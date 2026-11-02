@@ -126,7 +126,10 @@ export function isNativeDomain(rawHostname: string): boolean {
     host === 'nsore.shop' ||
     host.endsWith('.nsore.shop') ||
     host.includes('web.app') ||
-    host.includes('firebaseapp.com')
+    host.includes('firebaseapp.com') ||
+    host.includes('cloudflarepreviews.com') ||
+    host.includes('workers.dev') ||
+    host.includes('onrender.com')
   ) {
     return true;
   }
@@ -151,7 +154,9 @@ export function isPlatformRootDomain(rawHostname: string): boolean {
     host === 'nsore.shop' ||
     host === 'www.nsore.shop' ||
     host === 'pos-app-1759a.web.app' ||
-    host === 'pos-app-1759a.firebaseapp.com'
+    host === 'pos-app-1759a.firebaseapp.com' ||
+    host.includes('cloudflarepreviews.com') ||
+    host.includes('workers.dev')
   ) {
     return true;
   }

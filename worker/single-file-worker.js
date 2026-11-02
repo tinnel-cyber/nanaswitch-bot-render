@@ -97,9 +97,14 @@ export default {
     targetUrl.protocol = "https:";
     targetUrl.port = "";
 
+    // Si la requête provient de la prévisualisation Cloudflare, normaliser vers le domaine officiel nanasore.com
+    const effectiveHost = (url.hostname.includes("cloudflarepreviews.com") || url.hostname.includes("workers.dev"))
+      ? "nanasore.com"
+      : url.hostname;
+
     const newHeaders = new Headers(request.headers);
     newHeaders.set("Host", targetHost);
-    newHeaders.set("X-Forwarded-Host", url.hostname);
+    newHeaders.set("X-Forwarded-Host", effectiveHost);
     newHeaders.set("X-Forwarded-Proto", "https");
     newHeaders.set("X-Served-By", "Nanasore-Edge-Router");
 
