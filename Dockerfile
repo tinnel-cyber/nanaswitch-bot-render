@@ -11,7 +11,8 @@ FROM node:26.13.0-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm install --production --legacy-peer-deps
+# On utilise npm install complet pour garder les dépendances nécessaires au serveur
+RUN npm install --legacy-peer-deps
 
 # Copie des fichiers générés dans dist
 COPY --from=builder /app/dist ./dist
