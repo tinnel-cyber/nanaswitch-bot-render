@@ -1410,6 +1410,12 @@ export const FunnelBuilder = ({
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const [toastMessage, setToastMessage] = useState(null);
 
+  // Toast Helper déclaré immédiatement pour éviter toute Temporal Dead Zone (TDZ)
+  const triggerToast = useCallback((msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
   // FAQ interactive state (pour tester les accordéons directement dans le canvas)
   const [expandedFaqId, setExpandedFaqId] = useState('q-1');
 
@@ -1496,12 +1502,6 @@ export const FunnelBuilder = ({
       setLiveSeconds(prev => (prev > 0 ? prev - 1 : 59));
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Toast Helper
-  const triggerToast = useCallback((msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
   }, []);
 
   // Fermeture du switcher au clic extérieur
