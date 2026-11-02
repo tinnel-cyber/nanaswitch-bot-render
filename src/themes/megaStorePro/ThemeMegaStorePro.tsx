@@ -1005,7 +1005,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
               <strong className="text-xl font-black text-amber-300">15 000 F</strong>
             </div>
             <div className="w-12 h-10 bg-white/10 rounded flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-amber-300" />
+              <Heart className="w-6 h-6 text-amber-300" />
             </div>
           </div>
 
@@ -1230,7 +1230,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
               { icon: Percent, label: 'Jusqu\'à -50%' },
               { icon: Ticket, label: 'Bons & Coupons' },
               { icon: Shirt, label: "Mode & Tendances" },
-              { icon: Sparkles, label: 'Nouveautés' },
+              { icon: Star, label: 'Nouveautés' },
             ].map((offer, oIdx) => {
               const IconComp = offer.icon;
               return (

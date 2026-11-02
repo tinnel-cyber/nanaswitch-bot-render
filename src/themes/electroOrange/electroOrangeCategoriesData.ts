@@ -44,7 +44,7 @@ export const ELECTRO_DEPARTMENTS: ElectroDepartmentCategory[] = [
   {
     id: 'new-arrivals',
     name: 'Derniers Arrivages High-Tech',
-    icon: Sparkles,
+    icon: Flame,
     isFeatured: true,
     hasSubmenu: false
   },

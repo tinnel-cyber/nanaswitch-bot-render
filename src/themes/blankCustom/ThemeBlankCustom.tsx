@@ -22,7 +22,8 @@ import {
   Award,
   ChevronRight,
   Zap,
-  Volume2
+  Volume2,
+  Layers
 } from 'lucide-react';
 import { StoreThemeProps } from '../../types/theme';
 import { CustomSectionInstance, CustomSectionType, StoreProductItem } from '../../types';
@@ -551,7 +552,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
               {/* 4 Blueprints Haute Conversion Pré-Assemblés en 1 Clic */}
               <div className="pt-8 border-t border-blue-200/60 dark:border-blue-900/40 text-left">
                 <div className="flex items-center gap-2 mb-4 justify-center sm:justify-start">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <Layers className="w-4 h-4 text-blue-500" />
                   <h3 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                     Ou choisissez un Blueprint Pré-Assemblé en 1 clic :
                   </h3>

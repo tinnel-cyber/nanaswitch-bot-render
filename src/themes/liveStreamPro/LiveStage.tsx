@@ -179,7 +179,7 @@ export const LiveStage: React.FC<LiveStageProps> = ({
                 </div>
 
                 <div className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 border border-white/20 backdrop-blur-md text-amber-300 text-[10px] sm:text-[11px] font-bold">
-                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <Zap className="w-3 h-3 text-amber-300" />
                   <span>Vente Flash Exclusive</span>
                 </div>
               </div>

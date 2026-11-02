@@ -231,7 +231,7 @@ export const ARCHITECT_BLUEPRINTS: ArchitectBlueprint[] = [
       {
         id: 'sec_beauty_slider',
         type: 'before_after_slider',
-        title: '✨ Les Résultats Visibles : Avant vs Après',
+        title: 'Les Résultats Visibles : Avant vs Après',
         subtitle: 'GLISSEZ LE CURSEUR POUR OBSERVER LA TRANSFORMATION',
         visible: true,
         spacingTop: 'md',

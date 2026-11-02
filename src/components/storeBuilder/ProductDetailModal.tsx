@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { 
   X, ShoppingBag, PhoneCall, Check, Tag, ShieldCheck, 
-  Truck, AlertCircle, Plus, Minus, Share2, Sparkles, Edit3,
-  Trash2, Copy, CreditCard, Clock, Zap, MessageCircle, Eye
+  Truck, AlertCircle, Plus, Minus, Share2, Edit3,
+  Trash2, Copy, CreditCard, Clock, Zap, MessageCircle, Eye,
+  Layers, Rocket
 } from 'lucide-react';
 import { StoreProductItem } from './types';
 import { StoreSubscription, StoreUser } from '../../types';
@@ -407,8 +408,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <div className="bg-secondary border border-theme rounded-2xl p-4 space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-body flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Description & Caractéristiques</span>
+                  <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Description &amp; Caractéristiques</span>
                 </h4>
                 <div className="flex items-center gap-1.5">
                   {!isPublicView && (
@@ -446,7 +447,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       className="text-[10.5px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1 transition cursor-pointer shadow-sm active:scale-95 border bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-600 dark:text-indigo-300 border-indigo-500/30"
                       title="Ultimate Funnel Builder Drag & Drop 🚀"
                     >
-                      <Sparkles className="w-3 h-3 text-indigo-500" />
+                      <Layers className="w-3 h-3 text-indigo-500" />
                       <span>Ultimate Builder</span>
                     </button>
                   )}
@@ -559,8 +560,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.99] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer transition transform"
               title="Ouvrir le tunnel de vente interactif (12 Blocs par défaut) dans le tiroir dépliable"
             >
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              <span>🚀 Ouvrir le tunnel de vente (12 Blocs)</span>
+              <Rocket className="w-4 h-4 text-white" />
+              <span>Ouvrir le tunnel de vente (12 Blocs)</span>
             </button>
           )}
 

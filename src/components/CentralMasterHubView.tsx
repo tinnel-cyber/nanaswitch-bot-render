@@ -115,6 +115,9 @@ import { NanasoreLogo, NanasorePasserelleIcon } from './common/NanasoreLogo';
 import { AppOmnibar } from './dashboard/AppOmnibar';
 import { getTaxonomyBadge } from './CentralHubOmnibar';
 import { APPS_REGISTRY, AppRegistryItem } from '../data/appsRegistry';
+import { useActiveOmnibarApps } from '../hooks/useActiveOmnibarApps';
+import { toggleModuleStatus } from '../services/moduleActivationService';
+import { OFFICIAL_MODULES } from '../appRegistry';
 import { ALL_SOLUTIONS_CATALOG, CatalogItem, TaxonomyType } from './common/AppSidebar';
 import { 
   listenToTenantApps, 
@@ -232,6 +235,49 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
   onOpenAcademy
 }) => {
   const isFree = isFreePlan(subscription);
+    // Validation Supabase & Récupération des Organisations
+  const [supabaseStatus, setSupabaseStatus] = useState<{
+    loading: boolean;
+    connected: boolean;
+    count: number;
+    error: string | null;
+  }>({
+    loading: true,
+    connected: false,
+    count: 0,
+    error: null,
+  });
+
+  useEffect(() => {
+    fetch('/api/test-supabase')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success) {
+          setSupabaseStatus({
+            loading: false,
+            connected: true,
+            count: res.count ?? res.organizations?.length ?? 0,
+            error: null,
+          });
+        } else {
+          setSupabaseStatus({
+            loading: false,
+            connected: false,
+            count: 0,
+            error: res?.error || 'Non configuré',
+          });
+        }
+      })
+      .catch((err) => {
+        setSupabaseStatus({
+          loading: false,
+          connected: false,
+          count: 0,
+          error: err.message,
+        });
+      });
+  }, []);
+
   const [sellerMode, setSellerMode] = useState<SellerMode>(() => resolveSellerMode(currentUser));
   const [showSecondaryPosTools, setShowSecondaryPosTools] = useState<boolean>(false);
 
@@ -344,7 +390,15 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     onNavigate(targetView as any);
   };
 
-  const handleOpenAppFromOmnibar = (app: AppRegistryItem) => {
+  const handleOpenAppFromOmnibar = async (app: AppRegistryItem | any) => {
+    if (app?.id) {
+      // Synchronisation immédiate avec Firebase Realtime Database
+      try {
+        await toggleModuleStatus(app.id, true, tenantId);
+      } catch (err) {
+        console.warn('[HUB] Erreur synchronisation activation module RTDB :', err);
+      }
+    }
     if (app.id === 'nanagenerator' || app.id === 'studio-ia') {
       if (onOpenMarketingAi) {
         onOpenMarketingAi();
@@ -480,6 +534,10 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
 
   // Synchronisation temps réel des solutions activées pour le marchand
   const tenantId = useMemo(() => resolveCurrentTenantId(currentUser), [currentUser]);
+  const {
+    isModuleActive: isOmnibarModuleActive,
+    modules: omnibarOfficialModules
+  } = useActiveOmnibarApps(tenantId);
   const [installedAppsMap, setInstalledAppsMap] = useState<Record<string, InstalledAppData>>(() => DEFAULT_PINNED_APPS);
 
   useEffect(() => {
@@ -494,24 +552,62 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
   // Liste des applications activées avec logos vectoriels et métadonnées
   const activePinnedApps = useMemo(() => {
     const list: { app: AppRegistryItem; data: InstalledAppData }[] = [];
+    const addedIds = new Set<string>();
+
+    // 1. Modules officiels activés en temps réel via Firebase RTDB (/tenants/{tenantId}/modules)
+    omnibarOfficialModules.forEach((mod) => {
+      if (mod.enabled) {
+        addedIds.add(mod.id);
+        if (mod.aliases) mod.aliases.forEach((a) => addedIds.add(a));
+        list.push({
+          app: {
+            id: mod.id,
+            appName: mod.name,
+            appLogo: '/assets/icons/apps/caisse.svg',
+            shortDescription: mod.description,
+            category: mod.category,
+            keywords: mod.keywords || [],
+            route: mod.route,
+            installationType: 'installed',
+            trialType: 'freemium',
+            priceMonthly: 0,
+            palmares: '✅ Module Actif',
+            badge: mod.taxonomy,
+            taxonomyType: mod.taxonomy === 'APPLICATION' ? 'Application' : mod.taxonomy === 'SERVICE' ? 'Service' : mod.taxonomy === 'MODULE' ? 'Module' : 'Outil',
+            targetView: mod.view || mod.targetView
+          },
+          data: {
+            status: 'active',
+            activatedAt: mod.updatedAt || Date.now(),
+            expiresAt: null,
+            pinnedToSidebar: true
+          }
+        });
+      }
+    });
+
+    // 2. Apps installées dans installedAppsMap
     Object.entries(installedAppsMap).forEach(([appId, data]) => {
+      if (addedIds.has(appId)) return;
       if (data.pinnedToSidebar || data.status === 'active' || data.status === 'trial') {
         const found = APPS_REGISTRY.find((a) => a.id === appId);
         if (found) {
+          addedIds.add(found.id);
           list.push({ app: found, data });
         }
       }
     });
+
     if (list.length === 0) {
       Object.keys(DEFAULT_PINNED_APPS).forEach((appId) => {
         const found = APPS_REGISTRY.find((a) => a.id === appId);
-        if (found) {
+        if (found && !addedIds.has(found.id)) {
           list.push({ app: found, data: DEFAULT_PINNED_APPS[appId] });
         }
       });
     }
     return list;
-  }, [installedAppsMap]);
+  }, [installedAppsMap, omnibarOfficialModules]);
 
   // Filtrage dynamique du catalogue des 36 solutions
   const filteredSolutionsCatalog = useMemo(() => {
@@ -1666,6 +1762,32 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
             0. SÉLECTEUR DE MODE CAMÉLÉON 1-CLIC & QUARTIER GÉNÉRAL ADAPTATIF
                (Bleu Royal #2563EB & Blanc Pur #FFFFFF)
            ======================================================================= */}
+        {/* Validation Supabase & Statut de Connexion (Table organizations) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800 text-white gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className={`w-3.5 h-3.5 rounded-full ${supabaseStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-300">Base de données Supabase :</span>
+                <span className={`text-xs font-bold ${supabaseStatus.connected ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {supabaseStatus.loading ? 'Vérification en cours...' : supabaseStatus.connected ? '✓ Connecté (Table organizations validée)' : 'En attente de connexion'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Table <code className="text-amber-400 font-mono">organizations</code> : <strong className="text-white">{supabaseStatus.count}</strong> organisation(s) détectée(s)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <a
+              href="/test-supabase"
+              className="text-xs px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold border border-slate-700 transition"
+            >
+              Diagnostic Supabase ↗
+            </a>
+          </div>
+        </div>
+
         <section className="rounded-3xl bg-[#FFFFFF] border-2 border-[#2563EB] p-4 sm:p-6 shadow-2xl space-y-5 text-slate-900">
           {/* Barre supérieure : Titre + Sélecteur 1-Clic en Bleu Royal (#2563EB) et Blanc Pur (#FFFFFF) */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-blue-100 pb-4">

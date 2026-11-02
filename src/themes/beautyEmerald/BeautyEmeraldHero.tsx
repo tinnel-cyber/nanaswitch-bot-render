@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Sparkles, ShieldCheck, ArrowRight, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Tag, ShieldCheck, ArrowRight, Play } from 'lucide-react';
 import { ThemeCustomizationConfig } from '../../types';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 import {
@@ -200,7 +200,7 @@ export const BeautyEmeraldHero: React.FC<BeautyEmeraldHeroProps> = ({
 
           {currentSlide.priceHighlight && (
             <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F4C3A]/8 border border-[#C59B27]/40 text-[#0F4C3A] text-xs font-bold tracking-wider uppercase w-fit">
-              <Sparkles className="w-3.5 h-3.5 text-[#C59B27]" />
+              <Tag className="w-3.5 h-3.5 text-[#C59B27]" />
               <span>{currentSlide.priceHighlight}</span>
             </div>
           )}

@@ -135,7 +135,7 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
               {/* Haut : Badges de Réassurance Animés */}
               <div className="relative z-10 flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-md flex items-center gap-1.5 animate-pulse">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <Flame className="w-3.5 h-3.5 text-amber-300" />
                   <span>{subtitle}</span>
                 </span>
                 <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-white/20 backdrop-blur-md text-white border border-white/20 hidden sm:inline-flex items-center gap-1">
@@ -263,7 +263,7 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             <div className="lg:col-span-6 space-y-6 text-left">
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-                ✨ {subtitle}
+                {subtitle}
               </span>
               <h1 className={`text-3xl sm:text-5xl font-black tracking-tight leading-tight ${moodStyle.textPrimary}`}>
                 {title}
@@ -318,7 +318,7 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
         {layout === 'center_minimal' && (
           <div className="text-center max-w-3xl mx-auto py-8 sm:py-16 space-y-6">
             <span className={`inline-block px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-              ✨ {subtitle}
+              {subtitle}
             </span>
             <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight ${moodStyle.textPrimary}`}>
               {title}

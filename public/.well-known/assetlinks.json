@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.nanasore.pos",
+      "sha256_cert_fingerprints": [
+        "D2:5B:53:4B:E7:DE:13:6C:40:55:5C:C6:27:E8:FF:6E:86:B0:03:2C"
+      ]
+    }
+  }
+]

@@ -49,7 +49,7 @@ export const BeforeAfterSliderModule: React.FC<BeforeAfterSliderModuleProps> = (
 
   const targetProduct = products.find(p => p.id === cfg.productId) || products[0] || DEMO_TRANSFORMATION_PRODUCT;
 
-  const title = section.title || cfg.title || "✨ La Preuve en Image : Avant vs Après";
+  const title = section.title || cfg.title || "La Preuve en Image : Avant vs Après";
   const subtitle = section.subtitle || cfg.subtitle || "RÉSULTATS VISIBLES • GLISSEZ POUR COMPARER";
 
   const beforeImage = cfg.beforeImage || "https://images.unsplash.com/photo-1512290900672-1f02e1b1d7d0?w=800&auto=format&fit=crop&q=80";
@@ -102,7 +102,7 @@ export const BeforeAfterSliderModule: React.FC<BeforeAfterSliderModuleProps> = (
         {/* En-tête */}
         <div className="text-center max-w-2xl mx-auto mb-10 space-y-2">
           <span className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-            <Sparkles className="w-3.5 h-3.5" />
+            <CheckCircle2 className="w-3.5 h-3.5" />
             <span>{subtitle}</span>
           </span>
           <h2 className={`text-2xl sm:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>

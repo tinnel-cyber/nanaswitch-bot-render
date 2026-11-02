@@ -5,19 +5,24 @@
     "ignore": [
       "firebase.json",
       "**/.*",
+      "!**/.well-known/**",
       "**/node_modules/**"
     ],
     "headers": [
       {
-        "source": "**",
+        "source": "/.well-known/assetlinks.json",
         "headers": [
           {
-            "key": "Cross-Origin-Embedder-Policy",
-            "value": "credentialless"
+            "key": "Content-Type",
+            "value": "application/json"
           },
           {
-            "key": "Cross-Origin-Opener-Policy",
-            "value": "same-origin"
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
           }
         ]
       },

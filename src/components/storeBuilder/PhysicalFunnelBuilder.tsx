@@ -21,7 +21,8 @@ import {
   Eye,
   Trash2,
   Plus,
-  Sparkles,
+  Star,
+  Zap,
   Smartphone,
   Monitor,
   Save,
@@ -120,7 +121,7 @@ const SortableBlockRow: React.FC<SortableBlockRowProps> = ({
       case 'INLINE_CHECKOUT': return <CreditCard className="w-3.5 h-3.5 text-indigo-400" />;
       case 'TRUST_BADGES': return <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />;
       case 'BENEFITS_LIST': return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
-      case 'CUSTOMER_REVIEWS': return <Sparkles className="w-3.5 h-3.5 text-amber-300" />;
+      case 'CUSTOMER_REVIEWS': return <Star className="w-3.5 h-3.5 text-amber-300" />;
       case 'FLASH_LIVE_CTA': return <Radio className="w-3.5 h-3.5 text-pink-400" />;
       case 'AUTOPLAY_VIDEO': return <Video className="w-3.5 h-3.5 text-violet-400" />;
       default: return <Layers className="w-3.5 h-3.5 text-slate-400" />;
@@ -613,8 +614,8 @@ export const PhysicalFunnelBuilder: React.FC<{
             }}
             className="px-3 py-1.5 rounded-xl text-white font-extrabold text-xs shadow-md flex items-center gap-1.5 transition cursor-pointer hover:brightness-110 active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span className="hidden sm:inline">Générer avec NaNa AI</span>
+            <Zap className="w-3.5 h-3.5 text-amber-300" />
+            <span className="hidden sm:inline">Générer avec NaNa Studio</span>
           </button>
 
           <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
@@ -1938,7 +1939,7 @@ export const PhysicalFunnelBuilder: React.FC<{
                       <div className="space-y-3 text-xs">
                         <div className="p-2.5 rounded-xl bg-violet-950/30 border border-violet-500/30 text-[11px] text-violet-300 space-y-1">
                           <span className="font-bold flex items-center gap-1.5 text-violet-200">
-                            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                            <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
                             <span>Économie Bande Passante Firebase</span>
                           </span>
                           <p className="text-slate-400 text-[10.5px]">

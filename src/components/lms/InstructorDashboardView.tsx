@@ -149,7 +149,7 @@ const OnboardingVideoSection: React.FC<OnboardingVideoSectionProps> = ({
         {/* Colonne Gauche : Accueil Formateur & Informations */}
         <div className="lg:col-span-6 space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-bold tracking-wide">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
             <span>Votre Académie Privée en Marque Blanche</span>
           </div>
 
@@ -646,7 +646,7 @@ const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
             {totalBonus.toLocaleString('fr-FR')} <span className="text-xs font-bold text-amber-400">FCFA</span>
           </div>
           <div className="text-[10.5px] text-amber-400 flex items-center gap-1 font-bold">
-            <Sparkles className="w-3.5 h-3.5" />
+            <BarChart3 className="w-3.5 h-3.5" />
             <span>Programme affilié 0% commission</span>
           </div>
         </div>
@@ -684,7 +684,7 @@ const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
       <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-slate-900 to-indigo-950/70 border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+            <GraduationCap className="w-5 h-5 text-amber-300" />
           </div>
           <div>
             <p className="text-xs sm:text-sm font-semibold text-slate-200 italic">
@@ -1547,7 +1547,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 : 'text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
             <span>Création de Cours (Course Forge)</span>
             <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold ml-1">Studio</span>
           </button>
@@ -1651,7 +1651,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
               <div className="space-y-4 relative z-10">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-500/40 shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
                     <span>ATELIER DE CRÉATION DE COURS 🎓</span>
                   </div>
                   {isUnlimited ? (
@@ -1935,7 +1935,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-md">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50 shrink-0">
-                <Sparkles className="w-5 h-5" />
+                <GraduationCap className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">

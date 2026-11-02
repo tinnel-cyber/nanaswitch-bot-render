@@ -10,7 +10,8 @@
       "DOM.Iterable"
     ],
     "types": [
-      "vite/client"
+      "vite/client",
+      "node"
     ],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -21,9 +22,18 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "~/*": [
+        "./app/*"
       ]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".cache"
+  ]
 }

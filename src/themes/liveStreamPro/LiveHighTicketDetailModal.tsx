@@ -224,7 +224,7 @@ export const LiveHighTicketDetailModal: React.FC<LiveHighTicketDetailModalProps>
               {/* Bonus 1 */}
               <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20">
                 <div className="flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Gift className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-extrabold text-indigo-200 block">
                       2. Bonus VIP #1 : Accès Privé au Cercle Mastermind WhatsApp & Support VIP
@@ -242,7 +242,7 @@ export const LiveHighTicketDetailModal: React.FC<LiveHighTicketDetailModalProps>
               {/* Bonus 2 */}
               <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20">
                 <div className="flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Gift className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-extrabold text-indigo-200 block">
                       3. Bonus VIP #2 : Pack 50 Templates de Tunnels Dépliables & Scripts Prêts à l'Emploi
@@ -260,7 +260,7 @@ export const LiveHighTicketDetailModal: React.FC<LiveHighTicketDetailModalProps>
               {/* Bonus 3 */}
               <div className="flex items-start justify-between gap-3 p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20">
                 <div className="flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <Award className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-xs font-extrabold text-indigo-200 block">
                       4. Bonus VIP #3 : Session de Coaching Live & Audit Personnalisé 30 Jours

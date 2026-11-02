@@ -46,11 +46,11 @@ export interface EmailCampaign {
 }
 
 export const DEFAULT_BREVO_CONFIG: BrevoConfig = {
-  apiKey: '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',
+  apiKey: (import.meta as any).env?.VITE_BREVO_SMTP_KEY || (import.meta as any).env?.VITE_BREVO_API_KEY || '',
   senderEmail: 'admin@nanasore.com',
   senderName: 'Nanasore Team',
   endpointUrl: 'https://api.brevo.com/v3',
-  isConfigured: true,
+  isConfigured: false,
 };
 
 /**

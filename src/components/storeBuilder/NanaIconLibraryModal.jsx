@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   X,
   Search,
-  Sparkles,
   GripVertical,
   Plus,
   Sliders,
@@ -271,7 +270,7 @@ export const NanaIconLibraryModal = ({
         {/* Pied de Modale */}
         <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 text-xs">
           <div className="flex items-center gap-2 text-slate-400">
-            <Sparkles className="w-4 h-4 text-blue-400" />
+            <Zap className="w-4 h-4 text-blue-400" />
             <span>Toutes les icônes supportent le changement de taille, couleur et ombre dans l'inspecteur.</span>
           </div>
 

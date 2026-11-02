@@ -4,8 +4,10 @@ import {
   ShieldCheck, Zap, MessageCircle, ArrowLeft, Laptop, 
   BookOpen, Sparkles, Download, Layers, Play, Eye, 
   Edit3, Trash2, Share2, Plus, Minus, Lock, CheckCircle2,
-  Palette, ShoppingCart, Copy
+  Palette, ShoppingCart, Copy, GraduationCap, User
 } from 'lucide-react';
+import { StudentAuthModal } from '../../components/lms/student/StudentAuthModal';
+import { getCurrentStudent, navigateToStudentDashboard } from '../../services/studentAuthService';
 import { StoreThemeProps } from '../../types/theme';
 import { StoreProductItem } from '../../components/storeBuilder/types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
@@ -265,6 +267,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
   const [tunnelQuantity, setTunnelQuantity] = useState<number>(1);
   const [activeThumbnailIndex, setActiveThumbnailIndex] = useState<number>(0);
   const [copyFunnelToast, setCopyFunnelToast] = useState(false);
+  const [isStudentAuthOpen, setIsStudentAuthOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const handleCopyTunnelLink = (prod: StoreProductItem, e?: React.MouseEvent) => {
@@ -473,7 +476,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
             )}
           </div>
 
-          {/* Liens de Navigation Centraux (Boutique, Produits ✨, Nos Formations, Abonnements, Contact) */}
+          {/* Liens de Navigation Centraux (Boutique, Produits, Nos Formations, Abonnements, Contact) */}
           <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
             <button
               type="button"
@@ -502,7 +505,6 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
               className="px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-1 cursor-pointer"
             >
               <span>Produits</span>
-              <Sparkles className="w-3 h-3 text-amber-500" />
             </button>
 
             <button
@@ -604,29 +606,24 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
               </button>
             )}
 
-            {storeConfig.whatsappPhone ? (
-              <a
-                href={`https://wa.me/${storeConfig.whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite accéder à mes formations sur ${storeConfig.storeName}.`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-sm hover:shadow active:scale-95 flex items-center gap-2"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Se connecter / Espace Élève</span>
-                <span className="sm:hidden">Espace Élève</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  if (displayProducts[0]) handleOpenTunnel(displayProducts[0]);
-                }}
-                className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-sm hover:shadow active:scale-95"
-              >
-                Acheter
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                const student = getCurrentStudent();
+                if (student) {
+                  navigateToStudentDashboard();
+                } else {
+                  setIsStudentAuthOpen(true);
+                }
+              }}
+              className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-sm hover:shadow active:scale-95 flex items-center gap-2 cursor-pointer"
+              title="Accéder à mon espace étudiant & formations"
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-white" />
+              <span className="hidden sm:inline">Se connecter / Espace Élève</span>
+              <span className="sm:hidden">Espace Élève</span>
+            </button>
           </div>
         </div>
       </header>
@@ -687,7 +684,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
               <div className="lg:col-span-6 space-y-6 text-left">
                 
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EBF3FC] text-[#0056D2] text-xs font-black uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <GraduationCap className="w-3.5 h-3.5" />
                   <span>{customConfig?.heroSubtitle || 'E-learning & Produits Digitaux'}</span>
                 </div>
 
@@ -1148,6 +1145,12 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
           </div>
         </div>
       </footer>
+
+      {/* Modal d'Authentification Élève (Connexion & Inscription) */}
+      <StudentAuthModal
+        isOpen={isStudentAuthOpen}
+        onClose={() => setIsStudentAuthOpen(false)}
+      />
     </div>
   );
 };

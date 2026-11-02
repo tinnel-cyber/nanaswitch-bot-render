@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronDown,
   ChevronUp,
-  Sparkles,
+  PlusCircle,
+  LayoutTemplate,
   Smartphone,
   Monitor,
   Tablet,
@@ -130,6 +131,65 @@ if (typeof window !== 'undefined') {
   window.extractYouTubeVideoId = extractYouTubeVideoId;
 }
 
+/**
+ * Nettoie rigoureusement les chaînes issues des fiches produits (descriptions riches WooCommerce, balises HTML, etc.)
+ * Élimine les balises <h2>, <p>, <span>, styles inline et étincelles IA pour garantir un texte persuasif pur.
+ */
+export function stripHtmlToCleanText(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let text = raw;
+  if (/<[a-z][\s\S]*>/i.test(text)) {
+    text = text
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<\/p>|<\/div>|<\/h[1-6]>|<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>');
+  }
+  return text
+    .replace(/[✨⭐🌟]+/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n/g, '\n')
+    .trim();
+}
+
+/**
+ * Normalise un bloc : garantit un ID string unique et assainit rigoureusement ses données contre l'injection de tags HTML bruts.
+ */
+export function normalizeAndSanitizeBlock(b, index = 0) {
+  if (!b) return null;
+  const blockId = String(b.id || `block-${b.type || 'module'}-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 7)}`);
+  const data = b.data ? JSON.parse(JSON.stringify(b.data)) : {};
+
+  // Nettoyage systématique récursif de tout tag HTML brut dans toutes les données du bloc
+  const sanitizeDeep = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      if (typeof obj[key] === 'string') {
+        if (/<[a-z][\s\S]*>/i.test(obj[key])) {
+          obj[key] = stripHtmlToCleanText(obj[key]);
+        }
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitizeDeep(obj[key]);
+      }
+    }
+  };
+  sanitizeDeep(data);
+
+  return {
+    ...b,
+    id: blockId,
+    name: b.name || (DIVI_MODULES_CATALOG.find(m => m.type === b.type)?.name) || 'Module de Vente',
+    data,
+    conditions: b.conditions || { device: 'all', showIfUrlParam: '', hideIfPurchased: false }
+  };
+}
+
 // ============================================================================
 // CODE SPLITTING ABSOLU (React.lazy) — 0 octet consommé au chargement initial
 // ============================================================================
@@ -137,6 +197,8 @@ const ToolboxDrawer = React.lazy(() => import('./ToolboxDrawer'));
 const NanaIconLibraryModal = React.lazy(() => import('./NanaIconLibraryModal'));
 const FunnelSettingsModal = React.lazy(() => import('./FunnelSettingsModal'));
 const FunnelCodeEditor = React.lazy(() => import('./FunnelCodeEditor'));
+const UltimateCheckout = React.lazy(() => import('../payment/UltimateCheckout').then(m => ({ default: m.UltimateCheckout })));
+import { ImageUploadInput } from '../common/ImageUploadInput';
 
 // ============================================================================
 // 1. CATALOGUE ÉLARGI DES MODULES HAUTE CONVERSION NANA STUDIO
@@ -148,7 +210,7 @@ export const DIVI_MODULES_CATALOG = [
     name: 'Scrollytelling Produit 3D (Style Apple)',
     category: 'conversion',
     badge: 'Apple / Webflow 🍏',
-    icon: Sparkles,
+    icon: Layers,
     color: '#6366f1',
     description: 'Image produit fixée (sticky) au centre pendant que l\'utilisateur fait défiler la page avec fonctionnalités séquentielles animées.',
     createDefaultData: (prod) => ({
@@ -544,14 +606,14 @@ export const DIVI_MODULES_CATALOG = [
     name: 'Hero Studio Showcase 3D (Split Immersif)',
     category: 'conversion',
     badge: 'Studio 3D 💎',
-    icon: Sparkles,
+    icon: LayoutTemplate,
     color: '#6366f1',
     description: 'Hero immersif haut de gamme en 2 colonnes avec fond dégradé mesh, carte 3D en verre dépoli, double CTA et preuve sociale.',
     createDefaultData: (prod) => ({
       kickerBadge: 'NOUVELLE COLLECTION STUDIO PRO',
       headline: prod?.name ? `Propulsez Votre Quotidien avec ${prod.name}` : 'Révolutionnez Votre Activité avec Notre Solution Tout-en-Un',
       highlightWord: 'Révolutionnez',
-      subheadline: prod?.description || 'Rejoignez les milliers d\'entrepreneurs et professionnels qui obtiennent des résultats concrets en moins de 7 jours grâce à une conception sur-mesure.',
+      subheadline: stripHtmlToCleanText(prod?.description) || 'Rejoignez les milliers d\'entrepreneurs et professionnels qui obtiennent des résultats concrets en moins de 7 jours grâce à une conception sur-mesure.',
       primaryCtaText: 'Commander Maintenant • Offre Flash 🚀',
       primaryCtaLink: '#checkout',
       secondaryCtaText: 'Voir la Démonstration (2 min)',
@@ -675,12 +737,12 @@ export const DIVI_MODULES_CATALOG = [
     name: 'Section Hero & Accroche Choc',
     category: 'conversion',
     badge: 'Indispensable',
-    icon: Sparkles,
+    icon: Flame,
     color: '#f59e0b',
     description: 'Titre magnétique, badge promo animé, sous-titre persuasif et CTA clignotant.',
     createDefaultData: (prod) => ({
       headline: `Découvrez la Puissance Ultime de : ${prod?.name || 'Pack Élite NaNa Pro X'}`,
-      subheadline: prod?.description || 'La solution tout-en-un plébiscitée par les entrepreneurs et leaders pour multiplier leurs résultats en un temps record.',
+      subheadline: stripHtmlToCleanText(prod?.description) || 'La solution tout-en-un plébiscitée par les entrepreneurs et leaders pour multiplier leurs résultats en un temps record.',
       promoBadge: '⚡ OFFRE EXCLUSIVE • DISPONIBILITÉ LIMITÉE',
       badgeLocation: 'ZONE UEMOA & AFRIQUE DE L\'OUEST',
       ctaText: 'Commander Maintenant & Réclamer les Bonus 🚀',
@@ -1019,6 +1081,8 @@ export const FunnelBuilder = ({
   onClose = () => {},
   onSave = () => {},
   onDelete = () => {},
+  onDirectCheckout = null,
+  onBuyNow = null,
   isPublicView = false
 }) => {
   // Produit de démonstration si non fourni
@@ -1032,7 +1096,15 @@ export const FunnelBuilder = ({
     description: 'Le concentré de technologie conçu pour décupler votre productivité et vos résultats au quotidien.'
   }), []);
 
-  const activeProduct = product || defaultProduct;
+  const activeProduct = useMemo(() => {
+    const rawProd = product || defaultProduct;
+    if (!rawProd) return rawProd;
+    return {
+      ...rawProd,
+      name: stripHtmlToCleanText(rawProd.name) || rawProd.name,
+      description: stripHtmlToCleanText(rawProd.description) || rawProd.description
+    };
+  }, [product, defaultProduct]);
 
   // État d'ouverture de la Boîte à Outils Pro (Hub d'Intégration)
   const [isToolboxOpen, setIsToolboxOpen] = useState(false);
@@ -1048,10 +1120,23 @@ export const FunnelBuilder = ({
   // 1. ÉTAT GLOBAL DU FUNNEL MULTI-PAGES (funnelPages & activePageId)
   // --------------------------------------------------------------------------
   const [funnelPages, setFunnelPages] = useState(() => {
-    if (product?.pages && Array.isArray(product.pages) && product.pages.length > 0) {
-      return product.pages.map(p => {
-        const variants = p.variants || {
-          A: (p.blocks && Array.isArray(p.blocks)) ? p.blocks : [],
+    const rawPages = (product?.pages && Array.isArray(product.pages) && product.pages.length > 0)
+      ? product.pages
+      : (product?.modular_funnel?.pages && Array.isArray(product.modular_funnel.pages) && product.modular_funnel.pages.length > 0)
+      ? product.modular_funnel.pages
+      : (product?.modularFunnel?.pages && Array.isArray(product.modularFunnel.pages) && product.modularFunnel.pages.length > 0)
+      ? product.modularFunnel.pages
+      : null;
+
+    if (rawPages) {
+      return rawPages.map(p => {
+        const rawBlocks = (p.blocks && Array.isArray(p.blocks)) ? p.blocks : [];
+        const normalizedBlocks = rawBlocks.map((b, i) => normalizeAndSanitizeBlock(b, i)).filter(Boolean);
+        const variants = p.variants ? {
+          A: (p.variants.A && Array.isArray(p.variants.A)) ? p.variants.A.map((b, i) => normalizeAndSanitizeBlock(b, i)).filter(Boolean) : normalizedBlocks,
+          B: (p.variants.B && Array.isArray(p.variants.B)) ? p.variants.B.map((b, i) => normalizeAndSanitizeBlock(b, i)).filter(Boolean) : []
+        } : {
+          A: normalizedBlocks,
           B: []
         };
         return {
@@ -1064,28 +1149,28 @@ export const FunnelBuilder = ({
     }
     // Séquence complète initiale pré-assemblée des 12 modules de vente pour la page principale
     const initialBlocks = (() => {
-      if (product?.blocks && Array.isArray(product.blocks) && product.blocks.length > 0) {
-        return product.blocks.map(b => ({
-          ...b,
-          conditions: b.conditions || { device: 'all', showIfUrlParam: '', hideIfPurchased: false }
-        }));
+      const existingBlocks = (product?.blocks && Array.isArray(product.blocks) && product.blocks.length > 0)
+        ? product.blocks
+        : (product?.modular_funnel?.blocks && Array.isArray(product.modular_funnel.blocks) && product.modular_funnel.blocks.length > 0)
+        ? product.modular_funnel.blocks
+        : (product?.modularFunnel?.blocks && Array.isArray(product.modularFunnel.blocks) && product.modularFunnel.blocks.length > 0)
+        ? product.modularFunnel.blocks
+        : null;
+
+      if (existingBlocks) {
+        return existingBlocks.map((b, index) => normalizeAndSanitizeBlock(b, index)).filter(Boolean);
       }
       const initialTypes = ['urgency', 'hero', 'video', 'benefits', 'stats', 'comparison', 'testimonials', 'pricing', 'checkout', 'guarantee', 'faq', 'footer'];
       return initialTypes
         .map((type, index) => {
           const mod = DIVI_MODULES_CATALOG.find(m => m.type === type);
           if (!mod) return null;
-          return {
+          return normalizeAndSanitizeBlock({
             id: `block-${mod.type}-${Date.now()}-${index}`,
             type: mod.type,
             name: mod.name,
-            data: mod.createDefaultData(activeProduct),
-            conditions: {
-              device: 'all',
-              showIfUrlParam: '',
-              hideIfPurchased: false
-            }
-          };
+            data: mod.createDefaultData ? mod.createDefaultData(activeProduct) : {}
+          }, index);
         })
         .filter(Boolean);
     })();
@@ -1331,14 +1416,78 @@ export const FunnelBuilder = ({
   // Simulation audio lecteur vidéo
   const [isVideoMuted, setIsVideoMuted] = useState(true);
 
-  // Simulation formulaire de checkout interactif
-  const [simulatedCheckout, setSimulatedCheckout] = useState({
-    fullName: '',
-    phone: '',
-    city: 'Abidjan',
-    paymentMethod: 'wave'
-  });
+  // Formulaire de checkout interactif avec pré-remplissage 100% automatique depuis localStorage
+  const [simulatedCheckout, setSimulatedCheckout] = useState(() => ({
+    fullName: (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_name') : '') || '',
+    phone: (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_phone') : '') || '',
+    city: (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_address') : '') || 'Abidjan',
+    paymentMethod: (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_payment_method') : '') || 'wave'
+  }));
   const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [isPrimaryCheckoutOpen, setIsPrimaryCheckoutOpen] = useState(false);
+  const [checkoutProductPayload, setCheckoutProductPayload] = useState(null);
+
+  // Redirection obligatoire vers la caisse principale avec transmission et pré-remplissage des coordonnées
+  const handleProceedToPrimaryCheckout = useCallback((targetProduct = null) => {
+    const prodToBuy = targetProduct || activeProduct;
+    const customerName = (simulatedCheckout.fullName || '').trim();
+    const customerPhone = (simulatedCheckout.phone || '').trim();
+    const customerCity = (simulatedCheckout.city || '').trim() || 'Abidjan';
+    const paymentMethod = simulatedCheckout.paymentMethod || 'wave';
+
+    if (isPublicView && !customerPhone) {
+      triggerToast('⚠️ Veuillez renseigner votre numéro de téléphone pour finaliser');
+      return;
+    }
+
+    // Sauvegarde immédiate dans localStorage pour pré-remplissage 100% automatique sur toute l'app
+    if (typeof window !== 'undefined') {
+      if (customerName) localStorage.setItem('nana_customer_name', customerName);
+      if (customerPhone) localStorage.setItem('nana_customer_phone', customerPhone);
+      if (customerCity) localStorage.setItem('nana_customer_address', customerCity);
+      localStorage.setItem('nana_customer_payment_method', paymentMethod);
+    }
+
+    try { playCashChime(); } catch (e) {}
+
+    const payload = {
+      product: {
+        id: prodToBuy?.id || activeProduct?.id || 'funnel-item',
+        name: prodToBuy?.name || activeProduct?.name || 'Offre Spéciale',
+        price: Number(prodToBuy?.price || activeProduct?.price) || 25000,
+        originalPrice: Number(prodToBuy?.originalPrice || activeProduct?.originalPrice) || 45000,
+        imageUrl: prodToBuy?.image || activeProduct?.image || '',
+        quantity: 1
+      },
+      customer: {
+        fullName: customerName,
+        phone: customerPhone,
+        city: customerCity,
+        paymentMethod
+      },
+      amount: Number(prodToBuy?.price || activeProduct?.price) || 25000
+    };
+
+    // 1. Événement global Nana pour ouverture immédiate dans le thème parent
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nana:open_checkout', { detail: payload }));
+    }
+
+    // 2. Callbacks directs si fournis
+    if (typeof onDirectCheckout === 'function') {
+      onDirectCheckout(payload.product, 1);
+    } else if (typeof onBuyNow === 'function') {
+      onBuyNow(payload.product, 1);
+    } else {
+      // 3. Fallback direct sur page standalone : modale checkout fintech intégrée
+      setCheckoutProductPayload(payload.product);
+      setIsPrimaryCheckoutOpen(true);
+    }
+
+    setOrderConfirmed(true);
+    triggerToast('⚡ Redirection vers la caisse sécurisée...');
+    setTimeout(() => setOrderConfirmed(false), 3000);
+  }, [activeProduct, simulatedCheckout, isPublicView, triggerToast, onDirectCheckout, onBuyNow]);
 
   // Compteur à rebours live qui s'anime vraiment
   const [liveSeconds, setLiveSeconds] = useState(18);
@@ -1557,9 +1706,14 @@ export const FunnelBuilder = ({
     return () => document.removeEventListener('mouseleave', handleMouseLeave);
   }, [viewMode, triggerToast]);
 
-  // Synchronisation sélection si suppression
+  // Synchronisation sélection si suppression ou sélection active
   const activeBlock = useMemo(() => {
-    return canvasBlocks.find(b => b.id === selectedBlockId) || canvasBlocks[0] || null;
+    if (!canvasBlocks || canvasBlocks.length === 0) return null;
+    if (selectedBlockId) {
+      const found = canvasBlocks.find(b => String(b.id) === String(selectedBlockId));
+      if (found) return found;
+    }
+    return canvasBlocks[0] || null;
   }, [canvasBlocks, selectedBlockId]);
 
   // --------------------------------------------------------------------------
@@ -1608,7 +1762,7 @@ export const FunnelBuilder = ({
       return next;
     });
     try { playValidationBeep(); } catch (e) {}
-    triggerToast('✨ Module dupliqué !');
+    triggerToast('✅ Module dupliqué !');
   }, [setCanvasBlocks, triggerToast]);
 
   const deleteBlock = useCallback((index) => {
@@ -1629,7 +1783,9 @@ export const FunnelBuilder = ({
 
   // Handlers mémoïsés pour CanvasBlockItem (stabilité de référence absolue)
   const handleSelectBlock = useCallback((blockId) => {
-    setSelectedBlockId(blockId);
+    setSelectedBlockId(String(blockId));
+    setInspectorTab('content');
+    setIsSettingsOpen(true);
     try { playTapBeep(); } catch (e) {}
   }, []);
 
@@ -1755,7 +1911,7 @@ export const FunnelBuilder = ({
 
     insertBlockAtIndex(moduleTemplate, targetIndex);
     try { playValidationBeep(); } catch (err) {}
-    triggerToast(`✨ Module "${moduleTemplate.name}" inséré avec succès !`);
+    triggerToast(`✅ Module "${moduleTemplate.name}" inséré avec succès !`);
 
     setTimeout(() => {
       if (canvasScrollRef.current) {
@@ -1790,7 +1946,7 @@ export const FunnelBuilder = ({
     setSelectedBlockId(uniqueId);
 
     try { playValidationBeep(); } catch (err) {}
-    triggerToast(`✨ Module "${moduleTemplate.name}" empilé en bas de page !`);
+    triggerToast(`✅ Module "${moduleTemplate.name}" empilé en bas de page !`);
 
     setTimeout(() => {
       if (canvasScrollRef.current) {
@@ -2176,7 +2332,7 @@ export const FunnelBuilder = ({
 
             {data.promoBadge && (
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-black shadow-lg shadow-amber-950/40 animate-pulse">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
                 <span>{data.promoBadge}</span>
               </div>
             )}
@@ -2534,8 +2690,12 @@ export const FunnelBuilder = ({
               <button
                 type="button"
                 onClick={() => {
-                  try { playCashChime(); } catch (e) {}
-                  triggerToast('⚡ Redirection fluide vers le paiement en 1-clic !');
+                  handleProceedToPrimaryCheckout({
+                    id: activeProduct?.id || 'funnel-item',
+                    name: data.sectionTitle || activeProduct?.name || 'Offre Spéciale',
+                    price: Number(data.discountPrice) || Number(activeProduct?.price) || 24500,
+                    image: activeProduct?.image || ''
+                  });
                 }}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-base font-black transition flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/40 cursor-pointer"
               >
@@ -2679,14 +2839,16 @@ export const FunnelBuilder = ({
                 </div>
               </div>
 
-              {/* Bouton de confirmation en direct */}
+              {/* Bouton de confirmation en direct avec pré-remplissage et redirection immédiate vers le checkout */}
               <button
                 type="button"
                 onClick={() => {
-                  setOrderConfirmed(true);
-                  try { playCashChime(); } catch (e) {}
-                  triggerToast('🎉 Commande simulée confirmée avec succès !');
-                  setTimeout(() => setOrderConfirmed(false), 4000);
+                  handleProceedToPrimaryCheckout({
+                    id: activeProduct?.id || 'funnel-item',
+                    name: data.productName || activeProduct?.name || 'Offre Spéciale',
+                    price: Number(data.productPrice) || Number(activeProduct?.price) || 24500,
+                    image: data.productImage || activeProduct?.image || ''
+                  });
                 }}
                 className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/40 cursor-pointer hover:brightness-110 active:scale-95 transition"
               >
@@ -3514,7 +3676,7 @@ export const FunnelBuilder = ({
                   type="button"
                   onClick={() => {
                     try { playCashChime(); } catch(e) {}
-                    triggerToast('✨ Redirection vers le Campus Social NaNa...');
+                    triggerToast('🚀 Redirection vers le Campus Social NaNa...');
                   }}
                   className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/30 hover:scale-105 active:scale-95 transition cursor-pointer"
                 >
@@ -4769,7 +4931,7 @@ export const FunnelBuilder = ({
                   style={{ backgroundColor: `${accent}20`, borderColor: `${accent}40`, color: accent }}
                   className="px-3 py-1 rounded-full text-xs font-black border inline-flex items-center gap-1.5 uppercase tracking-wider"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Award className="w-3.5 h-3.5" />
                   <span>{data.kickerBadge || 'NOUVELLE COLLECTION STUDIO PRO'}</span>
                 </span>
 
@@ -5550,15 +5712,43 @@ export const FunnelBuilder = ({
     // 4. ONGLET CONTENU DU BLOC SÉLECTIONNÉ (DATA BINDING RÉACTIF)
     return (
       <div className="space-y-4">
-        {/* Titre du bloc sélectionné */}
-        <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-black uppercase text-amber-400">Module Actif</span>
-            <h4 className="text-xs font-bold text-white">{activeBlock.name}</h4>
+        {/* Sélecteur Universel de Module Actif avec Défilement Automatique */}
+        <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase text-amber-400">
+              Module Actif ({canvasBlocks.findIndex(b => String(b.id) === String(activeBlock.id)) + 1} / {canvasBlocks.length})
+            </span>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              Live Binding ⚡
+            </span>
           </div>
-          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            Live Binding
-          </span>
+
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-400 font-bold block">
+              Sélectionner le module à personnaliser :
+            </label>
+            <select
+              value={activeBlock.id}
+              onChange={(e) => {
+                const targetId = e.target.value;
+                setSelectedBlockId(targetId);
+                setInspectorTab('content');
+                if (typeof window !== 'undefined') {
+                  const el = document.querySelector(`[data-block-id="${targetId}"]`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }
+              }}
+              className="w-full bg-slate-900 border border-slate-700 hover:border-amber-500/80 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {canvasBlocks.map((b, idx) => (
+                <option key={b.id} value={b.id} className="bg-slate-900 text-white">
+                  {idx + 1}. {b.name} ({b.type})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* 1. CHAMPS SPÉCIFIQUES SELON LE TYPE DE MODULE */}
@@ -5573,6 +5763,38 @@ export const FunnelBuilder = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-rose-500 font-bold"
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Compte à Rebours (Heures : Min : Sec)</label>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="72"
+                  value={data.countdownHours !== undefined ? data.countdownHours : 11}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'countdownHours', Number(e.target.value))}
+                  placeholder="11h"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-rose-400 font-mono text-center font-bold"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={data.countdownMinutes !== undefined ? data.countdownMinutes : 42}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'countdownMinutes', Number(e.target.value))}
+                  placeholder="42m"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-rose-400 font-mono text-center font-bold"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={data.countdownSeconds !== undefined ? data.countdownSeconds : 1}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'countdownSeconds', Number(e.target.value))}
+                  placeholder="01s"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-rose-400 font-mono text-center font-bold"
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Stock Restant</label>
@@ -5584,6 +5806,17 @@ export const FunnelBuilder = ({
                 />
               </div>
               <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Stock Total (Jauge)</label>
+                <input
+                  type="number"
+                  value={data.stockTotal || 20}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'stockTotal', Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Entrepôt / Ville</label>
                 <input
                   type="text"
@@ -5592,15 +5825,15 @@ export const FunnelBuilder = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Notification d'Acheteur en Direct</label>
-              <input
-                type="text"
-                value={data.liveBuyerName || ''}
-                onChange={(e) => updateBlockField(activeBlock.id, 'liveBuyerName', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
-              />
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Acheteur Récent (Preuve)</label>
+                <input
+                  type="text"
+                  value={data.liveBuyerName || ''}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'liveBuyerName', e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+                />
+              </div>
             </div>
           </div>
         )}
@@ -5709,6 +5942,16 @@ export const FunnelBuilder = ({
               />
             </div>
             <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Zone Géographique de Réassurance</label>
+              <input
+                type="text"
+                value={data.badgeLocation || ''}
+                placeholder="Zone UEMOA & Afrique de l'Ouest"
+                onChange={(e) => updateBlockField(activeBlock.id, 'badgeLocation', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Texte du Bouton CTA Principal</label>
               <input
                 type="text"
@@ -5733,7 +5976,7 @@ export const FunnelBuilder = ({
           <div className="space-y-4">
             <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-[11px] text-indigo-300 space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-indigo-200">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Économie de Bande Passante Firebase</span>
               </div>
               <p className="text-slate-400">
@@ -5880,25 +6123,47 @@ export const FunnelBuilder = ({
                 type="text"
                 value={data.headline || ''}
                 onChange={(e) => updateBlockField(activeBlock.id, 'headline', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Image de Couverture (Poster URL)</label>
-              <input
-                type="text"
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre Explicatif</label>
+              <textarea
+                rows={2}
+                value={data.subheadline || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'subheadline', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-slate-300 focus:outline-none focus:border-amber-500 resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Texte du Badge Live</label>
+                <input
+                  type="text"
+                  value={data.liveBadgeText || ''}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'liveBadgeText', e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Spectateurs Live</label>
+                <input
+                  type="number"
+                  value={data.viewersCount || 247}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'viewersCount', Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-rose-400 font-mono font-bold"
+                />
+              </div>
+            </div>
+            <div>
+              <ImageUploadInput
                 value={data.posterUrl || ''}
-                onChange={(e) => updateBlockField(activeBlock.id, 'posterUrl', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Texte du Badge Live</label>
-              <input
-                type="text"
-                value={data.liveBadgeText || ''}
-                onChange={(e) => updateBlockField(activeBlock.id, 'liveBadgeText', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                onChange={(newUrl) => updateBlockField(activeBlock.id, 'posterUrl', newUrl)}
+                label="Image de Couverture (Poster URL)"
+                badge="ImgBB Direct"
+                showPreview={true}
+                previewHeight="h-24"
+                helperText="Collez une URL ou téléversez une miniature vidéo depuis votre appareil."
               />
             </div>
           </div>
@@ -5907,31 +6172,85 @@ export const FunnelBuilder = ({
         {activeBlock.type === 'benefits' && (
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Section</label>
-              <input
-                type="text"
-                value={data.sectionTitle || ''}
-                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Tag / Sur-titre</label>
               <input
                 type="text"
                 value={data.sectionTag || ''}
                 onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                placeholder="RÉSULTATS TANGIBLES"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Section</label>
+              <input
+                type="text"
+                value={data.sectionTitle || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre de Présentation</label>
+              <input
+                type="text"
+                value={data.sectionSubtitle || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionSubtitle', e.target.value)}
+                placeholder="Une méthode pas-à-pas pensée pour produire des résultats..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-amber-500"
+              />
+            </div>
             <div className="pt-2 border-t border-slate-800">
-              <span className="text-[11px] font-bold text-emerald-400 block mb-2">Bénéfices Individuels :</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-emerald-400">Bénéfices Individuels ({(data.items || []).length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newItems = [...(data.items || []), {
+                      id: `b-${Date.now()}`,
+                      number: `0${(data.items || []).length + 1}`,
+                      title: 'Nouveau Bénéfice Clé',
+                      desc: 'Description claire et persuasive de ce bénéfice direct pour l\'utilisateur.'
+                    }];
+                    updateBlockField(activeBlock.id, 'items', newItems);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/40 hover:bg-emerald-500/30 cursor-pointer"
+                >
+                  + Ajouter un Bénéfice
+                </button>
+              </div>
               <div className="space-y-2">
                 {(data.items || []).map((item, idx) => (
                   <div key={item.id || idx} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400">N° :</span>
+                        <input
+                          type="text"
+                          value={item.number || `0${idx + 1}`}
+                          onChange={(e) => {
+                            const newItems = [...(data.items || [])];
+                            newItems[idx] = { ...newItems[idx], number: e.target.value };
+                            updateBlockField(activeBlock.id, 'items', newItems);
+                          }}
+                          className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[11px] text-emerald-400 font-mono font-bold"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = (data.items || []).filter((_, i) => i !== idx);
+                          updateBlockField(activeBlock.id, 'items', newItems);
+                        }}
+                        className="text-rose-400 hover:text-rose-300 text-[10px] cursor-pointer"
+                      >
+                        Supprimer ✕
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={item.title}
+                      placeholder="Titre du bénéfice..."
                       onChange={(e) => {
                         const newItems = [...data.items];
                         newItems[idx] = { ...newItems[idx], title: e.target.value };
@@ -5942,6 +6261,7 @@ export const FunnelBuilder = ({
                     <textarea
                       rows={2}
                       value={item.desc}
+                      placeholder="Explication détaillée..."
                       onChange={(e) => {
                         const newItems = [...data.items];
                         newItems[idx] = { ...newItems[idx], desc: e.target.value };
@@ -5959,6 +6279,16 @@ export const FunnelBuilder = ({
         {activeBlock.type === 'stats' && (
           <div className="space-y-3">
             <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Tag / Sur-Titre</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                placeholder="IMPACT & PERFORMANCE EN AFRIQUE"
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Section Chiffres</label>
               <input
                 type="text"
@@ -5968,30 +6298,389 @@ export const FunnelBuilder = ({
               />
             </div>
             <div className="space-y-2">
+              <span className="text-[11px] font-bold text-sky-400 block mb-1">Compteurs d'Impact ({(data.metrics || []).length}) :</span>
               {(data.metrics || []).map((m, idx) => (
-                <div key={m.id || idx} className="p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <div key={m.id || idx} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">Valeur Chiffrée</label>
+                      <input
+                        type="text"
+                        value={m.value}
+                        onChange={(e) => {
+                          const newM = [...data.metrics];
+                          newM[idx] = { ...newM[idx], value: e.target.value };
+                          updateBlockField(activeBlock.id, 'metrics', newM);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-sky-400 font-black font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-0.5">Libellé</label>
+                      <input
+                        type="text"
+                        value={m.label}
+                        onChange={(e) => {
+                          const newM = [...data.metrics];
+                          newM[idx] = { ...newM[idx], label: e.target.value };
+                          updateBlockField(activeBlock.id, 'metrics', newM);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Note explicative / Pays</label>
+                    <input
+                      type="text"
+                      value={m.note || ''}
+                      placeholder="Ex: Côte d'Ivoire, Sénégal, Burkina..."
+                      onChange={(e) => {
+                        const newM = [...data.metrics];
+                        newM[idx] = { ...newM[idx], note: e.target.value };
+                        updateBlockField(activeBlock.id, 'metrics', newM);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeBlock.type === 'comparison' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Badge / Tag Supérieur</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                placeholder="POURQUOI FAIRE CE CHOIX AUJOURD'HUI"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Section</label>
+              <input
+                type="text"
+                value={data.sectionTitle || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
+                placeholder="La Différence Fondamentale"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre de Réassurance</label>
+              <input
+                type="text"
+                value={data.sectionSubtitle || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionSubtitle', e.target.value)}
+                placeholder="Comparez par vous-même..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold text-rose-400 mb-1">Titre "Sans Nous"</label>
+                <input
+                  type="text"
+                  value={data.withoutTitle || ''}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'withoutTitle', e.target.value)}
+                  placeholder="Méthodes Traditionnelles"
+                  className="w-full bg-slate-950 border border-rose-900/40 rounded-xl px-3 py-1.5 text-xs text-rose-300 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-emerald-400 mb-1">Titre "Avec Nous"</label>
+                <input
+                  type="text"
+                  value={data.withTitle || ''}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'withTitle', e.target.value)}
+                  placeholder="Avec Notre Solution"
+                  className="w-full bg-slate-950 border border-emerald-900/40 rounded-xl px-3 py-1.5 text-xs text-emerald-300 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Liste des Points Comparatifs */}
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-pink-400">Points de Comparaison ({(data.points || []).length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextPoints = [...(data.points || []), { without: 'Méthode manuelle lente', with: 'Automatisation 1-clic instantanée' }];
+                    updateBlockField(activeBlock.id, 'points', nextPoints);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-pink-500/20 text-pink-300 text-[10px] font-bold border border-pink-500/40 hover:bg-pink-500/30 cursor-pointer"
+                >
+                  + Ajouter un Point
+                </button>
+              </div>
+
+              {(data.points || []).map((pt, idx) => (
+                <div key={idx} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400">Point #{idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextPoints = (data.points || []).filter((_, i) => i !== idx);
+                        updateBlockField(activeBlock.id, 'points', nextPoints);
+                      }}
+                      className="text-rose-400 hover:text-rose-300 text-[10px] cursor-pointer"
+                    >
+                      Supprimer ✕
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={pt.without || ''}
+                    placeholder="Sans nous..."
+                    onChange={(e) => {
+                      const nextPoints = [...(data.points || [])];
+                      nextPoints[idx] = { ...nextPoints[idx], without: e.target.value };
+                      updateBlockField(activeBlock.id, 'points', nextPoints);
+                    }}
+                    className="w-full bg-slate-900 border border-rose-950/60 rounded-lg px-2 py-1 text-xs text-rose-300 placeholder-slate-600"
+                  />
+                  <input
+                    type="text"
+                    value={pt.with || ''}
+                    placeholder="Avec nous..."
+                    onChange={(e) => {
+                      const nextPoints = [...(data.points || [])];
+                      nextPoints[idx] = { ...nextPoints[idx], with: e.target.value };
+                      updateBlockField(activeBlock.id, 'points', nextPoints);
+                    }}
+                    className="w-full bg-slate-900 border border-emerald-950/60 rounded-lg px-2 py-1 text-xs text-emerald-300 placeholder-slate-600 font-medium"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeBlock.type === 'founder' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Nom du Fondateur / Auteur</label>
+              <input
+                type="text"
+                value={data.authorName || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'authorName', e.target.value)}
+                placeholder="Ex: Mamadou Diallo"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre / Rôle Officiel</label>
+              <input
+                type="text"
+                value={data.authorRole || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'authorRole', e.target.value)}
+                placeholder="Fondateur & Directeur Général"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-purple-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <ImageUploadInput
+                value={data.authorImage || ''}
+                onChange={(newUrl) => updateBlockField(activeBlock.id, 'authorImage', newUrl)}
+                label="Photo de Profil du Fondateur (URL)"
+                badge="ImgBB Direct"
+                showPreview={true}
+                previewHeight="h-20"
+                helperText="Collez une URL ou téléversez une photo de profil depuis votre appareil."
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Lettre Personnelle</label>
+              <input
+                type="text"
+                value={data.title || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'title', e.target.value)}
+                placeholder="« Pourquoi j'ai conçu cette solution »"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white italic"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Paragraphe d'Accroche 1</label>
+              <textarea
+                rows={3}
+                value={data.paragraph1 || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'paragraph1', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-300 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Paragraphe d'Accroche 2</label>
+              <textarea
+                rows={3}
+                value={data.paragraph2 || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'paragraph2', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-300 resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Signature de Clôture</label>
+              <input
+                type="text"
+                value={data.signatureText || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'signatureText', e.target.value)}
+                placeholder="— Mamadou Diallo, Fondateur"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-purple-300 font-mono italic"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeBlock.type === 'testimonials' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sur-Titre / Tag</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                placeholder="PREUVE SOCIALE & AUTORITÉ"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Section Témoignages</label>
+              <input
+                type="text"
+                value={data.sectionTitle || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
+                placeholder="Ce Que Disent les Professionnels et Dirigeants"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-amber-400 mb-1">Note & Statistique Sociale</label>
+              <input
+                type="text"
+                value={data.ratingText || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'ratingText', e.target.value)}
+                placeholder="4.95 / 5 (840+ avis vérifiés)"
+                className="w-full bg-slate-950 border border-amber-500/40 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-bold"
+              />
+            </div>
+
+            {/* Liste des Témoignages */}
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-400">Avis Clients ({(data.testimonials || []).length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextT = [...(data.testimonials || []), {
+                      id: `t-${Date.now()}`,
+                      name: 'Nouveau Client',
+                      role: 'Chef d\'Entreprise',
+                      comment: 'Un produit remarquable, livraison ultra rapide et support réactif !',
+                      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+                      rating: 5
+                    }];
+                    updateBlockField(activeBlock.id, 'testimonials', nextT);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer"
+                >
+                  + Ajouter un Avis
+                </button>
+              </div>
+
+              {(data.testimonials || []).map((t, idx) => (
+                <div key={t.id || idx} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400">Avis #{idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextT = (data.testimonials || []).filter((_, i) => i !== idx);
+                        updateBlockField(activeBlock.id, 'testimonials', nextT);
+                      }}
+                      className="text-rose-400 hover:text-rose-300 text-[10px] cursor-pointer"
+                    >
+                      Supprimer ✕
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="text"
-                      value={m.value}
+                      value={t.name || ''}
+                      placeholder="Nom client"
                       onChange={(e) => {
-                        const newM = [...data.metrics];
-                        newM[idx] = { ...newM[idx], value: e.target.value };
-                        updateBlockField(activeBlock.id, 'metrics', newM);
+                        const nextT = [...(data.testimonials || [])];
+                        nextT[idx] = { ...nextT[idx], name: e.target.value };
+                        updateBlockField(activeBlock.id, 'testimonials', nextT);
                       }}
-                      className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-sky-400 font-black font-mono"
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-bold"
                     />
                     <input
                       type="text"
-                      value={m.label}
+                      value={t.role || ''}
+                      placeholder="Poste / Ville"
                       onChange={(e) => {
-                        const newM = [...data.metrics];
-                        newM[idx] = { ...newM[idx], label: e.target.value };
-                        updateBlockField(activeBlock.id, 'metrics', newM);
+                        const nextT = [...(data.testimonials || [])];
+                        nextT[idx] = { ...nextT[idx], role: e.target.value };
+                        updateBlockField(activeBlock.id, 'testimonials', nextT);
                       }}
-                      className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white font-bold"
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300"
                     />
                   </div>
+
+                  {/* Note en Étoiles (1 à 5) */}
+                  <div className="flex items-center justify-between bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1">
+                    <span className="text-[10.5px] font-bold text-slate-400">Note :</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((starVal) => (
+                        <button
+                          key={starVal}
+                          type="button"
+                          onClick={() => {
+                            const nextT = [...(data.testimonials || [])];
+                            nextT[idx] = { ...nextT[idx], rating: starVal };
+                            updateBlockField(activeBlock.id, 'testimonials', nextT);
+                          }}
+                          className={`p-0.5 transition cursor-pointer ${
+                            (t.rating || 5) >= starVal ? 'text-amber-400' : 'text-slate-600'
+                          }`}
+                          title={`${starVal} étoile(s)`}
+                        >
+                          <Star className="w-3.5 h-3.5 fill-current" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <ImageUploadInput
+                    value={t.avatarUrl || ''}
+                    onChange={(newUrl) => {
+                      const nextT = [...(data.testimonials || [])];
+                      nextT[idx] = { ...nextT[idx], avatarUrl: newUrl };
+                      updateBlockField(activeBlock.id, 'testimonials', nextT);
+                    }}
+                    label="Photo de Profil / Avatar (URL)"
+                    badge="ImgBB Direct"
+                    showPreview={false}
+                    previewHeight="h-10"
+                    helperText="Collez une URL ou téléversez une photo de profil."
+                  />
+                  <textarea
+                    rows={2}
+                    value={t.comment || ''}
+                    placeholder="Commentaire de l'acheteur..."
+                    onChange={(e) => {
+                      const nextT = [...(data.testimonials || [])];
+                      nextT[idx] = { ...nextT[idx], comment: e.target.value };
+                      updateBlockField(activeBlock.id, 'testimonials', nextT);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200 resize-none"
+                  />
                 </div>
               ))}
             </div>
@@ -6001,31 +6690,60 @@ export const FunnelBuilder = ({
         {activeBlock.type === 'pricing' && (
           <div className="space-y-3">
             <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Tag / Sur-Titre</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                placeholder="OFFRE SPÉCIALE LIMITÉE"
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Badge d'Offre (Réduction)</label>
+              <input
+                type="text"
+                value={data.discountBadge || ''}
+                placeholder="ÉCONOMISEZ 50% AUJOURD'HUI"
+                onChange={(e) => updateBlockField(activeBlock.id, 'discountBadge', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Titre de l'Offre</label>
               <input
                 type="text"
                 value={data.sectionTitle || ''}
                 onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Prix Normal (Barré)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Prix Normal</label>
                 <input
                   type="number"
                   value={data.originalPrice || 0}
                   onChange={(e) => updateBlockField(activeBlock.id, 'originalPrice', Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-emerald-400 mb-1">Prix Flash Promo</label>
+                <label className="block text-xs font-bold text-emerald-400 mb-1">Prix Promo</label>
                 <input
                   type="number"
                   value={data.discountPrice || 0}
                   onChange={(e) => updateBlockField(activeBlock.id, 'discountPrice', Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl px-3 py-1.5 text-xs text-emerald-400 font-black focus:outline-none font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-emerald-400 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Devise</label>
+                <input
+                  type="text"
+                  value={data.currency || 'FCFA'}
+                  onChange={(e) => updateBlockField(activeBlock.id, 'currency', e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-amber-300 focus:outline-none font-bold"
                 />
               </div>
             </div>
@@ -6034,18 +6752,84 @@ export const FunnelBuilder = ({
               <input
                 type="text"
                 value={data.ctaText || ''}
+                placeholder="Valider Ma Commande Immédiate ⚡"
                 onChange={(e) => updateBlockField(activeBlock.id, 'ctaText', e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Badge d'Économie</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Texte de Réassurance Paiement</label>
               <input
                 type="text"
-                value={data.discountBadge || ''}
-                onChange={(e) => updateBlockField(activeBlock.id, 'discountBadge', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                value={data.reassuranceText || ''}
+                placeholder="Paiement sécurisé par Wave, Orange Money, Moov, MTN & Carte"
+                onChange={(e) => updateBlockField(activeBlock.id, 'reassuranceText', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300"
               />
+            </div>
+
+            {/* Éditeur de Bonus Inclus (The Offer Stack) */}
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-400">🎁 Bonus Empilés Offerts ({(data.bonusList || []).length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextB = [...(data.bonusList || []), {
+                      id: `bon-${Date.now()}`,
+                      title: 'Guide Pratique Bonus',
+                      value: 15000
+                    }];
+                    updateBlockField(activeBlock.id, 'bonusList', nextB);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer"
+                >
+                  + Ajouter Bonus
+                </button>
+              </div>
+
+              {(data.bonusList || []).map((b, idx) => (
+                <div key={b.id || idx} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400">Bonus #{idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextB = (data.bonusList || []).filter((_, i) => i !== idx);
+                        updateBlockField(activeBlock.id, 'bonusList', nextB);
+                      }}
+                      className="text-rose-400 hover:text-rose-300 text-[10px] cursor-pointer"
+                    >
+                      Supprimer ✕
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={b.title || ''}
+                    placeholder="Titre du bonus offert..."
+                    onChange={(e) => {
+                      const nextB = [...(data.bonusList || [])];
+                      nextB[idx] = { ...nextB[idx], title: e.target.value };
+                      updateBlockField(activeBlock.id, 'bonusList', nextB);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-medium"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400">Valeur :</span>
+                    <input
+                      type="number"
+                      value={b.value || 0}
+                      onChange={(e) => {
+                        const nextB = [...(data.bonusList || [])];
+                        nextB[idx] = { ...nextB[idx], value: Number(e.target.value) };
+                        updateBlockField(activeBlock.id, 'bonusList', nextB);
+                      }}
+                      className="w-28 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-emerald-400 font-mono font-bold"
+                    />
+                    <span className="text-[10px] text-slate-400">FCFA</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -6053,12 +6837,33 @@ export const FunnelBuilder = ({
         {activeBlock.type === 'checkout' && (
           <div className="space-y-3">
             <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sur-Titre / Tag</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                placeholder="COMMANDE SÉCURISÉE EN 1 MINUTE"
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Titre du Formulaire</label>
               <input
                 type="text"
                 value={data.sectionTitle || ''}
+                placeholder="Finalisez Votre Commande ci-dessous"
                 onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre Explicatif</label>
+              <input
+                type="text"
+                value={data.sectionSubtitle || ''}
+                placeholder="Remplissez vos coordonnées pour recevoir immédiatement votre accès..."
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionSubtitle', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300"
               />
             </div>
             <div>
@@ -6070,14 +6875,24 @@ export const FunnelBuilder = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Image Produit (URL)</label>
+              <input
+                type="text"
+                value={data.productImage || ''}
+                placeholder="https://..."
+                onChange={(e) => updateBlockField(activeBlock.id, 'productImage', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono text-[11px]"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Prix Encaissé</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Prix Encaissé (FCFA)</label>
                 <input
                   type="number"
                   value={data.productPrice || 0}
                   onChange={(e) => updateBlockField(activeBlock.id, 'productPrice', Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-emerald-400 font-bold font-mono"
                 />
               </div>
               <div>
@@ -6085,10 +6900,94 @@ export const FunnelBuilder = ({
                 <input
                   type="text"
                   value={data.deliveryFee || ''}
+                  placeholder="GRATUITE"
                   onChange={(e) => updateBlockField(activeBlock.id, 'deliveryFee', e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Badge d'Expédition / Livraison</label>
+              <input
+                type="text"
+                value={data.shippingBadge || ''}
+                placeholder="LIVRAISON 100% GRATUITE À DOMICILE"
+                onChange={(e) => updateBlockField(activeBlock.id, 'shippingBadge', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Texte Bouton Validation</label>
+              <input
+                type="text"
+                value={data.ctaText || ''}
+                placeholder="Confirmer Ma Commande & Mon Expédition 🚀"
+                onChange={(e) => updateBlockField(activeBlock.id, 'ctaText', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Mention de Garantie Légale</label>
+              <input
+                type="text"
+                value={data.guaranteeNotice || ''}
+                placeholder="Paiement sécurisé par protocole bancaire agréé BCEAO"
+                onChange={(e) => updateBlockField(activeBlock.id, 'guaranteeNotice', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-400"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeBlock.type === 'guarantee' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-cyan-400 mb-1">Badge / Tag Supérieur</label>
+              <input
+                type="text"
+                value={data.badgeText || ''}
+                placeholder="ZÉRO RISQUE POUR VOUS"
+                onChange={(e) => updateBlockField(activeBlock.id, 'badgeText', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-cyan-300"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Garantie</label>
+              <input
+                type="text"
+                value={data.title || ''}
+                placeholder="Garantie Inconditionnelle 30 Jours"
+                onChange={(e) => updateBlockField(activeBlock.id, 'title', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre de Réassurance</label>
+              <input
+                type="text"
+                value={data.subtitle || ''}
+                placeholder="Testez l'ensemble des fonctionnalités..."
+                onChange={(e) => updateBlockField(activeBlock.id, 'subtitle', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Durée en Jours</label>
+              <input
+                type="number"
+                value={data.durationDays || 30}
+                onChange={(e) => updateBlockField(activeBlock.id, 'durationDays', Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Texte Détaillé de l'Engagement</label>
+              <textarea
+                rows={3}
+                value={data.description || ''}
+                onChange={(e) => updateBlockField(activeBlock.id, 'description', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-300 resize-none leading-relaxed"
+              />
             </div>
           </div>
         )}
@@ -6096,12 +6995,32 @@ export const FunnelBuilder = ({
         {activeBlock.type === 'faq' && (
           <div className="space-y-3">
             <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Tag / Sur-Titre</label>
+              <input
+                type="text"
+                value={data.sectionTag || ''}
+                placeholder="TOUTES LES RÉPONSES"
+                onChange={(e) => updateBlockField(activeBlock.id, 'sectionTag', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la FAQ</label>
               <input
                 type="text"
                 value={data.sectionTitle || ''}
                 onChange={(e) => updateBlockField(activeBlock.id, 'sectionTitle', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Sous-Titre de Réassurance</label>
+              <input
+                type="text"
+                value={data.subtitle || ''}
+                placeholder="Tout ce que vous devez savoir avant de commander..."
+                onChange={(e) => updateBlockField(activeBlock.id, 'subtitle', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300"
               />
             </div>
             <div className="pt-2 border-t border-slate-800">
@@ -8096,23 +9015,24 @@ export const FunnelBuilder = ({
             {/* URL de l'image */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-slate-300">URL de l'image</label>
                 {activeProduct?.image && (
                   <button
                     type="button"
                     onClick={() => updateBlockField(activeBlock.id, 'imageUrl', activeProduct.image)}
-                    className="text-[10px] font-bold text-sky-400 hover:underline cursor-pointer"
+                    className="text-[10px] font-bold text-sky-400 hover:underline cursor-pointer ml-auto mb-1"
                   >
                     Utiliser l'image produit
                   </button>
                 )}
               </div>
-              <input
-                type="text"
+              <ImageUploadInput
                 value={data.imageUrl || ''}
-                placeholder="https://..."
-                onChange={(e) => updateBlockField(activeBlock.id, 'imageUrl', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+                onChange={(newUrl) => updateBlockField(activeBlock.id, 'imageUrl', newUrl)}
+                label="Image de Mise en Avant"
+                badge="ImgBB Direct"
+                showPreview={true}
+                previewHeight="h-28"
+                helperText="Collez une URL ou téléversez votre image produit."
               />
             </div>
 
@@ -8590,7 +9510,7 @@ export const FunnelBuilder = ({
           <div className="space-y-4">
             <div className="p-3 rounded-2xl bg-slate-950 border border-indigo-500/40 space-y-1">
               <span className="text-[10px] font-black uppercase text-indigo-400 block flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-indigo-400" />
+                <Layers className="w-3 h-3 text-indigo-400" />
                 <span>Apple & Webflow Showcase • Scrollytelling 3D</span>
               </span>
               <h4 className="text-xs font-bold text-white">Présentation Produit Immersive au Scroll</h4>
@@ -8985,7 +9905,7 @@ export const FunnelBuilder = ({
           <div className="space-y-4">
             <div className="p-3 rounded-2xl bg-slate-950 border border-purple-500/40 space-y-1">
               <span className="text-[10px] font-black uppercase text-purple-400 block flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-purple-400" />
+                <Target className="w-3 h-3 text-purple-400" />
                 <span>CRO 2.0 • Micro-Engagement</span>
               </span>
               <h4 className="text-xs font-bold text-white">Quiz Funnel Interactif & Offre Dynamique</h4>
@@ -9279,7 +10199,7 @@ export const FunnelBuilder = ({
                 onClick={() => {
                   updateBlockField(activeBlock.id, 'questions', DEFAULT_QUIZ_FUNNEL_DATA.questions);
                   updateBlockField(activeBlock.id, 'outcomes', DEFAULT_QUIZ_FUNNEL_DATA.outcomes);
-                  triggerToast('✨ Modèle de Quiz et Offres réinitialisés aux valeurs recommandées !');
+                  triggerToast('✅ Modèle de Quiz et Offres réinitialisés aux valeurs recommandées !');
                 }}
                 className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
@@ -10258,7 +11178,7 @@ export const FunnelBuilder = ({
             onClick={() => setShowTemplatesModal(true)}
             className="px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden md:inline">Gabarits 1-Clic</span>
           </button>
 
@@ -10357,7 +11277,7 @@ export const FunnelBuilder = ({
       {/* Notification Toast */}
       {toastMessage && (
         <div className="absolute top-18 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-slate-900/95 border border-indigo-500/50 text-indigo-300 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <Sparkles className="w-4 h-4 text-indigo-400" />
+          <CheckCircle2 className="w-4 h-4 text-indigo-400" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -10468,7 +11388,7 @@ export const FunnelBuilder = ({
                             insertBlockAtIndex(mod, canvasBlocks.length);
                             setIsModulesOpen(false); // Ferme automatiquement le tiroir sur mobile
                             try { playValidationBeep(); } catch (e) {}
-                            triggerToast(`✨ Module "${mod.name}" ajouté en bas de page !`);
+                            triggerToast(`✅ Module "${mod.name}" ajouté en bas de page !`);
                             setTimeout(() => {
                               if (canvasScrollRef.current) {
                                 canvasScrollRef.current.scrollTo({
@@ -10508,60 +11428,62 @@ export const FunnelBuilder = ({
           onDragLeave={handleCanvasDragLeave}
           onDrop={handleCanvasDrop}
         >
-          {/* Barre d'Outils du Canvas (Sélecteur d'Écran Responsive) */}
-          <div className="h-12 px-4 sm:px-6 bg-slate-900/60 border-b border-slate-800/80 flex items-center justify-between shrink-0 backdrop-blur-sm z-20">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Page Longue Persuasive :</span>
-              <span className="text-white bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
-                {canvasBlocks.length} Modules Assemblés
-              </span>
+          {/* Barre d'Outils du Canvas (Sélecteur d'Écran Responsive - réservé au Builder, jamais affiché aux clients) */}
+          {!isPublicView && viewMode === 'builder' && (
+            <div className="h-12 px-4 sm:px-6 bg-slate-900/60 border-b border-slate-800/80 flex items-center justify-between shrink-0 backdrop-blur-sm z-20">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Structure du Tunnel :</span>
+                <span className="text-white bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
+                  {canvasBlocks.length} Modules Actifs
+                </span>
+              </div>
+
+              {/* Sélecteur de périphérique */}
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('desktop')}
+                  className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    previewDevice === 'desktop' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Aperçu Grand Écran"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Desktop</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('tablet')}
+                  className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    previewDevice === 'tablet' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Aperçu Tablette Tactile"
+                >
+                  <Tablet className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Tablette</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('mobile')}
+                  className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    previewDevice === 'mobile' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Aperçu Smartphone"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Mobile</span>
+                </button>
+              </div>
             </div>
-
-            {/* Sélecteur de périphérique */}
-            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-              <button
-                type="button"
-                onClick={() => setPreviewDevice('desktop')}
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  previewDevice === 'desktop' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Aperçu Grand Écran"
-              >
-                <Monitor className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Desktop</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPreviewDevice('tablet')}
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  previewDevice === 'tablet' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Aperçu Tablette Tactile"
-              >
-                <Tablet className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Tablette</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPreviewDevice('mobile')}
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  previewDevice === 'mobile' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Aperçu Smartphone"
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Mobile</span>
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* ================================================================ */}
           {/* BARRE EXTÉRIEURE DE PARAMÈTRES DU FUNNEL (DIRECTEMENT VISIBLE)    */}
           {/* ================================================================ */}
-          {viewMode === 'builder' && (
+          {viewMode === 'builder' && !isPublicView && (
             <div className="w-full bg-slate-900/90 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between gap-3 flex-wrap shrink-0 backdrop-blur-md z-20 shadow-sm">
               <div className="flex items-center gap-2 flex-1 min-w-[240px]">
                 <div className="flex items-center gap-1.5 text-xs font-black text-amber-400 shrink-0">
@@ -10629,12 +11551,16 @@ export const FunnelBuilder = ({
             ref={canvasScrollRef}
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
-            className="flex-1 overflow-y-auto h-full min-h-0 overscroll-contain p-4 sm:p-8 pb-48 sm:pb-64 flex flex-col items-center custom-scrollbar relative"
+            className={`flex-1 overflow-y-auto h-full min-h-0 overscroll-contain flex flex-col items-center custom-scrollbar relative ${
+              isPublicView
+                ? 'p-0 sm:p-4 pb-20'
+                : 'p-4 sm:p-8 pb-48 sm:pb-64'
+            }`}
           >
             {/* Bannière flottante d'aide au drop */}
-            {isDraggingActive && (
+            {isDraggingActive && !isPublicView && viewMode === 'builder' && (
               <div className="sticky top-2 z-40 mx-auto w-fit px-4 py-1.5 rounded-full bg-indigo-600 text-white font-black text-xs shadow-2xl shadow-indigo-600/30 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 mb-4">
-                <Sparkles className="w-3.5 h-3.5" />
+                <PlusCircle className="w-3.5 h-3.5" />
                 <span>Déposez n'importe où dans le Canvas pour empiler en bas</span>
               </div>
             )}
@@ -10670,18 +11596,20 @@ export const FunnelBuilder = ({
               </div>
             )}
 
-            {/* Conteneur de la Page Longue ou du Popup avec padding-bottom anti-masquage */}
+            {/* Conteneur de la Page Longue ou du Popup avec adaptation responsive automatique */}
             <div
               onDragOver={handleCanvasDragOver}
               onDrop={handleCanvasDrop}
-              className={`transition-all duration-300 h-fit min-h-full pb-56 sm:pb-72 relative ${
+              className={`transition-all duration-300 h-fit min-h-full relative ${
                 isEditingPopup
-                  ? 'w-full max-w-2xl rounded-3xl border-2 border-rose-500/70 shadow-[0_25px_90px_rgba(244,63,94,0.25)] bg-slate-950 ring-4 ring-rose-500/20'
+                  ? 'w-full max-w-2xl rounded-3xl border-2 border-rose-500/70 shadow-[0_25px_90px_rgba(244,63,94,0.25)] bg-slate-950 ring-4 ring-rose-500/20 pb-20'
+                  : isPublicView || viewMode === 'preview'
+                  ? 'w-full max-w-4xl mx-auto rounded-none sm:rounded-3xl border-0 sm:border sm:border-slate-800/80 shadow-none sm:shadow-2xl bg-slate-950 overflow-hidden pb-16'
                   : previewDevice === 'mobile'
-                  ? 'w-[385px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.8)] bg-slate-950 ring-1 ring-slate-700/60'
+                  ? 'w-full max-w-[390px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.8)] bg-slate-950 ring-1 ring-slate-700/60 pb-56 sm:pb-72'
                   : previewDevice === 'tablet'
-                  ? 'w-[680px] rounded-3xl border-2 border-slate-800 shadow-2xl bg-slate-950'
-                  : 'w-full max-w-4xl rounded-3xl border border-slate-800/80 shadow-2xl bg-slate-950'
+                  ? 'w-full max-w-[720px] rounded-3xl border-2 border-slate-800 shadow-2xl bg-slate-950 pb-56 sm:pb-72'
+                  : 'w-full max-w-4xl rounded-3xl border border-slate-800/80 shadow-2xl bg-slate-950 pb-56 sm:pb-72'
               } ${
                 isDraggingActive ? 'ring-2 ring-indigo-500/40 shadow-[0_0_50px_rgba(99,102,241,0.1)]' : ''
               }`}
@@ -10706,8 +11634,8 @@ export const FunnelBuilder = ({
                 <style>{customCSS}</style>
               )}
 
-              {/* Encoche smartphone si mode mobile */}
-              {!isEditingPopup && previewDevice === 'mobile' && (
+              {/* Encoche smartphone si mode mobile en mode builder uniquement */}
+              {!isEditingPopup && previewDevice === 'mobile' && !isPublicView && viewMode === 'builder' && (
                 <div className="h-6 bg-slate-900 flex items-center justify-center border-b border-slate-800/60">
                   <div className="w-24 h-3.5 bg-black rounded-full" />
                 </div>
@@ -10777,7 +11705,7 @@ export const FunnelBuilder = ({
               {/* Empilement des Modules de la Page Longue avec marge de respiration (pb-40) */}
               <div className="divide-y divide-slate-800/40 pb-40">
                 {canvasBlocks.map((block, index) => {
-                  const isSelected = block.id === selectedBlockId && viewMode === 'builder';
+                  const isSelected = String(block.id) === String(selectedBlockId) && viewMode === 'builder';
                   const isHoveredDropZone = dropTargetZone === index + 1;
                   const condEval = evaluateBlockConditions(block);
 
@@ -10863,7 +11791,7 @@ export const FunnelBuilder = ({
               )}
 
               {/* Grande Zone de Dépôt Inférieure (Empilement "Coller en bas") */}
-              {viewMode === 'builder' && (
+              {viewMode === 'builder' && !isPublicView && (
                 <div className="p-6">
                   <div
                     onDragOver={(e) => {
@@ -10907,7 +11835,7 @@ export const FunnelBuilder = ({
                       Glissez et déposez n'importe quel module ici pour l'empiler tout en bas de la page.
                     </p>
                     <div className="mt-2 flex items-center gap-2 text-[10.5px] font-semibold text-indigo-400/80 bg-indigo-500/10 px-3 py-0.5 rounded-full border border-indigo-500/20">
-                      <Sparkles className="w-3 h-3" />
+                      <ArrowDown className="w-3 h-3" />
                       <span>Drop Zone h-40 • Défilement infini</span>
                     </div>
                   </div>
@@ -10915,7 +11843,7 @@ export const FunnelBuilder = ({
               )}
 
               {/* Barre Sticky Mobile CTA de Bas de Page (pour conversions extrêmes sur smartphone) */}
-              {funnelSettings.enableStickyMobileBar && previewDevice === 'mobile' && (
+              {funnelSettings.enableStickyMobileBar && (previewDevice === 'mobile' || isPublicView) && (
                 <div className="sticky bottom-0 z-40 bg-slate-950/95 border-t border-slate-800 p-3 backdrop-blur-md flex items-center justify-between gap-3 shadow-2xl">
                   <div className="min-w-0">
                     <span className="text-[10px] text-slate-400 block leading-tight">Offre Spéciale :</span>
@@ -10925,10 +11853,7 @@ export const FunnelBuilder = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      try { playCashChime(); } catch (e) {}
-                      triggerToast('⚡ Action de conversion enregistrée !');
-                    }}
+                    onClick={() => handleProceedToPrimaryCheckout()}
                     className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30 cursor-pointer"
                   >
                     <Zap className="w-3.5 h-3.5 fill-current" />
@@ -10955,7 +11880,7 @@ export const FunnelBuilder = ({
             )}
 
             <aside
-              className={`fixed inset-y-0 right-0 z-50 w-3/4 sm:w-96 max-w-[85vw] lg:relative lg:translate-x-0 lg:w-88 lg:sm:w-96 lg:shrink-0 h-full max-h-full bg-slate-900/95 border-l border-slate-800/80 flex flex-col shadow-2xl backdrop-blur-md overflow-hidden select-none transform transition-transform duration-300 ease-in-out ${
+              className={`fixed inset-y-0 right-0 z-50 w-[92vw] sm:w-96 max-w-md lg:relative lg:translate-x-0 lg:w-88 lg:sm:w-96 lg:shrink-0 h-full max-h-full bg-slate-900/95 border-l border-slate-800/80 flex flex-col shadow-2xl backdrop-blur-md overflow-hidden select-none transform transition-transform duration-300 ease-in-out ${
                 isSettingsOpen ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none lg:pointer-events-auto lg:translate-x-0'
               }`}
             >
@@ -11053,7 +11978,7 @@ export const FunnelBuilder = ({
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      <Sparkles className="w-3 h-3" />
+                      <ArrowDown className="w-3 h-3" />
                       <span>Funnel</span>
                     </button>
                   </div>
@@ -11090,10 +12015,10 @@ export const FunnelBuilder = ({
       </div>
 
       {/* ================================================================== */}
-      {/* BOUTONS FLOTTANTS (FAB) MOBILE : ACCÈS RAPIDE TIROIRS (lg:hidden)  */}
+      {/* BOUTONS FLOTTANTS (FAB) MOBILE : ACCÈS UNIFIÉ SANS COLLISION (lg:hidden) */}
       {/* ================================================================== */}
-      {viewMode === 'builder' && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] lg:hidden flex items-center gap-3 bg-slate-900/95 backdrop-blur-xl p-2 rounded-2xl border border-slate-700/80 shadow-[0_12px_40px_rgba(0,0,0,0.85)]">
+      {viewMode === 'builder' && !isPublicView && (
+        <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[60] lg:hidden flex items-center gap-1.5 bg-slate-900/95 backdrop-blur-xl p-1.5 rounded-2xl border border-slate-700/80 shadow-[0_12px_40px_rgba(0,0,0,0.85)] max-w-[96vw] overflow-x-auto">
           <button
             type="button"
             onClick={() => {
@@ -11101,9 +12026,9 @@ export const FunnelBuilder = ({
               setIsSettingsOpen(false);
               try { playTapBeep(); } catch (e) {}
             }}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-600/30 active:scale-95 transition cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-xs flex items-center gap-1 shadow-md active:scale-95 transition cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4 stroke-[3]" />
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>Modules</span>
           </button>
 
@@ -11114,22 +12039,45 @@ export const FunnelBuilder = ({
               setIsModulesOpen(false);
               try { playTapBeep(); } catch (e) {}
             }}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs flex items-center gap-1.5 border border-slate-700 active:scale-95 transition cursor-pointer shadow-md"
+            className="px-3 py-2 rounded-xl bg-slate-800 text-white font-black text-xs flex items-center gap-1 border border-slate-700 active:scale-95 transition cursor-pointer shadow-sm shrink-0"
           >
-            <Sliders className="w-4 h-4 text-indigo-400" />
+            <Sliders className="w-3.5 h-3.5 text-indigo-400" />
             <span>Éditer</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsToolboxOpen(prev => !prev);
+              try { playTapBeep(); } catch (e) {}
+            }}
+            className="px-2.5 py-2 rounded-xl bg-slate-800 text-indigo-300 font-bold text-xs flex items-center gap-1 border border-slate-700 active:scale-95 transition cursor-pointer shrink-0"
+            title="Outils Pro"
+          >
+            <span>🧰</span>
+            <span>Outils</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsIconLibraryOpen(true);
+              try { playTapBeep(); } catch (e) {}
+            }}
+            className="px-2.5 py-2 rounded-xl bg-slate-800 text-sky-300 font-bold text-xs flex items-center gap-1 border border-slate-700 active:scale-95 transition cursor-pointer shrink-0"
+            title="Icônes NaNa"
+          >
+            <span>💎</span>
+            <span>Icônes</span>
           </button>
         </div>
       )}
 
       {/* ================================================================== */}
-      {/* GROS BOUTON FLOTTANT STYLISÉ : BOÎTE À OUTILS PRO (BAS GAUCHE)     */}
+      {/* 4. BOUTONS FLOTTANTS HUB INTÉGRATION & BIBLIOTHÈQUE (DESKTOP SEUL) */}
       {/* ================================================================== */}
-      {/* ================================================================== */}
-      {/* 4. BOUTONS FLOTTANTS HUB INTÉGRATION & BIBLIOTHÈQUE D'ICÔNES NANA */}
-      {/* ================================================================== */}
-      {viewMode === 'builder' && (
-        <div className="fixed bottom-6 left-6 z-[60] flex items-center gap-2.5">
+      {viewMode === 'builder' && !isPublicView && (
+        <div className="hidden lg:flex fixed bottom-6 left-6 z-[60] items-center gap-2.5">
           {/* Bouton 1 : Boîte à Outils Pro */}
           <button
             type="button"
@@ -11143,7 +12091,7 @@ export const FunnelBuilder = ({
             <div className="w-7 h-7 rounded-xl bg-slate-950 text-indigo-400 flex items-center justify-center font-bold text-sm shadow-md group-hover:rotate-12 transition-transform">
               🧰
             </div>
-            <div className="text-left leading-tight hidden sm:block">
+            <div className="text-left leading-tight">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-indigo-200">
                 Hub Intégration
               </span>
@@ -11151,9 +12099,6 @@ export const FunnelBuilder = ({
                 Boîte à Outils Pro
               </span>
             </div>
-            <span className="sm:hidden font-black text-white text-xs">
-              Outils
-            </span>
           </button>
 
           {/* Bouton 2 : 💎 Icônes NaNa (Bibliothèque Duotone Pro) */}
@@ -11169,7 +12114,7 @@ export const FunnelBuilder = ({
             <div className="w-7 h-7 rounded-xl bg-slate-950 text-sky-400 flex items-center justify-center font-bold text-sm shadow-md group-hover:scale-110 transition-transform">
               💎
             </div>
-            <div className="text-left leading-tight hidden sm:block">
+            <div className="text-left leading-tight">
               <span className="block text-[10px] font-extrabold uppercase tracking-wider text-blue-200">
                 Illustrations Duotone
               </span>
@@ -11177,9 +12122,6 @@ export const FunnelBuilder = ({
                 Icônes NaNa
               </span>
             </div>
-            <span className="sm:hidden font-black text-white text-xs">
-              Icônes
-            </span>
           </button>
         </div>
       )}
@@ -11197,7 +12139,7 @@ export const FunnelBuilder = ({
             onInsertTool={(tool) => {
               insertBlockAtIndex(tool, canvasBlocks.length);
               try { playValidationBeep(); } catch (err) {}
-              triggerToast(`✨ Outil Pro "${tool.name}" empilé en bas de page !`);
+              triggerToast(`✅ Outil Pro "${tool.name}" empilé en bas de page !`);
               setTimeout(() => {
                 if (canvasScrollRef.current) {
                   canvasScrollRef.current.scrollTo({
@@ -11293,7 +12235,7 @@ export const FunnelBuilder = ({
           <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <LayoutTemplate className="w-5 h-5 text-indigo-400" />
                 <h3 className="text-base font-black text-white">Gabarits de Funnels Complets 1-Clic</h3>
               </div>
               <button
@@ -11564,6 +12506,36 @@ export const FunnelBuilder = ({
             <span>Tester Popup Exit-Intent 🎯</span>
           </button>
         </div>
+      )}
+
+      {/* Caisse Checkout Principale Sebpay Intégrée avec pré-remplissage 100% automatique */}
+      {isPrimaryCheckoutOpen && (
+        <Suspense fallback={null}>
+          <UltimateCheckout
+            isModal={true}
+            isOpen={isPrimaryCheckoutOpen}
+            product={checkoutProductPayload || {
+              id: activeProduct?.id,
+              name: activeProduct?.name || 'Offre Spéciale',
+              price: Number(activeProduct?.price) || 25000,
+              imageUrl: activeProduct?.image || '',
+              quantity: 1
+            }}
+            amount={Number(checkoutProductPayload?.price || activeProduct?.price) || 25000}
+            currency="FCFA"
+            orderDescription={`Commande : ${checkoutProductPayload?.name || activeProduct?.name || 'Offre Spéciale'}`}
+            defaultCustomerName={simulatedCheckout.fullName}
+            defaultPhone={simulatedCheckout.phone}
+            defaultAddress={simulatedCheckout.city}
+            onClose={() => setIsPrimaryCheckoutOpen(false)}
+            onCancel={() => setIsPrimaryCheckoutOpen(false)}
+            onSuccess={() => {
+              setIsPrimaryCheckoutOpen(false);
+              setOrderConfirmed(true);
+              triggerToast('🎉 Paiement validé avec succès ! Félicitations.');
+            }}
+          />
+        </Suspense>
       )}
 
     </div>

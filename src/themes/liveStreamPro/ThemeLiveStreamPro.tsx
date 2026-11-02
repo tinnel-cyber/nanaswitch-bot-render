@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  ShoppingBag, Search, Sparkles, Zap, ShieldCheck, 
+  ShoppingBag, Search, Radio, Zap, ShieldCheck, 
   HelpCircle, Eye, ExternalLink, Play, ArrowRight, CheckCircle2 
 } from 'lucide-react';
 import { StoreThemeProps } from '../../types/theme';
@@ -244,7 +244,7 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
 
             <div className="flex flex-col items-center space-y-2">
               <span className="w-10 h-10 rounded-2xl bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/30 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-[#F59E0B]" />
+                <Radio className="w-5 h-5 text-[#F59E0B]" />
               </span>
               <h4 className="font-extrabold text-sm text-white">{customConfig?.reassurance3Title || 'Multistreaming Haute Qualité'}</h4>
               <p className="text-xs text-[#94A3B8]">{customConfig?.reassurance3Desc || 'Diffusion simultanée synchronisée sur Facebook, TikTok, YouTube & Instagram'}</p>

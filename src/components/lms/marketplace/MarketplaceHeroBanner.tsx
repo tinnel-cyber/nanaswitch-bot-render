@@ -4,7 +4,7 @@ import {
   Play,
   Volume2,
   VolumeX,
-  Sparkles,
+  GraduationCap,
   Award,
   ShieldCheck,
   Users,
@@ -94,24 +94,24 @@ export const MarketplaceHeroBanner: React.FC<MarketplaceHeroBannerProps> = ({
         {/* Badges de Tête */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-rose-500 text-slate-950 shadow-lg shadow-amber-500/20 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>FORMATION VEDETTE • MASTERCLASS UEMOA</span>
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>FORMATION &amp; MASTERCLASS D&apos;EXCELLENCE</span>
           </span>
 
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-900/80 backdrop-blur-md text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Agréé Entreprise Konkobo</span>
+            <span>Certifications Professionnelles Reconnues</span>
           </span>
         </div>
 
         {/* Titre Principal */}
         <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white leading-tight tracking-tight drop-shadow-md">
-          {course.title}
+          Explorez nos Cours &amp; Masterclasses
         </h1>
 
         {/* Tagline marketing */}
         <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-normal max-w-2xl drop-shadow">
-          {course.tagline}
+          Développez vos compétences pratiques et accélérez votre réussite grâce à des formations d&apos;élite et des programmes interactifs animés par des experts.
         </p>
 
         {/* Preuve Sociale Rapide */}
@@ -142,6 +142,7 @@ export const MarketplaceHeroBanner: React.FC<MarketplaceHeroBannerProps> = ({
             onClick={() => onDirectEnroll(course)}
             className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/25 transition transform active:scale-95 flex items-center gap-2.5 cursor-pointer"
           >
+            <GraduationCap className="w-5 h-5 text-slate-950" />
             <span>S&apos;inscrire Immédiatement ({formatCFA(effectivePrice)})</span>
             <ChevronRight className="w-4 h-4" />
           </button>

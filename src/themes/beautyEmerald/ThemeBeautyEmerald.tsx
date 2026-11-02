@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Star, ShoppingBag, Eye, Heart, ArrowRight, ShieldCheck, 
-  Sparkles, MessageCircle, Check, ChevronRight, CheckCircle2 
+  Award, MessageCircle, Check, ChevronRight, CheckCircle2 
 } from 'lucide-react';
 import { StoreThemeProps } from '../../types/theme';
 import { StoreProductItem } from '../../components/storeBuilder/types';
@@ -317,7 +317,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
             <div className="mt-4 pt-12 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
               <div className="space-y-2">
                 <span className="w-10 h-10 mx-auto rounded-full bg-[#0F4C3A]/10 text-[#0F4C3A] flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-[#C59B27]" />
+                  <Award className="w-5 h-5 text-[#C59B27]" />
                 </span>
                 <h4 className="font-['Syne'] font-bold text-sm text-[#111C18]">
                   {customConfig?.reassurance1Title || 'Formules 100% Naturelles'}

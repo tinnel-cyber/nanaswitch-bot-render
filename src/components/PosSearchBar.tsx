@@ -194,17 +194,21 @@ export const PosSearchBar: React.FC<PosSearchBarProps> = ({
                 <div className="flex items-center gap-2.5 min-w-0">
                   {/* Photo or Initials */}
                   <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 shrink-0 overflow-hidden flex items-center justify-center">
-                    {item.photoUrl ? (
-                      <img
-                        src={item.photoUrl}
-                        alt={item.name}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <Package className="w-5 h-5 text-blue-400" />
-                    )}
+                    {(() => {
+                      const itemImg = item.photoUrl || (item as any).imageUrl || (item as any).image;
+                      return itemImg ? (
+                        <img
+                          src={itemImg}
+                          alt={item.name}
+                          loading="lazy"
+                          decoding="async"
+                          crossOrigin="anonymous"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <Package className="w-5 h-5 text-blue-400" />
+                      );
+                    })()}
                   </div>
 
                   <div className="min-w-0">

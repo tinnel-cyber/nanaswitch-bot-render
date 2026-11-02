@@ -14,7 +14,7 @@ export const DEFAULT_THEME_ID: ThemeId = 'theme-default';
 export const AVAILABLE_THEMES: ThemeDefinition[] = [
   {
     id: 'theme-blank-custom',
-    name: '✨ Nanasore Architect (Constructeur Libre A à Z)',
+    name: 'Nanasore Architect (Constructeur Libre A à Z)',
     subtitle: 'Drag & Drop Total • 15 Modules E-Commerce Exclusifs au Monde',
     description: 'Le constructeur nouvelle génération de Nanasore : partez d\'une page blanche ou d\'un des 4 Blueprints en 1 clic. Composez votre vitrine avec 15 modules ultra-rapides (Bento Hero, Rail Hits Spotify, Note Vocale WhatsApp, Négociateur Flash IA, Quiz 3 Clics, Comparateur Avant/Après, etc.).',
     badge: 'ARCHITECT OS • 15 MODULES',

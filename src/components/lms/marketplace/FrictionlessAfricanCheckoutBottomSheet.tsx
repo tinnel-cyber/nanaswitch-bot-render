@@ -13,11 +13,13 @@ import {
   RotateCcw,
   Check,
   PhoneCall,
-  CreditCard
+  CreditCard,
+  GraduationCap
 } from 'lucide-react';
 import { MarketplaceCourse, MobileMoneyProvider } from './types';
 import { formatCFA, playCashChime, playValidationBeep, playTapBeep } from '../../../utils/audio';
 import { recordMobileMoneyEnrollment } from '../../../services/marketplaceService';
+import { recordCourseEnrollment, navigateToStudentDashboard } from '../../../services/studentAuthService';
 import { useCheckout } from '../../../hooks/useCheckout';
 import { NanasorePaymentGateway } from '../../payment/NanasorePaymentGateway';
 
@@ -115,11 +117,23 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
         amount: effectivePrice
       });
 
+      // Enregistrement du profil élève pour connexion ultérieure automatique
+      recordCourseEnrollment({
+        courseId: course.id,
+        fullName: studentName,
+        phoneNumber: details.phoneNumber || phoneNumber
+      });
+
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);
       playCashChime();
     } catch (err) {
       console.warn('Erreur enrollment LMS :', err);
+      recordCourseEnrollment({
+        courseId: course.id,
+        fullName: studentName,
+        phoneNumber: details?.phoneNumber || phoneNumber
+      });
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);
       playCashChime();
@@ -142,7 +156,10 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
   const handleFinishAndAccess = () => {
     playValidationBeep();
     onClose();
-    onEnrollSuccess(course.id);
+    if (onEnrollSuccess) {
+      onEnrollSuccess(course.id);
+    }
+    navigateToStudentDashboard();
   };
 
   return (
@@ -214,7 +231,7 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
                       {discountPercentage && discountPercentage > 0 && (
                         <div className="mt-1">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            <Sparkles className="w-2.5 h-2.5" />
+                            <CheckCircle2 className="w-2.5 h-2.5" />
                             {discountLabel || `Remise Flash Diagnostic (-${discountPercentage}%)`}
                           </span>
                         </div>
@@ -408,7 +425,8 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
                       onClick={handleFinishAndAccess}
                       className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-95 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 transition flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <span>Accéder Immédiatement au Campus Virtuel</span>
+                      <GraduationCap className="w-5 h-5 text-slate-950" />
+                      <span>Accéder à mon Tableau de Bord &amp; Commencer</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

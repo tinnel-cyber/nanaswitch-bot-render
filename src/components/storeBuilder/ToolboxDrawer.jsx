@@ -6,7 +6,6 @@ import {
   ChevronUp,
   GripVertical,
   Plus,
-  Sparkles,
   Zap,
   Info
 } from 'lucide-react';
@@ -282,7 +281,7 @@ export const ToolboxDrawer = ({
         {/* Pied du Hub d'Intégration */}
         <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">
           <span className="flex items-center gap-1.5 text-[11px]">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <Zap className="w-3.5 h-3.5 text-indigo-400" />
             <span>Moteur d'injection temps réel prêt</span>
           </span>
           <button

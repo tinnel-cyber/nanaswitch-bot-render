@@ -490,6 +490,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         slug: productToEdit?.slug || productToEdit?.productSlug
       });
 
+      const cleanPlainDescription = stripHtmlToPlainText(richDescription || description).trim();
+
       const resolvedProduct: InventoryProduct = {
         id: productId,
         storeId: resolvedStoreId,
@@ -508,9 +510,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           ...trimmedName.toLowerCase().split(/\s+/)
         ].filter(Boolean),
         photoUrl: photoUrl || '',
-        description: (richDescription || description).trim() || '',
+        description: cleanPlainDescription || (richDescription || description).trim() || '',
         richDescription: (richDescription || description).trim() || '',
-        shortDescription: shortDescription.trim() || '',
+        shortDescription: (stripHtmlToPlainText(shortDescription) || cleanPlainDescription).slice(0, 160) || '',
         badge: badge.trim() || '',
         hasLiveDemo: Boolean(hasLiveDemo),
         linkedFunnelId: linkedFunnelId || (hasModularFunnel ? finalSlug : null),
@@ -523,6 +525,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           funnelStudio: 'nana_studio_3',
           linkPrefix: 't',
           title: trimmedName,
+          description: cleanPlainDescription,
           salePrice: priceNum,
           originalPrice: originalPriceNum || Math.round(priceNum * 1.5),
           active: true

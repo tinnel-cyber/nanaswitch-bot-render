@@ -420,8 +420,8 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
                 className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/30 text-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition cursor-pointer"
                 title="Rédiger du contenu de vente avec l'Assistant Marketing IA"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Marketing IA</span>
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Marketing Pro</span>
               </button>
             )}
 

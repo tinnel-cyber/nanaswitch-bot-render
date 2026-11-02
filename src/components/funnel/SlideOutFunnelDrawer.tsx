@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Sparkles, ChevronUp, ChevronDown, ArrowUp, Zap } from 'lucide-react';
+import { X, Loader2, ChevronUp, ChevronDown, ArrowUp, Zap } from 'lucide-react';
 import { getFunnelBySlug, resolveProductFunnelEngine, hasActiveModularFunnelSync } from '../../services/omniFunnelService';
 
 const PublicDealPageView = React.lazy(() =>
@@ -155,6 +155,16 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
     }
   }, [isOpen, funnelId]);
 
+  // Fermeture automatique du tiroir lors du déclenchement du checkout principal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleCheckoutTriggered = () => {
+      if (onClose) onClose();
+    };
+    window.addEventListener('nana:open_checkout', handleCheckoutTriggered);
+    return () => window.removeEventListener('nana:open_checkout', handleCheckoutTriggered);
+  }, [isOpen, onClose]);
+
   // Calcul dynamique de la jauge de progression
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -301,9 +311,9 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
           </button>
         </div>
 
-        {/* 2b. L'ASCENSEUR LATÉRAL TACTILE ULTRA-EFFICACE (Spécial Mobile & Desktop) */}
+        {/* 2b. L'ASCENSEUR LATÉRAL TACTILE ULTRA-EFFICACE (Spécial Desktop & Tablette - masqué sur petit mobile pour ne pas masquer les champs) */}
         <div 
-          className="absolute right-2 sm:right-3.5 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center bg-slate-950/90 backdrop-blur-md border border-white/20 rounded-full shadow-2xl p-1 sm:p-1.5 gap-1.5 select-none"
+          className="hidden sm:flex absolute right-2 sm:right-3.5 top-1/2 -translate-y-1/2 z-50 flex-col items-center bg-slate-950/90 backdrop-blur-md border border-white/20 rounded-full shadow-2xl p-1 sm:p-1.5 gap-1.5 select-none"
           aria-label="Scrolleur rapide du tunnel de vente"
         >
           {/* Bouton Haut de Page */}
@@ -399,7 +409,7 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
                 fallback={
                   <div className="min-h-screen w-full bg-[#020617] flex flex-col items-center justify-center p-6 text-slate-300">
                     <div className="w-9 h-9 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center mb-3">
-                      <Sparkles className="w-5 h-5 text-indigo-400 animate-spin" />
+                      <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                     </div>
                     <span className="text-xs font-bold text-slate-200">Ouverture du tunnel 12 blocs...</span>
                   </div>
@@ -410,6 +420,12 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
                     slug={cleanSlug}
                     product={product}
                     onBackToStore={onClose}
+                    onDirectCheckout={(prod, qty) => {
+                      onClose();
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('nana:open_checkout', { detail: { product: prod, quantity: qty || 1 } }));
+                      }
+                    }}
                     className="pt-2"
                   />
                 ) : resolvedType === 'c' ? (

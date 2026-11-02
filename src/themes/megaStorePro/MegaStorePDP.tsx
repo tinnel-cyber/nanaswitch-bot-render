@@ -383,7 +383,7 @@ export const MegaStorePDP: React.FC<MegaStorePDPProps> = ({
 
               {/* Points Fidélité Récompense */}
               <div className="p-2 rounded bg-amber-50 border border-amber-200/60 flex items-center gap-2 text-xs text-amber-900 font-bold">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                <Award className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Gagnez 135 Points Nanasore sur cet achat.</span>
               </div>
 

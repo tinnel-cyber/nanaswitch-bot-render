@@ -8,7 +8,9 @@ import {
   Eye,
   Check,
   ChevronRight,
-  Sparkles,
+  Target,
+  PlusCircle,
+  FileCode2,
   Smartphone,
   Monitor,
   Tablet,
@@ -132,7 +134,7 @@ export const BLOCK_CATEGORIES = [
   { id: 'sections', label: 'Sections', icon: Layout },
   { id: 'forms', label: 'Formulaires', icon: MessageSquare },
   { id: 'cta', label: 'Boutons & CTA', icon: MousePointer },
-  { id: 'animations', label: 'Animations', icon: Sparkles },
+  { id: 'animations', label: 'Animations', icon: Zap },
   { id: 'third_party', label: 'Outils Tiers', icon: Globe }
 ];
 
@@ -340,7 +342,7 @@ export const READY_TO_USE_BLOCKS = [
 
 // Étapes standards du Funnel
 export const FUNNEL_JOURNEY_STEPS = [
-  { id: 'optin', name: 'Page de Capture (Opt-in)', conversion: '44.8%', icon: Sparkles, shortName: 'Opt-in' },
+  { id: 'optin', name: 'Page de Capture (Opt-in)', conversion: '44.8%', icon: Target, shortName: 'Opt-in' },
   { id: 'sales', name: 'Page de Vente (Masterclass)', conversion: '22.1%', icon: ShoppingBag, shortName: 'Vente' },
   { id: 'upsell', name: 'Upsell 1-Clic (Coaching VIP)', conversion: '38.4%', icon: TrendingUp, shortName: 'Upsell' },
   { id: 'downsell', name: 'Downsell (Replay Éco)', conversion: '26.7%', icon: Tag, shortName: 'Downsell' }
@@ -1342,7 +1344,7 @@ export const UltimateFunnelBuilder = ({
             className="hidden md:flex px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold items-center gap-1.5 transition cursor-pointer border border-slate-700/60 shadow-sm shrink-0"
             title="Exporter directement la structure en JSON Elementor 3.x"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <FileCode2 className="w-3.5 h-3.5 text-indigo-400" />
             <span>Ouvrir dans Elementor</span>
           </button>
 
@@ -1489,7 +1491,7 @@ export const UltimateFunnelBuilder = ({
       {/* Bannière de Notification Toast */}
       {toastMessage && (
         <div className="absolute top-18 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-slate-900/95 border border-amber-500/50 text-amber-300 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-          <Sparkles className="w-4 h-4 text-amber-400" />
+          <CheckCircle2 className="w-4 h-4 text-amber-400" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -1706,7 +1708,7 @@ export const UltimateFunnelBuilder = ({
             {/* Bannière flottante d'aide au drop en cours de manipulation */}
             {isDraggingActive && (
               <div className="sticky top-2 z-40 mx-auto w-fit px-4 py-1.5 rounded-full bg-amber-500 text-slate-950 font-black text-xs shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 mb-4">
-                <Sparkles className="w-3.5 h-3.5" />
+                <PlusCircle className="w-3.5 h-3.5" />
                 <span>Zone de dépôt active : Déposez le bloc dans la zone de votre choix</span>
               </div>
             )}
@@ -1928,7 +1930,7 @@ export const UltimateFunnelBuilder = ({
                     Glissez-déposez n'importe quel bloc depuis la Banque d'outils à gauche, ou cliquez pour insérer un bloc à la suite.
                   </p>
                   <div className="mt-3 flex items-center gap-2 text-[10.5px] font-semibold text-amber-400/80 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-                    <Sparkles className="w-3 h-3" />
+                    <CheckCircle2 className="w-3 h-3" />
                     <span>Dépôt ultra-tolérant : glissez sans frustration</span>
                   </div>
                 </div>
@@ -2529,7 +2531,7 @@ export const UltimateFunnelBuilder = ({
                   {/* Presets */}
                   <div>
                     <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <CheckCircle2 className="w-4 h-4 text-amber-400" />
                       <span>Palettes Thématiques Haut de Gamme</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -3276,7 +3278,7 @@ export const UltimateFunnelBuilder = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5" />
+                  <FileCode2 className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-black text-white">Exportateur Magique Elementor 3.x ⚡</h3>
@@ -3420,7 +3422,7 @@ function renderWYSIWYGBlock(block, activeSource) {
         <div className="flex flex-col items-center text-center">
           {d.promoBadge && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider uppercase mb-4 bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Award className="w-3.5 h-3.5" />
               <span>{d.promoBadge}</span>
             </div>
           )}

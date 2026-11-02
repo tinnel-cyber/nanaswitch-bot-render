@@ -238,7 +238,7 @@ export const BottomControls: React.FC<BottomControlsProps> = ({
         name: product.name,
         price: product.sellingPrice,
         quantity,
-        photoUrl: product.photoUrl,
+        photoUrl: product.photoUrl || (product as any).imageUrl || (product as any).image,
         barcode: product.barcode,
       }));
 

@@ -449,7 +449,6 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                       className="px-3.5 py-2 rounded-full text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>Nos Univers</span>
-                      <Sparkles className="w-3 h-3 text-amber-500" />
                     </button>
 
                     <button
@@ -955,7 +954,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                   <div className="space-y-4">
                     {customConfig?.heroSubtitle && (
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-[#0056D2] text-xs font-extrabold uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <ShieldCheck className="w-3.5 h-3.5" />
                         <span>{customConfig.heroSubtitle}</span>
                       </div>
                     )}

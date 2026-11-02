@@ -13,7 +13,8 @@ import {
   Package, 
   Undo2, 
   Redo2,
-  Sparkles
+  Sparkles,
+  Play
 } from 'lucide-react';
 import { buildPublicShopUrl } from '../../config/domains';
 import { getThemeRoutePrefix } from '../../utils/themeRoutePrefix';
@@ -384,7 +385,7 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
             className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/40 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             title="Tester le brouillon en direct en mode Sandbox Super-Admin (ex: /et/sandbox) sans être bloqué par un tenant"
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
             <span className="hidden md:inline">🧪 Tester en direct</span>
             <span className="md:hidden">🧪 Sandbox</span>
           </a>

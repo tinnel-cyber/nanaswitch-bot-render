@@ -324,7 +324,7 @@ const INITIAL_CONNECTORS: ConnectorConfig[] = [
     status: 'CONNECTED',
     description: 'Campagnes emailing marketing, newsletters, relances automatisées et envois transactionnels par email et SMS.',
     endpointUrl: 'https://api.brevo.com/v3',
-    apiKey: 'xkeysib-78b190f845a7201c-sec49281',
+    apiKey: '',
     senderEmail: 'contact@nanastore.africa',
     senderName: 'NaNa Store Marketing',
     senderId: 'NANA_STORE',

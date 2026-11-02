@@ -99,15 +99,17 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
     if (inventory && inventory.length > 0) {
       return inventory;
     }
-    return (FAST_SALE_PRODUCTS || []).map((f) => ({
+    return (FAST_SALE_PRODUCTS || []).map((f: any) => ({
       id: f.id,
       storeId: '',
       name: f.name,
-      category: 'Général',
+      category: f.category || 'Général',
       sellingPrice: f.price,
       costPrice: Math.round(f.price * 0.75),
       stock: 999,
-      unit: 'pièce',
+      unit: f.unit || 'pièce',
+      photoUrl: f.photoUrl || f.imageUrl || '',
+      imageUrl: f.photoUrl || f.imageUrl || '',
       keywords: [f.name.toLowerCase()],
     }));
   }, [inventory]);
@@ -252,38 +254,51 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
                   >
                     {/* Vignette ou Photo */}
                     <div className="w-full h-24 sm:h-28 rounded-xl bg-slate-100 dark:bg-slate-900 object-cover flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700/60 relative mb-2 group-hover:border-blue-400/40 transition-colors">
-                      {prod.photoUrl ? (
-                        <>
-                          <img
-                            src={prod.photoUrl}
-                            alt={prod.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          />
-                          {/* Bouton Loupe / Agrandisseur interactif */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              playTapBeep();
-                              setLightboxImage({
-                                url: prod.photoUrl!,
-                                alt: prod.name,
-                                title: `${prod.name} • ${formatCFA(prod.sellingPrice)}`,
-                              });
-                            }}
-                            className="absolute bottom-1.5 left-1.5 p-1 rounded-lg bg-white/90 hover:bg-blue-600 text-slate-700 hover:text-white border border-slate-200 backdrop-blur-xs transition-all shadow-xs z-10 cursor-pointer active:scale-90 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-white dark:border-slate-700/80"
-                            title="Agrandir et inspecter l'image"
-                            aria-label="Inspecter l'image"
-                          >
-                            <ZoomIn className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <div className="text-2xl font-black text-blue-600/80 dark:text-blue-400/80">
-                          {prod.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
+                      {(() => {
+                        const productImg = prod.photoUrl || (prod as any).imageUrl || (prod as any).image;
+                        return productImg ? (
+                          <>
+                            <img
+                              src={productImg}
+                              alt={prod.name}
+                              loading="lazy"
+                              crossOrigin="anonymous"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const fallbackEl = e.currentTarget.parentElement?.querySelector('.pos-img-fallback');
+                                if (fallbackEl) (fallbackEl as HTMLElement).style.display = 'flex';
+                              }}
+                            />
+                            <div className="pos-img-fallback hidden text-2xl font-black text-blue-600/80 dark:text-blue-400/80">
+                              {prod.name.charAt(0).toUpperCase()}
+                            </div>
+                            {/* Bouton Loupe / Agrandisseur interactif */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                playTapBeep();
+                                setLightboxImage({
+                                  url: productImg,
+                                  alt: prod.name,
+                                  title: `${prod.name} • ${formatCFA(prod.sellingPrice)}`,
+                                });
+                              }}
+                              className="absolute bottom-1.5 left-1.5 p-1 rounded-lg bg-white/90 hover:bg-blue-600 text-slate-700 hover:text-white border border-slate-200 backdrop-blur-xs transition-all shadow-xs z-10 cursor-pointer active:scale-90 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:text-white dark:border-slate-700/80"
+                              title="Agrandir et inspecter l'image"
+                              aria-label="Inspecter l'image"
+                            >
+                              <ZoomIn className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-2xl font-black text-blue-600/80 dark:text-blue-400/80">
+                            {prod.name.charAt(0).toUpperCase()}
+                          </div>
+                        );
+                      })()}
 
                       {/* Bouton Créer Image/Vidéo Pub Studio IA Interne */}
                       <button
@@ -466,13 +481,16 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
                   {/* Photo & Nom */}
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shrink-0 overflow-hidden flex items-center justify-center">
-                      {item.photoUrl ? (
-                        <img src={item.photoUrl} alt={item.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xs font-black text-blue-600 dark:text-blue-300">
-                          {item.name.charAt(0).toUpperCase()}
-                        </span>
-                      )}
+                      {(() => {
+                        const itemImg = item.photoUrl || (item as any).imageUrl || (item as any).image;
+                        return itemImg ? (
+                          <img src={itemImg} alt={item.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
+                        ) : (
+                          <span className="text-xs font-black text-blue-600 dark:text-blue-300">
+                            {item.name.charAt(0).toUpperCase()}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-slate-900 dark:text-white text-xs truncate">{item.name}</div>

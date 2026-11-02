@@ -21,7 +21,6 @@ import {
   Phone,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Truck,
   Check,
   Crown,

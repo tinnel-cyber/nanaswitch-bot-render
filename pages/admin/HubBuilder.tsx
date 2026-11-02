@@ -25,7 +25,11 @@ import {
 } from 'lucide-react';
 import { Link } from '../../components/CentralHubOmnibar';
 
-export type BlockType = 'header' | 'description' | 'image' | 'video' | 'cta';
+import { SlideModuleBlock, SlideItem, SlideSettings } from '../../src/components/storeBuilder/SlideModuleBlock';
+import { ImageUploadInput } from '../../src/components/common/ImageUploadInput';
+import { publishHubBlock, updateLocalAppRegistry, HubBlockConfig } from '../../src/services/hubPublishService';
+
+export type BlockType = 'header' | 'description' | 'image' | 'video' | 'cta' | 'image_slider';
 
 export interface BlockItem {
   id: string;
@@ -38,6 +42,8 @@ export interface BlockItem {
   ctaText: string;
   trialBadge: string;
   tutorialUrl: string;
+  slides?: SlideItem[];
+  slideSettings?: SlideSettings;
 }
 
 // Fonction de nettoyage strict des objets pour Firebase (élimine tout undefined)
@@ -58,7 +64,21 @@ export const createBlockWithDefaults = (overrides: Partial<BlockItem> & { id: st
   imageUrl: overrides.imageUrl ?? overrides.url ?? '',
   ctaText: overrides.ctaText ?? '',
   trialBadge: overrides.trialBadge ?? '',
-  tutorialUrl: overrides.tutorialUrl ?? ''
+  tutorialUrl: overrides.tutorialUrl ?? '',
+  slides: overrides.slides ?? (overrides.type === 'image_slider' ? [
+    { id: 'slide-1', imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80', captionTitle: 'Encaissement 1-Clic Rapide', captionText: 'Paiements directs Wave, Orange Money et Cartes bancaires sécurisés.' },
+    { id: 'slide-2', imageUrl: 'https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&auto=format&fit=crop&q=80', captionTitle: 'Gestion de Stock en Temps Réel', captionText: 'Synchronisation automatique entre vos dépôts et vos points de vente physiques.' },
+    { id: 'slide-3', imageUrl: 'https://images.unsplash.com/photo-1556742111-a301076d9d18?w=800&auto=format&fit=crop&q=80', captionTitle: 'Rapports Financiers & KPI', captionText: 'Visualisez vos marges, recettes et chiffres d\'affaires au centime près.' }
+  ] : []),
+  slideSettings: overrides.slideSettings ?? (overrides.type === 'image_slider' ? {
+    autoplay: true,
+    interval: 4000,
+    aspectRatio: 'wide'
+  } : {
+    autoplay: true,
+    interval: 4000,
+    aspectRatio: 'wide'
+  })
 });
 
 export interface CardItem {
@@ -84,23 +104,12 @@ export interface RowItem {
   rowTitle?: string;
 }
 
-// FONCTION DE NETTOYAGE STRICT D'URL ET PURGE TOTALE DES MOCK/UNSPLASH
+// FONCTION DE NETTOYAGE D'URL
 const sanitizeMediaUrl = (url?: string | null): string => {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();
   const match = trimmed.match(/\((https?:\/\/[^\)]+)\)/);
   const resolved = match ? match[1] : trimmed.replace(/^\[(.*?)\]$/, '$1').trim();
-  const lower = resolved.toLowerCase();
-  if (
-    lower.includes('unsplash.com') ||
-    lower.includes('images.unsplash') ||
-    lower.includes('via.placeholder') ||
-    lower.includes('placeholder.com') ||
-    lower.includes('sample-videos.com') ||
-    lower.includes('commondatastorage.googleapis.com')
-  ) {
-    return '';
-  }
   return resolved;
 };
 
@@ -321,6 +330,50 @@ export const HubBuilderPage = () => {
                   ? r.cards.filter(Boolean)
                   : (r.cards && typeof r.cards === 'object' ? Object.values(r.cards).filter(Boolean) : []);
 
+                if (rawCards.length === 0 && (r.title || r.id || r.type || r.imageUrl || r.routeOrAction)) {
+                  const cardId = r.id || `card-${rIdx + 1}`;
+                  const isSlider = r.type === 'image_slider' || (r.slides && r.slides.length > 0);
+                  const initialBlocks: BlockItem[] = [];
+                  if (isSlider) {
+                    initialBlocks.push(createBlockWithDefaults({
+                      id: `b-slider-${cardId}`,
+                      type: 'image_slider',
+                      title: r.title || 'Slide Module',
+                      slides: r.slides || [],
+                      slideSettings: r.slideSettings || r.settings
+                    }));
+                  } else {
+                    initialBlocks.push(createBlockWithDefaults({
+                      id: `b-${cardId}-header`,
+                      type: 'header',
+                      title: r.title || 'Module',
+                      badge: r.palmares || r.badge || ''
+                    }));
+                  }
+
+                  return {
+                    id: `row-${r.id || rIdx + 1}`,
+                    title: r.category || r.title || `Section #${rIdx + 1}`,
+                    cards: [{
+                      id: cardId,
+                      routeUrl: r.routeUrl || r.routeOrAction || '',
+                      isRootApp: Boolean(r.isRootApp),
+                      linkedModuleIds: r.linkedModuleIds || [],
+                      title: r.title || 'Nouveau Module',
+                      palmares: r.palmares || r.badge || '',
+                      description: r.description || '',
+                      mediaType: r.mediaType || 'image',
+                      mediaUrl: sanitizeMediaUrl(r.mediaUrl || r.imageUrl || ''),
+                      imageUrl: sanitizeMediaUrl(r.mediaUrl || r.imageUrl || ''),
+                      tutorialUrl: r.tutorialUrl || '',
+                      trialBadge: r.trialBadge || '',
+                      trialType: r.trialType || 'freemium',
+                      priceMonthly: r.priceMonthly || 0,
+                      blocks: Array.isArray(r.blocks) && r.blocks.length > 0 ? r.blocks : initialBlocks
+                    }]
+                  };
+                }
+
                 return {
                   id: r.id || `row-${rIdx + 1}`,
                   title: r.title || r.rowTitle || `Section #${rIdx + 1}`,
@@ -349,7 +402,9 @@ export const HubBuilderPage = () => {
                           imageUrl: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.url || '') : '',
                           ctaText: b.ctaText || '',
                           trialBadge: b.trialBadge || '',
-                          tutorialUrl: b.tutorialUrl || ''
+                          tutorialUrl: b.tutorialUrl || '',
+                          slides: b.slides || (b.type === 'image_slider' ? undefined : []),
+                          slideSettings: b.slideSettings
                         }))
                       };
                     }
@@ -469,6 +524,21 @@ export const HubBuilderPage = () => {
         return createBlockWithDefaults({ id, type, url: '' });
       case 'cta':
         return createBlockWithDefaults({ id, type, ctaText: 'Activer', trialBadge: 'Essai offert' });
+      case 'image_slider':
+        return createBlockWithDefaults({
+          id,
+          type,
+          slides: [
+            { id: 'slide-1', imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80', captionTitle: 'Encaissement 1-Clic Rapide', captionText: 'Paiements directs Wave, Orange Money et Cartes bancaires sécurisés.' },
+            { id: 'slide-2', imageUrl: 'https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&auto=format&fit=crop&q=80', captionTitle: 'Gestion de Stock en Temps Réel', captionText: 'Synchronisation automatique entre vos dépôts et vos points de vente physiques.' },
+            { id: 'slide-3', imageUrl: 'https://images.unsplash.com/photo-1556742111-a301076d9d18?w=800&auto=format&fit=crop&q=80', captionTitle: 'Rapports Financiers & KPI', captionText: 'Visualisez vos marges, recettes et chiffres d\'affaires au centime près.' }
+          ],
+          slideSettings: {
+            autoplay: true,
+            interval: 4000,
+            aspectRatio: 'wide'
+          }
+        });
     }
   };
 
@@ -768,6 +838,81 @@ export const HubBuilderPage = () => {
     showToast('Bloc supprimé.');
   };
 
+  // Fonctions de personnalisation en direct pour le Module Slide / Carrousel d'Images
+  const updateBlockSlides = (newSlides: SlideItem[]) => {
+    if (!selectedBlockInfo) return;
+    const { rowId, cardId, blockId } = selectedBlockInfo;
+    setHubData(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      return {
+        ...row,
+        cards: row.cards.map(card => {
+          if (card.id !== cardId) return card;
+          return {
+            ...card,
+            blocks: card.blocks.map(b => {
+              if (b.id !== blockId) return b;
+              return { ...b, slides: newSlides };
+            })
+          };
+        })
+      };
+    }));
+  };
+
+  const updateSlideField = (slideIndex: number, field: keyof SlideItem, value: string) => {
+    if (!activeBlock || !activeBlock.slides) return;
+    const nextSlides = [...activeBlock.slides];
+    if (!nextSlides[slideIndex]) return;
+    nextSlides[slideIndex] = { ...nextSlides[slideIndex], [field]: value };
+    updateBlockSlides(nextSlides);
+  };
+
+  const addSlideToBlock = () => {
+    if (!activeBlock) return;
+    const currentSlides = activeBlock.slides || [];
+    const newSlide: SlideItem = {
+      id: 'slide-' + Date.now(),
+      imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800&auto=format&fit=crop&q=80',
+      captionTitle: `Nouvelle Slide ${currentSlides.length + 1}`,
+      captionText: 'Ajoutez une description captivante pour cette slide.'
+    };
+    updateBlockSlides([...currentSlides, newSlide]);
+  };
+
+  const removeSlideFromBlock = (slideIndex: number) => {
+    if (!activeBlock || !activeBlock.slides) return;
+    const nextSlides = activeBlock.slides.filter((_, idx) => idx !== slideIndex);
+    updateBlockSlides(nextSlides);
+  };
+
+  const updateSlideSettings = (key: keyof SlideSettings, value: any) => {
+    if (!selectedBlockInfo) return;
+    const { rowId, cardId, blockId } = selectedBlockInfo;
+    setHubData(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      return {
+        ...row,
+        cards: row.cards.map(card => {
+          if (card.id !== cardId) return card;
+          return {
+            ...card,
+            blocks: card.blocks.map(b => {
+              if (b.id !== blockId) return b;
+              return {
+                ...b,
+                slideSettings: {
+                  ...(b.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' }),
+                  [key]: value
+                }
+              };
+            })
+          };
+        })
+      };
+    }));
+  };
+
   // CHARGEMENT INSTANTANÉ DE LA SUITE OFFICIELLE NANA POS & ERP (DONNÉES RÉELLES, ZÉRO MOCK, ZÉRO UNSPLASH)
   const loadOfficialNanaSuite = () => {
     const suiteRows: RowItem[] = [
@@ -780,7 +925,8 @@ export const HubBuilderPage = () => {
             title: 'Caisse Tactile & Point de Vente (POS)',
             description: 'Interface tactile ultra-rapide pour encaissement comptoir, multi-vendeurs, tickets de caisse, lecteur code-barres et synchronisation automatique hors-ligne.',
             mediaType: 'image',
-            mediaUrl: '',
+            mediaUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80',
+            imageUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80',
             routeUrl: '/dashboard/apps/pos',
             palmares: 'N°1 des Ventes • Certifié',
             trialBadge: 'Inclus • Illimité',
@@ -790,6 +936,7 @@ export const HubBuilderPage = () => {
             blocks: [
               createBlockWithDefaults({ id: 'b-pos-1', type: 'header', title: 'Caisse Tactile & Point de Vente (POS)', badge: 'N°1 des Ventes • Certifié' }),
               createBlockWithDefaults({ id: 'b-pos-2', type: 'description', text: 'Interface tactile ultra-rapide pour encaissement comptoir, multi-vendeurs, tickets de caisse, lecteur code-barres et synchronisation automatique hors-ligne.' }),
+              createBlockWithDefaults({ id: 'b-pos-img', type: 'image', url: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80', imageUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80' }),
               createBlockWithDefaults({ id: 'b-pos-3', type: 'cta', tutorialUrl: 'https://youtube.com', trialBadge: 'Inclus • Illimité', ctaText: 'Lancer la Caisse' })
             ]
           },
@@ -798,7 +945,8 @@ export const HubBuilderPage = () => {
             title: 'Clôture Journalière & Rapport Z de Caisse',
             description: 'Génération instantanée du Z de caisse, réconciliation des espèces, Mobile Money (Wave, Orange, Moov) et export comptable.',
             mediaType: 'image',
-            mediaUrl: '',
+            mediaUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+            imageUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
             routeUrl: '/dashboard/apps/pos-closing',
             palmares: 'Comptabilité',
             trialBadge: 'Inclus',
@@ -808,6 +956,7 @@ export const HubBuilderPage = () => {
             blocks: [
               createBlockWithDefaults({ id: 'b-clos-1', type: 'header', title: 'Clôture Journalière & Rapport Z de Caisse', badge: 'Comptabilité' }),
               createBlockWithDefaults({ id: 'b-clos-2', type: 'description', text: 'Génération instantanée du Z de caisse, réconciliation des espèces, Mobile Money (Wave, Orange, Moov) et export comptable.' }),
+              createBlockWithDefaults({ id: 'b-clos-img', type: 'image', url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80', imageUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80' }),
               createBlockWithDefaults({ id: 'b-clos-3', type: 'cta', tutorialUrl: '', trialBadge: 'Inclus', ctaText: 'Ouvrir Clôture' })
             ]
           },
@@ -816,7 +965,8 @@ export const HubBuilderPage = () => {
             title: 'Imprimante Ticket Thermique (58/80mm)',
             description: 'Impression automatique des tickets de caisse, duplicatas et factures proforma avec logo de boutique.',
             mediaType: 'image',
-            mediaUrl: '',
+            mediaUrl: 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80',
+            imageUrl: 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80',
             routeUrl: '/dashboard/apps/receipt-printer',
             palmares: 'Bluetooth & USB',
             trialBadge: 'Prêt',
@@ -826,6 +976,7 @@ export const HubBuilderPage = () => {
             blocks: [
               createBlockWithDefaults({ id: 'b-print-1', type: 'header', title: 'Imprimante Ticket Thermique (58/80mm)', badge: 'Bluetooth & USB' }),
               createBlockWithDefaults({ id: 'b-print-2', type: 'description', text: 'Impression automatique des tickets de caisse, duplicatas et factures proforma avec logo de boutique.' }),
+              createBlockWithDefaults({ id: 'b-print-img', type: 'image', url: 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80', imageUrl: 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80' }),
               createBlockWithDefaults({ id: 'b-print-3', type: 'cta', tutorialUrl: '', trialBadge: 'Prêt', ctaText: 'Configurer' })
             ]
           },
@@ -834,7 +985,8 @@ export const HubBuilderPage = () => {
             title: 'Scanner Code-Barres & Douchette Laser',
             description: 'Recherche et ajout ultra-rapide au panier par bip code-barres EAN-13, QR code ou caméra du téléphone.',
             mediaType: 'image',
-            mediaUrl: '',
+            mediaUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80',
+            imageUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80',
             routeUrl: '/dashboard/apps/barcode-scanner',
             palmares: 'Ultra-Rapide',
             trialBadge: 'Inclus',
@@ -844,6 +996,7 @@ export const HubBuilderPage = () => {
             blocks: [
               createBlockWithDefaults({ id: 'b-bar-1', type: 'header', title: 'Scanner Code-Barres & Douchette Laser', badge: 'Ultra-Rapide' }),
               createBlockWithDefaults({ id: 'b-bar-2', type: 'description', text: 'Recherche et ajout ultra-rapide au panier par bip code-barres EAN-13, QR code ou caméra du téléphone.' }),
+              createBlockWithDefaults({ id: 'b-bar-img', type: 'image', url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80', imageUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80' }),
               createBlockWithDefaults({ id: 'b-bar-3', type: 'cta', tutorialUrl: '', trialBadge: 'Inclus', ctaText: 'Scanner' })
             ]
           }
@@ -858,7 +1011,8 @@ export const HubBuilderPage = () => {
             title: 'Gestion de Stock & Inventaire Temps Réel',
             description: 'Mouvements d\'entrées/sorties, alertes automatiques de rupture, valorisation du stock marchand et transferts de magasins.',
             mediaType: 'image',
-            mediaUrl: '',
+            mediaUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
+            imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
             routeUrl: '/dashboard/apps/inventory',
             palmares: 'Automatisé',
             trialBadge: 'Inclus',
@@ -868,6 +1022,7 @@ export const HubBuilderPage = () => {
             blocks: [
               createBlockWithDefaults({ id: 'b-stk-1', type: 'header', title: 'Gestion de Stock & Inventaire Temps Réel', badge: 'Automatisé' }),
               createBlockWithDefaults({ id: 'b-stk-2', type: 'description', text: 'Mouvements d\'entrées/sorties, alertes automatiques de rupture, valorisation du stock marchand et transferts de magasins.' }),
+              createBlockWithDefaults({ id: 'b-stk-img', type: 'image', url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80', imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80' }),
               createBlockWithDefaults({ id: 'b-stk-3', type: 'cta', tutorialUrl: '', trialBadge: 'Inclus', ctaText: 'Gérer les Stocks' })
             ]
           },
@@ -958,7 +1113,9 @@ export const HubBuilderPage = () => {
               imageUrl: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.url || '') : '',
               ctaText: b.ctaText || '',
               trialBadge: b.trialBadge || '',
-              tutorialUrl: b.tutorialUrl || ''
+              tutorialUrl: b.tutorialUrl || '',
+              slides: b.slides || (b.type === 'image_slider' ? undefined : []),
+              slideSettings: b.slideSettings
             }))
           };
         })
@@ -970,7 +1127,71 @@ export const HubBuilderPage = () => {
       let rtdbSuccess = false;
       let firestoreSuccess = false;
 
-      // 1. Firebase RTDB - Enregistrement sur tous les nœuds de publication
+      // 1. Publication atomique unifiée (Hub Builder -> Firebase RTDB sous /central_hub_config/{blockId} & Local Registry)
+      for (const row of exportableData) {
+        for (const card of row.cards || []) {
+          const sliderBlock = card.blocks?.find((b: any) => b.type === 'image_slider');
+          const cardBlockConfig: HubBlockConfig = {
+            id: card.id,
+            title: card.title || 'Nouveau Module',
+            type: sliderBlock ? 'image_slider' : 'module',
+            imageUrl: card.mediaUrl || card.imageUrl || sliderBlock?.slides?.[0]?.imageUrl || '',
+            keywords: [card.title, card.subtitle, card.palmares, card.id].filter(Boolean) as string[],
+            routeOrAction: card.routeUrl || '',
+            updatedAt: new Date().toISOString(),
+            description: card.description || '',
+            subtitle: card.subtitle || '',
+            palmares: card.palmares || '',
+            trialBadge: card.trialBadge || '',
+            blocks: card.blocks || [],
+            slides: sliderBlock?.slides || [],
+            settings: sliderBlock?.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' },
+            slideSettings: sliderBlock?.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' },
+            linkedModuleIds: card.linkedModuleIds || [],
+            isRootApp: Boolean(card.isRootApp)
+          };
+
+          // Publication atomique de la carte
+          await publishHubBlock(card.id, cardBlockConfig).catch(e => console.warn('[HubBuilder] Atomic card publish warning:', e));
+
+          // Publication atomique des sous-blocs de type image_slider
+          if (sliderBlock && sliderBlock.id && sliderBlock.id !== card.id) {
+            await publishHubBlock(sliderBlock.id, {
+              id: sliderBlock.id,
+              title: sliderBlock.title || card.title || 'Slide Module Block',
+              type: 'image_slider',
+              imageUrl: sliderBlock.slides?.[0]?.imageUrl || card.mediaUrl || '',
+              keywords: [sliderBlock.title, card.title, 'image_slider', 'carrousel'].filter(Boolean) as string[],
+              routeOrAction: card.routeUrl || '',
+              updatedAt: new Date().toISOString(),
+              slides: sliderBlock.slides || [],
+              settings: sliderBlock.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' },
+              slideSettings: sliderBlock.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' }
+            }).catch(e => console.warn('[HubBuilder] Atomic slider publish warning:', e));
+          }
+        }
+      }
+
+      // Si un bloc particulier est actuellement en cours d'édition active dans le panneau latéral
+      if (activeBlock && activeBlock.id) {
+        const activeSlideSettings = activeBlock.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' };
+        await publishHubBlock(activeBlock.id, {
+          id: activeBlock.id,
+          title: activeBlock.title || activeCard?.title || 'Slide Module Block',
+          type: activeBlock.type || 'image_slider',
+          imageUrl: activeBlock.slides?.[0]?.imageUrl || activeBlock.url || activeCard?.mediaUrl || '',
+          keywords: [activeBlock.title, activeCard?.title, activeBlock.type, 'slide', 'carrousel'].filter(Boolean) as string[],
+          routeOrAction: activeCard?.routeUrl || '',
+          updatedAt: new Date().toISOString(),
+          slides: activeBlock.slides || [],
+          settings: activeSlideSettings,
+          slideSettings: activeSlideSettings,
+          description: activeBlock.text || activeCard?.description || '',
+          badge: activeBlock.badge || activeCard?.palmares || ''
+        }).catch(e => console.warn('[HubBuilder] Active block atomic publish warning:', e));
+      }
+
+      // 2. Firebase RTDB - Enregistrement global miroir sur tous les nœuds de publication
       try {
         const { rtdb } = await import('@/src/firebase');
         const { ref, set } = await import('firebase/database');
@@ -986,7 +1207,7 @@ export const HubBuilderPage = () => {
         console.warn('[HubBuilder] Erreur RTDB sync (non-bloquante) :', fbErr);
       }
 
-      // 2. Firebase Firestore - Sauvegarde miroir persistante
+      // 3. Firebase Firestore - Sauvegarde miroir persistante
       try {
         const { db, auth } = await import('@/src/firebase');
         const { doc, setDoc } = await import('firebase/firestore');
@@ -1004,9 +1225,10 @@ export const HubBuilderPage = () => {
         console.warn('[HubBuilder] Erreur Firestore sync (non-bloquante) :', fsErr);
       }
 
-      // 3. LocalStorage & Événements locaux (Garantie temps-réel)
+      // 4. LocalStorage & Événements locaux (Garantie temps-réel avec Omnibar et App Registry)
       try {
         localStorage.setItem('central_hub_config', JSON.stringify(dataToSave));
+        window.dispatchEvent(new CustomEvent('hub_registry_updated', { detail: { count: exportableData.length } }));
         window.dispatchEvent(new Event('central_hub_config_updated'));
       } catch (_) {}
 
@@ -1192,6 +1414,22 @@ export const HubBuilderPage = () => {
                 <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400" />
               </div>
               <p className="text-[11px] text-slate-400">Boutons "▶️ Voir le Tutoriel" et "⚡ Activer / Essayer".</p>
+            </div>
+
+            {/* Bloc 6: Module Slide / Carrousel d'Images */}
+            <div 
+              draggable
+              onDragStart={() => handleDragStartPalette('image_slider')}
+              onClick={() => handleQuickAddBlock('image_slider')}
+              className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 hover:border-cyan-400 rounded-xl p-3 cursor-grab active:cursor-grabbing transition shadow-sm group"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-cyan-400 flex items-center gap-2">
+                  <Sliders className="w-4 h-4" /> Module Slide / Carrousel
+                </span>
+                <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400" />
+              </div>
+              <p className="text-[11px] text-slate-400">Carrousel d'images rotatif avec légendes, puces et défilement automatique.</p>
             </div>
 
           </div>
@@ -1391,6 +1629,19 @@ export const HubBuilderPage = () => {
                                       </div>
                                     )}
 
+                                    {/* Module Slide / Carrousel d'Images */}
+                                    {block.type === 'image_slider' && (
+                                      <div className="w-full">
+                                        <SlideModuleBlock
+                                          id={block.id}
+                                          settings={block.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' }}
+                                          slides={block.slides || []}
+                                          isEditing={selectedBlockInfo?.blockId === block.id}
+                                          onUpdate={(updatedSlides) => updateBlockSlides(updatedSlides)}
+                                        />
+                                      </div>
+                                    )}
+
                                   </div>
                                 );
                               })
@@ -1461,83 +1712,65 @@ export const HubBuilderPage = () => {
                 </div>
               )}
 
-              {(activeBlock.type === 'image' || activeBlock.type === 'video') && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block font-bold text-slate-300 text-xs">
-                      URL du Média ({activeBlock.type === 'image' ? 'Image' : 'Vidéo'})
-                    </label>
-                    {activeBlock.type === 'image' && (
-                      <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                        Lien Direct Image
-                      </span>
-                    )}
-                  </div>
+              {activeBlock.type === 'image' && (
+                <div className="space-y-3">
+                  <ImageUploadInput
+                    value={activeBlock.url || ''}
+                    onChange={(newUrl) => {
+                      updateBlockProp('url', newUrl);
+                      updateBlockProp('imageUrl', newUrl);
+                    }}
+                    label="Image du Module"
+                    badge="Upload ImgBB Direct"
+                    showPreview={true}
+                    previewHeight="h-28"
+                    helperText="Collez une URL externe OU téléversez directement une image depuis votre appareil (hébergement automatique sur ImgBB)."
+                  />
 
+                  {/* Liens de secours externes */}
+                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 block">
+                      Hébergeurs externes recommandés :
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <a 
+                        href="https://imgbb.com/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-[#4169E1]/20 text-cyan-300 hover:text-white border border-slate-700 text-[10.5px] font-bold transition cursor-pointer"
+                      >
+                        <span>🌐 ImgBB</span>
+                        <ExternalLink className="w-3 h-3 text-cyan-400" />
+                      </a>
+                      <a 
+                        href="https://postimages.org/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-amber-300 hover:text-white border border-slate-700 text-[10.5px] font-bold transition cursor-pointer"
+                      >
+                        <span>📸 Postimages</span>
+                        <ExternalLink className="w-3 h-3 text-amber-400" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeBlock.type === 'video' && (
+                <div className="space-y-2.5">
+                  <label className="block font-bold text-slate-300 text-xs">
+                    URL de la Vidéo Démo (.mp4 ou Stream)
+                  </label>
                   <input 
                     type="text" 
                     value={activeBlock.url || ''} 
                     onChange={(e) => updateBlockProp('url', e.target.value)}
-                    placeholder={activeBlock.type === 'image' ? "https://i.ibb.co/... ou https://i.postimg.cc/..." : "https://..."}
+                    placeholder="https://..."
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#4169E1]"
                   />
-
-                  {/* Hébergeurs d'images recommandés : ImgBB & Postimages */}
-                  {activeBlock.type === 'image' && (
-                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                          <ImageIcon className="w-3.5 h-3.5 text-[#4169E1]" />
-                          <span>Hébergez votre image gratuitement :</span>
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {/* 1. ImgBB (imgbb.com) */}
-                        <a 
-                          href="https://imgbb.com/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 hover:bg-[#4169E1]/20 text-cyan-300 hover:text-white border border-slate-700 hover:border-cyan-400/50 text-[11px] font-bold transition shadow-xs group cursor-pointer"
-                          title="Ouvrir ImgBB (imgbb.com) pour uploader et obtenir un lien direct"
-                        >
-                          <span>🌐 ImgBB</span>
-                          <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100 transition-opacity text-cyan-400" />
-                        </a>
-
-                        {/* 2. Postimages (postimages.org / postgr) */}
-                        <a 
-                          href="https://postimages.org/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 hover:bg-amber-500/20 text-amber-300 hover:text-white border border-slate-700 hover:border-amber-400/50 text-[11px] font-bold transition shadow-xs group cursor-pointer"
-                          title="Ouvrir Postimages (postimages.org / postgr) pour uploader et obtenir un lien direct"
-                        >
-                          <span>📸 Postimages</span>
-                          <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100 transition-opacity text-amber-400" />
-                        </a>
-                      </div>
-
-                      <p className="text-[10px] text-slate-400 leading-relaxed">
-                        💡 Cliquez sur l'un des services pour déposer votre image, puis copiez et collez ci-dessus le <strong className="text-white">« Lien direct »</strong> (terminant par <code className="text-cyan-400 font-mono">.png</code>, <code className="text-cyan-400 font-mono">.jpg</code> ou <code className="text-cyan-400 font-mono">.webp</code>).
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Aperçu en direct de l'image */}
-                  {activeBlock.type === 'image' && activeBlock.url && (
-                    <div className="pt-1">
-                      <span className="text-[10px] font-bold text-slate-400 block mb-1">Aperçu en direct :</span>
-                      <div className="w-full h-24 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center relative">
-                        <img 
-                          src={activeBlock.url} 
-                          alt="Aperçu" 
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      </div>
+                  {activeBlock.url && (
+                    <div className="w-full h-28 rounded-lg overflow-hidden border border-slate-800 bg-black mt-2">
+                      <video src={activeBlock.url} controls className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
@@ -1574,6 +1807,139 @@ export const HubBuilderPage = () => {
                     />
                   </div>
                 </>
+              )}
+
+              {activeBlock.type === 'image_slider' && (
+                <div className="space-y-4">
+                  {/* Configuration générale du Carrousel */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-300 text-xs">Configuration du Carrousel</span>
+                      <span className="text-[10px] text-cyan-400 font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                        Slide Module
+                      </span>
+                    </div>
+
+                    {/* Défilement Automatique (Autoplay) */}
+                    <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer">
+                      <span>Défilement auto (Autoplay)</span>
+                      <input
+                        type="checkbox"
+                        checked={activeBlock.slideSettings?.autoplay ?? true}
+                        onChange={(e) => updateSlideSettings('autoplay', e.target.checked)}
+                        className="rounded accent-cyan-500 w-4 h-4 cursor-pointer"
+                      />
+                    </label>
+
+                    {/* Intervalle de transition */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Intervalle entre slides (ms)
+                      </label>
+                      <input
+                        type="number"
+                        step="500"
+                        min="1000"
+                        max="20000"
+                        value={activeBlock.slideSettings?.interval || 4000}
+                        onChange={(e) => updateSlideSettings('interval', Number(e.target.value))}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    {/* Format d'affichage (Aspect Ratio) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                        Format d'affichage (Ratio)
+                      </label>
+                      <select
+                        value={activeBlock.slideSettings?.aspectRatio || 'wide'}
+                        onChange={(e) => updateSlideSettings('aspectRatio', e.target.value as any)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 cursor-pointer"
+                      >
+                        <option value="wide">Panoramique Large (21/9)</option>
+                        <option value="video">Vidéo Standard (16/9)</option>
+                        <option value="square">Carré (1/1)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Gestion de chaque Slide individuelle */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-300 text-xs">
+                        Slides du Carrousel ({(activeBlock.slides || []).length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={addSlideToBlock}
+                        className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Ajouter Slide
+                      </button>
+                    </div>
+
+                    {(activeBlock.slides || []).map((slide, sIdx) => (
+                      <div key={slide.id || sIdx} className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-cyan-400">
+                            Slide #{sIdx + 1}
+                          </span>
+                          {(activeBlock.slides || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeSlideFromBlock(sIdx)}
+                              className="text-rose-400 hover:text-rose-300 text-[10px] font-semibold cursor-pointer"
+                            >
+                              Supprimer ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Image de la Slide avec Upload ImgBB Direct */}
+                        <ImageUploadInput
+                          value={slide.imageUrl || ''}
+                          onChange={(newUrl) => updateSlideField(sIdx, 'imageUrl', newUrl)}
+                          label="Image de la Slide"
+                          badge="ImgBB Direct"
+                          showPreview={true}
+                          previewHeight="h-16"
+                          placeholder="https://i.ibb.co/... ou parcourir"
+                        />
+
+                        {/* Titre Légende */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                            Titre de la Légende (Optionnel)
+                          </label>
+                          <input
+                            type="text"
+                            value={slide.captionTitle || ''}
+                            onChange={(e) => updateSlideField(sIdx, 'captionTitle', e.target.value)}
+                            placeholder="Ex: Encaissement 1-Clic Rapide"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 font-bold"
+                          />
+                        </div>
+
+                        {/* Description Légende */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                            Texte de Description (Optionnel)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={slide.captionText || ''}
+                            onChange={(e) => updateSlideField(sIdx, 'captionText', e.target.value)}
+                            placeholder="Description courte de la fonctionnalité..."
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-cyan-500 resize-none"
+                          />
+                        </div>
+
+
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* Configuration de la Route / Lien de Redirection (routeUrl) */}

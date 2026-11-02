@@ -51,7 +51,7 @@ export const LiveOfferHud: React.FC<LiveOfferHudProps> = ({
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-ping shrink-0" />
             <span className="text-[10px] font-black uppercase tracking-wider text-[#F59E0B] flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-[#F59E0B]" />
+              <Flame className="w-3 h-3 text-[#F59E0B]" />
               Offre Épinglée du Moment
             </span>
           </div>

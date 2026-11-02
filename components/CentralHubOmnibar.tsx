@@ -4,6 +4,9 @@ import { ref, onValue } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
 import { rtdb, db } from '../src/firebase';
 import { APPS_REGISTRY, searchAppsRegistry, AppRegistryItem } from '../src/data/appsRegistry';
+import { useActiveOmnibarApps } from '../src/hooks/useActiveOmnibarApps';
+import { toggleModuleStatus } from '../src/services/moduleActivationService';
+import { OFFICIAL_MODULES, getOfficialModuleById, AppModule } from '../src/appRegistry';
 import { 
   Search, 
   X, 
@@ -19,8 +22,10 @@ import {
   ExternalLink,
   Boxes,
   Check,
-  Plus
+  Plus,
+  Compass
 } from 'lucide-react';
+import { SlideModuleBlock } from './SlideModuleBlock';
 
 export interface HubCardItem {
   id: string;
@@ -86,7 +91,7 @@ export interface CentralHubOmnibarProps {
   placeholder?: string;
 }
 
-// REGISTRE OFFICIEL DE LA SUITE CAISSE ENREGISTREUSE & POS NANA (GARANTIE DE CHARGEMENT PERMANENT SANS MOCK)
+// REGISTRE OFFICIEL DE LA SUITE CAISSE ENREGISTREUSE & POS NANA (GARANTIE DE CHARGEMENT PERMANENT)
 export const OFFICIAL_POS_CORE_APP: HubCardItem & { subtitle?: string; rowTitle?: string } = {
   id: 'pos-caisse-core',
   title: 'Caisse Tactile & Point de Vente (POS)',
@@ -94,7 +99,7 @@ export const OFFICIAL_POS_CORE_APP: HubCardItem & { subtitle?: string; rowTitle?
   palmares: 'N°1 des Ventes • POS Certifié',
   description: 'Interface tactile ultra-rapide pour encaissement comptoir, tickets de caisse, lecteur code-barres, gestion multi-vendeurs et synchronisation automatique hors-ligne.',
   mediaType: 'image',
-  mediaUrl: '',
+  mediaUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80',
   routeUrl: '/dashboard/apps/pos',
   targetView: 'POS',
   trialBadge: 'Inclus • Illimité',
@@ -118,7 +123,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Indispensable',
     description: 'Génération instantanée du Z de caisse, comptage des espèces, réconciliation Mobile Money (Wave, Orange, Moov) et exportation PDF.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/pos-closing',
     targetView: 'POS',
     trialBadge: 'Inclus'
@@ -130,7 +135,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Bluetooth / USB',
     description: 'Impression automatique des tickets de caisse, duplicatas et factures proforma avec en-tête personnalisée et logo.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/receipt-printer',
     targetView: 'SETTINGS',
     trialBadge: 'Prêt'
@@ -142,7 +147,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Relances WhatsApp',
     description: 'Enregistrement des ardoises et crédits clients directement depuis la caisse avec rappels automatiques SMS et WhatsApp.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/credit-book',
     targetView: 'CUSTOMERS',
     trialBadge: 'Actif'
@@ -154,7 +159,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Caméra & USB',
     description: 'Bip ultra-rapide des articles en rayon, gestion des codes EAN-13, QR codes et saisie automatique au panier sans contact.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/barcode-scanner',
     targetView: 'POS',
     trialBadge: 'Inclus'
@@ -166,7 +171,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Anti-Fraude',
     description: 'Attribution de fonds de caisse individuels, code PIN par caissier, audit des écarts et historique complet des annulations.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/cashier-sessions',
     targetView: 'SETTINGS',
     trialBadge: 'Sécurisé'
@@ -178,7 +183,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     palmares: 'Zéro Coupure',
     description: 'Continuez d\'encaisser vos clients même en cas de panne internet ou coupure réseau, avec synchronisation automatique au retour de la connexion.',
     mediaType: 'image',
-    mediaUrl: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/pos',
     targetView: 'POS',
     trialBadge: 'Garanti'
@@ -190,19 +195,87 @@ export const cleanUrl = (url: string | undefined): string => {
   const trimmed = url.trim();
   const match = trimmed.match(/\((https?:\/\/[^\)]+)\)/);
   const resolved = match ? match[1] : trimmed.replace(/^\[(.*?)\]$/, '$1').trim();
-  const lower = resolved.toLowerCase();
-  // PURGE STRICTE D'UNSPLASH, DES MOCK SITES ET DES PLACEHOLDERS
-  if (
-    lower.includes('unsplash.com') ||
-    lower.includes('images.unsplash') ||
-    lower.includes('via.placeholder') ||
-    lower.includes('placeholder.com') ||
-    lower.includes('sample-videos.com') ||
-    lower.includes('commondatastorage.googleapis.com')
-  ) {
-    return '';
-  }
   return resolved;
+};
+
+export const cleanCategoryName = (name: string): string => {
+  if (!name || typeof name !== 'string') return '';
+  return name
+    .replace(/\s*\(\s*IA\s*&\s*WhatsApp\s*\)/gi, '')
+    .replace(/\s*\(\s*IA\s*\)/gi, '')
+    .trim();
+};
+
+export const MODULE_THUMBNAILS: Record<string, string> = {
+  // Caisse & Point de Vente (POS)
+  'app-pos': 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=600&auto=format&fit=crop&q=80',
+  'pos-caisse-core': 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=600&auto=format&fit=crop&q=80',
+  'mod-pos': 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=600&auto=format&fit=crop&q=80',
+  'mod_pos_closing': 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+  'mod_receipt_printer': 'https://images.unsplash.com/photo-1607344645866-009c320b5ab8?w=600&auto=format&fit=crop&q=80',
+  'mod_credit_book': 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
+  'mod_barcode_scanner': 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80',
+  'mod_cashier_sessions': 'https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?w=600&auto=format&fit=crop&q=80',
+  'mod_offline_sync': 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
+  'mod-inventory': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
+  'mod-debts': 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
+  'mod-cash-closing': 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+  
+  // LMS, Éducation, Campus & Formation
+  'srv-lms-marketplace': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80',
+  'lms-marketplace': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80',
+  'app-cours-forge': 'https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=600&auto=format&fit=crop&q=80',
+  'cours-forge': 'https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=600&auto=format&fit=crop&q=80',
+  'srv-certificates': 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=600&auto=format&fit=crop&q=80',
+  'official-cert': 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=600&auto=format&fit=crop&q=80',
+  'srv-academy': 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600&auto=format&fit=crop&q=80',
+  'nana-academy': 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600&auto=format&fit=crop&q=80',
+  
+  // Commerce en Ligne, Vitrine & Social
+  'app-studio': 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&auto=format&fit=crop&q=80',
+  'app-wameet': 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80',
+  'app-nanagenerator': 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
+  'app-tinnela': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
+  'app-ultimate-funnel': 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80',
+  'app-docusign': 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
+  'app-webinar': 'https://images.unsplash.com/photo-1588196749597-9ff075ee6b5b?w=600&auto=format&fit=crop&q=80',
+  'app-invoices-orders': 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&auto=format&fit=crop&q=80',
+  'app-nanamarket': 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=600&auto=format&fit=crop&q=80',
+  'srv-delivery': 'https://images.unsplash.com/photo-1526367790999-0150786686a2?w=600&auto=format&fit=crop&q=80',
+  'srv-payment': 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600&auto=format&fit=crop&q=80',
+  'srv-crm-automation': 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=600&auto=format&fit=crop&q=80',
+  'srv-sms': 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=600&auto=format&fit=crop&q=80'
+};
+
+export const getCardMediaUrl = (card: any): string => {
+  if (!card) return '';
+  const clean = cleanUrl(card.mediaUrl || card.imageUrl);
+  if (clean && clean.length > 5) return clean;
+  if (card.appLogo && card.appLogo.length > 5) return card.appLogo;
+  if (card.slides && card.slides.length > 0 && card.slides[0]?.imageUrl) return cleanUrl(card.slides[0].imageUrl);
+  if (card.blocks && Array.isArray(card.blocks)) {
+    const slider = card.blocks.find((b: any) => b?.type === 'image_slider');
+    if (slider?.slides?.[0]?.imageUrl) return cleanUrl(slider.slides[0].imageUrl);
+    const img = card.blocks.find((b: any) => b?.type === 'image');
+    if (img?.url || img?.imageUrl) return cleanUrl(img.url || img.imageUrl);
+  }
+  const id = String(card.id || '').toLowerCase();
+  if (MODULE_THUMBNAILS[id]) return MODULE_THUMBNAILS[id];
+  const title = String(card.title || card.name || '').toLowerCase();
+  for (const [key, url] of Object.entries(MODULE_THUMBNAILS)) {
+    const simpleKey = key.replace(/^(app-|srv-|mod[-_])/, '');
+    if (simpleKey.length > 2 && (id.includes(simpleKey) || title.includes(simpleKey))) {
+      return url;
+    }
+  }
+  if (title.includes('lms') || title.includes('marketplace')) return MODULE_THUMBNAILS['lms-marketplace'];
+  if (title.includes('certificat') || title.includes('qr')) return MODULE_THUMBNAILS['official-cert'];
+  if (title.includes('académie') || title.includes('tutoriel') || title.includes('video')) return MODULE_THUMBNAILS['nana-academy'];
+  if (title.includes('caisse') || title.includes('pos')) return MODULE_THUMBNAILS['app-pos'];
+  if (title.includes('stock') || title.includes('inventaire')) return MODULE_THUMBNAILS['mod-inventory'];
+  if (title.includes('cours') || title.includes('forge') || title.includes('centre')) return MODULE_THUMBNAILS['app-cours-forge'];
+  if (title.includes('live') || title.includes('webinar')) return MODULE_THUMBNAILS['app-webinar'];
+  return 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=600&auto=format&fit=crop&q=80';
 };
 
 export interface OmnibarItemProps {
@@ -215,6 +288,8 @@ export interface OmnibarItemProps {
   toggleModuleCheck?: (id: string) => void;
   onOpenTutorial?: (e: React.MouseEvent, url?: string) => void;
   onActivateModule?: (e: React.MouseEvent, mod: any, linkedIds?: string[]) => void;
+  isModuleActive?: (id: string) => boolean;
+  onToggleModule?: (id: string, targetStatus?: boolean) => Promise<boolean>;
   onClose?: () => void;
 }
 
@@ -228,6 +303,8 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
   toggleModuleCheck: externalToggleModuleCheck,
   onOpenTutorial,
   onActivateModule,
+  isModuleActive,
+  onToggleModule,
   onClose,
 }) => {
   const [localHoveredId, setLocalHoveredId] = useState<string | null>(null);
@@ -279,13 +356,14 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
     const h = rawBlocks.find((b: any) => b?.type === 'header');
     const d = rawBlocks.find((b: any) => b?.type === 'description');
     const m = rawBlocks.find((b: any) => b?.type === 'image' || b?.type === 'video');
+    const slider = rawBlocks.find((b: any) => b?.type === 'image_slider');
     const cta = rawBlocks.find((b: any) => b?.type === 'cta');
 
     const title = c?.title || h?.title || 'Module';
     const subtitle = c?.subtitle || h?.badge || c?.palmares || '';
     const palmares = c?.palmares || h?.badge || '';
     const description = c?.description || d?.text || '';
-    const rawUrl = c?.mediaUrl || c?.imageUrl || m?.url || m?.imageUrl || '';
+    const rawUrl = c?.mediaUrl || c?.imageUrl || m?.url || m?.imageUrl || slider?.slides?.[0]?.imageUrl || '';
     const mediaUrl = cleanUrl(rawUrl);
     const mediaType = c?.mediaType || (m?.type === 'video' || mediaUrl.includes('.mp4') ? 'video' : 'image');
     const tutorialUrl = c?.tutorialUrl || cta?.tutorialUrl || '';
@@ -403,6 +481,18 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                 </div>
                 {rootCard.subtitle && <p className="text-xs text-slate-400">{rootCard.subtitle}</p>}
                 <p className="text-sm text-slate-300 mt-2 leading-relaxed">{rootCard.description}</p>
+                {rootCard.blocks?.some((b: any) => b.type === 'image_slider') && (
+                  <div className="mt-3">
+                    {rootCard.blocks.filter((b: any) => b.type === 'image_slider').map((sb: any) => (
+                      <SlideModuleBlock
+                        key={sb.id}
+                        id={sb.id}
+                        settings={sb.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' }}
+                        slides={sb.slides || []}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
@@ -420,22 +510,58 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                     ▶️ Voir le Tutoriel
                   </button>
                   
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const selectedMods = companionCards.filter((m) => isChecked(m.id)).map((m) => m.id);
-                      handleActivate(e, rootCard, selectedMods);
-                    }}
-                    className="flex-1 px-5 py-2.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-[#4169E1]/20 flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
-                  >
-                    <Zap className="w-4 h-4 fill-current" />
-                    <span>
-                      {companionCards.filter((m) => isChecked(m.id)).length > 0 
-                        ? `${getTaxonomyBadge(rootCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'} ${rootCard.title} (+ ${companionCards.filter((m) => isChecked(m.id)).length} module${companionCards.filter((m) => isChecked(m.id)).length > 1 ? 's' : ''})` 
-                        : `${getTaxonomyBadge(rootCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'} ${rootCard.title}`}
-                    </span>
-                  </button>
+                  {isModuleActive && isModuleActive(rootCard.id) ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <button 
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (onToggleModule) await onToggleModule(rootCard.id, false);
+                        }}
+                        className="px-4 py-2 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer group"
+                        title="Désactiver ce module"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 group-hover:hidden" />
+                        <X className="w-4 h-4 text-rose-400 hidden group-hover:inline" />
+                        <span className="group-hover:hidden">✓ Actif</span>
+                        <span className="hidden group-hover:inline">Désactiver</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleActivate(e, rootCard);
+                        }}
+                        className="flex-1 px-4 py-2 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-[#4169E1]/20 flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+                      >
+                        <span>Ouvrir {rootCard.title}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const selectedMods = companionCards.filter((m) => isChecked(m.id)).map((m) => m.id);
+                        if (onToggleModule) {
+                          await onToggleModule(rootCard.id, true);
+                          for (const smId of selectedMods) {
+                            await onToggleModule(smId, true);
+                          }
+                        }
+                        handleActivate(e, rootCard, selectedMods);
+                      }}
+                      className="flex-1 px-5 py-2.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-lg shadow-[#4169E1]/20 flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+                    >
+                      <Zap className="w-4 h-4 fill-current" />
+                      <span>
+                        {companionCards.filter((m) => isChecked(m.id)).length > 0 
+                          ? `${getTaxonomyBadge(rootCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'} ${rootCard.title} (+ ${companionCards.filter((m) => isChecked(m.id)).length} module${companionCards.filter((m) => isChecked(m.id)).length > 1 ? 's' : ''})` 
+                          : `${getTaxonomyBadge(rootCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'} ${rootCard.title}`}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -540,16 +666,46 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                           >
                             {checked ? '✓ Sélectionné' : '+ Cocher'}
                           </button>
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleActivate(e, mod);
-                            }}
-                            className="px-2.5 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
-                          >
-                            {getTaxonomyBadge(mod) === 'Outil' ? '🛒 Acheter seul' : '⚡ Activer seul'}
-                          </button>
+                          {isModuleActive && isModuleActive(mod.id) ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (onToggleModule) await onToggleModule(mod.id, false);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer group"
+                                title="Désactiver"
+                              >
+                                <Check className="w-3 h-3 text-emerald-400 group-hover:hidden" />
+                                <X className="w-3 h-3 text-rose-400 hidden group-hover:inline" />
+                                <span className="group-hover:hidden">Actif</span>
+                                <span className="hidden group-hover:inline">Désactiver</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActivate(e, mod);
+                                }}
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-600 transition"
+                              >
+                                Ouvrir
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (onToggleModule) await onToggleModule(mod.id, true);
+                                handleActivate(e, mod);
+                              }}
+                              className="px-2.5 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
+                            >
+                              {getTaxonomyBadge(mod) === 'Outil' ? '🛒 Acheter seul' : '⚡ Activer seul'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -623,6 +779,18 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                   </div>
                   {card.subtitle && <p className="text-[11px] text-slate-400 font-medium">{card.subtitle}</p>}
                   <p className="text-xs text-slate-300 leading-relaxed">{card.description}</p>
+                  {card.blocks?.some((b: any) => b.type === 'image_slider') && (
+                    <div className="mt-2.5">
+                      {card.blocks.filter((b: any) => b.type === 'image_slider').map((sb: any) => (
+                        <SlideModuleBlock
+                          key={sb.id}
+                          id={sb.id}
+                          settings={sb.slideSettings || { autoplay: true, interval: 4000, aspectRatio: 'wide' }}
+                          slides={sb.slides || []}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}
@@ -711,13 +879,47 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
           </span>
         ) : <span />}
 
-        <button 
-          type="button"
-          onClick={(e) => handleActivate(e, singleCard)}
-          className="px-3 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95"
-        >
-          {getTaxonomyBadge(singleCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}
-        </button>
+        {isModuleActive && isModuleActive(singleCard.id) ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (onToggleModule) await onToggleModule(singleCard.id, false);
+              }}
+              className="px-2.5 py-1 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer group"
+              title="Désactiver"
+            >
+              <Check className="w-3 h-3 text-emerald-400 group-hover:hidden" />
+              <X className="w-3 h-3 text-rose-400 hidden group-hover:inline" />
+              <span className="group-hover:hidden">Actif</span>
+              <span className="hidden group-hover:inline">Désactiver</span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleActivate(e, singleCard);
+              }}
+              className="px-3 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95 flex items-center gap-1"
+            >
+              <span>Ouvrir</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <button 
+            type="button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (onToggleModule) await onToggleModule(singleCard.id, true);
+              handleActivate(e, singleCard);
+            }}
+            className="px-3 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95"
+          >
+            {getTaxonomyBadge(singleCard) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1025,6 +1227,15 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   className = '',
   placeholder
 }) => {
+  const {
+    modules: dynamicModules,
+    activeModules,
+    inactiveModules,
+    isModuleActive,
+    toggleModule,
+    tenantId: currentTenantId
+  } = useActiveOmnibarApps();
+
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
@@ -1049,12 +1260,12 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     if (list.length === 0) return [];
 
     const sanitizeCard = (c: any, cIdx: number) => {
-      const sanitizedUrl = cleanUrl(c?.mediaUrl || c?.url);
+      const sanitizedUrl = cleanUrl(c?.mediaUrl || c?.url || c?.imageUrl);
       let sanitizedBlocks = c?.blocks;
       if (Array.isArray(c?.blocks)) {
         sanitizedBlocks = c.blocks.map((b: any) => {
           if (b.type === 'image' || b.type === 'video') {
-            return { ...b, url: cleanUrl(b.url) };
+            return { ...b, url: cleanUrl(b.url || b.imageUrl) };
           }
           return b;
         });
@@ -1063,44 +1274,65 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         ...c,
         id: c?.id || `card-${cIdx}`,
         mediaUrl: sanitizedUrl,
+        imageUrl: sanitizedUrl,
+        routeUrl: c?.routeUrl || c?.routeOrAction || '',
         blocks: sanitizedBlocks
       };
     };
 
-    const hasRows = list.some(item => item && (item.cards || item.rowTitle || (item.title && (Array.isArray(item.cards) || typeof item.cards === 'object'))));
-    if (!hasRows) {
-      return [{
-        id: 'default-row',
-        rowTitle: 'Applications & Services',
-        cards: list.map(sanitizeCard)
-      }];
+    const rows: HubRowItem[] = [];
+    const directCards: any[] = [];
+
+    list.forEach((item: any, idx: number) => {
+      if (!item) return;
+      if (Array.isArray(item.cards) || (item.cards && typeof item.cards === 'object')) {
+        let rowCards: any[] = Array.isArray(item.cards)
+          ? item.cards.filter(Boolean)
+          : Object.values(item.cards).filter(Boolean);
+        rows.push({
+          ...item,
+          id: item.id || `row-${idx}`,
+          rowTitle: item.rowTitle || item.title || `Section #${idx + 1}`,
+          cards: rowCards.map(sanitizeCard)
+        });
+      } else {
+        // Bloc ou carte unifiée isolée (HubBlockConfig)
+        directCards.push(sanitizeCard(item, idx));
+      }
+    });
+
+    if (directCards.length > 0) {
+      rows.push({
+        id: 'direct-published-row',
+        rowTitle: 'Modules & Blocs Publiés',
+        cards: directCards
+      });
     }
 
-    return list.map((row: any, idx: number) => {
-      let rowCards: any[] = [];
-      if (Array.isArray(row?.cards)) {
-        rowCards = row.cards.filter(Boolean);
-      } else if (row?.cards && typeof row.cards === 'object') {
-        rowCards = Object.values(row.cards).filter(Boolean);
-      }
-      return {
-        ...row,
-        id: row?.id || `row-${idx}`,
-        rowTitle: row?.rowTitle || row?.title || 'Section',
-        cards: rowCards.map(sanitizeCard)
-      };
-    });
+    return rows;
   };
 
   const [blocks, setBlocks] = useState<any[]>(() => {
     try {
       const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
+      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
+      let combined: any[] = [];
       if (local) {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) return parsed.filter(Boolean);
-        if (parsed.blocks && Array.isArray(parsed.blocks)) return parsed.blocks;
-        if (typeof parsed === 'object') return Object.values(parsed).filter(Boolean);
+        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
+        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
+        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
       }
+      if (cachedRegistry) {
+        const regParsed = JSON.parse(cachedRegistry);
+        const regValues = Object.values(regParsed).filter(Boolean);
+        regValues.forEach((rb: any) => {
+          if (!combined.some(c => c.id === rb.id)) {
+            combined.push(rb);
+          }
+        });
+      }
+      return combined;
     } catch (_) {}
     return [];
   });
@@ -1108,16 +1340,30 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const [configRows, setConfigRows] = useState<HubRowItem[]>(() => {
     try {
       const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
+      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
+      let combined: any[] = [];
       if (local) {
         const parsed = JSON.parse(local);
-        const normalized = normalizeHubData(parsed);
-        if (normalized.length > 0) return normalized;
+        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
+        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
+        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
       }
+      if (cachedRegistry) {
+        const regParsed = JSON.parse(cachedRegistry);
+        const regValues = Object.values(regParsed).filter(Boolean);
+        regValues.forEach((rb: any) => {
+          if (!combined.some(c => c.id === rb.id)) {
+            combined.push(rb);
+          }
+        });
+      }
+      const normalized = normalizeHubData(combined);
+      if (normalized.length > 0) return normalized;
     } catch (_) {}
     return [];
   });
 
-  // 1. Synchronisation temps-réel avec Firebase RTDB (/central_hub_config)
+  // 1. Synchronisation temps-réel avec Firebase RTDB (/central_hub_config) et Local Registry (app_registry_cache)
   useEffect(() => {
     const hubConfigRef = ref(rtdb, 'central_hub_config');
 
@@ -1132,7 +1378,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         if (Array.isArray(rawData)) {
           parsedBlocks = rawData.filter(Boolean);
         } 
-        // 2. Si RTDB l'a converti en objet indexé { "0": {...}, "1": {...} }
+        // 2. Si RTDB l'a converti en objet indexé { "0": {...}, "1": {...} } ou avec clés ID personnalisées
         else if (typeof rawData === 'object' && rawData !== null) {
           if (rawData.blocks && Array.isArray(rawData.blocks)) {
             parsedBlocks = rawData.blocks;
@@ -1140,6 +1386,23 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
             parsedBlocks = Object.values(rawData).filter(Boolean);
           }
         }
+
+        // Fusionner avec le cache local app_registry_cache si existant
+        try {
+          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
+          if (cachedRegistryRaw) {
+            const cachedRegistry = JSON.parse(cachedRegistryRaw);
+            const cachedList = Object.values(cachedRegistry).filter(Boolean);
+            cachedList.forEach((cItem: any) => {
+              const existingIdx = parsedBlocks.findIndex(p => p.id === cItem.id);
+              if (existingIdx >= 0) {
+                parsedBlocks[existingIdx] = { ...parsedBlocks[existingIdx], ...cItem };
+              } else {
+                parsedBlocks.push(cItem);
+              }
+            });
+          }
+        } catch (_) {}
 
         console.log("✅ [OMNIBAR PARSED BLOCKS]:", parsedBlocks);
         setBlocks(parsedBlocks);
@@ -1150,6 +1413,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         } catch (_) {}
       } else {
         console.warn("⚠️ [OMNIBAR]: Aucun bloc trouvé sous /central_hub_config");
+        // Vérifier si des éléments existent dans app_registry_cache
+        try {
+          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
+          if (cachedRegistryRaw) {
+            const cachedRegistry = JSON.parse(cachedRegistryRaw);
+            const cachedList = Object.values(cachedRegistry).filter(Boolean);
+            if (cachedList.length > 0) {
+              setBlocks(cachedList);
+              setConfigRows(normalizeHubData(cachedList));
+              return;
+            }
+          }
+        } catch (_) {}
         setBlocks([]);
       }
     }, (error) => {
@@ -1159,27 +1435,49 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     const handleLocalUpdate = () => {
       try {
         const local = localStorage.getItem('central_hub_config');
+        const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
+        let combined: any[] = [];
+
         if (local) {
           const parsed = JSON.parse(local);
-          let parsedBlocks: any[] = [];
           if (Array.isArray(parsed)) {
-            parsedBlocks = parsed.filter(Boolean);
+            combined = parsed.filter(Boolean);
           } else if (typeof parsed === 'object' && parsed !== null) {
             if (parsed.blocks && Array.isArray(parsed.blocks)) {
-              parsedBlocks = parsed.blocks;
+              combined = parsed.blocks;
             } else {
-              parsedBlocks = Object.values(parsed).filter(Boolean);
+              combined = Object.values(parsed).filter(Boolean);
             }
           }
-          setBlocks(parsedBlocks);
-          const normalized = normalizeHubData(parsedBlocks);
-          setConfigRows(normalized);
         }
+
+        if (cachedRegistryRaw) {
+          const regParsed = JSON.parse(cachedRegistryRaw);
+          const regValues = Object.values(regParsed).filter(Boolean);
+          regValues.forEach((rb: any) => {
+            const existingIdx = combined.findIndex((c: any) => c.id === rb.id);
+            if (existingIdx >= 0) {
+              combined[existingIdx] = { ...combined[existingIdx], ...rb };
+            } else {
+              combined.push(rb);
+            }
+          });
+        }
+
+        setBlocks(combined);
+        const normalized = normalizeHubData(combined);
+        setConfigRows(normalized);
       } catch (_) {}
+    };
+
+    const handleRegistryUpdate = (event?: any) => {
+      console.log('🔄 [OMNIBAR] Événement hub_registry_updated capté avec succès :', event?.detail);
+      handleLocalUpdate();
     };
 
     window.addEventListener('storage', handleLocalUpdate);
     window.addEventListener('central_hub_config_updated', handleLocalUpdate);
+    window.addEventListener('hub_registry_updated', handleRegistryUpdate);
     const handleOpenOmnibar = () => {
       setIsOpen(true);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -1190,6 +1488,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       unsubscribe();
       window.removeEventListener('storage', handleLocalUpdate);
       window.removeEventListener('central_hub_config_updated', handleLocalUpdate);
+      window.removeEventListener('hub_registry_updated', handleRegistryUpdate);
       window.removeEventListener('nanasore_open_omnibar', handleOpenOmnibar);
     };
   }, []);
@@ -1243,46 +1542,57 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     }
     const linkedModuleIds = card.linkedModuleIds || (card.blocks && Array.isArray(card.blocks) && card.blocks.find((b: any) => b?.linkedModuleIds)?.linkedModuleIds) || [];
     const isRootApp = Boolean(card.isRootApp || (linkedModuleIds && linkedModuleIds.length > 0));
-    const fallbackRoute = card.routeUrl || (card.id === 'card-3' ? '/dashboard/apps/pos' : card.id === 'card-1' ? '/dashboard/apps/ai-generator' : card.id === 'card-2' ? '/dashboard/apps/wameet' : '');
+    const fallbackRoute = card.routeUrl || card.routeOrAction || (card.id === 'card-3' ? '/dashboard/apps/pos' : card.id === 'card-1' ? '/dashboard/apps/ai-generator' : card.id === 'card-2' ? '/dashboard/apps/wameet' : '');
+    const resolvedMediaUrl = card.mediaUrl || card.imageUrl || '';
+    const resolvedKeywords = Array.isArray(card.keywords) ? card.keywords : [];
 
     if (card.blocks && Array.isArray(card.blocks)) {
       const h = card.blocks.find((b: any) => b?.type === 'header');
       const d = card.blocks.find((b: any) => b?.type === 'description');
       const m = card.blocks.find((b: any) => b?.type === 'image' || b?.type === 'video');
       const c = card.blocks.find((b: any) => b?.type === 'cta');
+      const slider = card.blocks.find((b: any) => b?.type === 'image_slider');
+      const sliderImg = slider?.slides?.[0]?.imageUrl;
+
       return {
         id: card.id || `card-${Math.random()}`,
         title: card.title || h?.title || 'Module',
-        routeUrl: card.routeUrl || fallbackRoute,
+        routeUrl: card.routeUrl || card.routeOrAction || fallbackRoute,
         subtitle: card.subtitle || h?.badge || card.palmares || '',
         palmares: card.palmares || h?.badge || '',
         description: card.description || d?.text || '',
         mediaType: card.mediaType || (m ? m.type : 'image'),
-        mediaUrl: card.mediaUrl || m?.url || '',
+        mediaUrl: resolvedMediaUrl || sliderImg || m?.url || '',
         tutorialUrl: card.tutorialUrl || c?.tutorialUrl || '',
         trialBadge: card.trialBadge || c?.trialBadge || '',
         targetView: card.targetView,
         isRootApp,
         linkedModuleIds,
-        blocks: card.blocks || []
-      };
+        keywords: resolvedKeywords,
+        blocks: card.blocks || [],
+        slides: slider?.slides || card.slides,
+        slideSettings: slider?.slideSettings || card.slideSettings || card.settings
+      } as any;
     }
     return {
       id: card.id || `card-${Math.random()}`,
       title: card.title || 'Module',
-      routeUrl: card.routeUrl || fallbackRoute,
+      routeUrl: card.routeUrl || card.routeOrAction || fallbackRoute,
       subtitle: card.subtitle || card.palmares || '',
       palmares: card.palmares || '',
       description: card.description || '',
       mediaType: card.mediaType || 'image',
-      mediaUrl: card.mediaUrl || '',
+      mediaUrl: resolvedMediaUrl,
       tutorialUrl: card.tutorialUrl || '',
       trialBadge: card.trialBadge || '',
       targetView: card.targetView,
       isRootApp,
       linkedModuleIds,
-      blocks: card.blocks || []
-    };
+      keywords: resolvedKeywords,
+      blocks: card.blocks || [],
+      slides: card.slides,
+      slideSettings: card.slideSettings || card.settings
+    } as any;
   };
 
   // Catégories déduites des rangées RTDB + catalogue des 35+ applications Nanasore
@@ -1290,12 +1600,15 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     const list: string[] = [];
     if (blocks && Array.isArray(blocks)) {
       blocks.forEach((r: any) => {
-        const t = r?.rowTitle || r?.title;
+        const t = cleanCategoryName(r?.rowTitle || r?.title);
         if (t) list.push(t);
       });
     }
     APPS_REGISTRY.forEach((app) => {
-      if (app.category) list.push(app.category);
+      if (app.category) {
+        const cleaned = cleanCategoryName(app.category);
+        if (cleaned) list.push(cleaned);
+      }
     });
     return Array.from(new Set(list));
   }, [blocks]);
@@ -1320,65 +1633,134 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     const rtdbCardsWithContext: any[] = [];
     if (blocks && Array.isArray(blocks)) {
       blocks.forEach((row: any, rIdx: number) => {
+        if (!row) return;
         const rowTitle = row?.rowTitle || row?.title || `Section ${rIdx + 1}`;
         const rawCards = Array.isArray(row?.cards)
           ? row.cards
           : (row?.cards && typeof row.cards === 'object' ? Object.values(row.cards) : []);
 
-        const extractedRowCards = rawCards.map((c: any, cIdx: number) => {
-          const card = getCardDetails(c);
-          return {
+        if (rawCards.length > 0) {
+          const extractedRowCards = rawCards.map((c: any, cIdx: number) => {
+            const card = getCardDetails(c);
+            return {
+              ...card,
+              id: card.id || `card-${rIdx}-${cIdx}`,
+              rowTitle,
+              isRtdb: true
+            };
+          });
+
+          extractedRowCards.forEach((c: any) => {
+            rtdbCardsWithContext.push({
+              ...c,
+              allRowCards: extractedRowCards
+            });
+          });
+        } else if (row.id || row.title || row.type) {
+          // Module autonome publié directement sous /central_hub_config/{blockId} ou dans app_registry_cache
+          const card = getCardDetails(row);
+          const singleCard = {
             ...card,
-            id: card.id || `card-${rIdx}-${cIdx}`,
-            rowTitle,
+            id: card.id || `block-${rIdx}`,
+            rowTitle: row.category || 'Modules Publiés',
             isRtdb: true
           };
-        });
-
-        extractedRowCards.forEach((c: any) => {
           rtdbCardsWithContext.push({
-            ...c,
-            allRowCards: extractedRowCards
+            ...singleCard,
+            allRowCards: [singleCard]
           });
-        });
+        }
       });
     }
 
-    // 2. Normaliser les 37 mini-applications officielles Nanasore (APPS_REGISTRY)
-    const registryCards: any[] = APPS_REGISTRY.map((app) => ({
-      id: app.id,
-      title: app.appName,
-      subtitle: app.category,
-      category: app.category,
-      description: app.shortDescription,
-      palmares: app.badgePalmares || app.palmares || '⭐ 98% de satisfaction',
-      trialBadge: app.trialLabel || 'Essai disponible',
-      mediaUrl: app.appLogo || '',
-      mediaType: 'image' as const,
-      routeUrl: app.route || `/dashboard/apps/${app.id}`,
-      targetView: app.targetView,
-      taxonomyType: app.taxonomyType || (app as any).taxonomy,
-      badge: app.badge,
-      isRootApp: false,
-      linkedModuleIds: [],
-      keywords: app.keywords || [],
-      isRtdb: false
-    }));
+    // 1. Extraire les cartes publiées via le Block Builder (RTDB /central_hub_config)
+    const publishedIds = new Set<string>();
+    const publishedTitles = new Set<string>();
 
-    // Fusionner sans doublons : Priorité absolue aux modules configurés dans la RTDB par le Super-Admin
-    const allAvailableCards: any[] = [...rtdbCardsWithContext];
-    const existingIds = new Set(rtdbCardsWithContext.map((c) => c.id));
-    const existingTitles = new Set(rtdbCardsWithContext.map((c) => (c.title || '').toLowerCase()));
-    const hasRtdbCaisse = rtdbCardsWithContext.some((c) => (c.title || '').toLowerCase().includes('caisse'));
-    const hasRtdbNanagenerator = rtdbCardsWithContext.some((c) => (c.title || '').toLowerCase().includes('nanagénérateur') || (c.title || '').toLowerCase().includes('nanagenerateur'));
-
-    registryCards.forEach((rc) => {
-      const tLower = rc.title.toLowerCase();
-      if (hasRtdbCaisse && (rc.id === 'pos' || tLower.includes('caisse'))) return;
-      if (hasRtdbNanagenerator && (rc.id === 'nanagenerator' || tLower.includes('nanagénérateur') || tLower.includes('nanagenerateur'))) return;
-      if (existingIds.has(rc.id) || existingTitles.has(tLower)) return;
-      allAvailableCards.push(rc);
+    rtdbCardsWithContext.forEach((c) => {
+      if (c.id) publishedIds.add(String(c.id).toLowerCase());
+      if (c.title) publishedTitles.add(String(c.title).toLowerCase().trim());
     });
+
+    // 2. Normaliser les 36+ solutions officielles de l'écosystème (ALL_OFFICIAL_CATALOG)
+    // RÈGLE STRICTE DU BLOCK BUILDER : Si un composant a été publié via le Block Builder,
+    // la version Block Builder ÉCRASE OBLIGATOIREMENT l'ancienne version statique sans doublon !
+    const officialCatalogCards: any[] = [];
+
+    OFFICIAL_MODULES.forEach((official) => {
+      const idLower = official.id.toLowerCase();
+      const titleLower = official.name.toLowerCase().trim();
+
+      // Si le Block Builder a publié une version pour cet ID ou ce Nom, ON ÉCRASE ET ON NE CRÉE PAS DE DOUBLON
+      const isOverwrittenByBlockBuilder = 
+        publishedIds.has(idLower) || 
+        publishedTitles.has(titleLower) ||
+        (official.aliases && official.aliases.some((a) => publishedIds.has(a.toLowerCase())));
+
+      if (isOverwrittenByBlockBuilder) {
+        // La version Block Builder publiée a la priorité absolue d'écrasement
+        return;
+      }
+
+      const active = isModuleActive(official.id);
+      officialCatalogCards.push({
+        id: official.id,
+        title: official.name, // NOM D'ORIGINE EXACT RESTAURÉ
+        subtitle: official.category,
+        category: official.category,
+        description: official.description,
+        palmares: active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible'),
+        trialBadge: active ? 'Actif' : 'Prêt à l\'emploi',
+        mediaUrl: getCardMediaUrl(official),
+        mediaType: 'image' as const,
+        routeUrl: official.route,
+        targetView: official.view,
+        taxonomyType: official.taxonomy === 'APPLICATION' ? 'Application' : official.taxonomy === 'SERVICE' ? 'Service' : official.taxonomy === 'MODULE' ? 'Module' : 'Outil',
+        badge: official.taxonomy,
+        isRootApp: official.id === 'app-pos',
+        linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'mod-cash-closing', 'tool-scanner', 'tool-printer'] : [],
+        keywords: official.keywords || [],
+        isOfficialCatalog: true,
+        isActive: active
+      });
+    });
+
+    // 3. Normaliser les mini-applications de catalogue étendu (APPS_REGISTRY) sans doublons
+    const registryCards: any[] = [];
+    APPS_REGISTRY.forEach((app) => {
+      const idLower = app.id.toLowerCase();
+      const titleLower = app.appName.toLowerCase().trim();
+
+      if (publishedIds.has(idLower) || publishedTitles.has(titleLower)) return;
+      if (officialCatalogCards.some(c => c.id.toLowerCase() === idLower || c.title.toLowerCase().trim() === titleLower)) return;
+
+      registryCards.push({
+        id: app.id,
+        title: app.appName, // NOM D'ORIGINE EXACT RESTAURÉ
+        subtitle: app.category,
+        category: app.category,
+        description: app.shortDescription,
+        palmares: app.badgePalmares || app.palmares || '⭐ 98% de satisfaction',
+        trialBadge: app.trialLabel || 'Essai disponible',
+        mediaUrl: app.appLogo || '',
+        mediaType: 'image' as const,
+        routeUrl: app.route || `/dashboard/apps/${app.id}`,
+        targetView: app.targetView,
+        taxonomyType: app.taxonomyType || (app as any).taxonomy,
+        badge: app.badge,
+        isRootApp: false,
+        linkedModuleIds: [],
+        keywords: app.keywords || [],
+        isRtdb: false
+      });
+    });
+
+    // Fusion unifiée : Cartes Block Builder (priorité écrasante) + Catalogue officiel 36+ + Catalogue étendu
+    const allAvailableCards: any[] = [
+      ...rtdbCardsWithContext,
+      ...officialCatalogCards,
+      ...registryCards
+    ];
 
     // 3. Calculer les correspondances et le score de pertinence
     const scoredMatches: { card: any; score: number }[] = [];
@@ -1411,6 +1793,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       if (p.includes(q)) score += 80;
       if (s.includes(q)) score += 60;
       if (card.isRootApp) score += 100;
+      if (card.isOfficial14) score += 400; // Priorité aux 14 modules officiels
       if (card.isRtdb) score += 300; // Priorité aux modules réels configurés en RTDB
 
       if (score > 0) {
@@ -1476,12 +1859,33 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     }
   };
 
-  const handleActivateModule = (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
+  const handleActivateModule = async (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
     e.stopPropagation();
+
+    // 1. Persistance dynamique dans Firebase RTDB : /tenants/{tenantId}/modules/{moduleId}
+    try {
+      await toggleModule(card.id, true);
+      if (activatedSubModuleIds && activatedSubModuleIds.length > 0) {
+        for (const subId of activatedSubModuleIds) {
+          await toggleModule(subId, true);
+        }
+      }
+    } catch (err) {
+      console.warn('[OMNIBAR] Erreur écriture Firebase RTDB module :', err);
+    }
+
     setIsOpen(false);
 
+    // 2. Déblocage immédiat de la route sans rechargement de page
+    const route = card.routeUrl || (card as any).route;
+    if (route && route !== '#') {
+      window.history.pushState({}, '', route);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: route } }));
+    }
+
     if (onOpenApp) {
-      onOpenApp({ ...card, activatedSubModuleIds });
+      onOpenApp({ ...card, activatedSubModuleIds, isActivated: true });
       return;
     }
 
@@ -1514,18 +1918,6 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         onNavigate('CRM');
         return;
       }
-    }
-
-    if (card.routeUrl && card.routeUrl !== '#') {
-      window.history.pushState({}, '', card.routeUrl);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: card.routeUrl } }));
-    }
-
-    if (activatedSubModuleIds && activatedSubModuleIds.length > 0) {
-      alert(`⚡ Application « ${card.title} » activée avec succès ainsi que ${activatedSubModuleIds.length} module(s) associé(s) : [${activatedSubModuleIds.join(', ')}] !`);
-    } else {
-      alert(`⚡ Module « ${card.title} » activé avec succès ! (${card.trialBadge || 'Essai disponible'})`);
     }
   };
 
@@ -1631,13 +2023,14 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                         setSelectedCategory(cat);
                       }
                     }}
-                    className={`px-3 py-1 rounded-full font-medium transition-colors shrink-0 cursor-pointer ${
+                    className={`px-3 py-1 rounded-full font-medium transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 ${
                       selectedCategory === cat
                         ? 'bg-[#4169E1] text-white shadow-xs'
                         : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     }`}
                   >
-                    {cat}
+                    <Layers className="w-3 h-3 text-blue-400 opacity-80 shrink-0" />
+                    <span>{cleanCategoryName(cat)}</span>
                   </button>
                 ))}
                 {selectedCategory && (
@@ -1680,6 +2073,92 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                       </button>
                     ))}
                   </div>
+
+                  {/* Catalogue dynamique des 36+ solutions officielles Nanasore synchronisées Firebase RTDB */}
+                  <div className="w-full mt-8 text-left">
+                    <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Boxes className="w-4 h-4 text-[#4169E1]" />
+                        <h5 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                          Catalogue Officiel Nanasore (36 Solutions : Applications, Services, Modules & Outils)
+                        </h5>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        {activeModules.length} / {dynamicModules.length} Actif(s)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {dynamicModules.map((m) => {
+                        const active = m.enabled;
+                        return (
+                          <div
+                            key={m.id}
+                            className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                              active
+                                ? 'bg-slate-900/70 border-emerald-500/40 hover:border-emerald-500/60'
+                                : 'bg-slate-900/30 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-white truncate">{m.name}</span>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-slate-600'}`} />
+                              </div>
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">{m.description}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-slate-500 font-semibold">{m.category}</span>
+                                <span className="text-[9px] font-bold text-blue-400 bg-blue-950/40 px-1.5 py-0.2 rounded border border-blue-500/20">
+                                  [{m.taxonomy}]
+                                </span>
+                                {active && (
+                                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                                    En ligne
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await toggleModule(m.id, !active);
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${
+                                  active
+                                    ? 'bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-500/40'
+                                    : 'bg-[#4169E1] hover:bg-blue-600 text-white shadow-xs'
+                                }`}
+                                title={active ? 'Désactiver dans Firebase RTDB' : 'Activer dans Firebase RTDB'}
+                              >
+                                {active ? 'Désactiver' : 'Activer'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActivateModule(e, {
+                                    id: m.id,
+                                    title: m.name,
+                                    description: m.description,
+                                    mediaType: 'image',
+                                    mediaUrl: getCardMediaUrl(official),
+                                    routeUrl: m.route,
+                                    targetView: m.targetView
+                                  });
+                                }}
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
+                                title="Accéder au module"
+                              >
+                                Ouvrir
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               ) : !structuredOutput ? (
                 /* Aucun résultat pour la recherche tapée */
@@ -1718,9 +2197,47 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                       )}
                     </div>
 
-                    {/* Présentation Épurée Sans Carte : Le Nom est un Lien Allumant Bleu */}
-                    <div className="py-3.5 px-4 rounded-xl bg-blue-950/20 border border-blue-500/30 hover:border-blue-400/60 transition-all shadow-sm">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Présentation Visuelle Complète : Image / Slide Module + Blocs & Liens */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-950/30 via-slate-900 to-slate-900/90 border border-blue-500/40 hover:border-blue-400/70 transition-all shadow-xl">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                        
+                        {/* VIGNETTE D'IMAGE / SLIDE DU MODULE PRINCIPAL */}
+                        {(() => {
+                          const primImg = getCardMediaUrl(structuredOutput.primaryModule);
+                          const hasSlides = structuredOutput.primaryModule.slides && structuredOutput.primaryModule.slides.length > 0;
+                          
+                          if (hasSlides) {
+                            return (
+                              <div className="w-full sm:w-56 rounded-xl overflow-hidden shrink-0 border border-blue-500/30 shadow-md">
+                                <SlideModuleBlock
+                                  id={structuredOutput.primaryModule.id}
+                                  slides={structuredOutput.primaryModule.slides}
+                                  settings={structuredOutput.primaryModule.slideSettings || { autoplay: true, interval: 3500, aspectRatio: 'wide' }}
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (primImg) {
+                            return (
+                              <div className="relative w-full sm:w-44 h-28 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-md group">
+                                <img
+                                  src={primImg}
+                                  alt={structuredOutput.primaryModule.title}
+                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  crossOrigin="anonymous"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
                         <div className="space-y-1.5 flex-1 min-w-0">
                           <div className="flex items-center gap-2.5 flex-wrap">
                             <a
@@ -1747,6 +2264,17 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-2">
                             {structuredOutput.primaryModule.description}
                           </p>
+
+                          {/* Blocs et Attributs du Module */}
+                          {structuredOutput.primaryModule.blocks && Array.isArray(structuredOutput.primaryModule.blocks) && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                              {structuredOutput.primaryModule.blocks.filter((b: any) => b?.type !== 'header' && b?.type !== 'image_slider').map((b: any, bIdx: number) => (
+                                <span key={b.id || bIdx} className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60 font-medium">
+                                  {b.type === 'cta' ? (b.buttonText || 'Bouton Action') : b.type === 'description' ? '📄 Descriptif' : b.type === 'image' ? '🖼️ Visuel' : `Bloc ${b.type}`}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
@@ -1759,14 +2287,41 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                               ▶️ Voir Tuto
                             </button>
                           )}
-                          <button 
-                            type="button"
-                            onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
-                            className="px-4 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-md shadow-[#4169E1]/20 flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-                          >
-                            <Zap className="w-3.5 h-3.5 fill-current" />
-                            <span>{getTaxonomyBadge(structuredOutput.primaryModule) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}</span>
-                          </button>
+                          {isModuleActive(structuredOutput.primaryModule.id) ? (
+                            <div className="flex items-center gap-2">
+                              <button 
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await toggleModule(structuredOutput.primaryModule.id, false);
+                                }}
+                                className="px-3 py-1.5 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer group"
+                                title="Désactiver ce module"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 group-hover:hidden" />
+                                <X className="w-3.5 h-3.5 text-rose-400 hidden group-hover:inline" />
+                                <span className="group-hover:hidden">✓ Actif</span>
+                                <span className="hidden group-hover:inline">Désactiver</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
+                                className="px-3.5 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95 flex items-center gap-1"
+                              >
+                                <span>Ouvrir</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
+                              className="px-4 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-md shadow-[#4169E1]/20 flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+                            >
+                              <Zap className="w-3.5 h-3.5 fill-current" />
+                              <span>{getTaxonomyBadge(structuredOutput.primaryModule) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1790,18 +2345,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                       <div className="space-y-2">
                         {structuredOutput.linkedModules.map((mod: any, mIdx: number) => {
                           const checked = !!checkedModules[mod.id];
+                          const modImg = getCardMediaUrl(mod);
                           return (
                             <div 
                               key={mod.id || mIdx}
                               onClick={() => toggleModuleCheck(mod.id)}
-                              className={`py-2 px-3 rounded-lg transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer border ${
+                              className={`py-2 px-3 rounded-xl transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer border ${
                                 checked 
                                   ? 'border-[#4169E1] bg-blue-950/30 shadow-xs' 
                                   : 'border-slate-800/80 hover:border-blue-500/30 bg-slate-900/30 hover:bg-slate-900/60'
                               }`}
                             >
-                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                                <div className="pt-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                                   <input 
                                     type="checkbox"
                                     id={`check-${mod.id}`}
@@ -1810,6 +2366,24 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                     className="w-4 h-4 rounded accent-[#4169E1] cursor-pointer"
                                   />
                                 </div>
+                                {modImg ? (
+                                  <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-sm relative group">
+                                    <img
+                                      src={modImg}
+                                      alt={mod.title}
+                                      className="w-full h-full object-cover"
+                                      crossOrigin="anonymous"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-11 h-11 rounded-lg shrink-0 border border-blue-500/30 bg-blue-950/40 flex items-center justify-center text-blue-400 font-bold text-xs">
+                                    {mod.title.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
                                 <div className="space-y-0.5 min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <a
@@ -1853,13 +2427,39 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                     ▶️ Tuto
                                   </button>
                                 )}
-                                <button 
-                                  type="button"
-                                  onClick={(e) => handleActivateModule(e, mod)}
-                                  className="px-2.5 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
-                                >
-                                  {getTaxonomyBadge(mod) === 'Outil' ? '🛒 Acheter seul' : '⚡ Activer seul'}
-                                </button>
+                                {isModuleActive(mod.id) ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <button 
+                                      type="button"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        await toggleModule(mod.id, false);
+                                      }}
+                                      className="px-2 py-1 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer group"
+                                      title="Désactiver"
+                                    >
+                                      <Check className="w-3 h-3 text-emerald-400 group-hover:hidden" />
+                                      <X className="w-3 h-3 text-rose-400 hidden group-hover:inline" />
+                                      <span className="group-hover:hidden">Actif</span>
+                                      <span className="hidden group-hover:inline">Désactiver</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleActivateModule(e, mod)}
+                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-600 transition"
+                                    >
+                                      Ouvrir
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => handleActivateModule(e, mod)}
+                                    className="px-2.5 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition cursor-pointer active:scale-95"
+                                  >
+                                    {getTaxonomyBadge(mod) === 'Outil' ? '🛒 Acheter seul' : '⚡ Activer seul'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -1901,7 +2501,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     <div className="space-y-3 pt-2">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-400" />
+                          <Compass className="w-4 h-4 text-amber-400" />
                           <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
                             Modules de succession conseillés (4 suggestions utiles selon vos recherches)
                           </h4>
@@ -1911,42 +2511,65 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                         </span>
                       </div>
 
-                      <div className="space-y-2">
-                        {structuredOutput.suggestedModules.map((sug: any, sIdx: number) => (
-                          <div 
-                            key={sug.id || sIdx}
-                            className="py-2.5 px-3.5 rounded-xl border border-slate-800/80 hover:border-blue-500/40 bg-slate-900/30 hover:bg-slate-900/60 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                          >
-                            <div className="space-y-0.5 min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <a
-                                  href={sug.routeUrl || '#'}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleActivateModule(e, sug);
-                                  }}
-                                  className="text-xs sm:text-sm font-bold text-blue-400 hover:text-blue-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] hover:drop-shadow-[0_0_12px_rgba(96,165,250,1)] transition-all cursor-pointer hover:underline inline-flex items-center gap-1"
-                                  style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.75)' }}
-                                >
-                                  <span>{sug.title}</span>
-                                  <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                </a>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold tracking-wider bg-blue-500/15 text-blue-300 border border-blue-400/30 shadow-xs shrink-0">
-                                  [{getTaxonomyBadge(sug)}]
-                                </span>
-                                {sug.palmares && (
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20 shrink-0">
-                                    {sug.palmares}
-                                  </span>
+                      <div className="space-y-2.5">
+                        {structuredOutput.suggestedModules.map((sug: any, sIdx: number) => {
+                          const sugImg = getCardMediaUrl(sug);
+                          return (
+                            <div 
+                              key={sug.id || sIdx}
+                              className="py-2.5 px-3.5 rounded-xl border border-slate-800/80 hover:border-blue-500/40 bg-slate-900/40 hover:bg-slate-900/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {sugImg ? (
+                                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-sm relative group">
+                                    <img
+                                      src={sugImg}
+                                      alt={sug.title}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                      crossOrigin="anonymous"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl shrink-0 border border-blue-500/30 bg-blue-950/40 flex items-center justify-center text-blue-400 font-bold text-xs shadow-sm">
+                                    {sug.title.slice(0, 2).toUpperCase()}
+                                  </div>
                                 )}
-                                {sug.trialBadge && (
-                                  <span className="text-[10px] font-medium px-2 py-0.5 bg-blue-500/10 text-blue-300 rounded-full border border-blue-500/20 shrink-0">
-                                    {sug.trialBadge}
-                                  </span>
-                                )}
+
+                                <div className="space-y-0.5 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <a
+                                      href={sug.routeUrl || '#'}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleActivateModule(e, sug);
+                                      }}
+                                      className="text-xs sm:text-sm font-bold text-blue-400 hover:text-blue-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] hover:drop-shadow-[0_0_12px_rgba(96,165,250,1)] transition-all cursor-pointer hover:underline inline-flex items-center gap-1"
+                                      style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.75)' }}
+                                    >
+                                      <span>{sug.title}</span>
+                                      <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                    </a>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold tracking-wider bg-blue-500/15 text-blue-300 border border-blue-400/30 shadow-xs shrink-0">
+                                      [{getTaxonomyBadge(sug)}]
+                                    </span>
+                                    {sug.palmares && (
+                                      <span className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20 shrink-0">
+                                        {sug.palmares}
+                                      </span>
+                                    )}
+                                    {sug.trialBadge && (
+                                      <span className="text-[10px] font-medium px-2 py-0.5 bg-blue-500/10 text-blue-300 rounded-full border border-blue-500/20 shrink-0">
+                                        {sug.trialBadge}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-300 line-clamp-1">{sug.description}</p>
+                                </div>
                               </div>
-                              <p className="text-xs text-slate-300 line-clamp-1">{sug.description}</p>
-                            </div>
 
                             <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                               {sug.tutorialUrl && (
@@ -1958,16 +2581,44 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   ▶️ Tuto
                                 </button>
                               )}
-                              <button 
-                                type="button"
-                                onClick={(e) => handleActivateModule(e, sug)}
-                                className="px-3 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95"
-                              >
-                                {getTaxonomyBadge(sug) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}
-                              </button>
+                              {isModuleActive(sug.id) ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button 
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await toggleModule(sug.id, false);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer group"
+                                    title="Désactiver"
+                                  >
+                                    <Check className="w-3 h-3 text-emerald-400 group-hover:hidden" />
+                                    <X className="w-3 h-3 text-rose-400 hidden group-hover:inline" />
+                                    <span className="group-hover:hidden">Actif</span>
+                                    <span className="hidden group-hover:inline">Désactiver</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleActivateModule(e, sug)}
+                                    className="px-3 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95 flex items-center gap-1"
+                                  >
+                                    <span>Ouvrir</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button 
+                                  type="button"
+                                  onClick={(e) => handleActivateModule(e, sug)}
+                                  className="px-3 py-1 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95"
+                                >
+                                  {getTaxonomyBadge(sug) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}
+                                </button>
+                              )}
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                       </div>
                     </div>
                   )}

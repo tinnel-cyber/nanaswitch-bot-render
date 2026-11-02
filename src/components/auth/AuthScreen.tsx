@@ -111,42 +111,102 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     try {
       let resolvedName = fullName.trim() || (isTeacher ? "Prof. Formateur Nanasore" : "Commerçant Nanasore");
 
-      // Tentative via Firebase Auth si disponible
-      try {
-        if (isSignUp) {
-          const userCred = await registerWithEmail(email.trim(), password);
-          if (userCred && userCred.displayName) {
-            resolvedName = userCred.displayName;
+      if (isSignUp) {
+        // Utilisation de la nouvelle route API backend pour l'inscription avec email de confirmation
+        try {
+          const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: email.trim(),
+              password,
+              name: resolvedName,
+              sellerMode
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Erreur lors de la création du compte');
           }
-        } else {
+
+          // Succès de l'inscription
+          setInfoMessage("Compte créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Veuillez vérifier votre boîte de réception.");
+
+          // Simulation de chargement de 1 seconde (cahier des charges)
+          setTimeout(() => {
+            setIsLoading(false);
+            playValidationBeep();
+            if (onSuccess) {
+              onSuccess({
+                email: email.trim(),
+                name: resolvedName,
+                role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+                sellerMode
+              });
+            }
+          }, 1000);
+
+        } catch (apiErr: any) {
+          // Fallback vers Firebase si l'API échoue
+          console.warn("[AuthScreen] API backend non disponible, fallback Firebase :", apiErr?.message);
+          try {
+            const userCred = await registerWithEmail(email.trim(), password);
+            if (userCred && userCred.displayName) {
+              resolvedName = userCred.displayName;
+            }
+          } catch (firebaseErr: any) {
+            console.warn("[AuthScreen] Firebase notice (mode autonome actif) :", firebaseErr?.message || firebaseErr);
+          }
+
+          persistSellerModeLocally(sellerMode);
+          if (auth.currentUser?.uid) {
+            updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
+          }
+
+          setTimeout(() => {
+            setIsLoading(false);
+            playValidationBeep();
+            if (onSuccess) {
+              onSuccess({
+                email: email.trim(),
+                name: resolvedName,
+                role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+                sellerMode
+              });
+            }
+          }, 1000);
+        }
+      } else {
+        // Connexion existante (pas d'inscription)
+        try {
           const userCred = await loginWithEmail(email.trim(), password);
           if (userCred && userCred.displayName) {
             resolvedName = userCred.displayName;
           }
+        } catch (authErr: any) {
+          console.warn("[AuthScreen] Firebase notice (mode autonome actif) :", authErr?.message || authErr);
         }
-      } catch (authErr: any) {
-        // En cas d'erreur de clé réseau ou d'environnement démo/offline, on simule gracieusement
-        console.warn("[AuthScreen] Firebase notice (mode autonome actif) :", authErr?.message || authErr);
-      }
 
-      persistSellerModeLocally(sellerMode);
-      if (auth.currentUser?.uid) {
-        updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
-      }
-
-      // Simulation de chargement de 1 seconde (cahier des charges)
-      setTimeout(() => {
-        setIsLoading(false);
-        playValidationBeep();
-        if (onSuccess) {
-          onSuccess({
-            email: email.trim(),
-            name: resolvedName,
-            role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-            sellerMode
-          });
+        persistSellerModeLocally(sellerMode);
+        if (auth.currentUser?.uid) {
+          updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
         }
-      }, 1000);
+
+        setTimeout(() => {
+          setIsLoading(false);
+          playValidationBeep();
+          if (onSuccess) {
+            onSuccess({
+              email: email.trim(),
+              name: resolvedName,
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+              sellerMode
+            });
+          }
+        }, 1000);
+      }
 
     } catch (err: any) {
       setIsLoading(false);
@@ -553,16 +613,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   Mot de passe
                 </label>
                 {!isSignUp && (
-                  <button
-                    type="button"
-                    onClick={() => {
+                  <a
+                    href="/reset-password"
+                    onClick={(e) => {
                       playTapBeep();
-                      setInfoMessage("Lien de réinitialisation : saisissez votre adresse email et validez pour recevoir le lien sécurisé.");
+                      // Laisser la navigation par défaut vers /reset-password
                     }}
                     className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     Mot de passe oublié ?
-                  </button>
+                  </a>
                 )}
               </div>
 

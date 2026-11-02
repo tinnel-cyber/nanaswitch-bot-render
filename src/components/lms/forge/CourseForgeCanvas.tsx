@@ -873,12 +873,8 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-black text-white tracking-wide">
-                NaNa AI Course Forge
+                NaNa Course Forge
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-rose-500/20 to-indigo-500/20 text-rose-300 text-[10px] font-black border border-rose-500/30 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" />
-                <span>STUDIO IA</span>
-              </span>
             </div>
             <p className="text-[11px] text-slate-400">
               Éditeur visuel de parcours pédagogique adaptatif &amp; branching IRT

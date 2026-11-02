@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Check, ArrowRight, X, ShieldCheck } from 'lucide-react';
+import { Tag, Check, ArrowRight, X, ShieldCheck } from 'lucide-react';
 import { OmniFunnelOrder, FunnelProductItem } from '../../types/omniFunnel';
 import { purchaseDownsellItem } from '../../services/omniFunnelService';
 import { formatCFA, playCashChime, playTapBeep, playValidationBeep } from '../../utils/audio';
@@ -75,7 +75,7 @@ export const DownsellOffer: React.FC<DownsellOfferProps> = ({
 
         {/* Badge Attente */}
         <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-[10.5px] font-black border border-indigo-500/40 inline-flex items-center gap-1">
-          <Sparkles className="w-3 h-3" />
+          <Tag className="w-3 h-3" />
           <span>DERNIÈRE OPPORTUNITÉ SPÉCIALE</span>
         </span>
 

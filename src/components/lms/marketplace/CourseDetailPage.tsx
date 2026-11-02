@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   Share2,
   Sparkles,
+  GraduationCap,
   BookOpen,
   ArrowRight,
   Maximize2,
@@ -188,9 +189,9 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                 playTapBeep();
                 setIsCheckoutOpen(true);
               }}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <GraduationCap className="w-4 h-4 text-slate-950" />
               <span>S&apos;inscrire ({formatCFA(effectivePrice)})</span>
             </button>
           ) : (
@@ -435,7 +436,7 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                 </div>
                 {appliedDiscount ? (
                   <div className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" />
+                    <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Remise diagnostic -{appliedDiscount}% appliquée !</span>
                   </div>
                 ) : (
@@ -454,9 +455,9 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                       playTapBeep();
                       setIsCheckoutOpen(true);
                     }}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 transition flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
                   >
-                    <Sparkles className="w-4 h-4" />
+                    <GraduationCap className="w-5 h-5 text-slate-950" />
                     <span>S&apos;inscrire en 1-Clic Mobile Money</span>
                   </button>
 
@@ -614,9 +615,9 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                 playTapBeep();
                 setIsCheckoutOpen(true);
               }}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <GraduationCap className="w-4 h-4 text-slate-950" />
               <span>S&apos;inscrire</span>
             </button>
           </div>

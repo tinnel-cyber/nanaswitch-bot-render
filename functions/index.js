@@ -1917,7 +1917,14 @@ exports.sendEmail = onRequest(
         ? to.map((r) => typeof r === 'string' ? { email: r.trim() } : { email: r.email?.trim(), name: r.name })
         : [{ email: String(to).trim() }];
 
-      const apiKey = process.env.BREVO_API_KEY || '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';
+      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
+
+      if (!apiKey) {
+        console.error('[sendEmail Error] Aucune clé Brevo configurée (BREVO_SMTP_KEY ou BREVO_API_KEY manquante).');
+        return res.status(500).json({ 
+          error: 'Le service d\'envoi d\'e-mails n\'est pas configuré sur le serveur (BREVO_SMTP_KEY manquante dans .env).' 
+        });
+      }
 
       const payload = {
         sender: {

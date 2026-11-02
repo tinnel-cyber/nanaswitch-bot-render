@@ -4,7 +4,7 @@ import {
   Filter, FileSpreadsheet, FileText, ArrowLeft, ExternalLink, 
   ChevronRight, Sparkles, ShieldCheck, Mail, PhoneCall, 
   Laptop, Check, User, RefreshCw, Eye, MessageSquare, ArrowUpRight,
-  Rocket, Flame, Share2, DollarSign, Zap
+  Rocket, Flame, Share2, DollarSign, Zap, GraduationCap
 } from 'lucide-react';
 import { 
   AssignmentSubmission, StudentRosterItem, InstructorKpiMetrics, 
@@ -339,11 +339,8 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>NaNa AI Course Forge</span>
-              <span className="px-2 py-0.5 rounded-full text-[9.5px] bg-gradient-to-r from-rose-500 to-indigo-500 text-white font-black shadow-sm">
-                STUDIO IA
-              </span>
+              <GraduationCap className="w-4 h-4 text-purple-400" />
+              <span>NaNa Course Forge</span>
             </button>
 
             <button

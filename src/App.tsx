@@ -130,6 +130,8 @@ const StudentDashboardPage = React.lazy(() => import('./pages/StudentDashboardPa
 const CashierConnectPage = React.lazy(() => import('./pages/CashierConnectPage').then(m => ({ default: m.CashierConnectPage || m.default })));
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
+const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
+const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
 import { getMarketplaceCourseById } from './services/marketplaceService';
 import { AuthProvider } from './context/AuthContext';
 import { useTenant } from './context/TenantContext';
@@ -328,6 +330,10 @@ export type AppView =
   | 'salle_vip'
   | 'VIP'
   | 'vip'
+  | 'TEST_SUPABASE'
+  | 'test_supabase'
+  | 'PRODUCTS'
+  | 'products'
   | 'STANDALONE_APP'
   | 'standalone_app';
 export default function App() {
@@ -350,6 +356,20 @@ export default function App() {
   }>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      if (
+        pathname === '/test-supabase' ||
+        pathname.startsWith('/test-supabase') ||
+        pathname === '/products' ||
+        pathname.startsWith('/products') ||
+        pathname === '/pos' ||
+        pathname.startsWith('/pos') ||
+        pathname === '/dashboard' ||
+        pathname.startsWith('/dashboard') ||
+        pathname === '/admin' ||
+        pathname.startsWith('/admin')
+      ) {
+        return { isBoutique: false, targetStoreId: null, targetProductId: null };
+      }
       const params = new URLSearchParams(window.location.search);
       const isCustomHost = !isNativeDomain(window.location.hostname);
 
@@ -406,6 +426,18 @@ export default function App() {
   const [currentView, setCurrentView] = useState<AppView>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      if (pathname === '/test-supabase' || pathname.startsWith('/test-supabase')) {
+        return 'TEST_SUPABASE';
+      }
+      if (pathname === '/products' || pathname.startsWith('/products')) {
+        return 'PRODUCTS';
+      }
+      if (pathname === '/pos' || pathname.startsWith('/pos')) {
+        return 'POS';
+      }
+      if (pathname === '/dashboard' || pathname.startsWith('/dashboard')) {
+        return 'MASTER_HUB';
+      }
       const params = new URLSearchParams(window.location.search);
       const isBoutiquePath =
         pathname === '/s' ||
@@ -2002,6 +2034,16 @@ export default function App() {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       if (
+        pathname === '/test-supabase' ||
+        pathname.startsWith('/test-supabase') ||
+        pathname === '/products' ||
+        pathname.startsWith('/products') ||
+        pathname === '/pos' ||
+        pathname.startsWith('/pos') ||
+        pathname === '/dashboard' ||
+        pathname.startsWith('/dashboard') ||
+        pathname === '/admin' ||
+        pathname.startsWith('/admin') ||
         pathname === '/s' ||
         pathname.startsWith('/s/') ||
         pathname === '/boutique' || 
@@ -4256,6 +4298,25 @@ export default function App() {
     setLastSaleToast(`🛒 ${items.length} article(s) injecté(s) dans la caisse !`);
     setTimeout(() => setLastSaleToast(null), 3500);
   };
+
+  
+    // Priorité 0 : Route Gestion des Stocks Nanasore (/products)
+  if (currentView === 'PRODUCTS' || currentView === 'products') {
+    return (
+      <React.Suspense fallback={<div className="min-h-screen bg-[#0b1329] flex items-center justify-center text-[#f4f4f6]">Chargement de la gestion des stocks...</div>}>
+        <ProductsScreen />
+      </React.Suspense>
+    );
+  }
+
+  // Priorité 0 Absolue : Route de Test Supabase (Mode Sombre)
+  if (currentView === 'TEST_SUPABASE' || currentView === 'test_supabase') {
+    return (
+      <React.Suspense fallback={<div className="min-h-screen bg-[#060B18] flex items-center justify-center text-white">Chargement du test Supabase...</div>}>
+        <TestSupabaseScreen />
+      </React.Suspense>
+    );
+  }
 
   // =========================================================================
   // 1. ROUTEUR MODE DOMAINE PERSONNALISÉ (EXTERNAL CUSTOM DOMAIN)

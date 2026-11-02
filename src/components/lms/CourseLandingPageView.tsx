@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Play, Check, Star, Users, Clock, Award, ShieldCheck, Lock, 
   ChevronDown, ChevronUp, ArrowRight, Share2, BookOpen, 
-  Sparkles, PhoneCall, Smartphone, Store, ArrowLeft, CheckCircle2,
+  Sparkles, GraduationCap, PhoneCall, Smartphone, Store, ArrowLeft, CheckCircle2,
   FileText, HelpCircle, Laptop, Globe
 } from 'lucide-react';
 import { Course, StoreUser } from '../../types';
@@ -228,9 +228,9 @@ export const CourseLandingPageView: React.FC<CourseLandingPageViewProps> = ({
                   <button
                     type="button"
                     onClick={handleEnrollClick}
-                    className="flex-1 py-4 px-6 bg-gradient-to-r from-rose-600 via-rose-500 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 active:scale-95 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-rose-950/50 transition cursor-pointer min-h-[48px]"
+                    className="flex-1 py-4 px-6 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 active:scale-95 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-950/50 transition cursor-pointer min-h-[48px]"
                   >
-                    <Sparkles className="w-5 h-5 text-amber-300" />
+                    <GraduationCap className="w-5 h-5 text-emerald-300" />
                     <span>S'inscrire & Débloquer la Formation</span>
                   </button>
                 )}
@@ -499,9 +499,9 @@ export const CourseLandingPageView: React.FC<CourseLandingPageViewProps> = ({
             <button
               type="button"
               onClick={handleEnrollClick}
-              className="w-full sm:w-auto py-3 px-6 bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-black text-xs rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-rose-950/50 transition cursor-pointer min-h-[44px]"
+              className="w-full sm:w-auto py-3 px-6 bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-xs rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition cursor-pointer min-h-[44px]"
             >
-              <Sparkles className="w-4 h-4 text-amber-300" />
+              <GraduationCap className="w-4 h-4 text-emerald-300" />
               <span>S'inscrire Maintenant (Mobile Money & Carte)</span>
             </button>
           )}

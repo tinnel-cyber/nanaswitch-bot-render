@@ -64,7 +64,7 @@ export const ParallaxBrandStoryModule: React.FC<ParallaxBrandStoryModuleProps> =
           <div className="lg:col-span-7 space-y-6 text-left">
             <div className="space-y-2">
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-                ✨ {subtitle}
+                {subtitle}
               </span>
               <h2 className={`text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight ${moodStyle.textPrimary}`}>
                 {title}

@@ -204,7 +204,7 @@ export const BeautyEmeraldFooter: React.FC<BeautyEmeraldFooterProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 text-[11px] text-[#C59B27] font-['Outfit'] font-semibold tracking-wider uppercase">
-              <Sparkles className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-3.5 h-3.5" />
               <span>{customConfig?.reassurance3Title || 'Garantie Authenticité & Fraîcheur Botanique'}</span>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Star, Heart, ArrowLeft, ChevronLeft, ChevronRight, 
-  Clock, Truck, ShieldCheck, Sparkles, Check, Play, 
+  Clock, Truck, ShieldCheck, Check, Play, 
   Plus, Minus, X, CheckCircle2, MessageCircle, Ruler,
   Flame, ShoppingBag, Eye, RefreshCw, ChevronDown
 } from 'lucide-react';

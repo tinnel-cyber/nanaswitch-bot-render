@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Store, Baby, Sparkles, Cpu, Home as HomeIcon, Utensils, 
-  Shirt, Laptop, BookOpen, Compass 
+  Shirt, Laptop, BookOpen, Compass, Heart 
 } from 'lucide-react';
 
 export interface MegaMenuCategory {
@@ -76,7 +76,7 @@ export const MEGA_CATEGORIES: MegaMenuCategory[] = [
   {
     id: 'health-beauty',
     name: 'Health & Beauty',
-    icon: Sparkles,
+    icon: Heart,
     badge: 'SALE',
     columns: [
       {

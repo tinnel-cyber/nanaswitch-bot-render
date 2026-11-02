@@ -75,7 +75,7 @@ export const HeroSplitBannerSection: React.FC<HeroSplitBannerSectionProps> = ({
 
           <div className="relative z-10 max-w-3xl mx-auto space-y-6 text-white animate-in fade-in duration-300">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-xs font-black tracking-wider uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
               <span>{subtitle}</span>
             </div>
 
@@ -142,7 +142,7 @@ export const HeroSplitBannerSection: React.FC<HeroSplitBannerSectionProps> = ({
             <div className="lg:col-span-7 space-y-6 sm:space-y-8 text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase">
                 <span className={`px-3 py-1 rounded-full ${mood.accentBadge}`}>
-                  ✨ {subtitle}
+                  {subtitle}
                 </span>
               </div>
 

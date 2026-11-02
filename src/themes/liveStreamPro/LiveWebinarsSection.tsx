@@ -44,7 +44,7 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({
           </div>
 
           <div className="flex items-center gap-2 self-start md:self-auto shrink-0 text-xs text-indigo-300 bg-indigo-500/10 px-3.5 py-2 rounded-2xl border border-indigo-500/20 shadow-sm">
-            <Sparkles className="w-4 h-4 text-amber-300" />
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span>Accès Certifié & Support Dédié</span>
           </div>
         </div>
@@ -171,7 +171,7 @@ export const LiveWebinarsSection: React.FC<LiveWebinarsSectionProps> = ({
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
                         <span>Réserver mon accès VIP</span>
                       </>
                     )}

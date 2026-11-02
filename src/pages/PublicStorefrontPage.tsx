@@ -452,6 +452,18 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     setShowCheckoutDrawer(true);
   }, []);
 
+  // Écouteur global pour ouverture immédiate de la caisse avec pré-remplissage depuis un tunnel de vente
+  useEffect(() => {
+    const handleGlobalOpenCheckout = (e: any) => {
+      const detail = e.detail;
+      if (detail?.product) {
+        handleBuyNow(detail.product, detail.quantity || 1);
+      }
+    };
+    window.addEventListener('nana:open_checkout', handleGlobalOpenCheckout);
+    return () => window.removeEventListener('nana:open_checkout', handleGlobalOpenCheckout);
+  }, [handleBuyNow]);
+
   const handleOpenTunnel = useCallback((product: StoreProductItem) => {
     playTapBeep();
     const funnelTarget = product.linkedFunnelId || product.slug || product.id;

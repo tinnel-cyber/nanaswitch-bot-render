@@ -82,10 +82,10 @@ async function sendTwilioSms({ to, message }) {
  * Envoi d'un Email de confirmation via l'API officielle Brevo (ex-Sendinblue)
  */
 async function sendBrevoEmail({ toEmail, toName, subject, htmlContent }) {
-  const brevoApiKey = process.env.BREVO_API_KEY;
+  const brevoApiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
 
   if (!brevoApiKey) {
-    console.log(`[BREVO SIMULATION] Clé BREVO_API_KEY absente. Envoi simulé vers ${toEmail} : "${subject}"`);
+    console.log(`[BREVO SIMULATION] Clé BREVO_SMTP_KEY / BREVO_API_KEY absente. Envoi simulé vers ${toEmail} : "${subject}"`);
     return { success: true, simulated: true, messageId: `mock_brevo_${Date.now()}` };
   }
 

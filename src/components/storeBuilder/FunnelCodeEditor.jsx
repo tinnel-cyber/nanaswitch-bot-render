@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 /**
  * FunnelCodeEditor - Éditeur de code Lean (CSS Scoped & Injection HTML)
@@ -64,7 +64,7 @@ export const FunnelCodeEditor = ({
       {/* Notification Info */}
       <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
         <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <Zap className="w-3.5 h-3.5 text-amber-400" />
           <span>Moteur Lean Sans Dépendance</span>
         </div>
         <p>

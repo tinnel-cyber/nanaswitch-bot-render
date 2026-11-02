@@ -196,7 +196,7 @@ export const VoiceNotePitchModule: React.FC<VoiceNotePitchModuleProps> = ({
         {/* En-tête de section */}
         <div className="text-center max-w-2xl mx-auto mb-10 space-y-2">
           <span className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-            <Sparkles className="w-3.5 h-3.5" />
+            <Volume2 className="w-3.5 h-3.5" />
             <span>{subtitle}</span>
           </span>
           <h2 className={`text-2xl sm:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>
@@ -354,7 +354,7 @@ export const VoiceNotePitchModule: React.FC<VoiceNotePitchModuleProps> = ({
                     className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3" />
+                    <ShoppingBag className="w-3 h-3" />
                     <span>L'Offre Mentionnée</span>
                   </div>
                 </div>

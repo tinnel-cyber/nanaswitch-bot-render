@@ -330,3 +330,6 @@ export function onAppActivationChanged(callback: (appId?: string) => void): () =
     window.removeEventListener('storage', handler);
   };
 }
+
+// Re-export des nouveaux services modulaires dynamiques
+export * from './moduleActivationService';

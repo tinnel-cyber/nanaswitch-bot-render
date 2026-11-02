@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { FunnelBuilder } from '../storeBuilder/FunnelBuilder';
 import { getFunnelBySlug } from '../../services/omniFunnelService';
 import { injectFunnelSeoMeta } from '../../utils/seoMetaService';
-import { ArrowLeft, Sparkles, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Loader2, ShoppingBag } from 'lucide-react';
 
 interface PublicModularTunnelViewProps {
   slug: string;
   product?: any;
   onBackToStore?: () => void;
+  onDirectCheckout?: (product: any, quantity?: number) => void;
   className?: string;
 }
 
@@ -17,6 +18,7 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
   onBackToStore = () => {
     if (typeof window !== 'undefined') window.location.href = '/';
   },
+  onDirectCheckout,
   className = ''
 }) => {
   const [funnelData, setFunnelData] = useState<any | null>(null);
@@ -132,7 +134,7 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
         <div className="relative flex items-center justify-center mb-4">
           <div className="absolute -inset-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl blur-lg opacity-40 animate-pulse" />
           <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-xl border border-indigo-400/40">
-            <Sparkles className="w-7 h-7 text-white animate-spin" />
+            <Loader2 className="w-7 h-7 text-white animate-spin" />
           </div>
           <div className="absolute -inset-2.5 rounded-2xl border-2 border-transparent border-t-amber-400 border-r-indigo-400 animate-spin" />
         </div>
@@ -175,6 +177,7 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
         isOpen={true}
         isPublicView={true}
         onClose={onBackToStore}
+        onDirectCheckout={onDirectCheckout}
       />
     </div>
   );

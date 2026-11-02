@@ -71,6 +71,7 @@ export const CanvasBlockItem = memo(function CanvasBlockItem({
   return (
     <motion.div
       layout
+      data-block-id={block.id}
       onClick={() => {
         if (viewMode === 'builder') {
           onSelect(block.id);
@@ -82,8 +83,8 @@ export const CanvasBlockItem = memo(function CanvasBlockItem({
         viewMode === 'builder' ? 'cursor-pointer' : ''
       } ${
         isSelected
-          ? 'ring-2 ring-indigo-600 bg-indigo-600/[0.03] shadow-xl'
-          : viewMode === 'builder' ? 'hover:bg-slate-900/30' : ''
+          ? 'ring-2 ring-indigo-500 bg-indigo-600/[0.04] shadow-2xl'
+          : viewMode === 'builder' ? 'hover:bg-slate-900/40 hover:ring-1 hover:ring-slate-700' : ''
       } ${
         viewMode === 'builder' && !condEval.isVisible
           ? 'opacity-40 border-2 border-dashed border-indigo-500/70'
@@ -102,13 +103,32 @@ export const CanvasBlockItem = memo(function CanvasBlockItem({
       {/* Barre d'Actions Contextuelle au Survol / Sélection (Mode Builder uniquement) */}
       {viewMode === 'builder' && (
         <div
-          className={`absolute top-3 right-3 z-30 flex items-center gap-1 bg-slate-900/95 border border-slate-700 px-2.5 py-1 rounded-xl shadow-xl backdrop-blur-md transition-opacity duration-200 ${
-            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(block.id);
+          }}
+          className={`absolute top-3 right-3 z-30 flex items-center gap-1 bg-slate-900/95 border px-2.5 py-1 rounded-xl shadow-xl backdrop-blur-md transition-all duration-200 cursor-pointer ${
+            isSelected
+              ? 'opacity-100 border-indigo-500 ring-2 ring-indigo-500/40 bg-indigo-950/90'
+              : 'opacity-0 group-hover:opacity-100 border-slate-700 hover:border-indigo-400'
           }`}
+          title="Cliquez pour sélectionner et modifier ce module dans l'inspecteur"
         >
-          <span className="text-[10px] font-black uppercase text-indigo-400 mr-1.5 truncate max-w-[120px]">
+          <span className="text-[10px] font-black uppercase text-indigo-400 mr-1.5 truncate max-w-[140px]">
             {block.name}
           </span>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(block.id);
+            }}
+            className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black flex items-center gap-1 shadow-sm transition active:scale-95 cursor-pointer mr-1"
+            title="Personnaliser ce module dans le panneau latéral"
+          >
+            <span>✏️ Personnaliser</span>
+          </button>
 
           <button
             type="button"

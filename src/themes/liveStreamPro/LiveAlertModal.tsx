@@ -130,7 +130,7 @@ export const LiveAlertModal: React.FC<LiveAlertModalProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                <Sparkles className="w-3 h-3 text-[#F59E0B]" />
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                 <span>Zéro spam • Désinscription en 1 clic • Accès VIP gratuit</span>
               </div>
 

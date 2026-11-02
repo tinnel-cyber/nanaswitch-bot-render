@@ -15,7 +15,7 @@ import { UpsellOffer } from './UpsellOffer';
 import { DownsellOffer } from './DownsellOffer';
 import { FunnelSuccessView } from './FunnelSuccessView';
 import { formatCFA, playValidationBeep } from '../../utils/audio';
-import { ArrowRight, ShieldCheck, Check, Sparkles, HelpCircle, Award, BookOpen, Clock, Flame, Zap } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Check, HelpCircle, Award, BookOpen, Clock, Flame, Zap } from 'lucide-react';
 import { FunnelStep, OmniFunnelOrder } from '../../types/omniFunnel';
 import { getFunnelBySlug } from '../../services/omniFunnelService';
 import { injectFunnelSeoMeta } from '../../utils/seoMetaService';
@@ -386,7 +386,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
               <section key={block.id} className="p-5 sm:p-7 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4 shadow-xl flex flex-col items-center text-center">
                 {badge && (
                   <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black tracking-wider uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <Award className="w-3.5 h-3.5 text-amber-400" />
                     <span>{badge}</span>
                   </div>
                 )}

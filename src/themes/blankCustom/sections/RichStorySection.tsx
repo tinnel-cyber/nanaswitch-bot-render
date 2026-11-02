@@ -51,7 +51,7 @@ export const RichStorySection: React.FC<RichStorySectionProps> = ({
           {/* Bloc Texte */}
           <div className={`lg:col-span-7 space-y-6 ${imagePosition === 'left' ? 'lg:order-2' : 'lg:order-1'}`}>
             <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${mood.accentBadge}`}>
-              ✨ {subtitle}
+              {subtitle}
             </span>
             <h2 className={`text-2xl sm:text-4xl font-black tracking-tight leading-tight ${mood.textPrimary}`}>
               {title}

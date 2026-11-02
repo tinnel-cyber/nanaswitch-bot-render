@@ -21,7 +21,7 @@ export interface ModuleDefinition {
 // Définition des 6 En-Têtes Premium Nanasore
 export const HEADER_STYLES_LIST: { id: HeaderStyleType; title: string; badge: string; icon: string; desc: string }[] = [
   { id: 'mega_hub_marketplace', title: '🏪 Mega-Hub Marketplace', badge: 'Marketplace Pro', icon: '🏪', desc: 'Style You&Me Shop : Ruban défilant, Sélecteur de ville, Hotline WhatsApp & Mega-menu' },
-  { id: 'editorial_glowing_luxe', title: '✨ Editorial Glowing Luxe', badge: 'Beauté & Santé', icon: '✨', desc: 'Design épuré haut de gamme, navigation centrée, loupe et univers cosmétique' },
+  { id: 'editorial_glowing_luxe', title: '💎 Editorial Glowing Luxe', badge: 'Beauté & Santé', icon: '💎', desc: 'Design épuré haut de gamme, navigation centrée, loupe et univers cosmétique' },
   { id: 'stories_rings_viral', title: '📱 Stories Rings Viral', badge: 'TikTok & Insta', icon: '📱', desc: 'Pastilles et anneaux de stories cliquables animés façon réseaux sociaux' },
   { id: 'dynamic_island_glass', title: '🍏 Dynamic Island Glass', badge: 'Apple Minimal', icon: '🍏', desc: 'Pilule flottante ultra-moderne, effet verre dépoli et transitions fluides' },
   { id: 'live_radar_vocal', title: '🎙️ Live Radar & Note Vocale', badge: 'Direct & Vocal', icon: '🎙️', desc: 'Pulsation radar en direct et déclencheur audio instantané' },
@@ -255,9 +255,9 @@ export const ARCHITECT_MODULES: ModuleDefinition[] = [
     category: 'nanasore_original',
     title: 'Curseur Visuel Avant / Après',
     badge: 'PREUVE VISUELLE',
-    icon: '✨',
+    icon: '💎',
     desc: 'Un comparateur interactif à glissière montrant la transformation ou l\'efficacité du produit avec une précision chirurgicale.',
-    defaultTitle: '✨ Les Résultats en Images',
+    defaultTitle: 'Les Résultats en Images',
     defaultSubtitle: 'Faites glisser le curseur pour observer la transformation',
     defaultSettings: {
       beforeLabel: 'Avant utilisation',

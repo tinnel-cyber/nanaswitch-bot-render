@@ -961,10 +961,10 @@ export const IntegrationsModal: React.FC<IntegrationsModalProps> = ({
   instructorId = 'instructor-default'
 }) => {
   const [activeTab, setActiveTab] = useState<'ECOMMERCE_SMS' | 'VIDEO_LMS'>('ECOMMERCE_SMS');
-  const [wooUrl, setWooUrl] = useState('https://mon-ecole.com');
-  const [wooKey, setWooKey] = useState('ck_live_948f928374928374');
-  const [brevoKey, setBrevoKey] = useState('xkeysib-8374829374928374');
-  const [twilioSid, setTwilioSid] = useState('AC_live_73849204859302');
+  const [wooUrl, setWooUrl] = useState('');
+  const [wooKey, setWooKey] = useState('');
+  const [brevoKey, setBrevoKey] = useState('');
+  const [twilioSid, setTwilioSid] = useState('');
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
   if (!isOpen) return null;

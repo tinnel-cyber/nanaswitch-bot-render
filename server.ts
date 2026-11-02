@@ -69,6 +69,9 @@ export { compressVideoTo480p };
 
 
 dotenv.config();
+if (!process.env.SUPABASE_URL && fs.existsSync(path.join(process.cwd(), 'functions', '.env'))) {
+  dotenv.config({ path: path.join(process.cwd(), 'functions', '.env') });
+}
 
 
 const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'konkobo_telecom_webhook_secret_key_2026';
@@ -196,6 +199,442 @@ async function startServer() {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
+  });
+
+  // Test de connexion Supabase (lecture de la table organizations)
+  app.get('/api/test-supabase', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const { data, error } = await supabase.from('organizations').select('*').limit(50);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+          hint: error.hint || null,
+          details: error.details || null,
+        });
+      }
+      return res.json({
+        success: true,
+        count: data?.length || 0,
+        organizations: data,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || 'Erreur inconnue lors du test Supabase',
+      });
+    }
+  });
+
+  // API Produits Supabase (Gestion des stocks Nanasore)
+  app.get('/api/products', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return res.status(400).json({ success: false, error: error.message, products: [], totalStock: 0, totalValue: 0 });
+      }
+
+      const totalStock = products?.reduce((acc: number, p: any) => acc + (p.stock || 0), 0) || 0;
+      const totalValue = products?.reduce((acc: number, p: any) => acc + (p.price || 0) * (p.stock || 0), 0) || 0;
+
+      return res.json({
+        success: true,
+        products: products || [],
+        totalStock,
+        totalValue,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur chargement produits', products: [], totalStock: 0, totalValue: 0 });
+    }
+  });
+
+  app.post('/api/products', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const { intent, name, price, stock, category, id } = req.body || {};
+
+      if (intent === 'create') {
+        const prodName = String(name || '').trim();
+        const prodPrice = parseFloat(String(price || '0'));
+        const prodStock = parseInt(String(stock || '0'), 10);
+        const prodCategory = String(category || 'Général').trim();
+
+        if (!prodName || isNaN(prodPrice) || isNaN(prodStock)) {
+          return res.status(400).json({ success: false, error: 'Champs invalides' });
+        }
+
+        const { data: org } = await supabase.from('organizations').select('id').limit(1).single();
+
+        const { error } = await supabase.from('products').insert([
+          {
+            name: prodName,
+            price: prodPrice,
+            stock: prodStock,
+            category: prodCategory,
+            organization_id: org?.id || null,
+          },
+        ]);
+
+        if (error) return res.status(500).json({ success: false, error: error.message });
+        return res.json({ success: true });
+      }
+
+      if (intent === 'update-stock') {
+        const prodId = String(id || '');
+        const newStock = parseInt(String(stock || '0'), 10);
+
+        const { error } = await supabase.from('products').update({ stock: newStock }).eq('id', prodId);
+        if (error) return res.status(500).json({ success: false, error: error.message });
+        return res.json({ success: true });
+      }
+
+      return res.status(400).json({ success: false, error: 'Action non reconnue' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur action produit' });
+    }
+  });
+
+  // API Omnibar Modules & Blocs Multi-Tenant (Supabase RPC)
+  app.post('/api/modules', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      let { blockKey, block_key, isActive, is_active, organizationId, organization_id, settings } = req.body || {};
+
+      const key = String(blockKey || block_key || '').trim();
+      const active = Boolean(isActive ?? is_active ?? true);
+      let orgId = String(organizationId || organization_id || '').trim();
+      const blockSettings = settings || {};
+
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'blockKey requis' });
+      }
+
+      // 1. Assurer la mise à jour dans app_registry (nom, description, catégorie)
+      const blockName = req.body?.name || req.body?.title || (blockSettings?.title as string) || key;
+      const blockDesc = req.body?.description || (blockSettings?.description as string) || '';
+      const blockCat = req.body?.category || req.body?.type || (blockSettings?.category as string) || 'General';
+
+      try {
+        await supabase.from('app_registry').upsert(
+          {
+            key,
+            name: blockName,
+            description: blockDesc,
+            category: blockCat,
+            is_public: true,
+          },
+          { onConflict: 'key' }
+        );
+      } catch (err) {
+        console.warn('[APP REGISTRY UPSERT] Enregistrement catalogue :', err);
+      }
+
+      if (!orgId) {
+        const { data: defaultOrg } = await supabase.from('organizations').select('id').limit(1).single();
+        if (defaultOrg?.id) {
+          orgId = defaultOrg.id;
+        }
+      }
+
+      let rpcResult = null;
+      if (orgId) {
+        const { data, error } = await supabase.rpc('publish_organization_block', {
+          p_org_id: orgId,
+          p_block_key: key,
+          p_is_active: active,
+          p_settings: blockSettings,
+        });
+
+        if (error) {
+          return res.status(500).json({ success: false, error: error.message });
+        }
+        rpcResult = data;
+      }
+
+      return res.json({ success: true, message: 'Module et bloc synchronisés dans Supabase', blockKey: key, result: rpcResult });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur publication bloc' });
+    }
+  });
+
+  app.get('/api/modules', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const orgId = req.query.organizationId as string;
+
+      const { data: registry, error: regError } = await supabase
+        .from('app_registry')
+        .select('*')
+        .eq('is_public', true);
+
+      if (regError) {
+        return res.status(500).json({ success: false, error: regError.message, registry: [], activeBlocks: [] });
+      }
+
+      let activeBlocks: any[] = [];
+      if (orgId) {
+        const { data: blocks } = await supabase
+          .from('organization_blocks')
+          .select('*')
+          .eq('organization_id', orgId);
+        activeBlocks = blocks || [];
+      }
+
+      return res.json({ success: true, registry: registry || [], activeBlocks });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur liste blocs', registry: [], activeBlocks: [] });
+    }
+  });
+
+  // API Ventes & Caisse POS / Storefront (Supabase process_sale_transaction RPC)
+  app.post('/api/sales', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const {
+        productId,
+        product_id,
+        quantity,
+        source,
+        organizationId,
+        organization_id,
+        unitPrice,
+        unit_price,
+        customerName,
+        customer_name,
+        customerPhone,
+        customer_phone,
+        paymentMethod,
+        payment_method,
+        sellerName,
+        seller_name,
+        metadata,
+      } = req.body || {};
+
+      const prodId = String(productId || product_id || '').trim();
+      const qty = parseInt(String(quantity || '1'), 10);
+      const saleSource = String(source || 'pos').trim();
+
+      if (!prodId) {
+        return res.status(400).json({ success: false, error: 'productId requis' });
+      }
+      if (isNaN(qty) || qty <= 0) {
+        return res.status(400).json({ success: false, error: 'La quantité doit être supérieure à 0' });
+      }
+
+      const { data, error } = await supabase.rpc('process_sale_transaction', {
+        p_product_id: prodId,
+        p_quantity: qty,
+        p_source: saleSource,
+        p_org_id: organizationId || organization_id || null,
+        p_unit_price: unitPrice ?? unit_price ?? null,
+        p_customer_name: customerName || customer_name || null,
+        p_customer_phone: customerPhone || customer_phone || null,
+        p_payment_method: String(paymentMethod || payment_method || 'cash'),
+        p_seller_name: sellerName || seller_name || null,
+        p_metadata: metadata || {},
+      });
+
+      if (error) {
+        return res.status(400).json({ success: false, error: error.message, code: error.code });
+      }
+
+      return res.json({ success: true, transaction: data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du traitement de la vente' });
+    }
+  });
+
+  app.get('/api/sales', async (req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const orgId = req.query.organizationId as string;
+      const limit = parseInt(String(req.query.limit || '50'), 10);
+
+      let query = supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (orgId) {
+        query = query.eq('organization_id', orgId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message, sales: [] });
+      }
+      return res.json({ success: true, sales: data || [] });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur liste ventes', sales: [] });
+    }
+  });
+
+  // Route d'inscription avec envoi d'email de confirmation Brevo
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, password, name, sellerMode = 'creator_trainer', emailLinkAuth = false } = req.body;
+
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Adresse email invalide' });
+      }
+
+      if (!password || password.length < 6) {
+        return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères' });
+      }
+
+      // Import dynamique de la fonction d'envoi d'email
+      const { sendConfirmationEmail } = await import('./app/utils/email.server');
+
+      // Import Firebase pour créer l'utilisateur
+      const { registerWithEmail } = await import('./src/firebase');
+
+      // Création de l'utilisateur Firebase
+      const userCred = await registerWithEmail(email.trim(), password);
+      const userId = userCred.uid;
+
+      let confirmationUrl: string;
+
+      if (emailLinkAuth) {
+        // Mode authentification par lien email Firebase (Android App Links)
+        try {
+          const { adminAuth } = await import('./app/utils/firebase.server');
+          const actionCodeSettings = {
+            url: 'https://nanasore.com/finishSignUp',
+            handleCodeInApp: true,
+          };
+          confirmationUrl = await adminAuth.generateSignInWithEmailLink(email.trim(), actionCodeSettings);
+          console.log(`[FIREBASE ADMIN] Lien d'authentification par email généré pour ${email}`);
+        } catch (adminError: any) {
+          console.warn('[FIREBASE ADMIN] Erreur génération lien email, fallback token:', adminError?.message);
+          // Fallback vers le système de token standard
+          const confirmationToken = crypto.randomBytes(32).toString('hex');
+          confirmationUrl = `https://nanasore.com/confirm-email?token=${confirmationToken}&uid=${userId}`;
+        }
+      } else {
+        // Mode standard avec token personnalisé
+        const confirmationToken = crypto.randomBytes(32).toString('hex');
+        confirmationUrl = `https://nanasore.com/confirm-email?token=${confirmationToken}&uid=${userId}`;
+      }
+
+      // Envoi de l'email de confirmation via Brevo
+      try {
+        await sendConfirmationEmail({
+          email: email.trim(),
+          name: name || 'Utilisateur',
+          confirmationUrl
+        });
+        console.log(`[BREVO] Email de confirmation envoyé à ${email}`);
+      } catch (emailError: any) {
+        console.warn('[BREVO] Erreur envoi email de confirmation:', emailError?.message);
+        // On continue même si l'email échoue (fallback Firebase verification)
+      }
+
+      // Stocker le token de confirmation dans Firestore (pour validation future) - seulement en mode standard
+      if (!emailLinkAuth) {
+        try {
+          const { db, doc, setDoc } = await import('./src/firebase');
+          const confirmationToken = confirmationUrl.includes('token=') 
+            ? confirmationUrl.split('token=')[1].split('&')[0]
+            : crypto.randomBytes(32).toString('hex');
+          
+          await setDoc(doc(db, 'emailConfirmations', userId), {
+            token: confirmationToken,
+            email: email.trim(),
+            name: name || 'Utilisateur',
+            sellerMode,
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24h
+          });
+        } catch (firestoreError) {
+          console.warn('[FIRESTORE] Erreur stockage token confirmation:', firestoreError);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: emailLinkAuth 
+          ? 'Un email de confirmation a été envoyé. Cliquez sur le lien pour compléter votre inscription.'
+          : 'Compte créé avec succès. Veuillez vérifier votre email pour confirmer votre inscription.',
+        userId,
+        email: email.trim(),
+        requiresEmailConfirmation: true,
+        confirmationUrl: emailLinkAuth ? confirmationUrl : undefined,
+        authMethod: emailLinkAuth ? 'email-link' : 'token'
+      });
+    } catch (err: any) {
+      console.error('[AUTH REGISTER] Erreur inscription:', err);
+      const errorMessage = err?.message || err?.code || 'Erreur lors de la création du compte';
+      
+      // Mapping des erreurs Firebase courantes
+      if (errorMessage.includes('email-already-in-use')) {
+        return res.status(409).json({ error: 'Cette adresse email est déjà utilisée' });
+      }
+      if (errorMessage.includes('weak-password')) {
+        return res.status(400).json({ error: 'Le mot de passe est trop faible' });
+      }
+      if (errorMessage.includes('invalid-email')) {
+        return res.status(400).json({ error: 'Adresse email invalide' });
+      }
+
+      return res.status(500).json({ error: errorMessage });
+    }
+  });
+
+  // Route de confirmation d'email via token
+  app.get('/api/auth/confirm-email', async (req, res) => {
+    try {
+      const { token, uid } = req.query;
+
+      if (!token || !uid) {
+        return res.status(400).json({ error: 'Token ou UID manquant' });
+      }
+
+      // Vérifier le token dans Firestore
+      const { db, doc, getDoc, updateDoc, deleteDoc } = await import('./src/firebase');
+      const confirmationDoc = await getDoc(doc(db, 'emailConfirmations', uid as string));
+
+      if (!confirmationDoc.exists()) {
+        return res.status(404).json({ error: 'Token de confirmation introuvable ou expiré' });
+      }
+
+      const confirmationData = confirmationDoc.data();
+
+      // Vérifier que le token correspond
+      if (confirmationData.token !== token) {
+        return res.status(401).json({ error: 'Token de confirmation invalide' });
+      }
+
+      // Vérifier l'expiration (24h)
+      const expiresAt = new Date(confirmationData.expiresAt);
+      if (expiresAt < new Date()) {
+        await deleteDoc(doc(db, 'emailConfirmations', uid as string));
+        return res.status(410).json({ error: 'Token de confirmation expiré' });
+      }
+
+      // Marquer l'email comme vérifié dans Firestore
+      try {
+        await updateDoc(doc(db, 'users', uid as string), {
+          emailVerified: true,
+          emailVerifiedAt: new Date().toISOString()
+        });
+      } catch (updateError) {
+        console.warn('[FIRESTORE] Erreur mise à jour emailVerified:', updateError);
+      }
+
+      // Supprimer le token de confirmation
+      await deleteDoc(doc(db, 'emailConfirmations', uid as string));
+
+      return res.json({
+        success: true,
+        message: 'Email confirmé avec succès',
+        uid
+      });
+    } catch (err: any) {
+      console.error('[AUTH CONFIRM EMAIL] Erreur confirmation:', err);
+      return res.status(500).json({ error: err?.message || 'Erreur lors de la confirmation de l\'email' });
+    }
   });
 
   // ─── Route S3 Présignée /api/get-upload-url (AWS S3 Direct Upload) ───────
@@ -1793,7 +2232,14 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
         ? to.map((r: any) => typeof r === 'string' ? { email: r.trim() } : { email: r.email?.trim(), name: r.name })
         : [{ email: String(to).trim() }];
 
-      const apiKey = process.env.BREVO_API_KEY || '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';
+      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
+
+      if (!apiKey) {
+        console.error('[API Email Error] Aucune clé Brevo configurée (BREVO_SMTP_KEY ou BREVO_API_KEY manquante dans le .env).');
+        return res.status(500).json({
+          error: 'Le service d\'envoi d\'e-mails n\'est pas configuré sur le serveur (BREVO_SMTP_KEY manquante dans .env).'
+        });
+      }
 
       const payload: any = {
         sender: {
