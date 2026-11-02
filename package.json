@@ -45,6 +45,7 @@
     "firebase-admin": "^13.10.0",
     "hls.js": "^1.7.3",
     "html5-qrcode": "^2.3.8",
+    "https-proxy-agent": "^7.0.6",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
@@ -58,6 +59,7 @@
     "react-dom": "^19.0.1",
     "react-leaflet": "^5.0.0",
     "replicate": "^1.4.0",
+    "undici": "^6.21.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

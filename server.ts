@@ -195,9 +195,21 @@ async function startServer() {
     }
   }));
 
-  // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
+  // Health checks multi-chemins pour orchestration Docker, Render, VPS et Cloudflare Edge
+  app.get(['/health', '/healthz', '/api/health', '/ping'], (_req, res) => {
+    const memory = process.memoryUsage();
+    res.json({
+      status: 'ok',
+      service: 'nana-pos-remix-node',
+      uptimeSeconds: Math.floor(process.uptime()),
+      memory: {
+        rssMb: Math.round(memory.rss / (1024 * 1024)),
+        heapUsedMb: Math.round(memory.heapUsed / (1024 * 1024)),
+        heapTotalMb: Math.round(memory.heapTotal / (1024 * 1024)),
+        externalMb: Math.round(memory.external / (1024 * 1024)),
+      },
+      timestamp: Date.now()
+    });
   });
 
   // Test de connexion Supabase (lecture de la table organizations)
@@ -843,6 +855,132 @@ async function startServer() {
 
   app.all('/aws-lambda*', forwardToAwsLambda);
   app.post('/api/ai/lambda', forwardToAwsLambda);
+
+  // ============================================================================
+  // PROXY ROUTER & ROTATION IP STATIQUE FIXIE MULTI-AGRÉGATEURS (Sebpay / SasPay)
+  // ============================================================================
+  const PRIMARY_FIXIE_IP = '54.195.3.54';
+  const PAYMENT_API_BASE_URL = 
+    process.env.PAYMENT_API_URL || 
+    process.env.VITE_PAYMENT_API_URL || 
+    'https://nana-payment-api.onrender.com';
+
+  // Endpoint Diagnostic IP Statique Fixie vue par les banques partenaires
+  app.get('/api/payment/ip', async (req, res) => {
+    try {
+      try {
+        const { getOutboundIp } = await import('./payment-service/fixie-proxy.js');
+        const force = req.query.force === 'true';
+        const gateway = String(req.query.gateway || 'sebpay');
+        const ipResult = await getOutboundIp(force, gateway);
+        return res.json({
+          status: 'success',
+          service: 'nana-backend-router',
+          targetGateway: gateway,
+          ...ipResult,
+          whitelistingInstructions: ipResult.success
+            ? `Ajoutez l'adresse IP ${ipResult.ip} dans la liste blanche de votre partenaire (${gateway}).`
+            : `Vérifiez les variables SEBPAY_FIXIE_URL / SASPAY_FIXIE_URL / FIXIE_URL sur votre environnement.`
+        });
+      } catch {
+        const upstreamUrl = `${PAYMENT_API_BASE_URL.replace(/\/+$/, '')}/api/payment/ip?${new URLSearchParams(req.query as any).toString()}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const upstreamRes = await fetch(upstreamUrl, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeout);
+        const data = await upstreamRes.json();
+        return res.status(upstreamRes.status).json(data);
+      }
+    } catch {
+      return res.json({
+        status: 'success',
+        service: 'nana-backend-router',
+        ip: PRIMARY_FIXIE_IP,
+        isProxyActive: false,
+        fallbackStaticIp: true,
+        message: 'IP statique Fixie déclarée par défaut (mode offline/fallback).'
+      });
+    }
+  });
+
+  // Endpoint de vérification de santé et de diagnostic du switch de paiement
+  app.get(['/api/payment/health', '/api/payment/status'], (_req, res) => {
+    const sebpayProxy = Boolean(process.env.SEBPAY_FIXIE_URL || process.env.FIXIE_URL_SEBPAY || process.env.FIXIE_URL);
+    const saspayProxy = Boolean(process.env.SASPAY_FIXIE_URL || process.env.FIXIE_URL_SASPAY || process.env.FIXIE_URL);
+    return res.json({
+      status: 'online',
+      service: 'nana-payment-router-middleware',
+      environment: process.env.NODE_ENV || 'production',
+      proxyRotation: {
+        active: sebpayProxy || saspayProxy,
+        sebpayConfigured: sebpayProxy,
+        saspayConfigured: saspayProxy,
+        globalFallbackConfigured: Boolean(process.env.FIXIE_URL || process.env.QUOTAGUARDSTATIC_URL),
+        failoverReady: true,
+        primaryStaticIp: PRIMARY_FIXIE_IP
+      },
+      upstreamApi: PAYMENT_API_BASE_URL,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Relais sécurisé et résilient pour tous les autres flux de paiement (/api/payment/*)
+  const forwardToPaymentMicroservice = async (req: express.Request, res: express.Response) => {
+    try {
+      const targetBase = PAYMENT_API_BASE_URL.replace(/\/+$/, '');
+      const targetUrl = `${targetBase}${req.originalUrl}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      const outgoingHeaders: Record<string, string> = {
+        'Accept': 'application/json',
+        'X-Forwarded-Host': req.get('host') || 'nanasore.com',
+        'X-Forwarded-Proto': req.protocol || 'https',
+      };
+      if (req.headers['authorization']) outgoingHeaders['authorization'] = req.headers['authorization'] as string;
+      if (req.headers['content-type']) outgoingHeaders['content-type'] = req.headers['content-type'] as string;
+      if (req.headers['x-api-key']) outgoingHeaders['x-api-key'] = req.headers['x-api-key'] as string;
+      if (req.headers['x-nanakey']) outgoingHeaders['x-nanakey'] = req.headers['x-nanakey'] as string;
+
+      const bodyData = req.method !== 'GET' && req.method !== 'HEAD' 
+        ? (req.rawBody || JSON.stringify(req.body)) 
+        : undefined;
+
+      const upstreamResponse = await fetch(targetUrl, {
+        method: req.method,
+        headers: outgoingHeaders,
+        body: bodyData,
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      res.status(upstreamResponse.status);
+      const contentType = upstreamResponse.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await upstreamResponse.json();
+        return res.json(json);
+      } else {
+        const text = await upstreamResponse.text();
+        return res.send(text);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return res.status(504).json({
+          error: 'Gateway Timeout : Le pont bancaire Render n\'a pas répondu dans le délai imparti (15s).'
+        });
+      }
+      return res.status(502).json({
+        error: 'Bad Gateway : Échec de communication avec le micro-service de paiement',
+        details: err.message
+      });
+    }
+  };
+
+  app.all('/api/payment*', forwardToPaymentMicroservice);
 
 
   // Endpoint Webhook fortifié pour le traitement des paiements Mobile Money (HMAC-SHA256)
@@ -2828,6 +2966,12 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
     });
   });
 
+
+  // Optimisations Timeout HTTP pour Reverse Proxy (Cloudflare / Render / Nginx VPS)
+  // Prévient les erreurs 502 Bad Gateway / ECONNRESET sous charge concurrente élevée
+  httpServer.keepAliveTimeout = 65000;
+  httpServer.headersTimeout = 66000;
+  httpServer.requestTimeout = 30000;
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Nana Server with Gemini AI & Smart Haggle WebSocket running on http://0.0.0.0:${PORT}`);
