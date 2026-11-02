@@ -611,18 +611,8 @@ export default {
         return await handleStudioModule(request, env, ctx);
       }
 
-      // 19. Route racine par défaut
-      if (path === "/") {
-        return jsonResponse({
-          status: "healthy",
-          service: env.APP_NAME || "Nanasore Edge Worker",
-          environment: env.ENVIRONMENT || "production",
-          message: "Nanasore Edge Worker opérationnel",
-        });
-      }
-
-      // 20. Aiguillage Module 38 : Routeur Global & Failover d'Urgence (srv-router)
-      // Filet de sécurité Edge-First pour toutes les requêtes non interceptées
+      // 19. Aiguillage Application Principale & Routeur Global (srv-router)
+      // Acheminement direct de la racine "/" et de toutes les pages d'application vers Render
       return await handleGlobalRouterFallback(request, env, ctx);
 
     } catch (error) {
