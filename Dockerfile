@@ -1,22 +1,27 @@
-# 1. Étape de build avec Node 26.13.0
+# ==============================================================================
+# Étape 1 : Builder (Compilation du client Vite et du serveur Node.js)
+# ==============================================================================
 FROM node:26.13.0-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
+RUN mkdir -p /app/build
 
-# 2. Étape de production avec Node 26.13.0
-FROM node:26.13.0-alpine
+# ==============================================================================
+# Étape 2 : Production (Image légère, runtime optimisé sous Node 26.13.0)
+# ==============================================================================
+FROM node:26.13.0-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
-# On utilise npm install complet pour garder les dépendances nécessaires au serveur
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --omit=dev
 
-# Copie des fichiers générés dans dist
+# Copie des artefacts compilés et des assets statiques
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/build ./build
 
 EXPOSE 3000
 CMD ["node", "dist/server.cjs"]

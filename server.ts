@@ -3,7 +3,6 @@ import http from 'http';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -107,7 +106,7 @@ function injectThemeIntoHtml(html: string, theme: 'dark' | 'light' | 'blue'): st
 }
 
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Lazy initialize Gemini API client to prevent crashing if GEMINI_API_KEY is not set
 let aiClient: GoogleGenAI | null = null;
@@ -2526,6 +2525,7 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
   const distPath = path.join(process.cwd(), 'dist');
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'custom',
