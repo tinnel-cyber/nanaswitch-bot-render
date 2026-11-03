@@ -48,6 +48,7 @@ import {
 import { StarterTemplate, ProCorporateTemplate, EliteExecutiveTemplate } from './templates';
 import { exportResumeToHdPdf, printResumeDocument } from '../../utils/resumePdfExporter';
 import { 
+  canAccessCvPro,
   getGeneratedDocumentsCount, 
   incrementGeneratedDocumentsCount, 
   isLimitReached, 
@@ -219,6 +220,15 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
 
   // Génération de la lettre de motivation IA
   const handleOpenCoverLetter = async () => {
+    const cvAccess = canAccessCvPro(subscription, (currentUser as any)?.walletBalance || 0);
+    if (!cvAccess.allowed) {
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'Lettre de Motivation IA (Inclus Plan Pro ou Pay-As-You-Go)');
+      setExportErrorAlert({
+        isOpen: true,
+        message: cvAccess.message
+      });
+      return;
+    }
     playTapBeep();
     setIsCoverLetterModalOpen(true);
     setIsGeneratingLetter(true);
@@ -243,10 +253,20 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
   const handleDownloadPdfHd = async () => {
     if (!resume) return;
 
-    // Vérification du quota de documents (Plan Gratuit : max 1 document)
+    // Vérification stricte du Plan Zéro & Quotas CV Pro
+    const cvAccess = canAccessCvPro(subscription, (currentUser as any)?.walletBalance || 0);
+    if (!cvAccess.allowed) {
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (Inclus Plan Pro ou 500 F CFA à l\'acte)');
+      setExportErrorAlert({
+        isOpen: true,
+        message: cvAccess.message
+      });
+      return;
+    }
+
     const currentDocs = getGeneratedDocumentsCount(currentUser?.storeId);
     if (isLimitReached(subscription, 'DOCUMENTS', currentDocs)) {
-      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 1, 'CV / document');
+      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 0, 'CV Pro');
       return;
     }
 
@@ -328,10 +348,20 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
 
   // Impression / Enregistrement Système (Ctrl+P / Impression Vectorielle)
   const handlePrintSystem = async () => {
-    // Vérification du quota de documents
+    // Vérification stricte du Plan Zéro & Quotas CV Pro
+    const cvAccess = canAccessCvPro(subscription, (currentUser as any)?.walletBalance || 0);
+    if (!cvAccess.allowed) {
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (Inclus Plan Pro ou 500 F CFA à l\'acte)');
+      setExportErrorAlert({
+        isOpen: true,
+        message: cvAccess.message
+      });
+      return;
+    }
+
     const currentDocs = getGeneratedDocumentsCount(currentUser?.storeId);
     if (isLimitReached(subscription, 'DOCUMENTS', currentDocs)) {
-      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 1, 'CV / document');
+      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 0, 'CV Pro');
       return;
     }
 

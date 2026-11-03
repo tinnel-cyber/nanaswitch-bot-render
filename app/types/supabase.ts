@@ -70,3 +70,52 @@ export interface ProcessSaleParams {
   p_seller_name?: string | null;
   p_metadata?: Record<string, unknown>;
 }
+
+export interface SupabasePlan {
+  id?: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  billing_type: 'FREE' | 'COMMISSION' | 'SUBSCRIPTION' | 'PAY_AS_YOU_GO';
+  default_commission_rate: number;
+  subscription_price_monthly?: number | null;
+  subscription_price_yearly?: number | null;
+  currency: string;
+  is_active: boolean;
+  is_popular?: boolean;
+  badge?: string | null;
+  features?: string[];
+  limits?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ServiceCommissionRule {
+  id?: string;
+  service_code: string;
+  service_name: string;
+  commission_rate: number;
+  escrow_period_hours: number;
+  min_commission_amount: number;
+  currency: string;
+  is_active: boolean;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UsageServiceRate {
+  id?: string;
+  usage_code: string;
+  service_name: string;
+  rate_per_unit: number;
+  credit_units_per_act: number;
+  unit_label: string;
+  currency: string;
+  is_active: boolean;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
