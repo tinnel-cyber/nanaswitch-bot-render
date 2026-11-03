@@ -1228,7 +1228,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
             </div>
 
             {/* Toggle Mensuel / Annuel */}
-            <div className="text-center max-w-xl mx-auto mb-10">
+            <div className="text-center max-w-xl mx-auto mb-8">
               <div className="inline-flex items-center gap-3 p-1.5 rounded-2xl bg-slate-200/80 border border-slate-300">
                 <button
                   type="button"
@@ -1251,6 +1251,74 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                     -20%
                   </span>
                 </button>
+              </div>
+            </div>
+
+            {/* BANNIÈRE COLORÉE EXPLICATIVE : TARIFICATION MODULAIRE À LA CARTE */}
+            <div className="mb-10 max-w-5xl mx-auto rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-600 text-white shadow-xl shadow-orange-500/15 border border-amber-300/40 relative overflow-hidden">
+              <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30">
+                      <Sparkles className="w-5 h-5 text-amber-200" />
+                    </div>
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider mb-1">
+                        <span>✨ Tarification Modulaire & Sur-Mesure</span>
+                      </div>
+                      <h4 className="text-base sm:text-lg font-black tracking-tight">
+                        Ne payez que ce que vous utilisez ! Personnalisez vos modules au choix lors de l'abonnement.
+                      </h4>
+                    </div>
+                  </div>
+                  <div className="shrink-0 px-3 py-1 rounded-xl bg-white text-slate-900 font-black text-xs uppercase tracking-wider shadow">
+                    Choix en 1 clic
+                  </div>
+                </div>
+
+                {/* Les 4 pastilles colorées en résumé */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
+                    <div className="font-extrabold text-amber-200 flex items-center gap-1.5 mb-0.5">
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Caisse Physique Seule</span>
+                    </div>
+                    <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-orange-100">/ mois</span></div>
+                    <div className="text-[10px] text-orange-100 mt-1">Caisse tactile, tickets, clôture Z & dettes.</div>
+                  </div>
+
+                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
+                    <div className="font-extrabold text-indigo-200 flex items-center gap-1.5 mb-0.5">
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Vitrine Web Seule</span>
+                    </div>
+                    <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-indigo-100">/ mois</span></div>
+                    <div className="text-[10px] text-indigo-100 mt-1">Site nsore.shop, panier WhatsApp & pixels.</div>
+                  </div>
+
+                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
+                    <div className="font-extrabold text-purple-200 flex items-center gap-1.5 mb-0.5">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      <span>Formateur Seul</span>
+                    </div>
+                    <div className="text-base font-black text-white">10 000 F CFA <span className="text-[10px] font-normal text-purple-100">/ mois</span></div>
+                    <div className="text-[10px] text-purple-100 mt-1">Vidéos illimitées, diplômes QR & Wameet.</div>
+                  </div>
+
+                  <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl border border-white/30 ring-1 ring-white/40">
+                    <div className="font-extrabold text-emerald-300 flex items-center gap-1.5 mb-0.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Pack Tout-en-Un</span>
+                    </div>
+                    <div className="text-base font-black text-white">15 000 F CFA <span className="text-[10px] font-normal text-emerald-100">/ mois</span></div>
+                    <div className="text-[10px] text-emerald-100 mt-1">Tout inclus (économie de 5 000 F CFA).</div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-orange-100/90 mt-3 text-center sm:text-left">
+                  👉 <em>Cliquez sur « Choisir ce plan » : vous pourrez cocher librement la caisse, la vitrine ou l'espace formateur selon vos besoins réels.</em>
+                </div>
               </div>
             </div>
 

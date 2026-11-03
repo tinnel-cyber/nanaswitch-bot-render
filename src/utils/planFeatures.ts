@@ -970,3 +970,97 @@ export function canAccessCvPro(
     message: 'Le module CV Pro n\'est pas inclus dans le Plan Zéro gratuit. Passez au Plan Pro ou activez la formule Pay-As-You-Go (500 F CFA / CV).'
   };
 }
+
+// =============================================================================
+// ARCHITECTURE MODULAIRE : PILIERS SOCLES (Caisse, Vitrine, Formateur)
+// =============================================================================
+export interface ModularPillarOption {
+  id: 'caisse_pos' | 'vitrine_web' | 'formateur_lms';
+  title: string;
+  shortDesc: string;
+  starterPrice: number;
+  businessPrice: number;
+  enterprisePrice: number;
+  includedModules: string[];
+  badge: string;
+}
+
+export const MODULAR_PILLARS: ModularPillarOption[] = [
+  {
+    id: 'caisse_pos',
+    title: 'Caisse Physique & POS',
+    shortDesc: 'Caisse tactile de comptoir, tickets thermiques, clôture Z, ardoises et gestion des dettes/dépenses.',
+    starterPrice: 5000,
+    businessPrice: 10000,
+    enterprisePrice: 20000,
+    includedModules: ['caisse', 'stock', 'scanner', 'recu_thermique', 'cloture_caisse', 'dettes_creances', 'depenses'],
+    badge: '5 000 F / mois'
+  },
+  {
+    id: 'vitrine_web',
+    title: 'Vitrine Web & Vente en Ligne',
+    shortDesc: 'Site e-commerce nsore.shop, panier WhatsApp, commandes clients, Pixels Meta & TikTok.',
+    starterPrice: 5000,
+    businessPrice: 10000,
+    enterprisePrice: 20000,
+    includedModules: ['boutique_enligne', 'panier_whatsapp', 'catalogue', 'commandes_clients', 'meta_pixel', 'tiktok_pixel', 'avis_clients'],
+    badge: '5 000 F / mois'
+  },
+  {
+    id: 'formateur_lms',
+    title: 'Espace Formateur & Académie',
+    shortDesc: 'Cours vidéo privés, hébergement PDF, examens interactifs, diplômes QR-Code et masterclasses Wameet.',
+    starterPrice: 10000,
+    businessPrice: 20000,
+    enterprisePrice: 40000,
+    includedModules: ['cours_en_ligne', 'certificats_qr', 'webinaire_wameet', 'quiz_examens', 'eleves_crm', 'escrow_sequestre', 'produits_numeriques'],
+    badge: '10 000 F / mois'
+  }
+];
+
+export function calculateModularPrice(
+  planId: string,
+  selectedPillars: Array<'caisse_pos' | 'vitrine_web' | 'formateur_lms'>
+): {
+  totalPrice: number;
+  isAllInclusive: boolean;
+  savings: number;
+  modulesIncluded: string[];
+} {
+  const normPlan = normalizePlanId(planId);
+  const bundleFullPrice = normPlan === 'business' ? 30000 : normPlan === 'elite' ? 60000 : 15000;
+
+  // Si tout est coché ou rien n'est coché (défaut = tout)
+  if (selectedPillars.length === 3 || selectedPillars.length === 0) {
+    const rawSum = MODULAR_PILLARS.reduce((sum, p) => {
+      const pPrice = normPlan === 'business' ? p.businessPrice : normPlan === 'elite' ? p.enterprisePrice : p.starterPrice;
+      return sum + pPrice;
+    }, 0);
+    return {
+      totalPrice: bundleFullPrice,
+      isAllInclusive: true,
+      savings: Math.max(0, rawSum - bundleFullPrice),
+      modulesIncluded: MODULAR_PILLARS.flatMap(p => p.includedModules)
+    };
+  }
+
+  let sumPrice = 0;
+  const modules: string[] = [];
+  selectedPillars.forEach(pillarId => {
+    const pillar = MODULAR_PILLARS.find(p => p.id === pillarId);
+    if (pillar) {
+      const pPrice = normPlan === 'business' ? pillar.businessPrice : normPlan === 'elite' ? pillar.enterprisePrice : pillar.starterPrice;
+      sumPrice += pPrice;
+      modules.push(...pillar.includedModules);
+    }
+  });
+
+  const finalPrice = Math.min(sumPrice, bundleFullPrice);
+  return {
+    totalPrice: finalPrice,
+    isAllInclusive: finalPrice === bundleFullPrice && selectedPillars.length === 3,
+    savings: 0,
+    modulesIncluded: modules
+  };
+}
+

@@ -17,6 +17,7 @@ import { getSuperAdminPlatformConfig, isSuperAdminLocally } from '../../services
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 import { SPaymentGateway, PaymentSuccessDetails } from '../../services/nana-switch/payment/SPaymentGateway';
 import { PricingComparisonMatrix } from './pricing/PricingComparisonMatrix';
+import { calculateModularPrice, MODULAR_PILLARS } from '../../utils/planFeatures';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -31,6 +32,9 @@ import {
   ArrowLeft,
   Tag,
   Flame,
+  Store,
+  ShoppingBag,
+  GraduationCap,
 } from 'lucide-react';
 
 interface SubscriptionPaywallModalProps {
@@ -151,6 +155,36 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   // Référence d'horodatage pour isoler les transactions de la session courante
   const modalOpenedTimestampRef = React.useRef<number>(Date.now());
 
+  // État du choix modulaire des piliers (Caisse, Vitrine, Formateur)
+  const [selectedPillars, setSelectedPillars] = useState<Array<'caisse_pos' | 'vitrine_web' | 'formateur_lms'>>([
+    'caisse_pos',
+    'vitrine_web',
+    'formateur_lms',
+  ]);
+
+  const isAllPillarsSelected = selectedPillars.length === 3;
+
+  const handleToggleAllPillars = () => {
+    playTapBeep();
+    if (isAllPillarsSelected) {
+      setSelectedPillars(['caisse_pos']);
+    } else {
+      setSelectedPillars(['caisse_pos', 'vitrine_web', 'formateur_lms']);
+    }
+  };
+
+  const handleTogglePillar = (pillarId: 'caisse_pos' | 'vitrine_web' | 'formateur_lms') => {
+    playTapBeep();
+    setSelectedPillars(prev => {
+      if (prev.includes(pillarId)) {
+        if (prev.length === 1) return prev; // Au moins un pilier obligatoire
+        return prev.filter(p => p !== pillarId);
+      } else {
+        return [...prev, pillarId];
+      }
+    });
+  };
+
   // Réinitialiser strictement le tunnel à chaque ouverture
   useEffect(() => {
     if (isOpen) {
@@ -158,6 +192,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
       if (initialPlanId) {
         setSelectedPlanId(initialPlanId);
       }
+      setSelectedPillars(['caisse_pos', 'vitrine_web', 'formateur_lms']);
       setFunnelStep('PLAN_SELECTION');
       setPaymentSuccess(false);
       setPaymentResult(null);
@@ -188,6 +223,19 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
 
   const currentPlan = platformConfig.plans.find(p => p.id === selectedPlanId) || platformConfig.plans[0];
 
+  // Calcul dynamique du prix selon les piliers modulaires cochés
+  const modularCalculation = useMemo(() => {
+    if (currentPlan.price === 0 || currentPlan.id === 'free') {
+      return {
+        totalPrice: 0,
+        isAllInclusive: true,
+        savings: 0,
+        modulesIncluded: ['caisse', 'stock', 'catalogue']
+      };
+    }
+    return calculateModularPrice(currentPlan.id, selectedPillars);
+  }, [currentPlan.id, currentPlan.price, selectedPillars]);
+
   // Calcul dynamique du Montant Total avec Add-ons et Remise Downsell
   const addonsTotal = selectedAddonIds.reduce((sum, id) => {
     const addon = SAAS_ADDONS.find(a => a.id === id);
@@ -195,8 +243,8 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   }, 0);
 
   const downsellDiscountAmount = downsellAccepted ? 2000 : 0;
-  const rawTotal = (currentPlan?.price || 0) + addonsTotal - downsellDiscountAmount;
   const isFreePlan = (currentPlan?.price === 0 || currentPlan?.id === 'free') && addonsTotal === 0;
+  const rawTotal = (isFreePlan ? 0 : modularCalculation.totalPrice) + addonsTotal - downsellDiscountAmount;
   const montantTotal = isFreePlan ? 0 : Math.max(1000, rawTotal);
 
   // Écouteur temps réel Firestore sur `/stores/{storeId}`
@@ -313,6 +361,10 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
       lastPaymentMethod: paymentMethodName as any,
       lastAmountPaid: details.amount || montantTotal,
       transactionRef: details.transactionId,
+      // Piliers modulaires sélectionnés (Caisse, Vitrine, Formateur)
+      selectedPillars: selectedPillars as any,
+      isAllInclusive: isAllPillarsSelected,
+      customMonthlyAmount: montantTotal,
     };
 
     setPaymentResult({
@@ -326,6 +378,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
       if (typeof window !== 'undefined') {
         localStorage.setItem('nana_user_plan', currentPlan.id);
         localStorage.setItem('nana_store_plan', currentPlan.id);
+        localStorage.setItem('nana_selected_pillars', JSON.stringify(selectedPillars));
         localStorage.setItem('nana_store_sub', JSON.stringify(newSub));
         const savedUserStr = localStorage.getItem('nana_store_auth_user');
         if (savedUserStr) {
@@ -516,6 +569,162 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
               </div>
             </div>
 
+            {/* SÉLECTEUR MODULAIRE GRANULAIRE À LA CARTE */}
+            {currentPlan.price > 0 && currentPlan.id !== 'free' && (
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-indigo-500/30 space-y-3.5">
+                {/* En-tête avec case "Tout sélectionner" */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-black uppercase tracking-wider text-white">
+                        Personnalisation Modulaire à la Carte
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Cochez uniquement les volets dont vous avez besoin, ou gardez le Pack Complet pour faire des économies.
+                    </p>
+                  </div>
+
+                  {/* Case "Tout sélectionner" en haut (activée par défaut) */}
+                  <button
+                    type="button"
+                    onClick={handleToggleAllPillars}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer border ${
+                      isAllPillarsSelected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-md flex items-center justify-center text-xs font-bold ${
+                      isAllPillarsSelected ? 'bg-emerald-500 text-slate-950' : 'border border-slate-500'
+                    }`}>
+                      {isAllPillarsSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <span>Tout sélectionner (Pack Complet)</span>
+                  </button>
+                </div>
+
+                {/* Les 3 Cases à cocher modulaires */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* 1. Caisse Physique & POS */}
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePillar('caisse_pos')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedPillars.includes('caisse_pos')
+                        ? 'bg-blue-600/15 border-blue-500 text-white ring-1 ring-blue-500'
+                        : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-md flex items-center justify-center ${
+                          selectedPillars.includes('caisse_pos') ? 'bg-blue-500 text-white' : 'border border-slate-600'
+                        }`}>
+                          {selectedPillars.includes('caisse_pos') && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <span className="text-xs font-bold text-white">🏪 Caisse Physique & POS</span>
+                      </div>
+                      <span className="text-[11px] font-black text-amber-300">
+                        {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-snug">
+                      Caisse tactile, impression tickets thermiques, clôture Z, gestion du fond et créances clients.
+                    </p>
+                  </button>
+
+                  {/* 2. Vitrine Web & Vente en Ligne */}
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePillar('vitrine_web')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedPillars.includes('vitrine_web')
+                        ? 'bg-indigo-600/15 border-indigo-500 text-white ring-1 ring-indigo-500'
+                        : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-md flex items-center justify-center ${
+                          selectedPillars.includes('vitrine_web') ? 'bg-indigo-500 text-white' : 'border border-slate-600'
+                        }`}>
+                          {selectedPillars.includes('vitrine_web') && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <span className="text-xs font-bold text-white">🌐 Vitrine Web & E-commerce</span>
+                      </div>
+                      <span className="text-[11px] font-black text-amber-300">
+                        {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-snug">
+                      Boutique nsore.shop, panier WhatsApp, commandes clients, Pixels Meta & TikTok intégrés.
+                    </p>
+                  </button>
+
+                  {/* 3. Espace Formateur & Académie */}
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePillar('formateur_lms')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      selectedPillars.includes('formateur_lms')
+                        ? 'bg-purple-600/15 border-purple-500 text-white ring-1 ring-purple-500'
+                        : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-md flex items-center justify-center ${
+                          selectedPillars.includes('formateur_lms') ? 'bg-purple-500 text-white' : 'border border-slate-600'
+                        }`}>
+                          {selectedPillars.includes('formateur_lms') && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                        <span className="text-xs font-bold text-white">🎓 Formateur & Académie</span>
+                      </div>
+                      <span className="text-[11px] font-black text-amber-300">
+                        {formatCFA(selectedPlanId === 'business' ? 20000 : selectedPlanId === 'elite' ? 40000 : 10000)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-snug">
+                      Vidéos illimitées, masterclasses Wameet, examens, diplômes QR-Code et séquestre Escrow.
+                    </p>
+                  </button>
+                </div>
+
+                {/* Boîte de résumé dynamique en direct */}
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <div className="font-bold text-slate-200 flex items-center gap-2">
+                      <span>Résumé de sélection :</span>
+                      <span className="text-emerald-400 font-extrabold">
+                        {selectedPillars.length} volet{selectedPillars.length > 1 ? 's' : ''} actif{selectedPillars.length > 1 ? 's' : ''}
+                      </span>
+                      {isAllPillarsSelected && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30">
+                          Bundle Complet (Économie {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)})
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {selectedPillars.length === 1 && selectedPillars[0] === 'caisse_pos' && 'Modules Caisse physique et gestion de caisse activés.'}
+                      {selectedPillars.length === 1 && selectedPillars[0] === 'vitrine_web' && 'Modules Boutique en ligne et commandes WhatsApp activés.'}
+                      {selectedPillars.length === 1 && selectedPillars[0] === 'formateur_lms' && 'Modules Académie en ligne, cours vidéo et certificats QR activés.'}
+                      {selectedPillars.length === 2 && 'Les deux volets cochés sont combinés au tarif cumulé exact.'}
+                      {selectedPillars.length === 3 && 'Accès complet aux modules sélectionnés pour votre activité.'}
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] text-slate-400 block">Tarif mensuel calculé :</span>
+                    <span className="text-lg font-black text-amber-300 font-mono">
+                      {formatCFA(modularCalculation.totalPrice)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Matrice de Comparaison Détaillée Déployable */}
             <PricingComparisonMatrix
               selectedPlanId={selectedPlanId}
@@ -555,7 +764,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 }}
                 className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 transition active:scale-98 cursor-pointer"
               >
-                <span>Continuer vers les options ({formatCFA(currentPlan.price)})</span>
+                <span>Continuer vers les options ({formatCFA(modularCalculation.totalPrice)})</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}

@@ -119,3 +119,16 @@ export interface UsageServiceRate {
   updated_at?: string;
 }
 
+export interface PlanModularPillar {
+  pillar_id: 'caisse_pos' | 'vitrine_web' | 'formateur_lms';
+  name: string;
+  category: 'PHYSICAL_POS' | 'ONLINE_STORE' | 'INSTRUCTOR_LMS';
+  description: string;
+  starter_monthly_price: number;
+  business_monthly_price: number;
+  enterprise_monthly_price: number;
+  included_modules: string[];
+  features_highlight: string[];
+}
+
+
