@@ -1390,10 +1390,10 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                   <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-bold uppercase tracking-wider">
                     <GraduationCap className="w-4 h-4 text-indigo-300" />
-                    <span>Spécial Formateurs, Coachs & Vendeurs de Produits Numériques</span>
+                    <span>Spécial Formateurs, Coachs & Créateurs de Tout Genre</span>
                   </div>
                   <div className="px-4 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs">
-                    ✓ ZÉRO RISQUE FINANCIER
+                    ✓ ZÉRO RISQUE FINANCIER • 0 F AU DÉPART
                   </div>
                 </div>
 
@@ -1402,16 +1402,17 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                     <h3 className="text-2xl sm:text-4xl font-black tracking-tight mb-4 leading-tight">
                       Vous transmettez votre savoir.<br />
                       <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-indigo-200 to-emerald-300">
-                        Nous gérons la tech & les paiements.
+                        Nous propulsons votre empire numérique.
                       </span>
                     </h3>
                     <p className="text-sm text-slate-300 leading-relaxed mb-6">
-                      Créez votre académie en ligne, hébergez vos cours vidéo, documents PDF, examens et webinaires 
-                      <strong className="text-white font-semibold"> 100% gratuitement</strong>. Aucun abonnement mensuel fixe requis. 
+                      Que vous soyez formateur, coach, consultant, conférencier ou créateur de tout genre : 
+                      lancez votre académie en ligne, hébergez vos cours vidéo, documents PDF, examens et masterclasses 
+                      <strong className="text-white font-semibold"> 100% gratuitement</strong>. Aucun abonnement mensuel fixe. 
                       Nous prélevons uniquement <strong className="text-amber-300 font-bold">14% de commission</strong> sur chaque vente réussie, sous protection séquestre Escrow automatique.
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                       <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
                         <div className="text-amber-300 font-black text-2xl mb-1">0 F CFA</div>
                         <div className="text-xs font-bold text-white">Création & Hébergement</div>
@@ -1421,6 +1422,34 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                         <div className="text-emerald-400 font-black text-2xl mb-1">14%</div>
                         <div className="text-xs font-bold text-white">Commission sur Vente</div>
                         <div className="text-[11px] text-slate-400 mt-1">Prélevé uniquement quand vous encaissez. Vous conservez 86% de votre prix.</div>
+                      </div>
+                    </div>
+
+                    {/* Grille des Atouts Clés Demandés */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-left mb-6 lg:mb-0">
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Thème Digital Pro</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Rocket className="w-4 h-4 text-blue-400 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Tunnels de Vente</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Video className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Live Webinaire</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Live Shopping Numérique</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Plug className="w-4 h-4 text-indigo-300 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Extensions & Intégrations</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-amber-300 shrink-0" />
+                        <span className="text-xs font-bold text-slate-200">Assistance Dédiée 7j/7</span>
                       </div>
                     </div>
                   </div>
@@ -1433,19 +1462,23 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                     <ul className="space-y-3 text-xs text-slate-200 mb-6">
                       <li className="flex items-start gap-2.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Thème Digital Pro & Tunnels de Vente</strong> : Vitrine d'académie premium responsive et tunnels de conversion 1 clic.</span>
+                      </li>
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Live Webinaire & Shopping Numérique</strong> : Masterclasses en direct Wameet et ventes interactives de formations.</span>
+                      </li>
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <span><strong>Séquestre Escrow Automatisé</strong> : Paiements Wave, Orange Money, MTN, Moov et CB sécurisés jusqu'à validation.</span>
                       </li>
                       <li className="flex items-start gap-2.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        <span><strong>Certificats QR-Code Authentifiés</strong> : Remise automatique de diplômes infalsifiables à la fin du cursus.</span>
+                        <span><strong>Certificats QR-Code Authentifiés</strong> : Remise automatique de diplômes et attestations infalsifiables.</span>
                       </li>
                       <li className="flex items-start gap-2.5">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        <span><strong>Protection Anti-Piratage</strong> : Streaming vidéo chiffré, téléchargements verrouillés par jeton élève unique.</span>
-                      </li>
-                      <li className="flex items-start gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                        <span><strong>Virements Automatiques</strong> : Encaissez directement sur votre compte Mobile Money ou virement bancaire local.</span>
+                        <span><strong>Extensions, Intégrations & Assistance</strong> : WhatsApp, Pixels Meta/TikTok, webhooks et accompagnement humain dédié.</span>
                       </li>
                     </ul>
 
