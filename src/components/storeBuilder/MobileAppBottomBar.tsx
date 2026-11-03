@@ -1,10 +1,5 @@
-import React from 'react';
-import { MobileAppBottomTabBar, MobileAppBottomTabBarProps } from './MobileAppBottomTabBar';
-
-export type MobileAppBottomBarProps = MobileAppBottomTabBarProps;
-
-export const MobileAppBottomBar: React.FC<MobileAppBottomBarProps> = (props) => {
-  return <MobileAppBottomTabBar {...props} />;
-};
-
-export default MobileAppBottomBar;
+/**
+ * Re-export de compatibilité vers : src/apps/studio/components/storeBuilder/MobileAppBottomBar.tsx
+ */
+export * from '../../apps/studio/components/storeBuilder/MobileAppBottomBar';
+export { default } from '../../apps/studio/components/storeBuilder/MobileAppBottomBar';

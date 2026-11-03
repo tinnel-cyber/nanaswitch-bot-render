@@ -1,28 +1,5 @@
-import React from 'react';
-import { SuperAdminDashboard } from './SuperAdminDashboard.tsx';
-
-import { StoreUser } from '../types';
-
-export interface CRMDashboardProps {
-  onBackToPOS?: () => void;
-  onClose?: () => void;
-  currentUser?: StoreUser | null;
-}
-
-export const CRMDashboard: React.FC<CRMDashboardProps> = ({
-  onBackToPOS,
-  onClose,
-  currentUser,
-}) => {
-  return (
-    <SuperAdminDashboard
-      initialUnlocked={true}
-      initialLevel={2}
-      onNavigateToPos={onBackToPOS}
-      onClose={onClose || onBackToPOS}
-      currentUser={currentUser}
-    />
-  );
-};
-
-export default CRMDashboard;
+/**
+ * Re-export de compatibilité vers le nouvel emplacement canonique : src/modules/pixels-crm/components/CRMDashboard.tsx
+ */
+export * from '../modules/pixels-crm/components/CRMDashboard';
+export { default } from '../modules/pixels-crm/components/CRMDashboard';

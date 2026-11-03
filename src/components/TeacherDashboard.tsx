@@ -1,10 +1,5 @@
-import React from 'react';
-import { InstructorDashboardView, InstructorDashboardViewProps } from './lms/InstructorDashboardView';
-
-export type TeacherDashboardProps = InstructorDashboardViewProps;
-
-export const TeacherDashboard: React.FC<TeacherDashboardProps> = (props) => {
-  return <InstructorDashboardView {...props} />;
-};
-
-export default TeacherDashboard;
+/**
+ * Re-export de compatibilité vers le nouvel emplacement canonique : src/apps/cours-forge/components/TeacherDashboard.tsx
+ */
+export * from '../apps/cours-forge/components/TeacherDashboard';
+export { default } from '../apps/cours-forge/components/TeacherDashboard';

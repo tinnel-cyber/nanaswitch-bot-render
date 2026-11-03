@@ -1,6 +1,5 @@
-export * from './CagnotteHeaderTracker';
-export * from './PinnedCagnotteBanner';
-export * from './ContributeCagnotteModal';
-export * from './CreateCagnotteModal';
-export * from './CagnotteCelebrationOverlay';
-export * from './CagnotteGroupDemoScreen';
+/**
+ * Re-export de compatibilité vers : src/apps/wameet/components/wameet/cagnotte/index.ts
+ */
+export * from '../../../apps/wameet/components/wameet/cagnotte/index';
+export { default } from '../../../apps/wameet/components/wameet/cagnotte/index';

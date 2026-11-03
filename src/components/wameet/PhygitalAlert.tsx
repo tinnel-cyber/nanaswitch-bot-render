@@ -1,7 +1,5 @@
 /**
- * @file PhygitalAlert.tsx
- * @description Ré-export rétrocompatible de PhygitalScarcityAlert
+ * Re-export de compatibilité vers : src/apps/wameet/components/wameet/PhygitalAlert.tsx
  */
-
-export { PhygitalScarcityAlert, PhygitalAlert } from './PhygitalScarcityAlert';
-export type { PhygitalScarcityAlertProps, PhygitalAlertProps } from './PhygitalScarcityAlert';
+export * from '../../apps/wameet/components/wameet/PhygitalAlert';
+export { default } from '../../apps/wameet/components/wameet/PhygitalAlert';

@@ -1,34 +1,5 @@
 /**
- * @file ReelVideoPlayer.tsx
- * @description Lecteur de Reel Immersif Robuste pour le Feed Wameet.
- * Version optimisée gérant proprement le nettoyage et la reprise du flux vidéo lors du scroll/recyclage.
+ * Re-export de compatibilité vers : src/apps/wameet/components/wameet/ReelVideoPlayer.tsx
  */
-
-import React from 'react';
-import { ReelErrorBoundary } from '../ReelErrorBoundary';
-import ImmersiveReelItem, { ImmersiveReelItemProps } from './ImmersiveReelItem';
-
-export { ImmersiveReelItem };
-export type { ImmersiveReelItemProps };
-export type ReelPlayerProps = ImmersiveReelItemProps;
-
-export const SingleReelPlayer: React.FC<ImmersiveReelItemProps> = (props) => (
-  <ReelErrorBoundary>
-    <ImmersiveReelItem {...props} />
-  </ReelErrorBoundary>
-);
-
-export const ReelVideoPlayer = SingleReelPlayer;
-
-export { ResonanceButton } from './ResonanceButton';
-export type { ResonanceButtonProps } from './ResonanceButton';
-export { VaultOfferButton } from './VaultOfferButton';
-export type { VaultButtonProps, ProductOffer } from './VaultOfferButton';
-export { CentralLockButton } from './CentralLockButton';
-export type { CentralLockButtonProps, VipAccessOffer } from './CentralLockButton';
-export { WameetActionButton } from './WameetActionButton';
-export type { WameetActionButtonProps } from './WameetActionButton';
-export { SocialInteractions } from './SocialInteractions';
-export type { SocialInteractionsProps, Comment } from './SocialInteractions';
-
-export default ReelVideoPlayer;
+export * from '../../apps/wameet/components/wameet/ReelVideoPlayer';
+export { default } from '../../apps/wameet/components/wameet/ReelVideoPlayer';

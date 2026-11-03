@@ -1,9 +1,5 @@
-export * from './WameetYouTubePlayer';
-export * from './WameetAdaptiveCloudPlayer';
-export * from './WameetClassroomReelPlayer';
-export * from './WameetClassroomLivePlayer';
-export * from './WameetMediaDispatcher';
-export * from './DailyVideoRoom';
-export * from './YouTubeLivePlayer';
-export * from './ReelVideoPlayer';
-export * from './MediaDispatcher';
+/**
+ * Re-export de compatibilité vers : src/apps/wameet/components/wameet/media/index.ts
+ */
+export * from '../../../apps/wameet/components/wameet/media/index';
+export { default } from '../../../apps/wameet/components/wameet/media/index';

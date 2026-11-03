@@ -1,12 +1,5 @@
-import React from 'react';
-
-interface AppFooterProps {
-  onOpenPrivacyPolicy?: () => void;
-  onOpenAffiliation?: () => void;
-  onOpenSubscription?: () => void;
-}
-
-export const AppFooter: React.FC<AppFooterProps> = () => {
-  return null;
-};
-
+/**
+ * Re-export de compatibilité vers le nouvel emplacement canonique : src/shell/layout/AppFooter.tsx
+ */
+export * from '../shell/layout/AppFooter';
+export { default } from '../shell/layout/AppFooter';
