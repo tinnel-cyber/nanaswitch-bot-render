@@ -1282,7 +1282,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                   <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
                     <div className="font-extrabold text-amber-200 flex items-center gap-1.5 mb-0.5">
                       <Store className="w-3.5 h-3.5" />
-                      <span>Caisse Physique Seule</span>
+                      <span>La Caisse et ses modules uniquement</span>
                     </div>
                     <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-orange-100">/ mois</span></div>
                     <div className="text-[10px] text-orange-100 mt-1">Caisse tactile, tickets, clôture Z & dettes.</div>
@@ -1291,7 +1291,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                   <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
                     <div className="font-extrabold text-indigo-200 flex items-center gap-1.5 mb-0.5">
                       <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>Vitrine Web Seule</span>
+                      <span>La Vitrine et ses modules uniquement</span>
                     </div>
                     <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-indigo-100">/ mois</span></div>
                     <div className="text-[10px] text-indigo-100 mt-1">Site nsore.shop, panier WhatsApp & pixels.</div>
@@ -1300,7 +1300,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                   <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
                     <div className="font-extrabold text-purple-200 flex items-center gap-1.5 mb-0.5">
                       <GraduationCap className="w-3.5 h-3.5" />
-                      <span>Formateur Seul</span>
+                      <span>Formateur et ses modules uniquement</span>
                     </div>
                     <div className="text-base font-black text-white">10 000 F CFA <span className="text-[10px] font-normal text-purple-100">/ mois</span></div>
                     <div className="text-[10px] text-purple-100 mt-1">Vidéos illimitées, diplômes QR & Wameet.</div>
@@ -1317,7 +1317,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 </div>
 
                 <div className="text-[11px] text-orange-100/90 mt-3 text-center sm:text-left">
-                  👉 <em>Cliquez sur « Choisir ce plan » : vous pourrez cocher librement la caisse, la vitrine ou l'espace formateur selon vos besoins réels.</em>
+                  👉 <em>Cliquez sur « Choisir ce plan » : vous pourrez cocher librement La Caisse et ses modules uniquement, La Vitrine et ses modules uniquement, ou Formateur et ses modules uniquement.</em>
                 </div>
               </div>
             </div>

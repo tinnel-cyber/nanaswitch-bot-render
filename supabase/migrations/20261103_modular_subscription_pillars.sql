@@ -25,7 +25,7 @@ INSERT INTO public.plan_modular_pillars (
 VALUES
 (
     'caisse_pos',
-    'Caisse Physique & POS',
+    'La Caisse et ses modules uniquement',
     'PHYSICAL_POS',
     'Caisse tactile de comptoir, tickets de caisse thermiques, gestion d''espèces, ardoises dettes et clôture Z',
     5000.00,
@@ -36,7 +36,7 @@ VALUES
 ),
 (
     'vitrine_web',
-    'Vitrine en Ligne & E-commerce',
+    'La Vitrine et ses modules uniquement',
     'ONLINE_STORE',
     'Boutique en ligne nsore.shop, catalogue de produits, panier WhatsApp, commandes clients et pixels publicitaires',
     5000.00,
@@ -47,7 +47,7 @@ VALUES
 ),
 (
     'formateur_lms',
-    'Espace Formateur & Académie',
+    'Formateur et ses modules uniquement',
     'INSTRUCTOR_LMS',
     'Cours vidéo privés, hébergement PDF, examens interactifs, diplômes avec QR-code inviolable et masterclasses Wameet',
     10000.00,

@@ -988,7 +988,7 @@ export interface ModularPillarOption {
 export const MODULAR_PILLARS: ModularPillarOption[] = [
   {
     id: 'caisse_pos',
-    title: 'Caisse Physique & POS',
+    title: 'La Caisse et ses modules uniquement',
     shortDesc: 'Caisse tactile de comptoir, tickets thermiques, clôture Z, ardoises et gestion des dettes/dépenses.',
     starterPrice: 5000,
     businessPrice: 10000,
@@ -998,7 +998,7 @@ export const MODULAR_PILLARS: ModularPillarOption[] = [
   },
   {
     id: 'vitrine_web',
-    title: 'Vitrine Web & Vente en Ligne',
+    title: 'La Vitrine et ses modules uniquement',
     shortDesc: 'Site e-commerce nsore.shop, panier WhatsApp, commandes clients, Pixels Meta & TikTok.',
     starterPrice: 5000,
     businessPrice: 10000,
@@ -1008,7 +1008,7 @@ export const MODULAR_PILLARS: ModularPillarOption[] = [
   },
   {
     id: 'formateur_lms',
-    title: 'Espace Formateur & Académie',
+    title: 'Formateur et ses modules uniquement',
     shortDesc: 'Cours vidéo privés, hébergement PDF, examens interactifs, diplômes QR-Code et masterclasses Wameet.',
     starterPrice: 10000,
     businessPrice: 20000,

@@ -607,7 +607,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
 
                 {/* Les 3 Cases à cocher modulaires */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {/* 1. Caisse Physique & POS */}
+                  {/* 1. La Caisse et ses modules uniquement */}
                   <button
                     type="button"
                     onClick={() => handleTogglePillar('caisse_pos')}
@@ -624,7 +624,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         }`}>
                           {selectedPillars.includes('caisse_pos') && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-                        <span className="text-xs font-bold text-white">🏪 Caisse Physique & POS</span>
+                        <span className="text-xs font-bold text-white">🏪 La Caisse et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
                         {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
@@ -635,7 +635,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                     </p>
                   </button>
 
-                  {/* 2. Vitrine Web & Vente en Ligne */}
+                  {/* 2. La Vitrine et ses modules uniquement */}
                   <button
                     type="button"
                     onClick={() => handleTogglePillar('vitrine_web')}
@@ -652,7 +652,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         }`}>
                           {selectedPillars.includes('vitrine_web') && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-                        <span className="text-xs font-bold text-white">🌐 Vitrine Web & E-commerce</span>
+                        <span className="text-xs font-bold text-white">🌐 La Vitrine et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
                         {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
@@ -663,7 +663,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                     </p>
                   </button>
 
-                  {/* 3. Espace Formateur & Académie */}
+                  {/* 3. Formateur et ses modules uniquement */}
                   <button
                     type="button"
                     onClick={() => handleTogglePillar('formateur_lms')}
@@ -680,7 +680,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         }`}>
                           {selectedPillars.includes('formateur_lms') && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-                        <span className="text-xs font-bold text-white">🎓 Formateur & Académie</span>
+                        <span className="text-xs font-bold text-white">🎓 Formateur et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
                         {formatCFA(selectedPlanId === 'business' ? 20000 : selectedPlanId === 'elite' ? 40000 : 10000)}
