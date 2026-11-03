@@ -76,6 +76,7 @@ const EscrowQuotesView = React.lazy(() => import('./components/quotes/EscrowQuot
 const PublicEscrowProjectView = React.lazy(() => import('./components/quotes/PublicEscrowProjectView'));
 const ResumeBuilderView = React.lazy(() => import('./components/resume/ResumeBuilderView'));
 const SaasAdminDashboard = React.lazy(() => import('./components/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
+const ControlPlaneRouter = React.lazy(() => import('./admin/ControlPlaneRouter'));
 const DocuSignHub = React.lazy(() => import('./components/DocuSignHub'));
 const MarketingAIAssistantModal = React.lazy(() => import('./components/MarketingAIAssistantModal').then(m => ({ default: m.MarketingAIAssistantModal })));
 const AiAdvisorView = React.lazy(() => import('./components/AiAdvisorView').then(m => ({ default: m.AiAdvisorView })));
@@ -606,6 +607,7 @@ export default function App() {
       }
       if (
         pathname === '/admin' ||
+        pathname.startsWith('/admin/') ||
         pathname === '/saas-admin' ||
         pathname === '/superadmin' ||
         viewParam === 'admin' ||
@@ -1250,6 +1252,7 @@ export default function App() {
       // Super Admin SaaS direct (/admin, /saas-admin, /superadmin)
       if (
         pathname === '/admin' ||
+        pathname.startsWith('/admin/') ||
         pathname === '/saas-admin' ||
         pathname === '/superadmin' ||
         params.get('view') === 'admin' ||
@@ -5342,14 +5345,13 @@ export default function App() {
     );
   }
 
-  // Super-Admin & Fondateur du SaaS Panoramic View (Accessible sans blocage même si déconnecté)
-  if (currentView === 'SAAS_ADMIN') {
+  // Super-Admin & Fondateur du SaaS Control Plane (Protégé par SuperAdminGuard)
+  if (currentView === 'SAAS_ADMIN' || currentView === 'SUPERADMIN') {
     return (
-      <ModuleErrorBoundary moduleName="Administration - Super Admin SaaS">
-        <React.Suspense fallback={<LazyModuleFallback label="Chargement Super Admin SaaS..." />}>
-          <SaasAdminDashboard
-            onBackToPOS={() => setCurrentView('MASTER_HUB')}
-            currentUser={currentUser}
+      <ModuleErrorBoundary moduleName="Administration - Control Plane Super Admin">
+        <React.Suspense fallback={<LazyModuleFallback label="Chargement Control Plane Super Admin..." />}>
+          <ControlPlaneRouter
+            onExitToMerchant={() => setCurrentView('MASTER_HUB')}
           />
         </React.Suspense>
       </ModuleErrorBoundary>
