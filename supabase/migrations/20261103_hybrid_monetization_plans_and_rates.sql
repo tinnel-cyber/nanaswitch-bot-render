@@ -664,6 +664,16 @@ INSERT INTO public.usage_service_rates (
     'XOF',
     true,
     'Création et hébergement d''un tunnel de capture rapide relié à un produit vedette pour les campagnes publicitaires.'
+),
+(
+    'usage-product-direct-view',
+    'Activation « Voir Direct » & Achat Produit Immédiat',
+    100.00,
+    1,
+    'produit activé',
+    'XOF',
+    true,
+    'Permet au marchand d''activer la vue vidéo directe sur un produit : le client visualise l''article en direct et peut l''acheter instantanément (100 F CFA par produit activé).'
 )
 ON CONFLICT (usage_code) DO UPDATE SET
     service_name = EXCLUDED.service_name,
