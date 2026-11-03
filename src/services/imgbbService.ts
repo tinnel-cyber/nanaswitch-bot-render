@@ -17,14 +17,14 @@ export function getImgbbApiKey(): string {
   // 1. Priorité absolue : Clé définie dans le fichier .env (VITE_IMGBB_API_KEY)
   const metaEnvKey = (import.meta as any).env?.VITE_IMGBB_API_KEY || (import.meta as any).env?.IMGBB_API_KEY;
   if (metaEnvKey && typeof metaEnvKey === 'string' && metaEnvKey.trim().length > 0) {
-    return metaEnvKey.trim();
+    return metaEnvKey.trim().replace(/^["']|["']$/g, '');
   }
 
   // 2. Détection via process.env pour environnements SSR/Node
   if (typeof process !== 'undefined' && process.env) {
     const procKey = process.env.VITE_IMGBB_API_KEY || process.env.IMGBB_API_KEY;
     if (procKey && typeof procKey === 'string' && procKey.trim().length > 0) {
-      return procKey.trim();
+      return procKey.trim().replace(/^["']|["']$/g, '');
     }
   }
 
@@ -32,7 +32,7 @@ export function getImgbbApiKey(): string {
   if (typeof window !== 'undefined') {
     const customKey = localStorage.getItem(IMGBB_STORAGE_KEY);
     if (customKey && customKey.trim().length > 0) {
-      return customKey.trim();
+      return customKey.trim().replace(/^["']|["']$/g, '');
     }
   }
 
@@ -72,7 +72,7 @@ export async function uploadImageToImgbb(
   imageSource: File | Blob | string,
   customApiKey?: string
 ): Promise<ImgbbUploadResult> {
-  const apiKey = (customApiKey && customApiKey.trim().length > 0) ? customApiKey.trim() : getImgbbApiKey();
+  const apiKey = (customApiKey && customApiKey.trim().length > 0) ? customApiKey.trim().replace(/^["']|["']$/g, '') : getImgbbApiKey();
 
   if (!apiKey) {
     throw new Error("Service de téléversement d'image temporairement indisponible.");

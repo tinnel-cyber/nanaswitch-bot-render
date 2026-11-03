@@ -43,16 +43,16 @@ export const NaNaSwitchAppPage: React.FC<NaNaSwitchAppPageProps> = ({
   const [activePage, setActivePage] = useState<NaNaSwitchPageKey>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
-      if (path === '/nana-switch/connectors') return 'connectors';
+      if (path === '/nana-switch/connectors' || path === '/nana-switch/byok' || path === '/nana-switch/keys') return 'connectors';
       if (path === '/nana-switch/routing') return 'routing';
       if (path === '/nana-switch/extension') return 'extension';
       if (path === '/nana-switch/app' || path === '/nana-switch/pocket') return 'pocket';
       if (path === '/nana-switch/security') return 'security';
       if (path === '/nana-switch/logs') return 'logs';
       if (path === '/nana-switch/billing') return 'billing';
-      if (path === '/nana-switch/overview') return 'overview';
+      if (path === '/nana-switch/overview' || path === '/nana-switch-app' || path === '/nana-switch/console') return 'overview';
       if (path === '/nana-switch/auth') return 'auth';
-      if (path === '/nana-switch') return 'landing';
+      if (path === '/nana-switch' || path === '/nana-switch/') return 'landing';
     }
     return initialPage;
   });
@@ -82,7 +82,7 @@ export const NaNaSwitchAppPage: React.FC<NaNaSwitchAppPageProps> = ({
     const handlePop = () => {
       applyNaNaSwitchFavicon();
       const path = window.location.pathname;
-      if (path === '/nana-switch/connectors') setActivePage('connectors');
+      if (path === '/nana-switch/connectors' || path === '/nana-switch/byok' || path === '/nana-switch/keys') setActivePage('connectors');
       else if (path === '/nana-switch/routing') setActivePage('routing');
       else if (path === '/nana-switch/extension') setActivePage('extension');
       else if (path === '/nana-switch/app' || path === '/nana-switch/pocket') setActivePage('pocket');
@@ -103,7 +103,7 @@ export const NaNaSwitchAppPage: React.FC<NaNaSwitchAppPageProps> = ({
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', path);
     }
-    if (path === '/nana-switch/connectors') setActivePage('connectors');
+    if (path === '/nana-switch/connectors' || path === '/nana-switch/byok' || path === '/nana-switch/keys') setActivePage('connectors');
     else if (path === '/nana-switch/routing') setActivePage('routing');
     else if (path === '/nana-switch/extension') setActivePage('extension');
     else if (path === '/nana-switch/app' || path === '/nana-switch/pocket') setActivePage('pocket');
@@ -118,6 +118,8 @@ export const NaNaSwitchAppPage: React.FC<NaNaSwitchAppPageProps> = ({
       }
       setActivePage('landing');
     } else if (path === '/nana-switch-app' || path === '/app/nanaswitch') {
+      setActivePage('connectors');
+    } else if (path === '/dashboard' || path.startsWith('/dashboard')) {
       if (typeof window !== 'undefined') {
         window.location.href = path;
       }
@@ -128,7 +130,7 @@ export const NaNaSwitchAppPage: React.FC<NaNaSwitchAppPageProps> = ({
   if (activePage === 'landing') {
     return (
       <NaNaSwitchLandingPage
-        onNavigateToConsole={() => handleNavigate('/nana-switch-app')}
+        onNavigateToConsole={() => handleNavigate('/nana-switch/connectors')}
         onNavigateToExtension={() => handleNavigate('/nana-switch/extension')}
         onNavigate={handleNavigate}
       />

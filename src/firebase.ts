@@ -23,7 +23,8 @@ import {
   getFirestore, 
   Firestore,
   doc,
-  getDocFromServer
+  getDocFromServer,
+  setLogLevel
 } from 'firebase/firestore';
 import { getFunctions, Functions } from 'firebase/functions';
 import { 
@@ -151,6 +152,11 @@ if (typeof window !== 'undefined') {
 }
 
 // 2. Base de données Cloud Firestore avec Persistance Hors-ligne (IndexedDB multi-onglets / localCache)
+// Filtrer les avertissements de routine de compétition de lease entre onglets
+try {
+  setLogLevel('error');
+} catch {}
+
 let firestoreDb: Firestore;
 try {
   firestoreDb = initializeFirestore(app, {

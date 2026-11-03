@@ -37,8 +37,22 @@ export const ImageUploadInput: React.FC<ImageUploadInputProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  
+  const [imgLoadError, setImgLoadError] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Réinitialise l'erreur de chargement à chaque nouvelle URL
+  React.useEffect(() => {
+    setImgLoadError(false);
+  }, [value]);
+
+  const cleanUrl = (raw: string): string => {
+    if (!raw) return '';
+    let cleaned = raw.trim().replace(/^["']|["']$/g, '');
+    const match = cleaned.match(/\((https?:\/\/[^\)]+)\)/);
+    if (match) cleaned = match[1];
+    return cleaned;
+  };
 
   // Déclencheur du sélecteur de fichiers
   const handleBrowseClick = () => {
@@ -151,7 +165,7 @@ export const ImageUploadInput: React.FC<ImageUploadInputProps> = ({
           <input
             type="text"
             value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(cleanUrl(e.target.value))}
             placeholder={isDragging ? "Déposez votre image ici..." : placeholder}
             disabled={isUploading}
             className="w-full bg-transparent px-3 py-2 text-white text-xs font-mono focus:outline-none placeholder-slate-500"
@@ -222,14 +236,22 @@ export const ImageUploadInput: React.FC<ImageUploadInputProps> = ({
             <span className="text-emerald-400">Actif ✓</span>
           </div>
           <div className={`relative w-full ${previewHeight} rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center group shadow-inner`}>
-            <img 
-              src={value} 
-              alt="Aperçu" 
-              className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-              onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = 'none';
-              }}
-            />
+            {!imgLoadError ? (
+              <img 
+                key={value}
+                src={value} 
+                alt="Aperçu" 
+                className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                onError={() => {
+                  setImgLoadError(true);
+                }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center text-slate-500 text-[10px] p-2 text-center gap-1">
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+                <span>Format ou lien inaccessible</span>
+              </div>
+            )}
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
               <a
                 href={value}

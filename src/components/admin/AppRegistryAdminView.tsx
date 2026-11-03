@@ -1,6 +1,6 @@
 /**
  * @file AppRegistryAdminView.tsx
- * @description Vue d'administration et de personnalisation des 38 modules de l'App Registry Nanasore
+ * @description Vue d'administration et de personnalisation des 27 modules de l'App Registry Nanasore
  * Permet d'éditer le nom et la configuration de chaque module avec synchronisation directe dans Supabase et Firebase.
  */
 
@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import {
   AppRegistryModule,
-  DEFAULT_38_MODULES,
+  DEFAULT_27_MODULES,
   loadAppRegistryModules,
   syncAppRegistryModule,
   syncAllAppRegistryModules,
@@ -36,7 +36,7 @@ interface AppRegistryAdminViewProps {
 }
 
 export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNotify }) => {
-  const [modules, setModules] = useState<AppRegistryModule[]>(DEFAULT_38_MODULES);
+  const [modules, setModules] = useState<AppRegistryModule[]>(DEFAULT_27_MODULES);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedSection, setSelectedSection] = useState<number | 'ALL'>('ALL');
@@ -102,7 +102,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
 
   // Réinitialiser un module au nom d'origine
   const handleResetToDefault = (key: string) => {
-    const original = DEFAULT_38_MODULES.find((d) => d.key === key);
+    const original = DEFAULT_27_MODULES.find((d) => d.key === key);
     if (original) {
       setModules((prev) =>
         prev.map((m) =>
@@ -158,7 +158,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
     try {
       const res = await syncAllAppRegistryModules(modules);
       if (res.success) {
-        const msg = `Tous les 38 modules ont été synchronisés simultanément dans Supabase et Firebase (${res.syncedCount}/${res.total})`;
+        const msg = `Les 27 modules ont été synchronisés simultanément dans Supabase et Firebase (${res.syncedCount}/${res.total})`;
         setLastSyncStatus({
           message: msg,
           success: true,
@@ -231,7 +231,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
               </div>
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
-                  <span>App Registry & Catalogue des 38 Modules Edge</span>
+                  <span>App Registry & Catalogue des 27 Modules</span>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                     Live Sync Supabase & Firebase
                   </span>
@@ -418,7 +418,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
                 : 'bg-slate-950/60 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            1. Front-Office (13)
+            1. Applications (11)
           </button>
           <button
             type="button"
@@ -429,7 +429,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
                 : 'bg-slate-950/60 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            2. Services (9)
+            2. Services (7)
           </button>
           <button
             type="button"
@@ -440,7 +440,7 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
                 : 'bg-slate-950/60 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            3. Gestion (10)
+            3. Modules (6)
           </button>
           <button
             type="button"
@@ -451,12 +451,12 @@ export const AppRegistryAdminView: React.FC<AppRegistryAdminViewProps> = ({ onNo
                 : 'bg-slate-950/60 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            4. Analytique (6)
+            4. Outils (3)
           </button>
         </div>
       </div>
 
-      {/* 3. GRILLE DES 38 MODULES */}
+      {/* 3. GRILLE DES 27 MODULES */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredModules.map((mod) => {
           const isModified = mod.name.trim() !== mod.defaultName.trim();

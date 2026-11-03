@@ -113,7 +113,7 @@ import { updateSellerModeInFirestore } from '../utils/firestoreService';
 import { WameetLogo, WameetSquircleIcon } from './wameet/WameetLogo';
 import { NanasoreLogo, NanasorePasserelleIcon } from './common/NanasoreLogo';
 import { AppOmnibar } from './dashboard/AppOmnibar';
-import { getTaxonomyBadge } from './CentralHubOmnibar';
+import { getTaxonomyBadge, ExpandableModuleDescription } from './CentralHubOmnibar';
 import { APPS_REGISTRY, AppRegistryItem } from '../data/appsRegistry';
 import { useActiveOmnibarApps } from '../hooks/useActiveOmnibarApps';
 import { toggleModuleStatus } from '../services/moduleActivationService';
@@ -2780,9 +2780,11 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                           </span>
                         </div>
 
-                        <p className="text-xs text-slate-300 leading-relaxed mt-1 line-clamp-2">
-                          {item.description}
-                        </p>
+                        <ExpandableModuleDescription
+                          id={item.id}
+                          description={item.description}
+                          defaultClamped="line-clamp-2"
+                        />
                       </div>
 
                       {/* Pied de Carte : Catégorie & Bouton d'Action */}
@@ -2936,9 +2938,11 @@ const ModuleCard: React.FC<ModuleCardProps> = React.memo(({ module, isFreeAccoun
             [{getTaxonomyBadge(module)}]
           </span>
         </div>
-        <p className="text-xs text-slate-300 leading-relaxed font-medium line-clamp-2">
-          {module.description}
-        </p>
+        <ExpandableModuleDescription
+          id={module.id}
+          description={module.description}
+          defaultClamped="line-clamp-2"
+        />
       </div>
 
       {/* Bouton d'action en bas */}

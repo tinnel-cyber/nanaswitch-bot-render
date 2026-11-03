@@ -113,6 +113,7 @@ const AuthScreen = React.lazy(() => import('./components/auth/AuthScreen').then(
 const UpsellModal = React.lazy(() => import('./components/quotas/UpsellModal').then(m => ({ default: m.UpsellModal })));
 const AiStudioView = React.lazy(() => import('./components/ai/AiStudioView').then(m => ({ default: m.AiStudioView })));
 const NanaGeneratorModal = React.lazy(() => import('./components/NanaGeneratorModal').then(m => ({ default: m.NanaGeneratorModal })));
+const KycVerificationModal = React.lazy(() => import('./components/storeBuilder/KycVerificationModal').then(m => ({ default: m.KycVerificationModal })));
 import { lazyWithRetry } from './utils/lazyWithRetry';
 const MarketDirectory = lazyWithRetry(() => import('./components/directory/MarketDirectory'));
 const StoreStudioPage = lazyWithRetry(() => import('./pages/StoreStudioPage'));
@@ -2504,6 +2505,7 @@ export default function App() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isSellerSwitchModalOpen, setIsSellerSwitchModalOpen] = useState(false);
   const [isPosCameraScannerOpen, setIsPosCameraScannerOpen] = useState(false);
+  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [activeReceiptData, setActiveReceiptData] = useState<ReceiptData | null>(null);
   const [lastSaleToast, setLastSaleToast] = useState<string | null>(null);
   const [securityToast, setSecurityToast] = useState<{ message: string; type?: string } | null>(null);
@@ -2656,9 +2658,14 @@ export default function App() {
       (window.location.pathname.startsWith('/nana-switch/auth') ||
         window.location.pathname.startsWith('/nanaswitch/auth'))
     ) {
-      setCurrentView('NANA_SWITCH');
+      const savedRedirect = sessionStorage.getItem('nanaswitch_auth_redirect');
+      if (savedRedirect) {
+        sessionStorage.removeItem('nanaswitch_auth_redirect');
+      }
+      const destination = savedRedirect || '/nana-switch/connectors';
+      setCurrentView('NANA_SWITCH_APP');
       setIsInstructorView(false);
-      window.history.pushState({}, '', '/nana-switch/overview');
+      window.history.pushState({}, '', destination);
       setLastSaleToast(`⚡ Bienvenue ${resolvedUser.name} sur NaNaSwitch Overview !`);
       setTimeout(() => setLastSaleToast(null), 4000);
       return;
@@ -5373,7 +5380,19 @@ export default function App() {
     return (
       <ModuleErrorBoundary moduleName="NaNaSwitch Cloud - Landing Page">
         <React.Suspense fallback={<LoadingScreen message="Chargement NaNaSwitch Cloud..." />}>
-          <NaNaSwitchLandingPage />
+          <NaNaSwitchLandingPage 
+            onNavigate={(path) => {
+              if (path === '/dashboard' || path.startsWith('/dashboard')) {
+                setCurrentView('MASTER_HUB');
+                window.history.pushState({}, '', path);
+              } else if (path.startsWith('/nana-switch') || path.startsWith('/nanaswitch')) {
+                setCurrentView('NANA_SWITCH_APP');
+                window.history.pushState({}, '', path);
+              } else {
+                window.location.href = path;
+              }
+            }}
+          />
         </React.Suspense>
       </ModuleErrorBoundary>
     );
@@ -5388,6 +5407,8 @@ export default function App() {
     if (
       swPath.startsWith('/nana-switch/') ||
       swPath.startsWith('/nanaswitch/') ||
+      swPath === '/nana-switch-app' ||
+      swPath === '/nanaswitch-app' ||
       swPath === '/nana-switch-apppage' ||
       swPath === '/nanaswitch-apppage'
     ) {
@@ -6449,6 +6470,57 @@ export default function App() {
                       return;
                     }
 
+                    // Groupe 3 - Déclencheurs de Modales & Outils Intégrés (Ouverture directe 1-clic)
+                    if (v === 'APPS_NANAGENERATOR' || v === 'NANAGENERATOR' || v === 'nanagenerator' || v === 'app-nanagenerator' || v === '/dashboard/apps/nanagenerator') {
+                      handleOpenMarketingAi();
+                      return;
+                    }
+                    if (v === 'EXCEL_IMPORT' || v === 'excel' || v === 'tool-excel' || v === '/excel' || v === '/dashboard/inventaire/excel') {
+                      requireManagerAuth(() => {
+                        setIsGlobalExcelImporterOpen(true);
+                        if (typeof window !== 'undefined') {
+                          window.history.pushState({}, '', '/dashboard/inventaire/excel');
+                        }
+                      }, 'Importer Excel / CSV', 'Import');
+                      return;
+                    }
+                    if (v === 'WEBINAR' || v === 'webinar' || v === 'app-webinar' || v === '/webinar' || v === '/dashboard/lives') {
+                      requireManagerAuth(() => {
+                        setIsGlobalWebinarModalOpen(true);
+                        if (typeof window !== 'undefined') {
+                          window.history.pushState({}, '', '/dashboard/lives');
+                        }
+                      }, 'Studio Webinaire & Live Shopping', 'Live');
+                      return;
+                    }
+                    if (v === 'KYC_VERIFICATION' || v === 'kyc' || v === 'srv-kyc' || v === '/kyc') {
+                      setIsKycModalOpen(true);
+                      return;
+                    }
+                    if (v === 'BARCODE_SCANNER' || v === 'scanner' || v === 'tool-scanner' || v === '/scanner') {
+                      setIsPosCameraScannerOpen(true);
+                      return;
+                    }
+                    if (v === 'ACADEMY' || v === 'academy' || v === 'srv-academy-support' || v === '/academy') {
+                      setActiveAcademyTutorialId('tuto-1-gmail-signup');
+                      setIsAcademyDrawerOpen(true);
+                      return;
+                    }
+
+                    // Groupe 2 - Normalisation & Aiguillage Vues Métiers
+                    if (v === 'CUSTOMERS' || v === 'debts' || v === 'mod-debts' || v === '/debts' || v === '/dashboard/dettes') {
+                      v = 'DEBT_BOOK';
+                    }
+                    if (v === 'ANALYTICS' || v === 'analytics' || v === 'mod-analytics' || v === '/analytics' || v === '/dashboard/rapports') {
+                      v = 'REPORTS';
+                    }
+                    if (v === 'NANAMARKET' || v === 'nanamarket' || v === 'app-nanamarket' || v === '/nanamarket' || v === '/dashboard/market') {
+                      v = 'MARKET_DIRECTORY';
+                    }
+                    if (v === 'CVPRO' || v === 'cvpro' || v === 'mod-cvpro' || v === '/cvpro' || v === '/dashboard/cv') {
+                      v = 'CV_CREATOR';
+                    }
+
                     if (v === 'PARTNER' || v === 'partner' || v === 'PARTNERS' || v === 'partners' || v === 'AFFILIATE' || v === 'affiliate') {
                       setCurrentView('PARTNER');
                       if (typeof window !== 'undefined') {
@@ -7261,6 +7333,23 @@ export default function App() {
               storeName={currentUser?.storeName || 'Votre Entreprise'}
               isModal={true}
               currentUser={currentUser}
+            />
+          </React.Suspense>
+        )}
+
+        {/* Modal Chaîne d'Identification KYC & Sécurité */}
+        {isKycModalOpen && (
+          <React.Suspense fallback={<LazyModalFallback label="Chargement Vérification KYC..." />}>
+            <KycVerificationModal
+              isOpen={isKycModalOpen}
+              onClose={() => setIsKycModalOpen(false)}
+              storeId={getCurrentStoreId()}
+              storeName={currentUser?.storeName || 'Votre Entreprise'}
+              managerName={currentUser?.name || currentUser?.storeName || 'Gérant'}
+              managerPhone={currentUser?.whatsappPhone || currentUser?.phone || ''}
+              onSubmitted={() => {
+                setIsKycModalOpen(false);
+              }}
             />
           </React.Suspense>
         )}

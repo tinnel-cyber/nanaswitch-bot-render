@@ -140,9 +140,13 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
   const redirectToOverview = useCallback(() => {
     playValidationBeep();
     if (onNavigate) {
-      onNavigate('/nana-switch-app');
+      const saved = typeof window !== 'undefined' ? sessionStorage.getItem('nanaswitch_auth_redirect') : null;
+      if (typeof window !== 'undefined') sessionStorage.removeItem('nanaswitch_auth_redirect');
+      onNavigate(saved || '/nana-switch/connectors');
     } else if (typeof window !== 'undefined') {
-      window.location.href = '/nana-switch-app';
+      const saved = typeof window !== 'undefined' ? sessionStorage.getItem('nanaswitch_auth_redirect') : null;
+      if (typeof window !== 'undefined') sessionStorage.removeItem('nanaswitch_auth_redirect');
+      window.location.href = saved || '/nana-switch/connectors';
     }
   }, [onNavigate]);
 

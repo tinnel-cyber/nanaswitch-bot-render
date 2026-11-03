@@ -8517,16 +8517,17 @@ export const FunnelBuilder = ({
                         </button>
                       )}
                     </div>
-                    <input
-                      type="text"
-                      value={slide.image}
-                      placeholder="URL de l'image"
-                      onChange={(e) => {
+                    <ImageUploadInput
+                      label="Image de la Slide"
+                      value={slide.image || ''}
+                      onChange={(url) => {
                         const updated = [...data.slides];
-                        updated[idx] = { ...updated[idx], image: e.target.value };
+                        updated[idx] = { ...updated[idx], image: url };
                         updateBlockField(activeBlock.id, 'slides', updated);
                       }}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-mono"
+                      placeholder="https://i.ibb.co/... ou parcourir"
+                      badge="ImgBB Direct"
+                      previewHeight="h-20"
                     />
                     <input
                       type="text"
@@ -9542,15 +9543,15 @@ export const FunnelBuilder = ({
               />
             </div>
 
-            {/* URL Image Produit */}
+            {/* URL Image Produit avec Upload ImgBB */}
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">Image du Produit Fixée (Sticky)</label>
-              <input
-                type="text"
+              <ImageUploadInput
+                label="Image du Produit Fixée (Sticky)"
                 value={data.productImage || ''}
-                placeholder="https://images.unsplash.com/..."
-                onChange={(e) => updateBlockField(activeBlock.id, 'productImage', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-indigo-300 font-mono text-[11px]"
+                onChange={(url) => updateBlockField(activeBlock.id, 'productImage', url)}
+                placeholder="https://i.ibb.co/... ou parcourir"
+                badge="ImgBB Direct"
+                previewHeight="h-28"
               />
             </div>
 
@@ -11171,7 +11172,7 @@ export const FunnelBuilder = ({
         </div>
 
         {/* Actions Principales du Constructeur */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Bouton Gabarits Prêts à l'Emploi */}
           <button
             type="button"
@@ -12007,6 +12008,33 @@ export const FunnelBuilder = ({
                 )}
               </div>
 
+              {/* Pied fixe de l'inspecteur : Sauvegarder & Appliquer */}
+              <div className="p-3 bg-slate-900/95 border-t border-slate-800/90 flex items-center gap-2 shrink-0 shadow-2xl backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saveStatus === 'saving'}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 active:scale-98 cursor-pointer disabled:opacity-50"
+                  title="Enregistrer toutes les personnalisations dans Firebase"
+                >
+                  {saveStatus === 'saving' ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                      <span>Enregistrement en cours...</span>
+                    </>
+                  ) : saveStatus === 'saved' ? (
+                    <>
+                      <Check className="w-4 h-4 text-white" />
+                      <span>Enregistré avec succès ! ✓</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 text-emerald-200" />
+                      <span>Sauvegarder les modifications</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
             </aside>
           </>
@@ -12043,6 +12071,24 @@ export const FunnelBuilder = ({
           >
             <Sliders className="w-3.5 h-3.5 text-indigo-400" />
             <span>Éditer</span>
+          </button>
+
+          {/* Bouton Sauvegarder Mobile */}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveStatus === 'saving'}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition cursor-pointer shrink-0 disabled:opacity-50"
+            title="Sauvegarder le tunnel"
+          >
+            {saveStatus === 'saving' ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : saveStatus === 'saved' ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            <span>{saveStatus === 'saved' ? 'Enregistré' : 'Sauvegarder'}</span>
           </button>
 
           <button

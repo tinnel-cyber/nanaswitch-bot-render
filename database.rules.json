@@ -1,18 +1,87 @@
 {
   "rules": {
+    /* =========================================================================
+       1. ACCÈS GLOBAL DU SUPER ADMINISTRATEUR
+       Autorise le Super Admin partout (par custom claims token, email ou UID).
+       Par défaut, tout autre utilisateur est REFUSÉ à la racine.
+       ========================================================================= */
+    ".read": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com' || auth.token.email === 'admin@nana.ci')",
+    ".write": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com' || auth.token.email === 'admin@nana.ci')",
+
+    /* =========================================================================
+       2. DONNÉES DU SAAS MULTI-TENANT (/tenants/{tenantId})
+       Modules actifs, applications installées, funnels privés par boutique
+       ========================================================================= */
+    "tenants": {
+      "$tenantId": {
+        ".read": "auth != null && (auth.uid === $tenantId || auth.token.tenant_id === $tenantId)",
+        ".write": "auth != null && (auth.uid === $tenantId || auth.token.tenant_id === $tenantId)",
+
+        "modules": {
+          ".validate": "newData.hasChildren()"
+        },
+        "installedApps": {
+          ".validate": "newData.hasChildren()"
+        }
+      }
+    },
+
+    /* =========================================================================
+       3. BOUTIQUES ET CAISSES (/stores/{storeId})
+       ========================================================================= */
+    "stores": {
+      "$storeId": {
+        ".read": "auth != null && (auth.uid === $storeId || auth.token.storeId === $storeId)",
+        ".write": "auth != null && (auth.uid === $storeId || auth.token.storeId === $storeId)"
+      }
+    },
+
+    /* =========================================================================
+       4. PRODUITS & TUNNELS MODULAIRES (/products/{productId})
+       Lecture publique pour les acheteurs, écriture réservée au marchand authentifié
+       ========================================================================= */
+    "products": {
+      "$productId": {
+        ".read": true,
+        ".write": "auth != null && (data.exists() ? (data.child('ownerId').val() === auth.uid || !data.hasChild('ownerId')) : (newData.child('ownerId').val() === auth.uid || !newData.hasChild('ownerId')))"
+      }
+    },
+
+    /* =========================================================================
+       5. REGISTRY DES APPS SAAS (/app_registry)
+       Lecture autorisée aux utilisateurs connectés, modification strictement Super Admin
+       ========================================================================= */
+    "app_registry": {
+      ".read": "auth != null",
+      ".write": false
+    },
+
+    /* =========================================================================
+       6. CENTRAL HUB & VITRINES PUBLIQUES
+       (/central_hub_config, /central_hub_blocks, /published_cards)
+       ========================================================================= */
     "central_hub_config": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null"
     },
     "central_hub_blocks": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null"
     },
     "published_cards": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null"
     },
-    ".read": "auth != null",
-    ".write": "auth != null"
+
+    /* =========================================================================
+       7. INTENTIONS DE PAIEMENT (/payment_intents/{intentId})
+       Réservé aux marchands concernés et au Super Admin
+       ========================================================================= */
+    "payment_intents": {
+      "$intentId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
   }
 }

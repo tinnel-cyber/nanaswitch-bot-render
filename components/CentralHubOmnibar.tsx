@@ -23,7 +23,9 @@ import {
   Boxes,
   Check,
   Plus,
-  Compass
+  Compass,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { SlideModuleBlock } from './SlideModuleBlock';
 
@@ -106,8 +108,6 @@ export const OFFICIAL_POS_CORE_APP: HubCardItem & { subtitle?: string; rowTitle?
   isRootApp: true,
   rowTitle: 'Commerce & Caisse (POS)',
   linkedModuleIds: [
-    'mod_pos_closing',
-    'mod_receipt_printer',
     'mod_credit_book',
     'mod_barcode_scanner',
     'mod_cashier_sessions',
@@ -149,7 +149,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     mediaType: 'image',
     mediaUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/credit-book',
-    targetView: 'CUSTOMERS',
+    targetView: 'DEBT_BOOK',
     trialBadge: 'Actif'
   },
   {
@@ -219,7 +219,6 @@ export const MODULE_THUMBNAILS: Record<string, string> = {
   'mod_offline_sync': 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80',
   'mod-inventory': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
   'mod-debts': 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
-  'mod-cash-closing': 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
   
   // LMS, Éducation, Campus & Formation
   'srv-lms-marketplace': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80',
@@ -235,16 +234,11 @@ export const MODULE_THUMBNAILS: Record<string, string> = {
   'app-studio': 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&auto=format&fit=crop&q=80',
   'app-wameet': 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80',
   'app-nanagenerator': 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-  'app-tinnela': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
   'app-ultimate-funnel': 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80',
   'app-docusign': 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
   'app-webinar': 'https://images.unsplash.com/photo-1588196749597-9ff075ee6b5b?w=600&auto=format&fit=crop&q=80',
-  'app-invoices-orders': 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&auto=format&fit=crop&q=80',
   'app-nanamarket': 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=600&auto=format&fit=crop&q=80',
-  'srv-delivery': 'https://images.unsplash.com/photo-1526367790999-0150786686a2?w=600&auto=format&fit=crop&q=80',
-  'srv-payment': 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600&auto=format&fit=crop&q=80',
-  'srv-crm-automation': 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=600&auto=format&fit=crop&q=80',
-  'srv-sms': 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=600&auto=format&fit=crop&q=80'
+  'srv-crm-automation': 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=600&auto=format&fit=crop&q=80'
 };
 
 export const getCardMediaUrl = (card: any): string => {
@@ -276,6 +270,69 @@ export const getCardMediaUrl = (card: any): string => {
   if (title.includes('cours') || title.includes('forge') || title.includes('centre')) return MODULE_THUMBNAILS['app-cours-forge'];
   if (title.includes('live') || title.includes('webinar')) return MODULE_THUMBNAILS['app-webinar'];
   return 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=600&auto=format&fit=crop&q=80';
+};
+
+export interface ExpandableModuleDescriptionProps {
+  id?: string;
+  description?: string;
+  className?: string;
+  defaultClamped?: string;
+}
+
+export const ExpandableModuleDescription: React.FC<ExpandableModuleDescriptionProps> = ({
+  id,
+  description,
+  className = "",
+  defaultClamped = "line-clamp-2"
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!description) return null;
+
+  const isLong = description.length > 50;
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsExpanded(!isExpanded);
+  };
+
+  return (
+    <div
+      onClick={isLong ? handleToggle : undefined}
+      className={`group/desc mt-1 select-text transition-all duration-200 ${isLong ? 'cursor-pointer' : ''} ${className}`}
+      title={isLong ? (isExpanded ? "Cliquer pour replier" : "Cliquer pour déballer le texte complet") : undefined}
+    >
+      <div className="relative">
+        <p
+          className={`text-xs text-slate-300 leading-relaxed font-normal transition-colors ${
+            isExpanded
+              ? 'text-slate-100 whitespace-pre-line bg-slate-950/80 p-2.5 rounded-lg border border-blue-500/40 shadow-lg ring-1 ring-blue-500/20'
+              : `${defaultClamped} group-hover/desc:text-white`
+          }`}
+        >
+          {description}
+        </p>
+
+        {isLong && (
+          <div className="flex items-center gap-1 mt-0.5" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={handleToggle}
+              className={`inline-flex items-center gap-1 text-[10.5px] font-bold transition-all px-1.5 py-0.5 rounded cursor-pointer ${
+                isExpanded
+                  ? 'text-blue-300 hover:text-white bg-blue-500/20 border border-blue-500/40 mt-1'
+                  : 'text-blue-400 group-hover/desc:text-cyan-300 hover:underline'
+              }`}
+            >
+              <span>{isExpanded ? 'Réduire' : 'Lire la suite...'}</span>
+              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export interface OmnibarItemProps {
@@ -480,7 +537,12 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                   </div>
                 </div>
                 {rootCard.subtitle && <p className="text-xs text-slate-400">{rootCard.subtitle}</p>}
-                <p className="text-sm text-slate-300 mt-2 leading-relaxed">{rootCard.description}</p>
+                <ExpandableModuleDescription 
+                  id={rootCard.id}
+                  description={rootCard.description}
+                  defaultClamped="line-clamp-3"
+                  className="mt-2"
+                />
                 {rootCard.blocks?.some((b: any) => b.type === 'image_slider') && (
                   <div className="mt-3">
                     {rootCard.blocks.filter((b: any) => b.type === 'image_slider').map((sb: any) => (
@@ -634,7 +696,11 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-300 line-clamp-2">{mod.description}</p>
+                            <ExpandableModuleDescription 
+                              id={mod.id}
+                              description={mod.description}
+                              defaultClamped="line-clamp-2"
+                            />
                           </div>
                         </div>
 
@@ -778,7 +844,11 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
                     )}
                   </div>
                   {card.subtitle && <p className="text-[11px] text-slate-400 font-medium">{card.subtitle}</p>}
-                  <p className="text-xs text-slate-300 leading-relaxed">{card.description}</p>
+                  <ExpandableModuleDescription 
+                    id={card.id}
+                    description={card.description}
+                    defaultClamped="line-clamp-2"
+                  />
                   {card.blocks?.some((b: any) => b.type === 'image_slider') && (
                     <div className="mt-2.5">
                       {card.blocks.filter((b: any) => b.type === 'image_slider').map((sb: any) => (
@@ -869,7 +939,11 @@ export const OmnibarItem: React.FC<OmnibarItemProps> = ({
             </span>
           )}
         </div>
-        <p className="text-xs text-slate-300 leading-relaxed">{singleCard.description}</p>
+        <ExpandableModuleDescription 
+          id={singleCard.id}
+          description={singleCard.description}
+          defaultClamped="line-clamp-2"
+        />
       </div>
 
       <div className="mt-3 pt-3 border-t border-slate-700/60 flex items-center justify-between gap-2">
@@ -1682,7 +1756,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       if (c.title) publishedTitles.add(String(c.title).toLowerCase().trim());
     });
 
-    // 2. Normaliser les 36+ solutions officielles de l'écosystème (ALL_OFFICIAL_CATALOG)
+    // 2. Normaliser les 27 solutions officielles de l'écosystème (ALL_OFFICIAL_CATALOG)
     // RÈGLE STRICTE DU BLOCK BUILDER : Si un composant a été publié via le Block Builder,
     // la version Block Builder ÉCRASE OBLIGATOIREMENT l'ancienne version statique sans doublon !
     const officialCatalogCards: any[] = [];
@@ -1718,7 +1792,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         taxonomyType: official.taxonomy === 'APPLICATION' ? 'Application' : official.taxonomy === 'SERVICE' ? 'Service' : official.taxonomy === 'MODULE' ? 'Module' : 'Outil',
         badge: official.taxonomy,
         isRootApp: official.id === 'app-pos',
-        linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'mod-cash-closing', 'tool-scanner', 'tool-printer'] : [],
+        linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'tool-scanner'] : [],
         keywords: official.keywords || [],
         isOfficialCatalog: true,
         isActive: active
@@ -1755,7 +1829,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       });
     });
 
-    // Fusion unifiée : Cartes Block Builder (priorité écrasante) + Catalogue officiel 36+ + Catalogue étendu
+    // Fusion unifiée : Cartes Block Builder (priorité écrasante) + Catalogue officiel 27 + Catalogue étendu
     const allAvailableCards: any[] = [
       ...rtdbCardsWithContext,
       ...officialCatalogCards,
@@ -1911,7 +1985,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         return;
       }
       if (titleLower.includes('dette') || titleLower.includes('credit') || routeLower.includes('debt')) {
-        onNavigate('CUSTOMERS');
+        onNavigate('DEBT_BOOK');
         return;
       }
       if (titleLower.includes('crm') || routeLower.includes('crm')) {
@@ -2074,7 +2148,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     ))}
                   </div>
 
-                  {/* Catalogue dynamique des 36+ solutions officielles Nanasore synchronisées Firebase RTDB */}
+                  {/* Catalogue dynamique des 27 solutions officielles Nanasore synchronisées Firebase RTDB */}
                   <div className="w-full mt-8 text-left">
                     <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
                       <div className="flex items-center gap-2">
@@ -2105,7 +2179,12 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                 <span className="font-bold text-xs text-white truncate">{m.name}</span>
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-slate-600'}`} />
                               </div>
-                              <p className="text-[11px] text-slate-400 truncate mt-0.5">{m.description}</p>
+                              <ExpandableModuleDescription 
+                                id={m.id}
+                                description={m.description}
+                                defaultClamped="line-clamp-1"
+                                className="mt-0.5"
+                              />
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] text-slate-500 font-semibold">{m.category}</span>
                                 <span className="text-[9px] font-bold text-blue-400 bg-blue-950/40 px-1.5 py-0.2 rounded border border-blue-500/20">
@@ -2261,9 +2340,11 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                               </span>
                             )}
                           </div>
-                          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-2">
-                            {structuredOutput.primaryModule.description}
-                          </p>
+                          <ExpandableModuleDescription 
+                            id={structuredOutput.primaryModule.id}
+                            description={structuredOutput.primaryModule.description}
+                            defaultClamped="line-clamp-2"
+                          />
 
                           {/* Blocs et Attributs du Module */}
                           {structuredOutput.primaryModule.blocks && Array.isArray(structuredOutput.primaryModule.blocks) && (
@@ -2413,7 +2494,11 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-slate-300 line-clamp-1">{mod.description}</p>
+                                  <ExpandableModuleDescription 
+                                    id={mod.id}
+                                    description={mod.description}
+                                    defaultClamped="line-clamp-1 sm:line-clamp-2"
+                                  />
                                 </div>
                               </div>
 
@@ -2567,7 +2652,11 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-slate-300 line-clamp-1">{sug.description}</p>
+                                  <ExpandableModuleDescription 
+                                    id={sug.id}
+                                    description={sug.description}
+                                    defaultClamped="line-clamp-1 sm:line-clamp-2"
+                                  />
                                 </div>
                               </div>
 

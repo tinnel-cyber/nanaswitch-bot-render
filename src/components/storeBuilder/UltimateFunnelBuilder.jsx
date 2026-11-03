@@ -76,6 +76,7 @@ import { incrementStoredFunnelsCount } from '../../utils/planFeatures';
 import { saveFunnelConfig, registerSubdomainInFirebase } from '../../services/omniFunnelService';
 import { saveTenantCustomDomain, cleanDomain } from '../../services/tenantDomainService';
 import { AutoplayVideoBlock, DEFAULT_AUTOPLAY_VIDEO_DATA } from '../cro/AutoplayVideoBlock';
+import { ImageUploadInput } from '../common/ImageUploadInput';
 export { extractYouTubeVideoId } from './FunnelBuilder';
 
 // ============================================================================
@@ -3101,15 +3102,13 @@ export const UltimateFunnelBuilder = ({
                     </div>
 
                     <div>
-                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
-                        Image de Partage WhatsApp (OpenGraph)
-                      </label>
-                      <input
-                        type="text"
+                      <ImageUploadInput
+                        label="Image de Partage WhatsApp & Réseaux (OpenGraph)"
                         value={tempSettings.ogImageUrl || ''}
-                        onChange={(e) => setTempSettings(prev => ({ ...prev, ogImageUrl: e.target.value }))}
-                        placeholder="https://images.unsplash.com/..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                        onChange={(url) => setTempSettings(prev => ({ ...prev, ogImageUrl: url }))}
+                        placeholder="https://i.ibb.co/... ou parcourir"
+                        badge="ImgBB Direct"
+                        previewHeight="h-28"
                       />
                     </div>
                   </div>

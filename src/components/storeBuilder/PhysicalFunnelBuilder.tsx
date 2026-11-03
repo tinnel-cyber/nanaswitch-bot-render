@@ -67,6 +67,7 @@ import {
   PhysicalFunnelConfig,
   DEFAULT_PHYSICAL_FUNNEL_BLOCKS
 } from '../../types/physicalFunnel';
+import { ImageUploadInput } from '../common/ImageUploadInput';
 import {
   DEFAULT_DELIVERY_OPTIONS,
   DEFAULT_ORDER_BUMP,
@@ -1557,16 +1558,16 @@ export const PhysicalFunnelBuilder: React.FC<{
                           </div>
                         )}
 
-                        {/* Image produit pour Vitrine, Split Luxury et Flash Card */}
+                        {/* Image produit pour Vitrine, Split Luxury et Flash Card avec Upload Direct ImgBB */}
                         {selectedBlock.type !== 'HERO_VSL_VIDEO' && (
-                          <div>
-                            <label className="text-[10.5px] font-bold text-slate-400 block mb-1">URL Image du Produit :</label>
-                            <input
-                              type="text"
+                          <div className="pt-1">
+                            <ImageUploadInput
+                              label="Image du Produit :"
                               value={selectedBlock.props.imageUrl || ''}
-                              onChange={(e) => updateBlockProps(selectedBlock.id, { imageUrl: e.target.value })}
-                              placeholder="https://images.unsplash.com/..."
-                              className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-[11px] focus:outline-none"
+                              onChange={(url) => updateBlockProps(selectedBlock.id, { imageUrl: url })}
+                              placeholder="https://i.ibb.co/... ou parcourir"
+                              badge="ImgBB Direct"
+                              previewHeight="h-28"
                             />
                           </div>
                         )}
@@ -2000,6 +2001,23 @@ export const PhysicalFunnelBuilder: React.FC<{
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Pied de page du panneau : Sauvegarder & Publier */}
+              <div className="p-3 bg-slate-900/95 border-t border-slate-800/80 sticky bottom-0 z-10 backdrop-blur-md flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAndPublish}
+                  style={{
+                    backgroundColor: brandColor,
+                    boxShadow: `0 8px 20px -4px ${brandColor}50`
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer hover:brightness-110 shadow-lg"
+                  title="Enregistrer toutes les modifications du tunnel physique"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Sauvegarder & Publier la Page</span>
+                </button>
               </div>
             </div>
           )}

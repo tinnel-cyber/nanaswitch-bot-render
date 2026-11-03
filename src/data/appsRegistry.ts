@@ -1,6 +1,6 @@
 /**
  * REGISTRE CENTRAL DES MINI-APPLICATIONS NANASORE (App Store / AWS Console Model)
- * Écosystème des 35+ modules autonomes sous forme de mini-applications.
+ * Cartes Hub / App Store. Le catalogue canonique fait 27 entrées (src/appRegistry.ts).
  */
 
 export type AppTrialType = 'credits' | 'time_trial' | 'freemium';

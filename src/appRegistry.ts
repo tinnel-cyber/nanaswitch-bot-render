@@ -1,5 +1,5 @@
 /**
- * REGISTRE OFFICIEL DES 36+ APPLICATIONS, SERVICES, MODULES ET OUTILS NANASORE (App Registry)
+ * REGISTRE OFFICIEL DES 27 APPLICATIONS, SERVICES, MODULES ET OUTILS NANASORE (App Registry)
  * Dénominations officielles exactes et immuables de l'écosystème NaNa POS.
  * Aucune altération de libellé : respect strict des identités d'origine.
  */
@@ -22,7 +22,7 @@ export interface AppModule {
 
 export const ALL_OFFICIAL_CATALOG: AppModule[] = [
   // =========================================================================
-  // --- 13+ APPLICATIONS ---
+  // --- 11 APPLICATIONS ---
   // =========================================================================
   {
     id: 'app-pos',
@@ -71,18 +71,6 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     defaultActive: true,
     keywords: ['nanagenerator', 'video', 'image', 'ia', 'pub', 'studio'],
     aliases: ['nanagenerator', 'ai-generator']
-  },
-  {
-    id: 'app-tinnela',
-    name: 'Tinnela AI Studio & Avatars',
-    taxonomy: 'APPLICATION',
-    category: 'Studio IA',
-    description: 'Générateur de porte-paroles et avatars vidéo réalistes.',
-    view: 'APPS_TINNELA',
-    route: '/dashboard/apps/tinnela',
-    defaultActive: false,
-    keywords: ['tinnela', 'avatar', 'video', 'photoshoot', 'studio', 'ia'],
-    aliases: ['studio-ia', 'tinnela']
   },
   {
     id: 'app-ultimate-funnel',
@@ -138,8 +126,8 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     taxonomy: 'APPLICATION',
     category: 'Marketplace',
     description: 'Place de marché nationale et annuaire des marchands vérifiés.',
-    view: 'NANAMARKET',
-    route: '/nanamarket',
+    view: 'MARKET_DIRECTORY',
+    route: '/dashboard/market',
     defaultActive: true,
     keywords: ['market', 'marketplace', 'annuaire', 'b2b2c'],
     aliases: ['nanamarket', 'mod-market-directory']
@@ -168,21 +156,9 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     keywords: ['docusign', 'contrats', 'signature', 'juridique', 'legal'],
     aliases: ['digital_signature', 'docusign', 'contrats']
   },
-  {
-    id: 'app-invoices-orders',
-    name: 'Bons de Commande & Devis / Projets',
-    taxonomy: 'APPLICATION',
-    category: 'Facturation',
-    description: 'Édition professionnelle de bons de commande et propositions commerciales.',
-    view: 'INVOICES',
-    route: '/invoices',
-    defaultActive: true,
-    keywords: ['bons-commande', 'devis', 'factures', 'projets'],
-    aliases: ['invoices-orders', 'quotes-escrow']
-  },
 
   // =========================================================================
-  // --- 11 SERVICES ---
+  // --- 7 SERVICES ---
   // =========================================================================
   {
     id: 'srv-crm-automation',
@@ -207,42 +183,6 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     defaultActive: true,
     keywords: ['theme', 'builder', 'design', 'vitrine', 'studio'],
     aliases: ['theme-builder']
-  },
-  {
-    id: 'srv-sms',
-    name: 'Campagnes Marketing & SMS Direct',
-    taxonomy: 'SERVICE',
-    category: 'Communication',
-    description: 'Envoi groupé de SMS promotionnels et notifications transactionnelles.',
-    view: 'SMS_MARKETING',
-    route: '/sms',
-    defaultActive: true,
-    keywords: ['sms', 'marketing', 'campagne', 'relances', 'notifications'],
-    aliases: ['wallet_messaging', 'marketing-campaigns', 'sms']
-  },
-  {
-    id: 'srv-delivery',
-    name: 'Livraisons & Suivi Heatmap en Direct',
-    taxonomy: 'SERVICE',
-    category: 'Logistique',
-    description: 'Carte interactive des livreurs et géolocalisation des colis en temps réel.',
-    view: 'DELIVERY_TRACKING',
-    route: '/deliveries',
-    defaultActive: false,
-    keywords: ['livraison', 'heatmap', 'suivi', 'colis', 'geolocalisation'],
-    aliases: ['delivery-tracking']
-  },
-  {
-    id: 'srv-payment',
-    name: 'Passerelles de Paiement Mobile Money',
-    taxonomy: 'SERVICE',
-    category: 'Finances',
-    description: 'Encaissement Wave, Orange Money, MTN MoMo, Moov & Cartes bancaires.',
-    view: 'PAYMENT_GATEWAYS',
-    route: '/payments',
-    defaultActive: true,
-    keywords: ['paiement', 'wave', 'orange-money', 'mtn', 'moov', 'mobile-money'],
-    aliases: ['payment-gateways']
   },
   {
     id: 'srv-partner',
@@ -304,21 +244,9 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     keywords: ['kyc', 'identification', 'securite', 'conformite'],
     aliases: ['kyc-verification']
   },
-  {
-    id: 'srv-vip-support',
-    name: 'Conciergerie & Support VIP WhatsApp',
-    taxonomy: 'SERVICE',
-    category: 'Assistance',
-    description: 'Assistance prioritaire dédiée 7j/7 pour les marchands et formateurs.',
-    view: 'VIP_SUPPORT',
-    route: '/vip-support',
-    defaultActive: false,
-    keywords: ['vip', 'support', 'whatsapp', 'conciergerie', 'assistance'],
-    aliases: ['vip-support']
-  },
 
   // =========================================================================
-  // --- 8 MODULES ---
+  // --- 6 MODULES ---
   // =========================================================================
   {
     id: 'mod-inventory',
@@ -333,40 +261,16 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     aliases: ['catalog', 'inventory_suppliers', 'mod_stock', 'inventory']
   },
   {
-    id: 'mod-invoices',
-    name: 'Factures, Reçus & Devis Automatiques',
-    taxonomy: 'MODULE',
-    category: 'Comptabilité',
-    description: 'Génération conforme de reçus thermiques et factures PDF.',
-    view: 'INVOICES',
-    route: '/invoices',
-    defaultActive: true,
-    keywords: ['factures', 'recus', 'devis', 'pdf', 'comptabilite'],
-    aliases: ['expenses_finance', 'mod_invoices', 'invoices']
-  },
-  {
     id: 'mod-debts',
     name: 'Gestion des Dettes (Ardoises clients)',
     taxonomy: 'MODULE',
     category: 'Trésorerie',
     description: 'Carnet de crédits clients, échéanciers et relances WhatsApp en 1 clic.',
-    view: 'CUSTOMERS',
-    route: '/debts',
+    view: 'DEBT_BOOK',
+    route: '/dashboard/dettes',
     defaultActive: true,
     keywords: ['dettes', 'ardoises', 'credit-client', 'creances', 'relances'],
     aliases: ['crm_customers', 'mod_credit_book', 'credit-book', 'debts']
-  },
-  {
-    id: 'mod-cash-closing',
-    name: 'Clôture de Caisse & Rapport Z',
-    taxonomy: 'MODULE',
-    category: 'Comptabilité',
-    description: 'Arrêté comptable journalier, réconciliation espèces/mobile money et export Z.',
-    view: 'CASH_REGISTER_CLOSING',
-    route: '/cash-closing',
-    defaultActive: true,
-    keywords: ['cloture', 'caisse', 'rapport-z', 'reconciliation'],
-    aliases: ['mod_pos_closing', 'cash-closing']
   },
   {
     id: 'mod-analytics',
@@ -374,8 +278,8 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     taxonomy: 'MODULE',
     category: 'Statistiques',
     description: 'Graphiques de chiffre d\'affaires, marges bénéficiaires et produits phares.',
-    view: 'ANALYTICS',
-    route: '/analytics',
+    view: 'REPORTS',
+    route: '/dashboard/rapports',
     defaultActive: true,
     keywords: ['analytique', 'gains', 'statistiques', 'courbe', 'chiffre-affaires'],
     aliases: ['analytics_reports', 'analytics']
@@ -398,8 +302,8 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     taxonomy: 'MODULE',
     category: 'Documents',
     description: 'Générateur de CV professionnels, attestations et portfolios vendeurs.',
-    view: 'CVPRO',
-    route: '/cvpro',
+    view: 'CV_CREATOR',
+    route: '/dashboard/cv',
     defaultActive: false,
     keywords: ['cvpro', 'cv', 'attestations', 'documents'],
     aliases: ['cvpro']
@@ -418,7 +322,7 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
   },
 
   // =========================================================================
-  // --- 6 OUTILS ---
+  // --- OUTILS ---
   // =========================================================================
   {
     id: 'tool-scanner',
@@ -433,18 +337,6 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     aliases: ['mod_barcode_scanner', 'barcode-scanner', 'scanner']
   },
   {
-    id: 'tool-printer',
-    name: 'Imprimante Ticket Thermique & POS Config',
-    taxonomy: 'OUTIL',
-    category: 'Matériel POS',
-    description: 'Configuration des imprimantes Bluetooth 58mm/80mm et tiroir-caisse.',
-    view: 'RECEIPT_PRINTER',
-    route: '/printer',
-    defaultActive: true,
-    keywords: ['imprimante', 'ticket', 'thermique', 'bluetooth', 'pos'],
-    aliases: ['mod_receipt_printer', 'receipt-printer', 'printer']
-  },
-  {
     id: 'tool-excel',
     name: 'Import & Export de Fichiers Excel / CSV',
     taxonomy: 'OUTIL',
@@ -455,30 +347,6 @@ export const ALL_OFFICIAL_CATALOG: AppModule[] = [
     defaultActive: true,
     keywords: ['excel', 'csv', 'import', 'export', 'donnees'],
     aliases: ['excel-import']
-  },
-  {
-    id: 'tool-pdf',
-    name: 'Générateur & Visionneuse PDF Suite',
-    taxonomy: 'OUTIL',
-    category: 'Impression',
-    description: 'Compilation instantanée de catalogues PDF et reçus imprimables HD.',
-    view: 'PDF_SUITE',
-    route: '/pdf',
-    defaultActive: true,
-    keywords: ['pdf', 'catalogue-pdf', 'impression', 'recus-hd'],
-    aliases: ['pdf-suite']
-  },
-  {
-    id: 'tool-security',
-    name: 'Sécurité, Sauvegarde & Signatures Certifiées',
-    taxonomy: 'OUTIL',
-    category: 'Sécurité',
-    description: 'Chiffrement des transactions, sauvegarde cloud et certificats officiels.',
-    view: 'SECURITY_BACKUP',
-    route: '/security',
-    defaultActive: true,
-    keywords: ['securite', 'sauvegarde', 'chiffrement', 'cloud', 'certificats'],
-    aliases: ['security-backup']
   },
   {
     id: 'tool-gateway',
@@ -526,7 +394,7 @@ export function isModuleDefaultActive(idOrNameOrAlias: string): boolean {
 }
 
 /**
- * Récupère l'intégralité du catalogue des 36+ applications, services, modules et outils
+ * Récupère l'intégralité du catalogue des 27 applications, services, modules et outils
  */
 export function getAllOfficialModules(): AppModule[] {
   return [...ALL_OFFICIAL_CATALOG];

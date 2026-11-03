@@ -160,7 +160,7 @@ export const HubBuilderPage = () => {
           subtitle: headerBlock?.badge || card.palmares || 'Module Certifié NaNa',
           description: descBlock?.text || card.description || 'Description du module et fonctionnalités...',
           mediaType: (mediaBlock?.type as 'image' | 'video') || card.mediaType || 'image',
-          mediaUrl: mediaBlock?.url || card.mediaUrl || '',
+          mediaUrl: mediaBlock?.url || mediaBlock?.imageUrl || card.mediaUrl || card.imageUrl || '',
           tutorialUrl: ctaBlock?.tutorialUrl || card.tutorialUrl || '',
           trialBadge: ctaBlock?.trialBadge || card.trialBadge || '',
           isRootApp: card.isRootApp,
@@ -724,7 +724,7 @@ export const HubBuilderPage = () => {
   }, [selectedBlockInfo, hubData]);
 
   const updateCardRootApp = (rowId: string, cardId: string, isRoot: boolean) => {
-    setHubData(hubData.map(row => {
+    setHubData(prev => prev.map(row => {
       if (row.id === rowId) {
         return {
           ...row,
@@ -741,7 +741,7 @@ export const HubBuilderPage = () => {
   };
 
   const updateCardRouteUrl = (rowId: string, cardId: string, routeUrl: string) => {
-    setHubData(hubData.map(row => {
+    setHubData(prev => prev.map(row => {
       if (row.id === rowId) {
         return {
           ...row,
@@ -757,8 +757,37 @@ export const HubBuilderPage = () => {
     }));
   };
 
+  const updateCardMediaUrl = (rowId: string, cardId: string, mediaUrl: string) => {
+    setHubData(prev => prev.map(row => {
+      if (row.id === rowId) {
+        return {
+          ...row,
+          cards: row.cards.map(c => {
+            if (c.id === cardId) {
+              const nextBlocks = c.blocks.map(b => {
+                if (b.type === 'image') {
+                  return { ...b, url: mediaUrl, imageUrl: mediaUrl };
+                }
+                return b;
+              });
+              return {
+                ...c,
+                mediaUrl,
+                imageUrl: mediaUrl,
+                mediaType: 'image',
+                blocks: nextBlocks
+              };
+            }
+            return c;
+          })
+        };
+      }
+      return row;
+    }));
+  };
+
   const updateCardLinkedModuleIds = (rowId: string, cardId: string, ids: string[]) => {
-    setHubData(hubData.map(row => {
+    setHubData(prev => prev.map(row => {
       if (row.id === rowId) {
         return {
           ...row,
@@ -784,39 +813,40 @@ export const HubBuilderPage = () => {
     updateCardLinkedModuleIds(rowId, cardId, next);
   };
 
-  const updateBlockProp = (prop: keyof BlockItem, value: string) => {
+  const updateBlockProps = (updates: Partial<BlockItem>) => {
     if (!selectedBlockInfo) return;
     const { rowId, cardId, blockId } = selectedBlockInfo;
 
-    setHubData(hubData.map(row => {
-      if (row.id === rowId) {
-        return {
-          ...row,
-          cards: row.cards.map(card => {
-            if (card.id === cardId) {
-              return {
-                ...card,
-                blocks: card.blocks.map(b => {
-                  if (b.id === blockId) {
-                    return { ...b, [prop]: value };
-                  }
-                  return b;
-                })
-              };
-            }
-            return card;
-          })
-        };
-      }
-      return row;
+    setHubData(prev => prev.map(row => {
+      if (row.id !== rowId) return row;
+      return {
+        ...row,
+        cards: row.cards.map(card => {
+          if (card.id !== cardId) return card;
+          const nextBlocks = card.blocks.map(b => {
+            if (b.id !== blockId) return b;
+            return { ...b, ...updates };
+          });
+          const targetUrl = updates.url || updates.imageUrl;
+          return {
+            ...card,
+            blocks: nextBlocks,
+            ...(targetUrl ? { mediaUrl: targetUrl, imageUrl: targetUrl, mediaType: 'image' } : {})
+          };
+        })
+      };
     }));
+  };
+
+  const updateBlockProp = (prop: keyof BlockItem, value: any) => {
+    updateBlockProps({ [prop]: value });
   };
 
   const deleteSelectedBlock = () => {
     if (!selectedBlockInfo) return;
     const { rowId, cardId, blockId } = selectedBlockInfo;
 
-    setHubData(hubData.map(row => {
+    setHubData(prev => prev.map(row => {
       if (row.id === rowId) {
         return {
           ...row,
@@ -1086,7 +1116,7 @@ export const HubBuilderPage = () => {
           const descB = card.blocks?.find(b => b.type === 'description');
           const mediaB = card.blocks?.find(b => b.type === 'image' || b.type === 'video');
           const ctaB = card.blocks?.find(b => b.type === 'cta');
-          const sanitizedMediaUrl = sanitizeMediaUrl(mediaB?.url || card.mediaUrl || '');
+          const sanitizedMediaUrl = sanitizeMediaUrl(mediaB?.url || mediaB?.imageUrl || card.mediaUrl || card.imageUrl || '');
 
           return {
             id: card.id || `card-${cIdx + 1}`,
@@ -1109,8 +1139,8 @@ export const HubBuilderPage = () => {
               title: b.title || '',
               badge: b.badge || '',
               text: b.text || '',
-              url: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.url || '') : '',
-              imageUrl: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.url || '') : '',
+              url: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.url || b.imageUrl || card.mediaUrl || '') : '',
+              imageUrl: (b.type === 'image' || b.type === 'video') ? sanitizeMediaUrl(b.imageUrl || b.url || card.mediaUrl || '') : '',
               ctaText: b.ctaText || '',
               trialBadge: b.trialBadge || '',
               tutorialUrl: b.tutorialUrl || '',
@@ -1589,8 +1619,13 @@ export const HubBuilderPage = () => {
                                     {/* Image */}
                                     {block.type === 'image' && (
                                       <div className="rounded-lg overflow-hidden border border-slate-700/60 bg-slate-950 h-36 flex items-center justify-center">
-                                        {block.url ? (
-                                          <img src={block.url} alt="Aperçu" className="w-full h-full object-cover" />
+                                        {(block.url || block.imageUrl) ? (
+                                          <img 
+                                            key={block.url || block.imageUrl}
+                                            src={block.url || block.imageUrl} 
+                                            alt="Aperçu" 
+                                            className="w-full h-full object-cover" 
+                                          />
                                         ) : (
                                           <ImageIcon className="w-8 h-8 text-slate-600" />
                                         )}
@@ -1715,10 +1750,9 @@ export const HubBuilderPage = () => {
               {activeBlock.type === 'image' && (
                 <div className="space-y-3">
                   <ImageUploadInput
-                    value={activeBlock.url || ''}
+                    value={activeBlock.url || activeBlock.imageUrl || ''}
                     onChange={(newUrl) => {
-                      updateBlockProp('url', newUrl);
-                      updateBlockProp('imageUrl', newUrl);
+                      updateBlockProps({ url: newUrl, imageUrl: newUrl });
                     }}
                     label="Image du Module"
                     badge="Upload ImgBB Direct"
@@ -1941,6 +1975,19 @@ export const HubBuilderPage = () => {
                   </div>
                 </div>
               )}
+
+              {/* Image Principale du Module (Omnibar) */}
+              <div className="pt-4 border-t border-slate-800 space-y-2">
+                <ImageUploadInput
+                  value={activeCard?.mediaUrl || activeCard?.imageUrl || ''}
+                  onChange={(newUrl) => updateCardMediaUrl(selectedBlockInfo.rowId, selectedBlockInfo.cardId, newUrl)}
+                  label="Image Principale du Module (Omnibar)"
+                  badge="Upload ImgBB Direct"
+                  showPreview={true}
+                  previewHeight="h-24"
+                  helperText="Image de couverture utilisée dans la liste des modules et dans l'Omnibar."
+                />
+              </div>
 
               {/* Configuration de la Route / Lien de Redirection (routeUrl) */}
               <div className="pt-4 border-t border-slate-800 space-y-2">

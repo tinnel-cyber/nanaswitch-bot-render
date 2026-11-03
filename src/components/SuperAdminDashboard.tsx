@@ -1126,7 +1126,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   currentLevel === 4 ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <span>4. App Registry (38 Modules)</span>
+                <span>4. App Registry (27 Modules)</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               </button>
             </div>
@@ -1956,7 +1956,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                       </span>
                     </div>
 
-                    {/* App Registry 38 Modules Edge -> CLIC OUVRE NIVEAU 4 */}
+                    {/* App Registry 27 Modules -> CLIC OUVRE NIVEAU 4 */}
                     <div 
                       onClick={() => {
                         playValidationBeep();
@@ -1975,7 +1975,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                         </div>
                         <div>
                           <h4 className="font-black text-sm text-white group-hover:text-emerald-200 transition">
-                            App Registry (38 Modules Edge)
+                            App Registry (27 Modules)
                           </h4>
                           <p className="text-xs text-slate-300 mt-1">
                             Personnalisation des noms et statuts en direct dans Supabase, Firebase et Cloudflare Edge.
@@ -2781,7 +2781,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             </motion.div>
           )}
 
-          {/* ── NIVEAU 4 : APP REGISTRY & 38 MODULES EDGE ───────────────────────── */}
+          {/* ── NIVEAU 4 : APP REGISTRY & 27 MODULES ───────────────────────── */}
           {currentLevel === 4 && (
             <motion.div
               key="level-4-app-registry"
@@ -2806,7 +2806,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                   </button>
                   <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Console App Registry • 38 Modules Edge Synchronisés</span>
+                    <span>Console App Registry • 27 Modules Synchronisés</span>
                   </span>
                 </div>
               </div>

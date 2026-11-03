@@ -108,15 +108,6 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     route: '/dashboard/apps/nanagenerator'
   },
   {
-    id: 'app-tinnela',
-    name: 'Tinnela AI Studio & Avatars',
-    taxonomy: 'APPLICATION',
-    category: 'Studio IA',
-    description: 'Générateur de porte-paroles et avatars vidéo réalistes.',
-    view: 'APPS_TINNELA',
-    route: '/dashboard/apps/tinnela'
-  },
-  {
     id: 'app-ultimate-funnel',
     name: 'Ultimate Funnel Builder',
     taxonomy: 'APPLICATION',
@@ -158,8 +149,8 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     taxonomy: 'APPLICATION',
     category: 'Marketplace',
     description: 'Place de marché nationale et annuaire des marchands vérifiés.',
-    view: 'NANAMARKET',
-    route: '/nanamarket'
+    view: 'MARKET_DIRECTORY',
+    route: '/dashboard/market'
   },
   {
     id: 'app-webinar',
@@ -178,15 +169,6 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     description: 'Signature électronique légale de contrats de vente et partenariats.',
     view: 'DOCUSIGN',
     route: '/docusign'
-  },
-  {
-    id: 'app-invoices-orders',
-    name: 'Bons de Commande & Devis / Projets',
-    taxonomy: 'APPLICATION',
-    category: 'Facturation',
-    description: 'Édition professionnelle de bons de commande et propositions commerciales.',
-    view: 'INVOICES',
-    route: '/invoices'
   },
 
   // --- SERVICES ---
@@ -207,33 +189,6 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     description: 'Sélectionnez, prévisualisez et construisez le thème pour votre vitrine e-commerce.',
     view: 'STUDIO',
     route: '/dashboard/vitrine'
-  },
-  {
-    id: 'srv-sms',
-    name: 'Campagnes Marketing & SMS Direct',
-    taxonomy: 'SERVICE',
-    category: 'Communication',
-    description: 'Envoi groupé de SMS promotionnels et notifications transactionnelles.',
-    view: 'SMS_MARKETING',
-    route: '/sms'
-  },
-  {
-    id: 'srv-delivery',
-    name: 'Livraisons & Suivi Heatmap en Direct',
-    taxonomy: 'SERVICE',
-    category: 'Logistique',
-    description: 'Carte interactive des livreurs et géolocalisation des colis en temps réel.',
-    view: 'DELIVERY_TRACKING',
-    route: '/deliveries'
-  },
-  {
-    id: 'srv-payment',
-    name: 'Passerelles de Paiement Mobile Money',
-    taxonomy: 'SERVICE',
-    category: 'Finances',
-    description: 'Encaissement Wave, Orange Money, MTN MoMo, Moov & Cartes bancaires.',
-    view: 'PAYMENT_GATEWAYS',
-    route: '/payments'
   },
   {
     id: 'srv-partner',
@@ -280,17 +235,8 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     view: 'KYC_VERIFICATION',
     route: '/kyc'
   },
-  {
-    id: 'srv-vip-support',
-    name: 'Conciergerie & Support VIP WhatsApp',
-    taxonomy: 'SERVICE',
-    category: 'Assistance',
-    description: 'Assistance prioritaire dédiée 7j/7 pour les marchands et formateurs.',
-    view: 'VIP_SUPPORT',
-    route: '/vip-support'
-  },
 
-  // --- 8 MODULES ---
+  // --- MODULES ---
   {
     id: 'mod-inventory',
     name: 'Stock & Inventaire Intelligent',
@@ -301,31 +247,13 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     route: '/inventory'
   },
   {
-    id: 'mod-invoices',
-    name: 'Factures, Reçus & Devis Automatiques',
-    taxonomy: 'MODULE',
-    category: 'Comptabilité',
-    description: 'Génération conforme de reçus thermiques et factures PDF.',
-    view: 'INVOICES',
-    route: '/invoices'
-  },
-  {
     id: 'mod-debts',
     name: 'Gestion des Dettes (Ardoises clients)',
     taxonomy: 'MODULE',
     category: 'Trésorerie',
     description: 'Carnet de crédits clients, échéanciers et relances WhatsApp en 1 clic.',
-    view: 'CUSTOMERS',
-    route: '/debts'
-  },
-  {
-    id: 'mod-cash-closing',
-    name: 'Clôture de Caisse & Rapport Z',
-    taxonomy: 'MODULE',
-    category: 'Comptabilité',
-    description: 'Arrêté comptable journalier, réconciliation espèces/mobile money et export Z.',
-    view: 'CASH_REGISTER_CLOSING',
-    route: '/cash-closing'
+    view: 'DEBT_BOOK',
+    route: '/dashboard/dettes'
   },
   {
     id: 'mod-analytics',
@@ -333,8 +261,8 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     taxonomy: 'MODULE',
     category: 'Statistiques',
     description: 'Graphiques de chiffre d\'affaires, marges bénéficiaires et produits phares.',
-    view: 'ANALYTICS',
-    route: '/analytics'
+    view: 'REPORTS',
+    route: '/dashboard/rapports'
   },
   {
     id: 'mod-team-employees',
@@ -350,8 +278,8 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     taxonomy: 'MODULE',
     category: 'Documents',
     description: 'Générateur de CV professionnels, attestations et portfolios vendeurs.',
-    view: 'CVPRO',
-    route: '/cvpro'
+    view: 'CV_CREATOR',
+    route: '/dashboard/cv'
   },
   {
     id: 'mod-pixels-crm',
@@ -362,7 +290,7 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     actionId: 'TRACKING_PIXELS_CRM'
   },
 
-  // --- 6 OUTILS ---
+  // --- OUTILS ---
   {
     id: 'tool-scanner',
     name: 'Scanner Code-Barres & Douchette USB/Caméra',
@@ -373,15 +301,6 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     route: '/scanner'
   },
   {
-    id: 'tool-printer',
-    name: 'Imprimante Ticket Thermique & POS Config',
-    taxonomy: 'OUTIL',
-    category: 'Matériel POS',
-    description: 'Configuration des imprimantes Bluetooth 58mm/80mm et tiroir-caisse.',
-    view: 'RECEIPT_PRINTER',
-    route: '/printer'
-  },
-  {
     id: 'tool-excel',
     name: 'Import & Export de Fichiers Excel / CSV',
     taxonomy: 'OUTIL',
@@ -389,24 +308,6 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     description: 'Importation en masse de catalogues produits et export comptable.',
     view: 'EXCEL_IMPORT',
     route: '/excel'
-  },
-  {
-    id: 'tool-pdf',
-    name: 'Générateur & Visionneuse PDF Suite',
-    taxonomy: 'OUTIL',
-    category: 'Impression',
-    description: 'Compilation instantanée de catalogues PDF et reçus imprimables HD.',
-    view: 'PDF_SUITE',
-    route: '/pdf'
-  },
-  {
-    id: 'tool-security',
-    name: 'Sécurité, Sauvegarde & Signatures Certifiées',
-    taxonomy: 'OUTIL',
-    category: 'Sécurité',
-    description: 'Chiffrement des transactions, sauvegarde cloud et certificats officiels.',
-    view: 'SECURITY_BACKUP',
-    route: '/security'
   },
   {
     id: 'tool-gateway',

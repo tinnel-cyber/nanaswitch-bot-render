@@ -375,7 +375,7 @@ export const AppsSearchPanel: React.FC<AppsSearchPanelProps> = ({
                 🔍 Saisissez un mot-clé ou choisissez une catégorie à gauche
               </p>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Recherchez instantanément par nom de module (ex: Caisse, Nanagénérateur, WhatsApp, Stock, Devis) ou parcourez nos 35+ mini-applications par thématique.
+                Recherchez instantanément par nom de module (ex: Caisse, Nanagénérateur, WhatsApp, Stock, Devis) ou parcourez le catalogue officiel par thématique.
               </p>
             </div>
           </div>

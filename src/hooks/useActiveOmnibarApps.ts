@@ -1,7 +1,7 @@
 /**
  * HOOK DE SYNCHRONISATION TEMPS RÉEL FIREBASE RTDB
  * Écoute le nœud /tenants/{tenantId}/modules/ et fusionne dynamiquement
- * les 14 modules officiels du catalogue statique avec l'état d'activation Firebase.
+ * les 27 modules officiels du catalogue statique avec l'état d'activation Firebase.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -35,7 +35,7 @@ export interface UseActiveOmnibarAppsResult {
 }
 
 /**
- * Fusionne le catalogue officiel des 36+ applications, services, modules et outils avec le dictionnaire Firebase RTDB
+ * Fusionne le catalogue officiel des 27 applications, services, modules et outils avec le dictionnaire Firebase RTDB
  */
 function mergeModulesWithRemoteData(
   remoteData: Record<string, any> | null | undefined

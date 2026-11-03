@@ -25,7 +25,10 @@ import {
   ShieldAlert, 
   CheckCircle,
   Clock,
-  ArrowUpRight
+  ArrowUpRight,
+  LayoutDashboard,
+  Store,
+  ShoppingBag
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 import { auth } from '../../firebase';
@@ -139,10 +142,14 @@ export const NaNaSwitchLandingPage: React.FC<NaNaSwitchLandingPageProps> = ({
     return DEMO_COUNTRIES.find(c => c.code === selectedCountryCode) || DEMO_COUNTRIES[0];
   }, [selectedCountryCode]);
 
-  // Redirections internes fluides
-  const handleGoToConsole = useCallback(() => {
+  // 1. CHEMIN 1 : ESPACE BYOK (Ceux qui ont leur propre client API & parcours d'insertion des clés)
+  const handleGoToByok = useCallback(() => {
     playValidationBeep();
-    const destination = auth.currentUser ? '/nana-switch-app' : '/nana-switch/auth';
+    const target = '/nana-switch/connectors';
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('nanaswitch_auth_redirect', target);
+    }
+    const destination = auth.currentUser ? target : '/nana-switch/auth';
     if (onNavigate) {
       onNavigate(destination);
     } else if (onNavigateToConsole) {
@@ -151,6 +158,20 @@ export const NaNaSwitchLandingPage: React.FC<NaNaSwitchLandingPageProps> = ({
       window.location.href = destination;
     }
   }, [onNavigateToConsole, onNavigate]);
+
+  // 2. CHEMIN 2 : ESPACE MARCHAND (Tableau de bord & création de l'application boutique)
+  const handleGoToMerchant = useCallback(() => {
+    playTapBeep();
+    const destination = '/dashboard';
+    if (onNavigate) {
+      onNavigate(destination);
+    } else if (typeof window !== 'undefined') {
+      window.location.href = destination;
+    }
+  }, [onNavigate]);
+
+  // Redirection générique vers la console (alias BYOK)
+  const handleGoToConsole = handleGoToByok;
 
   const handleGoToAuth = useCallback(() => {
     playTapBeep();
@@ -284,25 +305,26 @@ exit;`
             </a>
           </nav>
 
-          {/* Boutons d'Action Droite */}
+          {/* Boutons d'Action Droite : 2 Chemins Majeurs */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={handleGoToAuth}
-              className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-white text-slate-700 hover:text-blue-600 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              onClick={handleGoToMerchant}
+              className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 hover:border-emerald-400 bg-white hover:bg-emerald-50/50 text-slate-800 hover:text-emerald-700 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
+              title="Ouvrir l'Espace Marchand et le tableau de bord"
             >
-              <Key className="w-3.5 h-3.5 text-blue-600" />
-              <span className="sm:hidden">Connexion</span>
-              <span className="hidden sm:inline">Se connecter / S&apos;inscrire</span>
+              <LayoutDashboard className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Espace Marchand</span>
             </button>
 
             <button
               type="button"
-              onClick={handleGoToConsole}
-              className="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md shadow-blue-600/25 transition cursor-pointer active:scale-95 flex items-center gap-1.5"
+              onClick={handleGoToByok}
+              className="px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-md shadow-blue-600/25 transition cursor-pointer active:scale-95 flex items-center gap-1.5"
+              title="Espace BYOK : Insertion des clés API et console Cloud"
             >
-              <span className="hidden sm:inline">Accéder au Cockpit</span>
-              <span className="sm:hidden">Cockpit</span>
+              <Key className="w-3.5 h-3.5" />
+              <span>Espace BYOK</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -342,34 +364,86 @@ exit;`
               NaNaSwitch Cloud est le routeur SaaS intelligent qui permet aux entrepreneurs et développeurs de connecter leurs propres clés d&apos;agrégateurs et services externes sur un Nœud Cloud à IP Fixe, avec bascule anti-panne en 0ms et Extension Isolée.
             </p>
 
-            {/* 3 Grands Boutons CTA */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-4">
-              <button
-                type="button"
-                onClick={handleGoToConsole}
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-4 rounded-xl shadow-xl shadow-blue-600/25 transition cursor-pointer active:scale-98 flex items-center justify-center gap-2 text-sm sm:text-base"
-              >
-                <Zap className="w-5 h-5 fill-white" />
-                <span>Accéder au Cockpit NaNaSwitch Cloud →</span>
-              </button>
+            {/* 2 CHEMINS MAJEURS : ESPACE BYOK & ESPACE MARCHAND */}
+            <div className="pt-4 max-w-4xl mx-auto space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                
+                {/* CHEMIN 1 : ESPACE BYOK */}
+                <div 
+                  onClick={handleGoToByok}
+                  className="group relative p-6 rounded-2xl bg-gradient-to-br from-blue-900 via-slate-900 to-indigo-950 text-white border-2 border-blue-500/50 hover:border-blue-400 shadow-xl shadow-blue-500/10 transition-all duration-300 cursor-pointer hover:-translate-y-1"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider bg-blue-500/20 text-cyan-300 border border-blue-400/40">
+                      <Key className="w-3.5 h-3.5 text-cyan-400" />
+                      Chemin 1 • Clients Autonomes
+                    </span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                  </div>
+                  <h3 className="text-xl font-black text-white group-hover:text-cyan-200 transition-colors flex items-center gap-2">
+                    <span>Espace BYOK</span>
+                    <ArrowRight className="w-5 h-5 text-cyan-400 group-hover:translate-x-1.5 transition-transform" />
+                  </h3>
+                  <p className="text-xs text-slate-300 font-medium leading-relaxed mt-2">
+                    Pour ceux qui ont déjà leur propre compte client agrégateurs (CinetPay, Wave, Orange, LigdiCash...). Entrez directement dans la console pour le parcours d&apos;insertion de vos clés API.
+                  </p>
+                  <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleGoToByok(); }}
+                      className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <Key className="w-4 h-4" />
+                      <span>Accéder à l&apos;Espace BYOK (Clés API) →</span>
+                    </button>
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleGoToAuth}
-                className="w-full sm:w-auto bg-white hover:bg-blue-50 text-slate-800 border-2 border-slate-300 hover:border-blue-600 font-bold px-6 py-4 rounded-xl transition cursor-pointer active:scale-98 flex items-center justify-center gap-2 text-sm sm:text-base"
-              >
-                <Key className="w-5 h-5 text-blue-600" />
-                <span>Se connecter / S&apos;inscrire</span>
-              </button>
+                {/* CHEMIN 2 : ESPACE MARCHAND */}
+                <div 
+                  onClick={handleGoToMerchant}
+                  className="group relative p-6 rounded-2xl bg-white text-slate-900 border-2 border-emerald-500/40 hover:border-emerald-500 shadow-xl shadow-emerald-500/5 transition-all duration-300 cursor-pointer hover:-translate-y-1"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-300">
+                      <Store className="w-3.5 h-3.5 text-emerald-600" />
+                      Chemin 2 • Vente &amp; E-Commerce
+                    </span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors flex items-center gap-2">
+                    <span>Espace Marchand</span>
+                    <ArrowRight className="w-5 h-5 text-emerald-600 group-hover:translate-x-1.5 transition-transform" />
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium leading-relaxed mt-2">
+                    Ouvrez l&apos;espace de création de votre application et accédez directement à votre tableau de bord marchand tout-en-un (caisse POS, stocks, boutique et encaissement).
+                  </p>
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleGoToMerchant(); }}
+                      className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      <span>Ouvrir l&apos;Espace Marchand (Dashboard) →</span>
+                    </button>
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleGoToExtension}
-                className="w-full sm:w-auto bg-white hover:bg-blue-50 text-blue-600 border-2 border-blue-600 font-bold px-6 py-4 rounded-xl transition cursor-pointer active:scale-98 flex items-center justify-center gap-2 text-sm sm:text-base"
-              >
-                <Puzzle className="w-5 h-5 text-blue-600" />
-                <span>Extension Isolée</span>
-              </button>
+              </div>
+
+              {/* Raccourci secondaire Extension */}
+              <div className="flex items-center justify-center gap-3 pt-2 text-xs font-bold text-slate-500">
+                <span>Besoin d&apos;intégrer NaNaSwitch dans un site existant ?</span>
+                <button
+                  type="button"
+                  onClick={handleGoToExtension}
+                  className="text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Puzzle className="w-3.5 h-3.5" />
+                  <span>Voir l&apos;Extension Isolée →</span>
+                </button>
+              </div>
             </div>
 
             {/* Badges de Réassurance en Ligne */}
@@ -1048,14 +1122,23 @@ exit;`
             <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto">
               Configurez votre premier connecteur en 2 minutes chrono dans le Cockpit Central. Aucune carte bancaire requise pour débuter.
             </p>
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={handleGoToConsole}
-                className="px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs sm:text-sm shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95 inline-flex items-center gap-2"
+                onClick={handleGoToByok}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs sm:text-sm shadow-lg shadow-blue-600/25 transition cursor-pointer active:scale-95 inline-flex items-center justify-center gap-2"
               >
-                <Zap className="w-4 h-4 fill-white" />
-                <span>Ouvrir la Console NaNaSwitch Cloud</span>
+                <Key className="w-4 h-4" />
+                <span>Espace BYOK (Insertion Clés) →</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGoToMerchant}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-slate-800 border-2 border-emerald-400 font-extrabold text-xs sm:text-sm transition cursor-pointer active:scale-95 inline-flex items-center justify-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4 text-emerald-600" />
+                <span>Espace Marchand (Dashboard) →</span>
               </button>
             </div>
           </div>
