@@ -22,7 +22,9 @@ export type OfflineActionType =
   | 'SAVE_PRODUCT'
   | 'DELETE_PRODUCT'
   | 'SAVE_CART'
-  | 'RTDB_MUTATION';
+  | 'RTDB_MUTATION'
+  | 'CREATE_SALE'
+  | 'UPDATE_STOCK';
 
 export interface OfflineSyncItem {
   id: string;
@@ -37,7 +39,7 @@ export interface OfflineSyncItem {
 }
 
 const DB_NAME = 'nanasore_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let isSyncingQueue = false;
@@ -82,6 +84,13 @@ export function openOfflineDB(): Promise<IDBDatabase> {
           const queueStore = db.createObjectStore('offlineSyncQueue', { keyPath: 'id' });
           queueStore.createIndex('status', 'status', { unique: false });
           queueStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
+        // 5. Table Ventes (Sales) POS Caisse Local-First
+        if (!db.objectStoreNames.contains('sales')) {
+          const saleStore = db.createObjectStore('sales', { keyPath: 'id' });
+          saleStore.createIndex('storeId', 'storeId', { unique: false });
+          saleStore.createIndex('timestamp', 'timestamp', { unique: false });
         }
       };
 
@@ -435,6 +444,118 @@ export async function clearCartOffline(storeId: string): Promise<boolean> {
 }
 
 // =========================================================================
+// GESTION HORS-LIGNE DES VENTES & CAISSE POS (LOCAL-FIRST)
+// =========================================================================
+
+/**
+ * Enregistre une vente localement dans IndexedDB (0ms) avec miroir localStorage
+ */
+export async function saveSaleOffline(sale: any, storeId: string): Promise<boolean> {
+  const safeId = storeId || sale.storeId || 'default_store';
+  const saleId = sale.id || `sale-${Date.now()}`;
+  const localSale = { ...sale, id: saleId, storeId: safeId };
+
+  // 1. Miroir immédiat LocalStorage pour affichage instantané dans l'historique
+  try {
+    const key = `nana_tenant_${safeId}_sales`;
+    const raw = localStorage.getItem(key);
+    const list: any[] = raw ? JSON.parse(raw) : [];
+    const updated = [localSale, ...list.filter((s: any) => s.id !== saleId)];
+    localStorage.setItem(key, JSON.stringify(updated.slice(0, 300)));
+  } catch (e) {
+    console.warn('[OfflineDB] Erreur miroir localStorage vente:', e);
+  }
+
+  // 2. Persistance dans IndexedDB table 'sales'
+  try {
+    const db = await openOfflineDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('sales', 'readwrite');
+      const store = tx.objectStore('sales');
+      const req = store.put(localSale);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    return true;
+  } catch (err) {
+    console.warn('[OfflineDB] Erreur écriture vente IndexedDB:', err);
+    return false;
+  }
+}
+
+/**
+ * Récupère les ventes enregistrées localement dans IndexedDB
+ */
+export async function getSalesOffline(storeId: string): Promise<any[]> {
+  const safeId = storeId || 'default_store';
+  try {
+    const db = await openOfflineDB();
+    const sales = await new Promise<any[]>((resolve, reject) => {
+      const tx = db.transaction('sales', 'readonly');
+      const store = tx.objectStore('sales');
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    return sales.filter((s) => !safeId || s.storeId === safeId);
+  } catch (err) {
+    console.warn('[OfflineDB] Erreur lecture sales IndexedDB, repli localStorage:', err);
+    try {
+      const raw = localStorage.getItem(`nana_tenant_${safeId}_sales`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+/**
+ * Enfile une vente POS et ses déductions de stock associées pour le Web Worker
+ * Tout s'exécute en local (<5ms) sans aucune écriture unitaire sur le réseau.
+ */
+export async function queuePosSaleBatch(
+  sale: any,
+  updatedProducts: any[],
+  storeId: string
+): Promise<void> {
+  const safeStoreId = storeId || sale.storeId || 'default_store';
+
+  // 1. Sauvegarder la vente en local (IndexedDB + LocalStorage)
+  await saveSaleOffline(sale, safeStoreId);
+
+  // 2. Enfiler la vente dans offlineSyncQueue pour le Worker
+  await queueOfflineMutation({
+    type: 'CREATE_SALE',
+    storeId: safeStoreId,
+    payload: sale,
+  });
+
+  // 3. Enfiler chaque produit mis à jour en local
+  if (Array.isArray(updatedProducts) && updatedProducts.length > 0) {
+    for (const prod of updatedProducts) {
+      await saveProductOffline(prod, safeStoreId);
+      await queueOfflineMutation({
+        type: 'UPDATE_STOCK',
+        storeId: safeStoreId,
+        payload: prod,
+      });
+    }
+  }
+
+  // 4. Déclencher le signal de synchronisation pour le Worker d'arrière-plan
+  triggerWorkerSync();
+}
+
+/**
+ * Déclenche l'événement de synchronisation pour réveiller le Web Worker ou le planificateur
+ */
+export function triggerWorkerSync(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nana_trigger_worker_sync'));
+  }
+}
+
+// =========================================================================
 // FILE DE SYNCHRONISATION HORS-LIGNE (OFFLINE SYNC QUEUE)
 // =========================================================================
 
@@ -561,15 +682,16 @@ export async function updateQueueItem(item: OfflineSyncItem): Promise<void> {
 }
 
 // =========================================================================
-// MOTEUR DE RECONNEXION & DÉPILAGE DE LA FILE VERS FIREBASE
+// MOTEUR DE RECONNEXION & DÉPILAGE PAR LOTS (WORKER BATCHING VERS FIREBASE)
 // =========================================================================
 
 /**
- * Dépile et synchronise toutes les opérations en attente vers Firebase
+ * Dépile et synchronise toutes les opérations en attente vers Firebase par lots atomiques
+ * (WriteBatch de 20 à 50 opérations pour protéger drastiquement les quotas Firestore)
  */
-export async function flushOfflineSyncQueue(): Promise<{ synced: number; failed: number }> {
+export async function flushOfflineSyncQueue(maxBatchSize = 50): Promise<{ synced: number; failed: number }> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    console.log('[OfflineSync] Toujours hors-ligne, synchronisation reportée.');
+    console.log('[OfflineSync] Mode hors-ligne actif, synchronisation reportée.');
     return { synced: 0, failed: 0 };
   }
 
@@ -588,75 +710,45 @@ export async function flushOfflineSyncQueue(): Promise<{ synced: number; failed:
       return { synced: 0, failed: 0 };
     }
 
-    console.log(`[OfflineSync] Reconnexion détectée : Dépilage de ${queue.length} opération(s) vers Firebase...`);
+    console.log(`[OfflineSync Batching] Dépilage de ${queue.length} opération(s) par lots de max ${maxBatchSize}...`);
 
-    // Import dynamique pour éviter tout problème de cycle de dépendance
-    const { persistCustomerOrder, deleteCustomerOrder, persistInventoryProduct, deleteStoreDocument } =
-      await import('../utils/firestoreService');
+    // Import dynamique pour éviter tout cycle de dépendance
+    const { commitFirestoreBatch } = await import('../utils/firestoreService');
 
-    for (const item of queue) {
+    // Découpage en tranches de 20 à 50 opérations
+    for (let i = 0; i < queue.length; i += maxBatchSize) {
+      const chunk = queue.slice(i, i + maxBatchSize);
       try {
-        switch (item.type) {
-          case 'CREATE_ORDER':
-          case 'UPDATE_ORDER': {
-            await persistCustomerOrder(item.payload, item.storeId);
-            await removeQueueItem(item.id);
+        const batchResult = await commitFirestoreBatch(chunk);
+        if (batchResult.success) {
+          for (const syncedId of batchResult.syncedIds) {
+            await removeQueueItem(syncedId);
             synced++;
-            break;
-          }
-
-          case 'DELETE_ORDER': {
-            await deleteCustomerOrder(item.payload.id || item.payload, item.storeId);
-            await removeQueueItem(item.id);
-            synced++;
-            break;
-          }
-
-          case 'SAVE_PRODUCT': {
-            await persistInventoryProduct(item.payload, item.storeId);
-            await removeQueueItem(item.id);
-            synced++;
-            break;
-          }
-
-          case 'DELETE_PRODUCT': {
-            const prodId = item.payload.id || item.payload;
-            await deleteStoreDocument('inventory', prodId, item.storeId);
-            await removeQueueItem(item.id);
-            synced++;
-            break;
-          }
-
-          case 'SAVE_CART': {
-            // Cart synced
-            await removeQueueItem(item.id);
-            synced++;
-            break;
-          }
-
-          default: {
-            await removeQueueItem(item.id);
-            synced++;
-            break;
           }
         }
-      } catch (err: any) {
-        console.warn(`[OfflineSync] Échec temporaire sync item ${item.id}:`, err?.message || err);
-        failed++;
-        item.retryCount = (item.retryCount || 0) + 1;
-        item.lastAttempt = Date.now();
-        item.error = err?.message || String(err);
 
-        // Si plus de 5 tentatives infructueuses, marquer en échec pour ne pas bloquer les autres
-        if (item.retryCount > 5) {
-          item.status = 'failed';
+        if (batchResult.failedIds.length > 0) {
+          for (const failedId of batchResult.failedIds) {
+            failed++;
+            const item = chunk.find((c) => c.id === failedId);
+            if (item) {
+              item.retryCount = (item.retryCount || 0) + 1;
+              item.lastAttempt = Date.now();
+              if (item.retryCount > 5) {
+                item.status = 'failed';
+              }
+              await updateQueueItem(item);
+            }
+          }
         }
-        await updateQueueItem(item);
+      } catch (chunkErr: any) {
+        console.warn('[OfflineSync] Erreur d\'écriture lot :', chunkErr?.message || chunkErr);
+        failed += chunk.length;
       }
     }
 
     if (synced > 0) {
-      console.log(`[OfflineSync] Synchronisation réussie : ${synced} opération(s) envoyée(s) au Cloud.`);
+      console.log(`[OfflineSync] Synchronisation par lots réussie : ${synced} opération(s) archivée(s) sur le Cloud.`);
       try {
         window.dispatchEvent(
           new CustomEvent('nana_offline_sync_completed', {

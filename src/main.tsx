@@ -17,10 +17,12 @@ import { ThemeProvider } from './context/ThemeContext';
 import { TenantProvider } from './context/TenantContext';
 import { runAutomatedStorageGC } from './utils/storageManager';
 import { initOfflineSyncListeners } from './services/offlineSyncService';
+import { initOfflineSyncWorker } from './workers/offlineSyncWorkerClient';
 
-// Initialisation globale de la synchronisation hors-ligne IndexedDB & écouteur de reconnexion
+// Initialisation globale de la synchronisation hors-ligne IndexedDB & Worker de Batching
 if (typeof window !== 'undefined') {
   initOfflineSyncListeners();
+  initOfflineSyncWorker();
 }
 
 // 1. Bouclier Anti-Crash Global : Interception des erreurs d'imports dynamiques Vite et rejets asynchrones

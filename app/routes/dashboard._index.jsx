@@ -15,7 +15,22 @@ export function meta() {
   ];
 }
 
+// Cache mémoire serveur pour les requêtes de statut Supabase (3 minutes TTL)
+let dashboardOrgMemoryCache = { data: null, expiry: 0 };
+const DASHBOARD_CACHE_TTL_MS = 3 * 60 * 1000;
+
 export async function loader() {
+  if (dashboardOrgMemoryCache.data && dashboardOrgMemoryCache.expiry > Date.now()) {
+    return json(
+      { supabaseStatus: dashboardOrgMemoryCache.data },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=30, s-maxage=120, stale-while-revalidate=300",
+          "X-Nanasore-Cache": "HIT-SERVER-MEMORY",
+        },
+      }
+    );
+  }
   let supabaseStatus = {
     connected: false,
     count: 0,
@@ -38,7 +53,20 @@ export async function loader() {
     supabaseStatus.error = err instanceof Error ? err.message : "Erreur connexion Supabase";
   }
 
-  return json({ supabaseStatus });
+  dashboardOrgMemoryCache = {
+    data: supabaseStatus,
+    expiry: Date.now() + DASHBOARD_CACHE_TTL_MS,
+  };
+
+  return json(
+    { supabaseStatus },
+    {
+      headers: {
+        "Cache-Control": "private, max-age=30, s-maxage=120, stale-while-revalidate=300",
+        "X-Nanasore-Cache": "MISS-POPULATED",
+      },
+    }
+  );
 }
 
 export default function DashboardIndexRoute() {

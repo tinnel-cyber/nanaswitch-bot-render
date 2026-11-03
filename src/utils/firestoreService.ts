@@ -12,6 +12,7 @@ import {
   updateDoc,
   increment,
   runTransaction,
+  writeBatch,
   Unsubscribe,
   DocumentData,
   QuerySnapshot
@@ -20,6 +21,8 @@ import { db, auth, rtdb } from './firebase';
 import {
   saveProductOffline,
   saveOrderOffline,
+  saveSaleOffline,
+  triggerWorkerSync,
   deleteProductOffline,
   deleteOrderOffline,
   queueOfflineMutation,
@@ -454,12 +457,32 @@ export async function saveStoreDocument<T extends { id: string }>(
 
       // Sauvegarde résiliente dans IndexedDB
       saveProductOffline(securedPayload, tenantId).catch(() => {});
-    } else if (collectionName === 'orders' || collectionName === 'sales') {
+    } else if (collectionName === 'sales') {
+      // Sauvegarde résiliente de la vente dans IndexedDB (table 'sales')
+      saveSaleOffline(securedPayload, tenantId).catch(() => {});
+    } else if (collectionName === 'orders') {
       // Sauvegarde résiliente dans IndexedDB
       saveOrderOffline(securedPayload, tenantId).catch(() => {});
     }
   } catch (e) {
     console.error(`[LOCAL CACHE] Erreur écriture cache pour ${collectionName}:`, e);
+  }
+
+  // PROTECTION DES QUOTAS & LOCAL-FIRST : Les ventes de la caisse (POS) sont déléguées au Worker Batching
+  // Interdiction formelle d'écriture unitaire directe dans Firestore pour chaque clic de vente.
+  if (collectionName === 'sales') {
+    queueOfflineMutation({
+      type: 'CREATE_SALE',
+      storeId: tenantId,
+      payload: securedPayload,
+    }).catch(() => {});
+    triggerWorkerSync();
+
+    return {
+      success: true,
+      id: docId,
+      storeId: tenantId,
+    };
   }
 
   // 1.bis. En mode hors-ligne : enregistrement dans la file de synchronisation sans bloquer
@@ -470,7 +493,7 @@ export async function saveStoreDocument<T extends { id: string }>(
         storeId: tenantId,
         payload: securedPayload,
       }).catch(() => {});
-    } else if (collectionName === 'orders' || collectionName === 'sales') {
+    } else if (collectionName === 'orders') {
       queueOfflineMutation({
         type: 'CREATE_ORDER',
         storeId: tenantId,
@@ -487,14 +510,6 @@ export async function saveStoreDocument<T extends { id: string }>(
   // 2. Sauvegarde dans l'arborescence étanche du tenant dans Firestore
   try {
     await setDoc(doc(db, 'stores', tenantId, subcollection, docId), securedPayload, { merge: true });
-    // Si 'sales', on sauvegarde également un doublon sous 'sales' pour rétro-compatibilité
-    if (collectionName === 'sales') {
-      try {
-        await setDoc(doc(db, 'stores', tenantId, 'sales', docId), securedPayload, { merge: true });
-      } catch (e) {
-        // Optionnel
-      }
-    }
     console.log(`[FIRESTORE WRITE] Enregistré dans /${pathForWrite}`);
   } catch (error) {
     console.warn(`[FIRESTORE WRITE NOTICE] Sauvegarde ${pathForWrite} en attente (mise en file offlineSyncQueue) :`, error);
@@ -504,7 +519,7 @@ export async function saveStoreDocument<T extends { id: string }>(
         storeId: tenantId,
         payload: securedPayload,
       }).catch(() => {});
-    } else if (collectionName === 'orders' || collectionName === 'sales') {
+    } else if (collectionName === 'orders') {
       queueOfflineMutation({
         type: 'CREATE_ORDER',
         storeId: tenantId,
@@ -518,6 +533,127 @@ export async function saveStoreDocument<T extends { id: string }>(
     id: docId,
     storeId: tenantId,
   };
+}
+
+/**
+ * Exécute un lot d'opérations Firestore atomique via WriteBatch
+ * Permet de grouper jusqu'à 50 opérations en un seul appel réseau
+ * pour éliminer les écritures unitaires répétitives et protéger les quotas.
+ */
+export async function commitFirestoreBatch(
+  items: Array<{
+    id: string;
+    type: string;
+    storeId: string;
+    payload: any;
+  }>
+): Promise<{ success: boolean; syncedIds: string[]; failedIds: string[] }> {
+  if (!items || items.length === 0) {
+    return { success: true, syncedIds: [], failedIds: [] };
+  }
+
+  const batch = writeBatch(db);
+  const validBatchItems: Array<{ id: string; storeId: string; type: string; payload: any }> = [];
+
+  for (const item of items) {
+    const tenantId = resolveTenantId(item.storeId);
+    if (!tenantId) continue;
+
+    switch (item.type) {
+      case 'CREATE_SALE': {
+        const sale = item.payload;
+        const saleId = sale.id || `sale-${Date.now()}`;
+        const ref = doc(db, 'stores', tenantId, 'sales', saleId);
+        const data = cleanFirestoreData({
+          ...sale,
+          id: saleId,
+          storeId: tenantId,
+          recordType: 'sale',
+          updatedAt: new Date().toISOString()
+        });
+        batch.set(ref, data, { merge: true });
+        validBatchItems.push(item);
+        break;
+      }
+
+      case 'UPDATE_STOCK':
+      case 'SAVE_PRODUCT': {
+        const product = item.payload;
+        const prodId = product.id;
+        if (!prodId) continue;
+        const ref = doc(db, 'stores', tenantId, 'inventory', prodId);
+        const data = cleanFirestoreData({
+          ...product,
+          id: prodId,
+          storeId: tenantId,
+          updatedAt: new Date().toISOString()
+        });
+        batch.set(ref, data, { merge: true });
+        validBatchItems.push(item);
+        break;
+      }
+
+      case 'CREATE_ORDER':
+      case 'UPDATE_ORDER': {
+        const order = item.payload;
+        const orderId = order.id;
+        if (!orderId) continue;
+        const ref = doc(db, 'stores', tenantId, 'orders', orderId);
+        const data = cleanFirestoreData({
+          ...order,
+          id: orderId,
+          storeId: tenantId,
+          recordType: 'customer_order',
+          updatedAt: new Date().toISOString()
+        });
+        batch.set(ref, data, { merge: true });
+        validBatchItems.push(item);
+        break;
+      }
+
+      case 'DELETE_PRODUCT': {
+        const prodId = item.payload.id || item.payload;
+        if (!prodId) continue;
+        const ref = doc(db, 'stores', tenantId, 'inventory', prodId);
+        batch.delete(ref);
+        validBatchItems.push(item);
+        break;
+      }
+
+      case 'DELETE_ORDER': {
+        const orderId = item.payload.id || item.payload;
+        if (!orderId) continue;
+        const ref = doc(db, 'stores', tenantId, 'orders', orderId);
+        batch.delete(ref);
+        validBatchItems.push(item);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  if (validBatchItems.length === 0) {
+    return { success: true, syncedIds: items.map(i => i.id), failedIds: [] };
+  }
+
+  try {
+    await batch.commit();
+    console.log(`[FirestoreBatch] Succès : Lot de ${validBatchItems.length} opérations validé en 1 seule écriture !`);
+    return {
+      success: true,
+      syncedIds: validBatchItems.map(i => i.id),
+      failedIds: []
+    };
+  } catch (err: any) {
+    console.error('[FirestoreBatch] Erreur lors du commit du batch :', err);
+    return {
+      success: false,
+      syncedIds: [],
+      failedIds: validBatchItems.map(i => i.id)
+    };
+  }
 }
 
 /**

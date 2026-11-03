@@ -374,7 +374,19 @@ async function startServer() {
     }
   });
 
+  // Cache mémoire serveur pour /api/modules (5 minutes TTL)
+  const serverModulesCache = new Map<string, { data: any; expiry: number }>();
+  const SERVER_MODULES_TTL_MS = 5 * 60 * 1000;
+
   app.get('/api/modules', async (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    const orgId = req.query.organizationId as string;
+    const cacheKey = `modules_${orgId || 'all'}`;
+
+    const cached = serverModulesCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      return res.json(cached.data);
+    }
     try {
       const { supabase } = await import('./app/utils/supabase.server');
       const orgId = req.query.organizationId as string;
@@ -397,7 +409,9 @@ async function startServer() {
         activeBlocks = blocks || [];
       }
 
-      return res.json({ success: true, registry: registry || [], activeBlocks });
+      const payload = { success: true, registry: registry || [], activeBlocks };
+      serverModulesCache.set(cacheKey, { data: payload, expiry: Date.now() + SERVER_MODULES_TTL_MS });
+      return res.json(payload);
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur liste blocs', registry: [], activeBlocks: [] });
     }

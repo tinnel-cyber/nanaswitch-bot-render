@@ -1,3 +1,7 @@
+// Cache serveur en mémoire pour protéger les quotas Supabase (5 minutes de TTL)
+const modulesMemoryCache = new Map<string, { data: any; expiry: number }>();
+const MODULES_CACHE_TTL_MS = 5 * 60 * 1000;
+
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { supabase } from "../../utils/supabase.server";
@@ -70,6 +74,7 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ success: false, error: error.message }, { status: 500 });
     }
 
+    modulesMemoryCache.clear();
     return json({
       success: true,
       message: "Bloc mis à jour avec succès dans le registre Supabase",
@@ -88,6 +93,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const url = new URL(request.url);
     const orgId = url.searchParams.get("organizationId");
+    const cacheKey = `modules_${orgId || "all"}`;
+
+    const cached = modulesMemoryCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) {
+      return json(cached.data, {
+        headers: {
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "X-Nanasore-Cache": "HIT-SERVER-MEMORY",
+        },
+      });
+    }
 
     const { data: registry, error: regError } = await supabase
       .from("app_registry")
@@ -106,7 +122,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
       activeBlocks = blocks || [];
     }
 
-    return json({ success: true, registry: registry || [], activeBlocks });
+    const responseData = { success: true, registry: registry || [], activeBlocks };
+    modulesMemoryCache.set(cacheKey, {
+      data: responseData,
+      expiry: Date.now() + MODULES_CACHE_TTL_MS,
+    });
+
+    return json(responseData, {
+      headers: {
+        "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+        "X-Nanasore-Cache": "MISS-POPULATED",
+      },
+    });
   } catch (err: any) {
     return json({ success: false, error: err.message, registry: [], activeBlocks: [] }, { status: 500 });
   }

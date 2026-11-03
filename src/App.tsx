@@ -200,6 +200,7 @@ import {
   pruneStaleStorageCaches,
   updateSellerModeInFirestore,
 } from './utils/firestoreService';
+import { queuePosSaleBatch } from './services/offlineSyncService';
 import { runAutomatedStorageGC, safeSetItem, safeGetItem, safeRemoveItem } from './utils/storageManager';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from './utils/audio';
 import { isLimitReached, triggerLimitReachedUpsell, triggerProFeatureUpsell, isFreePlan, normalizePlanId, getPlanLimits, triggerUpsellModal, resolveSellerMode, persistSellerModeLocally } from './utils/planFeatures';
@@ -3544,9 +3545,9 @@ export default function App() {
   // "Au relâchement du micro, ajoute automatiquement au ticket un article simulant la phrase : '2 Pains et 1 Lait' (Total: 800 F CFA) avec un bip sonore de validation."
   const handleAddVoiceItems = () => {};
 
-  // Deduct sold products from inventory and persist updated stock to Firestore
-  const deductCartFromInventory = (itemsToDeduct: CartItem[]) => {
-    const currentStoreId = getCurrentStoreId();
+  // Deduct sold products from inventory (Local-First : aucune écriture unitaire sur le réseau)
+  const deductCartFromInventory = (itemsToDeduct: CartItem[]): InventoryProduct[] => {
+    const updatedProducts: InventoryProduct[] = [];
     setInventory((prev) =>
       prev.map((prod) => {
         const sold = itemsToDeduct.find((i) => i.id === prod.id);
@@ -3555,14 +3556,13 @@ export default function App() {
             ...prod,
             stock: Math.max(0, (prod.stock || 0) - sold.quantity),
           };
-          persistInventoryProduct(updatedProd, currentStoreId).catch((err) => {
-            console.warn('[STOCK DEDUCTION] Erreur persistance stock produit vendu :', err);
-          });
+          updatedProducts.push(updatedProd);
           return updatedProd;
         }
         return prod;
       })
     );
+    return updatedProducts;
   };
 
   // Cash payment confirmation
@@ -3596,9 +3596,9 @@ export default function App() {
     };
     sale.integrityHash = generateSaleIntegrityHash(sale);
 
-    deductCartFromInventory(cart);
+    const updatedStock = deductCartFromInventory(cart);
     setSalesHistory((prev) => [sale, ...prev]);
-    persistCompletedSale(sale, currentStoreId);
+    queuePosSaleBatch(sale, updatedStock, currentStoreId).catch(() => {});
     
     playValidationBeep();
     playValidationBeep(); // Double beep
@@ -3639,9 +3639,9 @@ export default function App() {
     };
     sale.integrityHash = generateSaleIntegrityHash(sale);
 
-    deductCartFromInventory(cart);
+    const updatedStock = deductCartFromInventory(cart);
     setSalesHistory((prev) => [sale, ...prev]);
-    persistCompletedSale(sale, currentStoreId);
+    queuePosSaleBatch(sale, updatedStock, currentStoreId).catch(() => {});
     setIsCashModalOpen(false);
 
     // Keep active receipt ready for 1-tap print / reprint
@@ -3771,9 +3771,9 @@ export default function App() {
       casierNumber: currentCasierSession.casierNumber,
     };
     sale.integrityHash = generateSaleIntegrityHash(sale);
-    deductCartFromInventory(cart);
+    const updatedStock = deductCartFromInventory(cart);
     setSalesHistory((prev) => [sale, ...prev]);
-    persistCompletedSale(sale, currentStoreId);
+    queuePosSaleBatch(sale, updatedStock, currentStoreId).catch(() => {});
 
     // Réinitialise le ticket
     setCart([]);
@@ -3884,10 +3884,9 @@ export default function App() {
       casierNumber: currentCasierSession.casierNumber,
     };
     creditSale.integrityHash = generateSaleIntegrityHash(creditSale);
+    const updatedStock = deductCartFromInventory(cart);
     setSalesHistory((prev) => [creditSale, ...prev]);
-    persistCompletedSale(creditSale, currentStoreId);
-
-    deductCartFromInventory(cart);
+    queuePosSaleBatch(creditSale, updatedStock, currentStoreId).catch(() => {});
     setIsCreditModalOpen(false);
     setCart([]);
 
