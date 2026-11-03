@@ -218,9 +218,9 @@ INSERT INTO public.plans (
 ) VALUES (
     'plan-creator-commission',
     'Plan Créateur / Vendeur (Pay-After-Sale / Commission)',
-    'Zéro abonnement mensuel fixe. Paiement après vente avec séquestre Escrow sécurisé et prélèvement de commission sur les ventes réussies.',
+    'Zéro abonnement mensuel fixe. Paiement après vente avec séquestre Escrow sécurisé et prélèvement de commission de 14% sur les ventes réussies.',
     'COMMISSION',
-    10.00,
+    14.00,
     0.00,
     0.00,
     'XOF',
@@ -233,7 +233,7 @@ INSERT INTO public.plans (
         "Encaissement multi-pays Mobile Money (Orange, Wave, Moov, MTN)",
         "Accès complet au Studio Créateur et Campus E-Learning",
         "Gestion des élèves et délivrance de certificats sécurisés",
-        "Protection anti-fraude et déblocage automatisé des fonds"
+        "Protection anti-fraude et déblocage automatisé des fonds (Commission 14%)"
     ]'::jsonb,
     '{
         "maxProducts": 50,
@@ -245,7 +245,7 @@ INSERT INTO public.plans (
         "cvProAllowed": false,
         "escrowProtection": true
     }'::jsonb,
-    '{"escrowEnabled": true, "commissionPercent": 10.0}'::jsonb
+    '{"escrowEnabled": true, "commissionPercent": 14.0}'::jsonb
 )
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name,
@@ -524,42 +524,42 @@ INSERT INTO public.service_commission_rules (
 (
     'srv-escrow-lms',
     'Escrow Cours & Formations LMS',
-    10.00,
+    14.00,
     48,
     100.00,
     'XOF',
     true,
-    'Séquestre sur les inscriptions aux cours et masterclass en ligne. Déblocage sous 48h après validation pédagogique.'
+    'Séquestre sur les inscriptions aux cours et masterclass en ligne. Déblocage sous 48h après validation pédagogique. Commission plateforme : 14%.'
 ),
 (
     'srv-escrow-digital',
     'Escrow Produits Numériques & Fichiers',
-    8.00,
+    14.00,
     24,
     50.00,
     'XOF',
     true,
-    'Séquestre sur la vente de fichiers téléchargeables, e-books et ressources numériques. Déblocage automatique à 24h.'
+    'Séquestre sur la vente de fichiers téléchargeables, e-books et ressources numériques. Déblocage automatique à 24h. Commission plateforme : 14%.'
 ),
 (
     'srv-escrow-webinar',
     'Escrow Billetterie Webinaires & Ateliers',
-    10.00,
+    14.00,
     2,
     150.00,
     'XOF',
     true,
-    'Séquestre sur les tickets d''événements en ligne. Déblocage automatisé 2h après l''heure de fin programmée du webinaire.'
+    'Séquestre sur les tickets d''événements en ligne. Déblocage automatisé 2h après l''heure de fin programmée du webinaire. Commission plateforme : 14%.'
 ),
 (
     'srv-escrow-funnel',
     'Escrow Tunnels de Vente & Offres Spéciales',
-    7.00,
+    14.00,
     48,
     100.00,
     'XOF',
     true,
-    'Séquestre sur les conversions en 1-clic générées via les tunnels de vente. Garantie de conformité et livraison.'
+    'Séquestre sur les conversions en 1-clic générées via les tunnels de vente. Garantie de conformité et livraison. Commission plateforme : 14%.'
 )
 ON CONFLICT (service_code) DO UPDATE SET
     service_name = EXCLUDED.service_name,
