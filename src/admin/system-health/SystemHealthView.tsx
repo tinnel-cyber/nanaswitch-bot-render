@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   Send,
   Radio,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react';
 import { RTDB_SUPER_ADMIN_URL } from '../../services/superAdminService';
 
@@ -27,6 +28,22 @@ interface ServiceStatus {
 export const SystemHealthView: React.FC = () => {
   const [isPinging, setIsPinging] = useState(false);
   const [lastCheck, setLastCheck] = useState<string>(() => new Date().toLocaleTimeString());
+  
+  // Statut diagnostique Supabase (réservé au Super Admin)
+  const [supabaseHealth, setSupabaseHealth] = useState<{
+    loading: boolean;
+    connected: boolean;
+    count: number;
+    error: string | null;
+    latencyMs: number;
+  }>({
+    loading: true,
+    connected: false,
+    count: 0,
+    error: null,
+    latencyMs: 0
+  });
+
   const [services, setServices] = useState<ServiceStatus[]>([
     {
       name: 'Firebase Realtime Database',
@@ -41,6 +58,13 @@ export const SystemHealthView: React.FC = () => {
       status: 'ONLINE',
       latencyMs: 68,
       description: 'Persistance catalogues, transactions et historiques'
+    },
+    {
+      name: 'Supabase PostgreSQL',
+      type: 'Database',
+      status: 'ONLINE',
+      latencyMs: 52,
+      description: 'Gestion des organisations, abonnements SaaS, portefeuilles et quotas'
     },
     {
       name: 'Cloudflare Worker Router',
@@ -72,6 +96,52 @@ export const SystemHealthView: React.FC = () => {
     }
   ]);
 
+  const testSupabaseConnection = async () => {
+    const t0 = Date.now();
+    try {
+      const res = await fetch('/api/test-supabase').then((r) => r.json());
+      const elapsed = Date.now() - t0;
+      if (res?.success) {
+        setSupabaseHealth({
+          loading: false,
+          connected: true,
+          count: res.count ?? res.organizations?.length ?? 0,
+          error: null,
+          latencyMs: elapsed
+        });
+        setServices((prev) =>
+          prev.map((s) => s.name === 'Supabase PostgreSQL' ? { ...s, latencyMs: elapsed, status: 'ONLINE' } : s)
+        );
+      } else {
+        setSupabaseHealth({
+          loading: false,
+          connected: false,
+          count: 0,
+          error: res?.error || 'Non synchronisé',
+          latencyMs: elapsed
+        });
+        setServices((prev) =>
+          prev.map((s) => s.name === 'Supabase PostgreSQL' ? { ...s, latencyMs: elapsed, status: 'DEGRADED' } : s)
+        );
+      }
+    } catch (err: any) {
+      setSupabaseHealth({
+        loading: false,
+        connected: false,
+        count: 0,
+        error: err.message || 'Erreur réseau',
+        latencyMs: 0
+      });
+      setServices((prev) =>
+        prev.map((s) => s.name === 'Supabase PostgreSQL' ? { ...s, status: 'OFFLINE' } : s)
+      );
+    }
+  };
+
+  useEffect(() => {
+    testSupabaseConnection();
+  }, []);
+
   const handleRunDiagnostics = async () => {
     setIsPinging(true);
     const start = Date.now();
@@ -83,6 +153,9 @@ export const SystemHealthView: React.FC = () => {
       setServices((prev) =>
         prev.map((s) => (s.name.includes('Realtime') ? { ...s, latencyMs: elapsed, status: 'ONLINE' } : s))
       );
+
+      // Test Supabase
+      await testSupabaseConnection();
     } catch (e) {
       // Fallback
     } finally {
@@ -121,6 +194,36 @@ export const SystemHealthView: React.FC = () => {
         </div>
       </div>
 
+      {/* Supabase Diagnostic Card (Déplacé du Central Hub vers l'Admin Système) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-2xl bg-slate-900 border border-slate-800 text-white gap-4 shadow-xl">
+        <div className="flex items-center gap-3.5">
+          <span className={`w-4 h-4 rounded-full shrink-0 ${supabaseHealth.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-300">Base de données Supabase PostgreSQL :</span>
+              <span className={`text-xs font-bold ${supabaseHealth.connected ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {supabaseHealth.loading ? 'Vérification en cours...' : supabaseHealth.connected ? '✓ Connecté (Table organizations validée)' : 'En attente de connexion'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Table <code className="text-amber-400 font-mono">organizations</code> : <strong className="text-white">{supabaseHealth.count}</strong> organisation(s) détectée(s)
+              {supabaseHealth.latencyMs > 0 && (
+                <span className="ml-2 font-mono text-cyan-400 text-[11px]">({supabaseHealth.latencyMs} ms)</span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <a
+            href="/test-supabase"
+            className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl bg-cyan-950 hover:bg-cyan-900 text-cyan-300 font-bold border border-cyan-800/80 transition shadow-sm"
+          >
+            <span>Diagnostic Supabase</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </div>
+
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {services.map((srv, idx) => (
@@ -133,8 +236,12 @@ export const SystemHealthView: React.FC = () => {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 py-0.5 rounded-md bg-slate-800">
                   {srv.type}
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                  srv.status === 'ONLINE' ? 'text-emerald-400' : srv.status === 'DEGRADED' ? 'text-amber-400' : 'text-rose-400'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    srv.status === 'ONLINE' ? 'bg-emerald-400 animate-pulse' : srv.status === 'DEGRADED' ? 'bg-amber-400' : 'bg-rose-400'
+                  }`} />
                   {srv.status}
                 </span>
               </div>
@@ -167,7 +274,7 @@ export const SystemHealthView: React.FC = () => {
           <div className="text-emerald-400/90">[SEC-AUDIT] Token Super-Admin vérifié avec succès. Accréditation valide.</div>
           <div>[NET-SYNC] Webhook SebPay opérationnel sur port sécurisé HTTPS.</div>
           <div>[DB-SYNC] 27 modules marchands répertoriés dans le registre canonique sans anomalie.</div>
-          <div>[GATEWAY] Synchronisation RTDB et Firestore en cours sans latence bloquante.</div>
+          <div>[GATEWAY] Synchronisation RTDB, Firestore et Supabase opérationnelle.</div>
         </div>
       </div>
     </div>

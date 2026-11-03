@@ -16,8 +16,7 @@ import {
   ChevronRight,
   SlidersHorizontal,
   Flame,
-  Printer,
-  Sparkles
+  Printer
 } from 'lucide-react';
 import { CompletedSale, InventoryProduct, DebtCustomer, CustomerOrder, SellerMode } from '../../types';
 import { GeneralSettingsData } from '../CentralMasterHubView';
@@ -147,11 +146,11 @@ export const HybridAnalyticsCardsGrid: React.FC<HybridAnalyticsCardsGridProps> =
       label: 'ACADÉMIE & ÉLÈVES',
       shortCode: 'LMS-04',
       icon: GraduationCap,
-      value: `${Math.max(customers.length, 128)} élèves`,
-      subtext: '3 cohortes • 14 devoirs PDF',
+      value: `${customers.length} élève${customers.length > 1 ? 's' : ''}`,
+      subtext: customers.length > 0 ? `${customers.length} apprenant(s) actif(s)` : 'Cohortes & cours en ligne',
       badge: {
-        text: '14 à corriger',
-        bg: 'bg-blue-50 text-blue-700 border-blue-200'
+        text: customers.length > 0 ? `${customers.length} inscrits` : 'Actif',
+        bg: customers.length > 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-50 text-slate-600 border-slate-200'
       },
       action: () => {
         playTapBeep();
@@ -193,8 +192,8 @@ export const HybridAnalyticsCardsGrid: React.FC<HybridAnalyticsCardsGridProps> =
       label: 'TUNNELS & LIVES',
       shortCode: 'TUN-06',
       icon: Radio,
-      value: '12 Tunnels',
-      subtext: 'Taux conv. 4.8% • TikTok & Web',
+      value: 'Tunnels Prêts',
+      subtext: 'Conversion directe & Vente omnicanale',
       badge: {
         text: 'Live Studio',
         bg: 'bg-rose-50 text-rose-700 border-rose-200'

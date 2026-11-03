@@ -1,5 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
+  Box,
+  Megaphone,
+  PlaySquare,
+  Wand2,
   ShoppingBag,
   Store,
   FileSpreadsheet,
@@ -11,7 +15,6 @@ import {
   BarChart3,
   Bot,
   FileBadge,
-  Sparkles,
   Radio,
   Share2,
   Plug,
@@ -235,48 +238,6 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
   onOpenAcademy
 }) => {
   const isFree = isFreePlan(subscription);
-    // Validation Supabase & Récupération des Organisations
-  const [supabaseStatus, setSupabaseStatus] = useState<{
-    loading: boolean;
-    connected: boolean;
-    count: number;
-    error: string | null;
-  }>({
-    loading: true,
-    connected: false,
-    count: 0,
-    error: null,
-  });
-
-  useEffect(() => {
-    fetch('/api/test-supabase')
-      .then((r) => r.json())
-      .then((res) => {
-        if (res?.success) {
-          setSupabaseStatus({
-            loading: false,
-            connected: true,
-            count: res.count ?? res.organizations?.length ?? 0,
-            error: null,
-          });
-        } else {
-          setSupabaseStatus({
-            loading: false,
-            connected: false,
-            count: 0,
-            error: res?.error || 'Non configuré',
-          });
-        }
-      })
-      .catch((err) => {
-        setSupabaseStatus({
-          loading: false,
-          connected: false,
-          count: 0,
-          error: err.message,
-        });
-      });
-  }, []);
 
   const [sellerMode, setSellerMode] = useState<SellerMode>(() => resolveSellerMode(currentUser));
   const [showSecondaryPosTools, setShowSecondaryPosTools] = useState<boolean>(false);
@@ -1084,7 +1045,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       badge: 'Multimodal',
       badgeColor: 'bg-gradient-to-r from-amber-500/20 to-purple-500/20 text-amber-300 border-amber-500/40',
       description: 'Génération neuronale de vidéos d\'avatars, visuels produits 4K et argumentaires commerciaux persuasifs.',
-      icon: Sparkles,
+      icon: Wand2,
       iconColor: 'text-amber-400',
       iconBg: 'bg-gradient-to-tr from-amber-500/20 to-purple-500/20 border-amber-500/40',
       actionText: 'Ouvrir le Studio IA',
@@ -1125,7 +1086,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       badge: 'Copywriting IA',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       description: 'Rédacteur automatique d’annonces de vente, campagnes ciblées WhatsApp et affiches promotionnelles.',
-      icon: Sparkles,
+      icon: Megaphone,
       iconColor: 'text-amber-400',
       iconBg: 'bg-amber-500/10 border-amber-500/30',
       actionText: 'Créer une Campagne',
@@ -1204,7 +1165,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       badge: 'Netflix Storefront',
       badgeColor: 'bg-gradient-to-r from-rose-500/20 to-indigo-500/20 text-rose-300 border-rose-500/40',
       description: 'Vitrine immersive style Netflix, carrousels swipeables, aperçus vidéo directs et souscription Mobile Money 1-clic.',
-      icon: Sparkles,
+      icon: PlaySquare,
       iconColor: 'text-rose-400',
       iconBg: 'bg-rose-500/10 border-rose-500/30',
       actionText: 'Explorer le Catalogue',
@@ -1364,7 +1325,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       badge: 'PRO',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
       description: 'Masquez tout branding NaNa sur vos vitrines, factures et campus pour mettre votre enseigne au premier plan.',
-      icon: Sparkles,
+      icon: Palette,
       iconColor: 'text-amber-400',
       iconBg: 'bg-amber-500/10 border-amber-500/30',
       actionText: 'Marque Blanche',
@@ -1762,31 +1723,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
             0. SÉLECTEUR DE MODE CAMÉLÉON 1-CLIC & QUARTIER GÉNÉRAL ADAPTATIF
                (Bleu Royal #2563EB & Blanc Pur #FFFFFF)
            ======================================================================= */}
-        {/* Validation Supabase & Statut de Connexion (Table organizations) */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800 text-white gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <span className={`w-3.5 h-3.5 rounded-full ${supabaseStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-300">Base de données Supabase :</span>
-                <span className={`text-xs font-bold ${supabaseStatus.connected ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {supabaseStatus.loading ? 'Vérification en cours...' : supabaseStatus.connected ? '✓ Connecté (Table organizations validée)' : 'En attente de connexion'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Table <code className="text-amber-400 font-mono">organizations</code> : <strong className="text-white">{supabaseStatus.count}</strong> organisation(s) détectée(s)
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <a
-              href="/test-supabase"
-              className="text-xs px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-bold border border-slate-700 transition"
-            >
-              Diagnostic Supabase ↗
-            </a>
-          </div>
-        </div>
+        
 
         <section className="rounded-3xl bg-[#FFFFFF] border-2 border-[#2563EB] p-4 sm:p-6 shadow-2xl space-y-5 text-slate-900">
           {/* Barre supérieure : Titre + Sélecteur 1-Clic en Bleu Royal (#2563EB) et Blanc Pur (#FFFFFF) */}
@@ -1958,7 +1895,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                   </span>
                   <div className="mt-1.5 flex items-baseline justify-between">
                     <span className="text-lg sm:text-xl font-black text-slate-900">
-                      {formatCFA(metrics.todayTotal > 0 ? metrics.todayTotal : 450000)}
+                      {formatCFA(metrics.todayTotal)}
                     </span>
                     <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
                       +18%
@@ -1972,7 +1909,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                   </span>
                   <div className="mt-1.5 flex items-baseline justify-between">
                     <span className="text-lg sm:text-xl font-black text-slate-900">
-                      {Math.max(customers.length, 128)} élèves
+                      {customers.length} élève{customers.length > 1 ? 's' : ''}
                     </span>
                     <button
                       type="button"
@@ -1990,7 +1927,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                   </span>
                   <div className="mt-1.5 flex items-baseline justify-between">
                     <span className="text-lg sm:text-xl font-black text-slate-900">
-                      14 à corriger
+                      {customers.length > 0 ? `${customers.length} devoirs` : "0 à corriger"}
                     </span>
                     <button
                       type="button"
@@ -2008,10 +1945,10 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                   </span>
                   <div className="mt-1.5 flex items-baseline justify-between">
                     <span className="text-lg sm:text-xl font-black text-slate-900">
-                      {formatCFA(320000)}
+                      {formatCFA(metrics.allSalesTotal)}
                     </span>
                     <span className="text-[10px] font-black text-[#2563EB] bg-blue-100 px-2 py-0.5 rounded-full">
-                      12 Blocs Actifs
+                      Tunnels Actifs
                     </span>
                   </div>
                 </div>
@@ -2263,7 +2200,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
               {!hasRealSales && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-white/80 backdrop-blur-[2px] rounded-2xl border border-blue-200">
                   <div className="w-10 h-10 rounded-2xl bg-blue-100 text-[#2563EB] flex items-center justify-center mb-2 border border-blue-300">
-                    <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
                   </div>
                   <p className="text-sm font-bold text-slate-900 max-w-sm">
                     Vos futures ventes apparaîtront ici.
@@ -2318,11 +2255,11 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
         <div className="p-4 rounded-2xl bg-[#09152e]/80 border border-blue-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-300 shadow-md">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-cyan-300 border border-cyan-400/30 flex items-center justify-center shrink-0 shadow-sm">
-              <Sparkles className="w-4 h-4 text-cyan-300 animate-pulse" />
+              <LayoutGrid className="w-4 h-4 text-cyan-300" />
             </div>
             <div>
               <div className="text-xs font-black text-white">
-                Catalogue Intégré : 36 Services, Applications, Modules et Outils
+                Catalogue Intégré : 27 Services, Applications, Modules et Outils
               </div>
               <p className="text-[11px] text-slate-400">
                 Accédez instantanément à chaque outil via le bouton <span className="text-cyan-300 font-bold">« Liste de nos Services, Applications, Modules et Outils »</span> du menu ou l'Omnibar.
@@ -2419,7 +2356,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                 }}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 active:scale-95 cursor-pointer shadow-lg shadow-emerald-500/20"
               >
-                <Sparkles className="w-4 h-4 fill-slate-950" />
+                <Store className="w-4 h-4" />
                 🟢 Réouvrir la Boutique &amp; Aller à la Caisse
               </button>
               <button
@@ -2470,7 +2407,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
             <div className="p-4 border-b border-white/[0.08] flex items-center justify-between gap-3 bg-[#061026]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <Boxes className="w-4 h-4 text-cyan-400" />
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white flex items-center gap-2">
@@ -2538,7 +2475,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                         {app.appLogo ? (
                           <img src={app.appLogo} alt={app.appName} className="w-full h-full object-contain" />
                         ) : (
-                          <Sparkles className="w-4 h-4 text-cyan-400" />
+                          <Box className="w-4 h-4 text-cyan-400" />
                         )}
                       </div>
 
@@ -2898,7 +2835,7 @@ const ModuleCard: React.FC<ModuleCardProps> = React.memo(({ module, isFreeAccoun
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {module.softGuidance && (
               <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-xs">
-                <Sparkles className="w-2.5 h-2.5 fill-emerald-300" />
+                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-300" />
                 <span>{module.guidanceLabel || 'Commencez ici'}</span>
               </span>
             )}

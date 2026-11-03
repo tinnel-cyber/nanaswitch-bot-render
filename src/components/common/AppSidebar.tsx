@@ -21,7 +21,6 @@ import {
   Lock,
   Pin,
   PinOff,
-  Sparkles,
   Crown,
   ArrowUpRight,
   Palette,
@@ -600,7 +599,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <div className="relative px-2 py-2 rounded-xl bg-gradient-to-b from-[#0c1a38] via-[#091326] to-[#060d1b] flex items-center justify-between gap-1.5 border border-blue-400/40 group-hover:border-blue-300/80 transition-all">
             <div className="flex items-center gap-1.5 min-w-0">
               <div className="w-6 h-6 rounded-lg bg-blue-500/25 border border-cyan-400/40 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(34,211,238,0.4)] group-hover:scale-110 transition-transform">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-300 animate-pulse" />
+                <LayoutGrid className="w-3.5 h-3.5 text-cyan-300" />
               </div>
               {!collapsed && (
                 <div className="min-w-0">
@@ -609,7 +608,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   </div>
                   <div className="text-[8px] font-bold text-cyan-300/90 flex items-center gap-1.5 mt-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    <span className="truncate">36 Solutions • Cliquez pour déballer</span>
+                    <span className="truncate">27 Solutions • Cliquez pour déballer</span>
                   </div>
                 </div>
               )}
@@ -961,7 +960,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                           {app.appLogo ? (
                             <img src={app.appLogo} alt={app.appName} className="w-full h-full object-contain" />
                           ) : (
-                            <Sparkles className="w-3 h-3 text-cyan-400" />
+                            <Box className="w-3 h-3 text-cyan-400" />
                           )}
                         </div>
                         {!collapsed && (
