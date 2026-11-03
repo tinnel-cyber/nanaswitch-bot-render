@@ -1830,81 +1830,84 @@ export const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
     plans: [
       {
         id: "free",
-        name: "Plan Gratuit",
-        subtitle: "Découverte & Lancement",
-        description: "Idéal pour tester la plateforme sans frais : vendez vos produits physiques ou publiez votre première formation.",
+        name: "Plan Zéro",
+        subtitle: "Gratuit / Acquisition",
+        description: "Démarrez et vendez sans frais ni carte bancaire. 19 outils essentiels inclus pour le commerce physique et l'initiation e-learning.",
         monthlyPriceFCFA: 0,
         annualPriceFCFA: 0,
-        euroEquivalent: "100% Gratuit • Aucune carte requise",
+        euroEquivalent: "100% Gratuit à vie • Aucune carte requise",
         badge: "Freemium",
         isPopular: false,
         features: [
-          "Caisse tactile POS complète",
-          "Jusqu'à 3 produits physiques",
-          "1 cours vidéo inclus",
-          "Sous-domaine gratuit offert",
-          "Paiements Mobile Money (0% com.)",
-          "0% de commission sur vos ventes"
+          "Caisse tactile POS de comptoir",
+          "Boutique en ligne nsore.shop offerte",
+          "1 cours vidéo & fiches marketplace",
+          "Carnet d'ardoises & tickets thermiques",
+          "Wameet visioconférence & messagerie",
+          "0% de commission sur vos encaissements",
+          "Module CV Pro exclu (500 F à l'acte)"
         ],
-        ctaText: "Commencer à vendre (0F)"
+        ctaText: "Commencer Gratuitement (0F)"
       },
       {
         id: "starter",
-        name: "Starter",
-        subtitle: "Lancement & Caisse",
-        description: "Idéal pour ouvrir votre première boutique physique ou tester une première formation en ligne.",
-        monthlyPriceFCFA: 15000,
-        annualPriceFCFA: 12000,
-        euroEquivalent: "Soit ~18 € / mois sans engagement",
-        badge: "Starter",
-        isPopular: false,
-        features: [
-          "Caisse POS illimitée & Ticket thermique",
-          "Jusqu'à 100 produits ou 1 formation",
-          "Paiements Mobile Money (0% com.)",
-          "Gestion des stocks & créances clients",
-          "Sans engagement de durée"
-        ],
-        ctaText: "Choisir ce plan"
-      },
-      {
-        id: "pro",
         name: "Plan Pro",
-        subtitle: "Commerçant & Formateur Pro",
-        description: "Le pack complet pour déployer un empire commercial ou une académie souveraine sans aucune restriction.",
-        monthlyPriceFCFA: 35000,
-        annualPriceFCFA: 28000,
-        euroEquivalent: "Soit ~42 € / mois • ROI dès la première vente",
+        subtitle: "Boutique & Formateur Pro",
+        description: "La formule tout-en-un pour les commerces actifs et les formateurs indépendants voulant encaisser sans aucune limite.",
+        monthlyPriceFCFA: 15000,
+        annualPriceFCFA: 12500,
+        euroEquivalent: "Soit 15 000 FCFA / mois (150 000 / an)",
         badge: "Le Choix Recommandé",
         isPopular: true,
         features: [
-          "Produits & Étudiants Illimités",
-          "Live Shopping 1-to-1 Daily.co illimité",
-          "Campus Marque Blanche avec votre domaine (.com)",
-          "Tunnels de vente IA & Paiements sans contact",
-          "Certificats automatiques avec vérification QR",
-          "Support prioritaire 7j/7 WhatsApp & Email"
+          "Caisse POS & Produits illimités",
+          "Étudiants & Formations illimités",
+          "Module CV Pro inclus en illimité",
+          "Gestion jusqu'à 10 caissiers (PIN)",
+          "Passerelles directes à 0% de commission",
+          "Certificats officiels sécurisés QR Code"
         ],
-        ctaText: "Passer Pro"
+        ctaText: "Choisir le Plan Pro"
+      },
+      {
+        id: "pro",
+        name: "Plan Business",
+        subtitle: "Multi-Boutiques & Campus",
+        description: "Solution complète pour commerces en réseau, équipes multi-caissiers et académies avec plusieurs instructeurs.",
+        monthlyPriceFCFA: 30000,
+        annualPriceFCFA: 25000,
+        euroEquivalent: "Soit 30 000 FCFA / mois (300 000 / an)",
+        badge: "Croissance & Équipe",
+        isPopular: false,
+        features: [
+          "Multi-points de vente (jusqu'à 20 caissiers)",
+          "Stocks multi-magasins synchronisés",
+          "Pixels publicitaires Meta & TikTok intégrés",
+          "CRM marketing & relances de paniers",
+          "Gestion multi-formateurs & cohortes d'élèves",
+          "Assistance prioritaire WhatsApp 7j/7"
+        ],
+        ctaText: "Choisir Plan Business"
       },
       {
         id: "elite",
-        name: "Plan Elite",
-        subtitle: "Franchises & Grands Comptes",
-        description: "Pour réseaux de boutiques multi-sites, universités privées et consortiums éducatifs.",
-        monthlyPriceFCFA: 75000,
-        annualPriceFCFA: 65000,
-        euroEquivalent: "Soit ~99 € / mois • Clé en main",
-        badge: "Plan Elite",
+        name: "Plan Enterprise",
+        subtitle: "Franchises & Marque Blanche",
+        description: "Pour réseaux de distribution, universités privées et grandes enseignes exigeant une autonomie souveraine absolue.",
+        monthlyPriceFCFA: 60000,
+        annualPriceFCFA: 50000,
+        euroEquivalent: "Soit 60 000 FCFA / mois (600 000 / an)",
+        badge: "Marque Blanche 100%",
         isPopular: false,
         features: [
-          "Jusqu'à 5 magasins / campus étanches",
-          "Agent IA dédié sur mesure & intégration CRM",
-          "Marque Blanche 100% aveugle (Zero mention)",
-          "Account Manager dédié & SLA garanti 99.99%",
-          "API d'encaissement et webhooks avancés"
+          "Marque Blanche totale (Zéro mention NaNa)",
+          "Votre propre nom de domaine personnalisé",
+          "Nombre de caisses & campus illimité",
+          "CV Pro & attestations d'entreprise illimités",
+          "Accès complet aux webhooks & API souveraines",
+          "Chargé de compte dédié & SLA garanti 99.9%"
         ],
-        ctaText: "Choisir ce plan"
+        ctaText: "Choisir Enterprise"
       }
     ]
   },

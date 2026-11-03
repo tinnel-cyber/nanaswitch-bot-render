@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
+import {
+  Eye,
   Rocket, 
   Sparkles, 
   ArrowRight, 
@@ -1055,9 +1056,10 @@ const PricingSection: React.FC<PricingSectionProps> = ({
   onSelectFreePlan,
   onOpenPartnerProgram,
 }) => {
+  const [pricingTab, setPricingTab] = useState<'SUBSCRIPTION' | 'CREATOR' | 'PAY_AS_YOU_GO'>('SUBSCRIPTION');
   const [isAnnual, setIsAnnual] = useState(false);
-  const title = config?.title || "Des tarifs simples pour bâtir sans limites.";
-  const subtitle = config?.subtitle || "Démarrez petit et évoluez à votre rythme. Changez de plan à tout moment en un clic.";
+  const title = config?.title || "Des tarifs simples, transparents et sans surprise.";
+  const subtitle = config?.subtitle || "Choisissez le modèle adapté à votre activité : abonnement fixe 0% commission, formule créateur à la performance, ou services à l'acte sans engagement.";
   const zeroBanner = config?.zeroCommissionBanner || DEFAULT_LANDING_PAGE_CONFIG.pricingSection.zeroCommissionBanner;
   
   const rawPlans = config?.plans && config.plans.length > 0
@@ -1080,13 +1082,23 @@ const PricingSection: React.FC<PricingSectionProps> = ({
     playValidationBeep();
     if (typeof window !== 'undefined') {
       window.history.pushState({ intent: 'vendor', plan: 'free' }, '', '/register?intent=vendor&plan=free');
+      window.location.href = '/register?intent=vendor&plan=free';
     }
     if (onSelectFreePlan) {
       onSelectFreePlan();
     } else if (onCheckout) {
       onCheckout('free', 0, false);
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/register?intent=vendor&plan=free';
+    }
+  };
+
+  /**
+   * Redirection Formule Créateur / Formateur vers /register
+   */
+  const handleCreatorClick = () => {
+    playValidationBeep();
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ intent: 'instructor', plan: 'creator' }, '', '/register?intent=instructor&plan=creator');
+      window.location.href = '/register?intent=instructor&plan=creator';
     }
   };
 
@@ -1108,262 +1120,568 @@ const PricingSection: React.FC<PricingSectionProps> = ({
   };
 
   return (
-    <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-white border-b border-slate-100">
+    <section id="pricing" className="py-20 sm:py-24 px-4 sm:px-6 lg:px-8 bg-slate-50/50 border-b border-slate-200/80">
       <div className="max-w-7xl mx-auto">
-        
-        {/* BANNIÈRE MASSIVE & RASSURANTE SUR LES 0% DE COMMISSION */}
-        <div className="mb-14 max-w-4xl mx-auto rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-2xl shadow-blue-600/25 border border-blue-400/40 relative overflow-hidden">
-          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-white shrink-0 shadow-inner">
-                <Percent className="w-8 h-8 text-amber-300" />
-              </div>
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight">
-                  {zeroBanner.title}
-                </h3>
-                <p className="text-xs sm:text-sm text-blue-100 mt-1 leading-relaxed">
-                  {zeroBanner.description}
-                </p>
-              </div>
-            </div>
 
-            <div className="shrink-0 px-4 py-2 rounded-xl bg-white text-blue-900 font-black text-xs uppercase tracking-wider shadow">
-              {zeroBanner.badge}
-            </div>
+        {/* En-tête de section */}
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold uppercase tracking-wider mb-4">
+            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <span>Architecture Tarifaire Hybride & Équitable</span>
           </div>
-        </div>
-
-        {/* Titre & Sélecteur Mensuel / Annuel */}
-        <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 mb-4">
             {title}
           </h2>
-          <p className="text-sm sm:text-base text-slate-600 mb-6">
+          <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
             {subtitle}
           </p>
+        </div>
 
-          {/* Toggle Mensuel / Annuel */}
-          <div className="inline-flex items-center gap-3 p-1.5 rounded-2xl bg-slate-200/80 dark:bg-slate-800 border border-slate-300 dark:border-slate-700">
+        {/* SÉLECTEUR DES 3 PILIERS TARIFAIRES */}
+        <div className="max-w-4xl mx-auto mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-200/90 rounded-2xl border border-slate-300 shadow-inner">
+            
+            {/* Pilier 1 : Abonnements Fixes */}
             <button
               type="button"
-              onClick={() => { playTapBeep(); setIsAnnual(false); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                !isAnnual ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
+              onClick={() => { playTapBeep(); setPricingTab('SUBSCRIPTION'); }}
+              className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl font-bold transition cursor-pointer text-center ${
+                pricingTab === 'SUBSCRIPTION'
+                  ? 'bg-white text-blue-700 shadow-md shadow-blue-900/10 scale-[1.02]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              Facturation Mensuelle
-            </button>
-            <button
-              type="button"
-              onClick={() => { playTapBeep(); setIsAnnual(true); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                isAnnual ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              <span>Facturation Annuelle</span>
-              <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded-full">
-                -20%
+              <div className="flex items-center gap-2 mb-1">
+                <Store className="w-4 h-4 text-blue-600" />
+                <span className="text-sm sm:text-base font-extrabold">Abonnements Fixes</span>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                0% Commission • Commerces & Formations
               </span>
             </button>
+
+            {/* Pilier 2 : Formule Créateur / Formateur */}
+            <button
+              type="button"
+              onClick={() => { playTapBeep(); setPricingTab('CREATOR'); }}
+              className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl font-bold transition cursor-pointer text-center ${
+                pricingTab === 'CREATOR'
+                  ? 'bg-white text-indigo-700 shadow-md shadow-indigo-900/10 scale-[1.02]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <GraduationCap className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm sm:text-base font-extrabold">Formule Créateur</span>
+              </div>
+              <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                0 F Création • 14% Vente Sécurisée
+              </span>
+            </button>
+
+            {/* Pilier 3 : Pay-As-You-Go */}
+            <button
+              type="button"
+              onClick={() => { playTapBeep(); setPricingTab('PAY_AS_YOU_GO'); }}
+              className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl font-bold transition cursor-pointer text-center ${
+                pricingTab === 'PAY_AS_YOU_GO'
+                  ? 'bg-white text-amber-700 shadow-md shadow-amber-900/10 scale-[1.02]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <span className="text-sm sm:text-base font-extrabold">Services à l'Acte</span>
+              </div>
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                Pay-As-You-Go • Voir Direct (100 F)
+              </span>
+            </button>
+
           </div>
         </div>
 
-        {/* Indication visuelle de balayage sur Mobile & Tablette */}
-        <div className="flex lg:hidden items-center justify-center gap-1.5 text-xs text-slate-500 mb-4 font-medium">
-          <span>← Glissez pour comparer les 4 formules →</span>
-        </div>
-
-        {/* Grille Responsive : Scroll Snap horizontal fluide sur Mobile/Tablette & Grille 4 Colonnes sur Desktop */}
-        <div className="flex lg:grid overflow-x-auto lg:overflow-x-visible snap-x snap-mandatory lg:snap-none gap-4 lg:gap-3 xl:gap-5 pb-6 lg:pb-0 px-4 sm:px-6 lg:px-0 -mx-4 sm:-mx-6 lg:mx-auto max-w-7xl lg:grid-cols-4 items-stretch scroll-smooth no-scrollbar">
-          {plans.map((plan) => {
-            const isFree = plan.id === 'free' || plan.monthlyPriceFCFA === 0;
-            const isPopular = plan.isPopular || plan.id === 'pro';
-            const isElite = plan.id === 'elite';
-            const price = isFree ? 0 : (isAnnual ? plan.annualPriceFCFA : plan.monthlyPriceFCFA);
-            const formattedPrice = isFree ? '0' : (price || 0).toLocaleString('fr-FR');
-
-            // CTA Text optimisé court et percutant
-            const ctaButtonText = isFree
-              ? (plan.ctaText || "Commencer à vendre (0F)")
-              : isPopular
-              ? (plan.ctaText || "Passer Pro")
-              : (plan.ctaText || "Choisir ce plan");
-
-            const isStarter = plan.id === 'starter';
-
-            // Couleurs et bordures très épaisses spécifiques pour différencier chaque plan tarifaire
-            const getPlanBorderColor = () => {
-              switch (plan.id?.toLowerCase()) {
-                case 'free':
-                  return 'border-4 border-emerald-400 shadow-xl shadow-emerald-950/40 hover:border-emerald-300';
-                case 'starter':
-                  return 'border-4 border-amber-400 shadow-xl shadow-amber-950/40 hover:border-amber-300';
-                case 'pro':
-                  return 'border-4 border-sky-400 shadow-2xl shadow-sky-950/50 hover:border-sky-300 ring-2 ring-sky-300/30';
-                case 'elite':
-                  return 'border-4 border-purple-400 shadow-xl shadow-purple-950/40 hover:border-purple-300';
-                default:
-                  return isPopular
-                    ? 'border-4 border-sky-400 shadow-2xl shadow-sky-950/50 hover:border-sky-300 ring-2 ring-sky-300/30'
-                    : 'border-4 border-indigo-400 shadow-xl shadow-indigo-950/40 hover:border-indigo-300';
-              }
-            };
-
-            return (
-              <div
-                key={plan.id}
-                className={`snap-center shrink-0 w-[84vw] max-w-[300px] sm:max-w-[320px] lg:w-auto lg:max-w-none lg:shrink flex flex-col justify-between rounded-3xl transition-all duration-300 text-white relative p-5 sm:p-6 lg:p-4 xl:p-6 bg-gradient-to-b from-[#09477e] to-[#031d3d] ${getPlanBorderColor()} ${
-                  isPopular ? 'lg:-translate-y-2' : ''
-                }`}
-              >
-                {plan.badge && (
-                  <div className={`absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white font-black text-[10px] uppercase tracking-wider shadow-md whitespace-nowrap ${
-                    isPopular
-                      ? 'bg-gradient-to-r from-blue-500 to-indigo-500'
-                      : isFree
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                      : isElite
-                      ? 'bg-gradient-to-r from-purple-600 to-pink-600'
-                      : 'bg-gradient-to-r from-amber-500 to-orange-500'
-                  }`}>
-                    {plan.badge}
+        {/* CONTENU ONGLET 1 : ABONNEMENTS FIXES (0% COMMISSION) */}
+        {pricingTab === 'SUBSCRIPTION' && (
+          <div>
+            {/* Bannière 0% de commission */}
+            <div className="mb-10 max-w-4xl mx-auto rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shadow-xl shadow-blue-600/20 border border-blue-400/40 relative overflow-hidden">
+              <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-white shrink-0 shadow-inner">
+                    <Percent className="w-8 h-8 text-amber-300" />
                   </div>
-                )}
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-black tracking-tight">
+                      {zeroBanner.title}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-blue-100 mt-1 leading-relaxed">
+                      {zeroBanner.description}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 px-4 py-2 rounded-xl bg-white text-blue-900 font-black text-xs uppercase tracking-wider shadow">
+                  {zeroBanner.badge}
+                </div>
+              </div>
+            </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[11px] font-black uppercase tracking-wider ${
-                      isFree
-                        ? 'text-emerald-300'
-                        : isStarter
-                        ? 'text-amber-300'
-                        : isPopular
-                        ? 'text-sky-300'
+            {/* Toggle Mensuel / Annuel */}
+            <div className="text-center max-w-xl mx-auto mb-10">
+              <div className="inline-flex items-center gap-3 p-1.5 rounded-2xl bg-slate-200/80 border border-slate-300">
+                <button
+                  type="button"
+                  onClick={() => { playTapBeep(); setIsAnnual(false); }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    !isAnnual ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                  }`}
+                >
+                  Facturation Mensuelle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { playTapBeep(); setIsAnnual(true); }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    isAnnual ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600'
+                  }`}
+                >
+                  <span>Facturation Annuelle</span>
+                  <span className="text-[10px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">
+                    -20%
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Indication visuelle mobile */}
+            <div className="flex lg:hidden items-center justify-center gap-1.5 text-xs text-slate-500 mb-4 font-medium">
+              <span>← Glissez horizontalement pour comparer les 4 formules →</span>
+            </div>
+
+            {/* Grille des 4 Plans */}
+            <div className="flex lg:grid overflow-x-auto lg:overflow-x-visible snap-x snap-mandatory lg:snap-none gap-4 lg:gap-3 xl:gap-5 pb-6 lg:pb-0 px-4 sm:px-6 lg:px-0 -mx-4 sm:-mx-6 lg:mx-auto max-w-7xl lg:grid-cols-4 items-stretch scroll-smooth no-scrollbar">
+              {plans.map((plan) => {
+                const isFree = plan.id === 'free' || plan.monthlyPriceFCFA === 0;
+                const isPopular = plan.isPopular || plan.id === 'pro';
+                const isElite = plan.id === 'elite';
+                const price = isFree ? 0 : (isAnnual ? plan.annualPriceFCFA : plan.monthlyPriceFCFA);
+                const formattedPrice = isFree ? '0' : (price || 0).toLocaleString('fr-FR');
+
+                const ctaButtonText = isFree
+                  ? (plan.ctaText || "Démarrer Gratuitement (0F)")
+                  : isPopular
+                  ? (plan.ctaText || "Choisir le Plan Pro")
+                  : isElite
+                  ? (plan.ctaText || "Passer à l'Élite Enterprise")
+                  : (plan.ctaText || `Choisir ${plan.name}`);
+
+                return (
+                  <div
+                    key={plan.id}
+                    className={`w-[85vw] sm:w-[340px] lg:w-auto shrink-0 snap-center rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 relative border ${
+                      isPopular
+                        ? 'bg-white border-blue-500 ring-2 ring-blue-500/30 shadow-xl shadow-blue-500/10 -translate-y-1'
                         : isElite
-                        ? 'text-purple-300'
-                        : 'text-sky-200'
-                    }`}>
-                      {plan.name}
-                    </span>
+                        ? 'bg-slate-900 border-amber-500/40 text-white shadow-xl shadow-slate-950/20'
+                        : isFree
+                        ? 'bg-emerald-50/40 border-emerald-300/80 shadow-md shadow-emerald-500/5'
+                        : 'bg-white border-slate-200 shadow-md hover:shadow-lg'
+                    }`}
+                  >
                     {isPopular && (
-                      <span className="text-[9.5px] font-bold text-sky-200 bg-sky-400/20 px-2 py-0.5 rounded-full border border-sky-300/30">
-                        Tout Illimité
-                      </span>
-                    )}
-                    {isFree && (
-                      <span className="text-[9.5px] font-bold text-emerald-300 bg-emerald-400/20 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                        100% Offert
-                      </span>
-                    )}
-                    {isStarter && (
-                      <span className="text-[9.5px] font-bold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded-full border border-amber-400/30">
-                        Essentiel
-                      </span>
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-wider shadow-md">
+                        {plan.badge || '⭐ Plus Populaire'}
+                      </div>
                     )}
                     {isElite && (
-                      <span className="text-[9.5px] font-bold text-purple-300 bg-purple-400/20 px-2 py-0.5 rounded-full border border-purple-400/30">
-                        Grand Compte
-                      </span>
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[11px] font-black uppercase tracking-wider shadow-md">
+                        {plan.badge || '👑 Marque Blanche VIP'}
+                      </div>
                     )}
-                  </div>
+                    {isFree && (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-black uppercase tracking-wider shadow-md">
+                        {plan.badge || '🎁 100% Gratuit'}
+                      </div>
+                    )}
 
-                  <h3 className={`font-black text-white mt-1.5 ${
-                    isPopular ? 'text-xl sm:text-2xl lg:text-lg xl:text-xl' : 'text-lg sm:text-xl lg:text-base xl:text-lg'
-                  }`}>
-                    {plan.subtitle || plan.name}
-                  </h3>
-                  <p className="text-xs text-slate-300 mt-1 mb-4 line-clamp-2 leading-relaxed">
-                    {plan.description}
-                  </p>
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <h4 className={`text-xl font-black ${isElite ? 'text-white' : 'text-slate-900'}`}>
+                          {plan.name}
+                        </h4>
+                      </div>
+                      <p className={`text-xs leading-relaxed min-h-[38px] mb-5 ${isElite ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {plan.description}
+                      </p>
 
-                  <div className="mb-4">
-                    <div className="flex items-baseline gap-1">
-                      <span className={`font-black text-white tracking-tight ${
-                        isPopular ? 'text-3xl sm:text-4xl lg:text-2xl xl:text-3xl' : 'text-2xl sm:text-3xl lg:text-xl xl:text-2xl'
-                      }`}>
-                        {isFree ? '0 F' : formattedPrice}
-                      </span>
-                      <span className="text-xs font-bold text-slate-300">
-                        {isFree ? 'CFA' : 'FCFA / mois'}
-                      </span>
+                      <div className="mb-6 flex items-baseline gap-1.5">
+                        <span className={`text-3xl sm:text-4xl font-black tracking-tight ${isElite ? 'text-white' : 'text-slate-900'}`}>
+                          {formattedPrice}
+                        </span>
+                        <span className={`text-xs font-bold ${isElite ? 'text-slate-400' : 'text-slate-500'}`}>
+                          F CFA {isFree ? '' : '/ mois'}
+                        </span>
+                      </div>
+
+                      <div className={`h-px w-full mb-6 ${isElite ? 'bg-slate-800' : 'bg-slate-100'}`} />
+
+                      <ul className="space-y-3 mb-8 text-xs">
+                        {plan.features.map((feature, fIdx) => (
+                          <li key={fIdx} className="flex items-start gap-2.5">
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                              isElite ? 'bg-amber-400/20 text-amber-400' : isFree ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                            <span className={isElite ? 'text-slate-300' : 'text-slate-700'}>
+                              {feature}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    {plan.euroEquivalent && (
-                      <div className={`text-[10px] mt-0.5 ${
-                        isFree 
-                          ? 'text-emerald-300 font-semibold'
-                          : isStarter
-                          ? 'text-amber-300 font-semibold'
-                          : isPopular 
-                          ? 'text-sky-200 font-semibold' 
-                          : 'text-purple-300 font-semibold'
-                      }`}>
-                        {plan.euroEquivalent}
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="space-y-2 pt-3 border-t border-white/15 text-xs text-slate-200">
-                    {plan.features.map((feat, idx) => (
-                      <div key={idx} className={`flex items-start gap-1.5 ${isPopular && idx < 2 ? 'font-bold text-white' : ''}`}>
-                        {isFree ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                        ) : isStarter ? (
-                          <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                        ) : isPopular && idx < 2 ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-sky-300 shrink-0 mt-0.5" />
-                        ) : isElite ? (
-                          <Check className="w-3.5 h-3.5 text-purple-300 shrink-0 mt-0.5" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
-                        )}
-                        <span className="leading-snug text-[11px] sm:text-xs text-slate-200">{feat}</span>
-                      </div>
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => handleCheckout(plan.id, price || 0)}
+                      className={`w-full py-3.5 px-4 rounded-xl font-extrabold text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg cursor-pointer ${
+                        isPopular
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-blue-500/25 hover:shadow-blue-500/40'
+                          : isElite
+                          ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20 font-black'
+                          : isFree
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                          : 'bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/20'
+                      }`}
+                    >
+                      {isFree && <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />}
+                      {isPopular && <Rocket className="w-4 h-4 text-amber-300 shrink-0" />}
+                      <span>{ctaButtonText}</span>
+                      <ArrowRight className="w-3.5 h-3.5 ml-0.5 opacity-80 shrink-0" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Matrice de Comparaison Détaillée Déployable */}
+            <div className="max-w-7xl mx-auto mt-8">
+              <PricingComparisonMatrix
+                selectedPlanId="pro"
+                onSelectPlan={(planId) => {
+                  const matchedPlan = plans.find(p => p.id === planId);
+                  const price = planId === 'free' ? 0 : (isAnnual ? matchedPlan?.annualPriceFCFA : matchedPlan?.monthlyPriceFCFA) || 0;
+                  handleCheckout(planId, price);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* CONTENU ONGLET 2 : FORMULE CRÉATEUR / FORMATEUR (14% COMMISSION) */}
+        {pricingTab === 'CREATOR' && (
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-indigo-700/50 relative overflow-hidden">
+              <div className="absolute -right-16 -top-16 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -left-16 -bottom-16 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-bold uppercase tracking-wider">
+                    <GraduationCap className="w-4 h-4 text-indigo-300" />
+                    <span>Spécial Formateurs, Coachs & Vendeurs de Produits Numériques</span>
+                  </div>
+                  <div className="px-4 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs">
+                    ✓ ZÉRO RISQUE FINANCIER
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => isFree ? handleFreePlanClick() : handleCheckout(plan.id, price)}
-                  className={`mt-6 w-full py-3 px-3 rounded-2xl font-black text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg active:scale-98 ${
-                    isFree
-                      ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-500/20'
-                      : isStarter
-                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-amber-500/20'
-                      : isPopular
-                      ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/30 ring-2 ring-sky-300/40'
-                      : isElite
-                      ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30'
-                      : 'bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/20'
-                  }`}
-                >
-                  {isFree && <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />}
-                  {isPopular && <Rocket className="w-4 h-4 text-amber-300 shrink-0" />}
-                  <span>{ctaButtonText}</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-0.5 opacity-80 shrink-0" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                  <div className="lg:col-span-7">
+                    <h3 className="text-2xl sm:text-4xl font-black tracking-tight mb-4 leading-tight">
+                      Vous transmettez votre savoir.<br />
+                      <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-indigo-200 to-emerald-300">
+                        Nous gérons la tech & les paiements.
+                      </span>
+                    </h3>
+                    <p className="text-sm text-slate-300 leading-relaxed mb-6">
+                      Créez votre académie en ligne, hébergez vos cours vidéo, documents PDF, examens et webinaires 
+                      <strong className="text-white font-semibold"> 100% gratuitement</strong>. Aucun abonnement mensuel fixe requis. 
+                      Nous prélevons uniquement <strong className="text-amber-300 font-bold">14% de commission</strong> sur chaque vente réussie, sous protection séquestre Escrow automatique.
+                    </p>
 
-        {/* Matrice de Comparaison Détaillée Déployable */}
-        <div className="max-w-7xl mx-auto mt-6">
-          <PricingComparisonMatrix
-            selectedPlanId="pro"
-            onSelectPlan={(planId) => {
-              const matchedPlan = plans.find(p => p.id === planId);
-              const price = planId === 'free' ? 0 : (isAnnual ? matchedPlan?.annualPriceFCFA : matchedPlan?.monthlyPriceFCFA) || 0;
-              handleCheckout(planId, price);
-            }}
-          />
-        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                      <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                        <div className="text-amber-300 font-black text-2xl mb-1">0 F CFA</div>
+                        <div className="text-xs font-bold text-white">Création & Hébergement</div>
+                        <div className="text-[11px] text-slate-400 mt-1">Cours illimités, quiz, élèves illimités et vidéos privées sans frais d'entrée.</div>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                        <div className="text-emerald-400 font-black text-2xl mb-1">14%</div>
+                        <div className="text-xs font-bold text-white">Commission sur Vente</div>
+                        <div className="text-[11px] text-slate-400 mt-1">Prélevé uniquement quand vous encaissez. Vous conservez 86% de votre prix.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-5 bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/15">
+                    <h4 className="text-sm font-extrabold uppercase tracking-wider text-indigo-200 mb-4 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>Inclus dans la Formule Créateur :</span>
+                    </h4>
+                    <ul className="space-y-3 text-xs text-slate-200 mb-6">
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Séquestre Escrow Automatisé</strong> : Paiements Wave, Orange Money, MTN, Moov et CB sécurisés jusqu'à validation.</span>
+                      </li>
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Certificats QR-Code Authentifiés</strong> : Remise automatique de diplômes infalsifiables à la fin du cursus.</span>
+                      </li>
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Protection Anti-Piratage</strong> : Streaming vidéo chiffré, téléchargements verrouillés par jeton élève unique.</span>
+                      </li>
+                      <li className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span><strong>Virements Automatiques</strong> : Encaissez directement sur votre compte Mobile Money ou virement bancaire local.</span>
+                      </li>
+                    </ul>
+
+                    <button
+                      type="button"
+                      onClick={handleCreatorClick}
+                      className="w-full py-4 px-6 rounded-xl font-black text-sm bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-xl shadow-amber-500/25 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <GraduationCap className="w-5 h-5" />
+                      <span>Lancer mon Académie Gratuitement (0 F)</span>
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </button>
+                    <p className="text-[11px] text-center text-slate-400 mt-2.5">
+                      0 F CFA à l'inscription • Pas de carte bancaire requise • Activez en 2 minutes
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CONTENU ONGLET 3 : SERVICES EXPRESS À L'ACTE (PAY-AS-YOU-GO) */}
+        {pricingTab === 'PAY_AS_YOU_GO' && (
+          <div className="max-w-6xl mx-auto space-y-8">
+
+            {/* VEDETTE MAJEURE : VOIR DIRECT (100 F CFA) */}
+            <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white shadow-2xl shadow-orange-500/25 border border-amber-300/60 overflow-hidden">
+              <div className="absolute -right-12 -top-12 w-56 h-56 bg-white/15 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-start sm:items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-lg border border-white/30">
+                    <Eye className="w-9 h-9 text-amber-200 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-[11px] font-black uppercase tracking-wider mb-2 border border-white/25">
+                      <Flame className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Nouveauté Essentielle • Conversion Maximale</span>
+                    </div>
+                    <h3 className="text-2xl sm:text-3xl font-black tracking-tight">
+                      Voir Direct & Achat Immédiat
+                    </h3>
+                    <p className="text-xs sm:text-sm text-orange-100 mt-1.5 max-w-2xl leading-relaxed">
+                      Activez la démo vidéo en direct de votre produit : vos visiteurs visualisent l'article en temps réel et déclenchent l'achat en 1 clic sans friction. 
+                      Multipliez par 3 vos ventes sans aucun abonnement préalable.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex flex-col items-center sm:items-end text-center sm:text-right bg-white/15 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/25 w-full md:w-auto">
+                  <div className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    100 <span className="text-lg font-bold text-amber-200">F CFA</span>
+                  </div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-orange-200 mb-3">
+                    Par produit activé
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playValidationBeep();
+                      if (typeof window !== 'undefined') {
+                        window.history.pushState({ intent: 'direct_view' }, '', '/register?intent=vendor&feature=direct_view');
+                        window.location.href = '/register?intent=vendor&feature=direct_view';
+                      }
+                    }}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white text-orange-900 font-extrabold text-xs hover:bg-orange-50 transition shadow-lg cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4 text-orange-600" />
+                    <span>Activer la Voir Direct</span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bannière explicative Pay-As-You-Go */}
+            <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                  <Zap className="w-5 h-5 fill-amber-500" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">
+                    Payez uniquement ce que vous consommez. Zéro abonnement.
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Idéal pour les visiteurs occasionnels ou les besoins ponctuels. Débit instantané sur votre solde Wallet.
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg shrink-0">
+                Rechargeable dès 500 F CFA via Wave / OM
+              </div>
+            </div>
+
+            {/* Grille des autres services à l'usage */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              
+              {/* CV Pro */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <FileCheck className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                      500 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">CV Pro Moderne & IA</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Génération et export PDF vectoriel haute définition de votre curriculum vitae avec modèle professionnel et lettre de motivation assistée par IA.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>À l'export PDF unique</span>
+                  <span className="text-emerald-600 font-bold">Inclus dans Plan Pro+</span>
+                </div>
+              </div>
+
+              {/* DocuSign */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                      300 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">Signature Électronique Certifiée</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    DocuSign sécurisé et horodatage SHA-256 de vos contrats de vente, devis ou accords commerciaux avec certificat juridique de conformité.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par document signé</span>
+                  <span className="text-emerald-600 font-bold">Preuve infalsifiable</span>
+                </div>
+              </div>
+
+              {/* SMS Marketing */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                      <Radio className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                      25 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">Notification SMS Transactionnelle</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Envoi instantané de SMS d'alerte, rappel de livraison ou confirmation de commande vers Orange, MTN, Moov et Wave avec accusé de réception.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par SMS délivré</span>
+                  <span className="text-slate-500 font-medium">Routage direct Afrique</span>
+                </div>
+              </div>
+
+              {/* WhatsApp Automatisé */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-green-50 text-green-600 flex items-center justify-center font-bold">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-green-700 bg-green-50 px-2.5 py-1 rounded-lg border border-green-200">
+                      35 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">Notification WhatsApp Automatisée</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Relance automatique de devis, facture avec bouton de paiement intégré et notification d'expédition envoyée directement dans le WhatsApp du client.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par message WhatsApp</span>
+                  <span className="text-emerald-600 font-bold">Taux d'ouverture 98%</span>
+                </div>
+              </div>
+
+              {/* IA Média Studio */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                      150 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">Génération IA Média Studio</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Détourage haute précision, création de visuels produits publicitaires et bannières promotionnelles pour vos réseaux sociaux assistés par IA.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par visuel généré</span>
+                  <span className="text-slate-500 font-medium">Qualité studio 4K</span>
+                </div>
+              </div>
+
+              {/* Vente Flash Live Countdown */}
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                      <Flame className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-black text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                      1 000 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5">Session Vente Flash Live</h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Activation d'un compte à rebours d'urgence en direct avec stock restant dynamique pour écouler vos invendus et séries limitées en temps record.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par session événement</span>
+                  <span className="text-amber-600 font-bold">Effet d'urgence maximal</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* Micro-copie d'Incitation au Programme Partenaire / Parrainage */}
-        <div className="max-w-4xl mx-auto mt-8 text-center">
+        <div className="max-w-4xl mx-auto mt-12 text-center">
           <button
             type="button"
             onClick={() => {
@@ -1375,10 +1693,10 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 window.location.href = '/partenaires';
               }
             }}
-            className="inline-flex items-center justify-center flex-wrap gap-1.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-blue-600 p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition cursor-pointer"
+            className="inline-flex items-center justify-center flex-wrap gap-1.5 text-xs sm:text-sm font-semibold text-slate-600 hover:text-blue-600 p-2.5 rounded-2xl hover:bg-slate-100/80 border border-transparent hover:border-slate-200 transition cursor-pointer"
           >
-            <span>💡 Rentabilisez votre abonnement ! Parrainez d'autres vendeurs et touchez des commissions.</span>
-            <span className="font-bold underline text-blue-600 ml-1 hover:text-blue-500">[En savoir plus]</span>
+            <span>💡 Rentabilisez votre activité ! Parrainez d'autres commerçants et formateurs pour toucher des commissions permanentes.</span>
+            <span className="font-bold underline text-blue-600 ml-1 hover:text-blue-500">[En savoir plus sur le parrainage]</span>
           </button>
         </div>
 
@@ -1387,9 +1705,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
   );
 };
 
-// =============================================================================
-// NOUVELLE BANDE CTA PRÉ-FOOTER : PROGRAMME PARTENAIRE
-// =============================================================================
+
 const PartnerPreFooterSection: React.FC<{
   onOpenPartnerProgram?: () => void;
 }> = ({ onOpenPartnerProgram }) => {
