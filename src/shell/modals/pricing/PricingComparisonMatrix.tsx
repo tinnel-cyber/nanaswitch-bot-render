@@ -249,7 +249,7 @@ export const PricingComparisonMatrix: React.FC<PricingComparisonMatrixProps> = (
                     </div>
                   </th>
 
-                  {/* Colonne 3 : Plan Starter */}
+                  {/* Colonne 3 : Plan Pro (Starter) */}
                   <th 
                     onClick={() => onSelectPlan && onSelectPlan('starter')}
                     className={`py-4 px-2.5 text-center transition-colors ${
@@ -258,10 +258,10 @@ export const PricingComparisonMatrix: React.FC<PricingComparisonMatrixProps> = (
                   >
                     <div className="flex flex-col items-center">
                       <span className="text-xs font-black text-blue-400 uppercase tracking-wide">
-                        Starter
+                        Pro
                       </span>
-                      <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                        4 900 F / mois
+                      <span className="text-[10px] text-slate-300 font-bold mt-0.5">
+                        15 000 F / mois
                       </span>
                       <span className="mt-1 text-[8.5px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
                         Croissance
@@ -269,7 +269,7 @@ export const PricingComparisonMatrix: React.FC<PricingComparisonMatrixProps> = (
                     </div>
                   </th>
 
-                  {/* Colonne 4 : Plan Pro (Mise en avant VIP Recommandé) */}
+                  {/* Colonne 4 : Plan Business (Mise en avant Recommandé) */}
                   <th 
                     onClick={() => onSelectPlan && onSelectPlan('pro')}
                     className={`py-4 px-2.5 text-center relative border-x border-amber-500/30 bg-gradient-to-b from-amber-500/15 via-slate-900/90 to-slate-950/95 transition-colors ${
@@ -283,18 +283,18 @@ export const PricingComparisonMatrix: React.FC<PricingComparisonMatrixProps> = (
                     <div className="flex flex-col items-center pt-1">
                       <span className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center gap-1">
                         <Crown className="w-3 h-3 text-amber-400" />
-                        <span>Pro</span>
+                        <span>Business</span>
                       </span>
                       <span className="text-[10px] text-amber-200 font-bold mt-0.5">
-                        9 900 F / mois
+                        30 000 F / mois
                       </span>
                       <span className="mt-1 text-[8.5px] px-1.5 py-0.2 rounded bg-amber-400/25 text-amber-200 font-extrabold border border-amber-400/40">
-                        Tout Illimité
+                        Multi-Boutiques
                       </span>
                     </div>
                   </th>
 
-                  {/* Colonne 5 : Plan Elite */}
+                  {/* Colonne 5 : Plan Elite (Enterprise) */}
                   <th 
                     onClick={() => onSelectPlan && onSelectPlan('elite')}
                     className={`py-4 px-2.5 text-center transition-colors ${
@@ -303,13 +303,13 @@ export const PricingComparisonMatrix: React.FC<PricingComparisonMatrixProps> = (
                   >
                     <div className="flex flex-col items-center">
                       <span className="text-xs font-black text-purple-400 uppercase tracking-wide">
-                        Elite
+                        Enterprise
                       </span>
-                      <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                        19 900 F / mois
+                      <span className="text-[10px] text-slate-300 font-bold mt-0.5">
+                        60 000 F / mois
                       </span>
                       <span className="mt-1 text-[8.5px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                        Entreprise VIP
+                        Marque Blanche
                       </span>
                     </div>
                   </th>

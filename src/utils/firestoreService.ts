@@ -1938,17 +1938,20 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
   plans: [
     {
       id: 'free',
-      name: 'Plan Gratuit — Découverte & Freemium PLG',
+      name: 'Plan Zéro — Découverte & Freemium PLG',
       price: 0,
       period: 'mois',
       badge: 'Freemium PLG',
-      description: 'Démarrez gratuitement votre activité sans carte bancaire avec les outils essentiels.',
+      description: 'Démarrez gratuitement votre activité sans carte bancaire avec les 19 outils essentiels inclus.',
       features: [
-        'Caisse tactile POS complète',
-        '1 compte caissier inclus',
-        'Jusqu\'à 3 produits physiques',
-        '1 cours vidéo inclus',
-        'Sous-domaine gratuit .nanasore.com',
+        'Caisse tactile POS de comptoir & hors-ligne',
+        'Boutique en ligne nsore.shop offerte',
+        'Publication Marketplace & catalogue public',
+        'Visioconférence Wameet Supra & messagerie',
+        'Assistant IA décisionnel de base',
+        'Impression tickets thermiques (Bluetooth/USB)',
+        'Carnet d\'ardoises dettes & créances clients',
+        'Formulaires devis & contact instantané',
         '0% de commission sur vos encaissements'
       ],
       limits: {
@@ -1964,42 +1967,44 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
     },
     {
       id: 'starter',
-      name: 'Starter — Caisse & Lancement',
+      name: 'Plan Pro — Boutique & Formateur Pro',
       price: 15000,
       period: 'mois',
-      badge: 'Starter',
-      description: 'Idéal pour ouvrir votre première boutique physique ou tester une première formation en ligne.',
+      badge: 'Le Choix Recommandé',
+      description: 'La formule tout-en-un pour les commerces actifs et les formateurs indépendants voulant encaisser sans aucune limite.',
       features: [
-        'Jusqu\'à 100 produits ou 1 formation',
-        'Jusqu\'à 5 tunnels de vente haute conversion',
-        'Caisse POS illimitée & Ticket thermique',
-        'Paiements Mobile Money (0% com.)',
-        'Gestion des stocks & créances clients'
+        'Caisse POS & Produits illimités',
+        'Étudiants & Formations illimités',
+        'Module CV Pro inclus en illimité',
+        'Gestion jusqu\'à 10 caissiers (PIN)',
+        'Passerelles directes à 0% de commission',
+        'Certificats officiels sécurisés QR Code'
       ],
       limits: {
-        maxProducts: 100,
-        maxFunnels: 5,
-        maxCourses: 1,
-        maxLiveShoppingSessions: 5,
+        maxProducts: -1,
+        maxFunnels: 10,
+        maxCourses: -1,
+        maxLiveShoppingSessions: 20,
         customDomainAllowed: true,
-        aiAssistanceQueries: 50,
-        docusignInvoices: 50,
-        maxCashiers: 2
+        aiAssistanceQueries: 100,
+        docusignInvoices: 100,
+        maxCashiers: 10
       }
     },
     {
       id: 'pro',
-      name: 'Plan Pro — Commerçant & Formateur Pro',
-      price: 35000,
+      name: 'Plan Business — Multi-Boutiques & Campus',
+      price: 30000,
       period: 'mois',
-      badge: 'Le Choix Recommandé',
-      description: 'Le pack complet pour déployer un empire commercial ou une académie souveraine sans restriction.',
+      badge: 'Croissance & Équipe',
+      description: 'Solution complète pour commerces en réseau, équipes multi-caissiers et académies avec plusieurs instructeurs.',
       features: [
-        'Produits & Étudiants Illimités',
-        'Tunnels de vente IA illimités',
-        'Live Shopping 1-to-1 Daily.co illimité',
-        'Campus Marque Blanche avec votre domaine',
-        'Support prioritaire 7j/7 Wameet & Email'
+        'Multi-points de vente (jusqu\'à 20 caissiers)',
+        'Stocks multi-magasins synchronisés',
+        'Pixels publicitaires Meta & TikTok intégrés',
+        'CRM marketing & relances de paniers',
+        'Gestion multi-formateurs & cohortes d\'élèves',
+        'Assistance prioritaire WhatsApp 7j/7'
       ],
       limits: {
         maxProducts: -1,
@@ -2009,22 +2014,23 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
         customDomainAllowed: true,
         aiAssistanceQueries: -1,
         docusignInvoices: -1,
-        maxCashiers: 10
+        maxCashiers: 20
       }
     },
     {
       id: 'elite',
-      name: 'Plan Elite — Franchises & Grands Comptes',
-      price: 75000,
+      name: 'Plan Enterprise — Franchises & Marque Blanche',
+      price: 60000,
       period: 'mois',
-      badge: 'Plan Elite',
-      description: 'Pour réseaux de boutiques multi-sites, universités privées et consortiums.',
+      badge: 'Marque Blanche 100%',
+      description: 'Pour réseaux de distribution, universités privées et grandes enseignes exigeant une autonomie souveraine absolue.',
       features: [
-        'Tout illimité (Produits, Tunnels, Formations)',
-        'Jusqu\'à 5 magasins / campus étanches',
-        'Agent IA dédié sur mesure & intégration CRM',
-        'Accompagnement VIP dédié & déploiement assisté',
-        'Infrastructure haute disponibilité dédiée'
+        'Marque Blanche totale (Zéro mention NaNa)',
+        'Votre propre nom de domaine personnalisé',
+        'Nombre de caisses & campus illimité',
+        'CV Pro & attestations d\'entreprise illimités',
+        'Accès complet aux webhooks & API souveraines',
+        'Chargé de compte dédié & SLA garanti 99.9%'
       ],
       limits: {
         maxProducts: -1,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
+  Palette,
   Eye,
   Rocket, 
   Sparkles, 
@@ -1194,7 +1195,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 <span className="text-sm sm:text-base font-extrabold">Services à l'Acte</span>
               </div>
               <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                Pay-As-You-Go • Voir Direct (100 F)
+                Pay-As-You-Go • Services à l'Usage
               </span>
             </button>
 
@@ -1496,7 +1497,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                     {/* Grille des Atouts Clés Demandés */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-left mb-6 lg:mb-0">
                       <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
+                        <Palette className="w-4 h-4 text-amber-300 shrink-0" />
                         <span className="text-xs font-bold text-slate-200">Thème Digital Pro</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2">
@@ -1555,8 +1556,8 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                       onClick={handleCreatorClick}
                       className="w-full py-4 px-6 rounded-xl font-black text-sm bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-xl shadow-amber-500/25 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <GraduationCap className="w-5 h-5" />
-                      <span>Lancer mon Académie Gratuitement (0 F)</span>
+                      <Rocket className="w-5 h-5 text-slate-950" />
+                      <span>Lancer ma Création Gratuitement (0 F)</span>
                       <ArrowRight className="w-4 h-4 ml-1" />
                     </button>
                     <p className="text-[11px] text-center text-slate-400 mt-2.5">
@@ -1573,49 +1574,49 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         {pricingTab === 'PAY_AS_YOU_GO' && (
           <div className="max-w-6xl mx-auto space-y-8">
 
-            {/* VEDETTE MAJEURE : VOIR DIRECT (100 F CFA) */}
+            {/* VEDETTE MAJEURE : SERVICES EXPRESS À L'USAGE */}
             <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white shadow-2xl shadow-orange-500/25 border border-amber-300/60 overflow-hidden">
               <div className="absolute -right-12 -top-12 w-56 h-56 bg-white/15 rounded-full blur-2xl pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex items-start sm:items-center gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-lg border border-white/30">
-                    <Eye className="w-9 h-9 text-amber-200 animate-pulse" />
+                    <Zap className="w-9 h-9 text-amber-200 fill-amber-200" />
                   </div>
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-[11px] font-black uppercase tracking-wider mb-2 border border-white/25">
                       <Flame className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Nouveauté Essentielle • Conversion Maximale</span>
+                      <span>Micro-Services & Outils Immédiats • Sans Engagement</span>
                     </div>
                     <h3 className="text-2xl sm:text-3xl font-black tracking-tight">
-                      Voir Direct & Achat Immédiat
+                      Micro-Services & Outils Immédiats
                     </h3>
                     <p className="text-xs sm:text-sm text-orange-100 mt-1.5 max-w-2xl leading-relaxed">
-                      Activez la démo vidéo en direct de votre produit : vos visiteurs visualisent l'article en temps réel et déclenchent l'achat en 1 clic sans friction. 
-                      Multipliez par 3 vos ventes sans aucun abonnement préalable.
+                      Accédez instantanément à nos fonctionnalités à la carte : Voir Direct, CV Pro, DocuSign, SMS & WhatsApp. 
+                      Payez uniquement ce que vous consommez, sans abonnement mensuel obligatoire.
                     </p>
                   </div>
                 </div>
 
                 <div className="shrink-0 flex flex-col items-center sm:items-end text-center sm:text-right bg-white/15 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/25 w-full md:w-auto">
                   <div className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                    100 <span className="text-lg font-bold text-amber-200">F CFA</span>
+                    Dès 25 <span className="text-lg font-bold text-amber-200">F CFA</span>
                   </div>
                   <div className="text-[11px] font-bold uppercase tracking-wider text-orange-200 mb-3">
-                    Par produit activé
+                    À l'acte selon le service
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       playValidationBeep();
                       if (typeof window !== 'undefined') {
-                        window.history.pushState({ intent: 'direct_view' }, '', '/register?intent=vendor&feature=direct_view');
-                        window.location.href = '/register?intent=vendor&feature=direct_view';
+                        window.history.pushState({ intent: 'pay_as_you_go' }, '', '/register?intent=vendor&feature=pay_as_you_go');
+                        window.location.href = '/register?intent=vendor&feature=pay_as_you_go';
                       }
                     }}
                     className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white text-orange-900 font-extrabold text-xs hover:bg-orange-50 transition shadow-lg cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <Eye className="w-4 h-4 text-orange-600" />
-                    <span>Activer la Voir Direct</span>
+                    <Rocket className="w-4 h-4 text-orange-600" />
+                    <span>Démarrer à l'Acte</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
                   </button>
                 </div>
@@ -1642,8 +1643,33 @@ const PricingSection: React.FC<PricingSectionProps> = ({
               </div>
             </div>
 
-            {/* Grille des autres services à l'usage */}
+            {/* Grille des services à l'usage */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              
+              {/* Voir Direct */}
+              <div className="bg-white rounded-2xl p-5 border border-amber-300/90 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/30 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
+                      <Eye className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <span className="text-sm font-black text-orange-700 bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200">
+                      100 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5 flex items-center gap-1.5">
+                    <span>Voir Direct (Live View Produit)</span>
+                    <span className="text-[10px] bg-rose-500 text-white font-black px-1.5 py-0.2 rounded-full">Top Vente</span>
+                  </h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Démo vidéo interactive en direct de votre produit : les clients voient l'article en temps réel et achètent en 1 clic sans friction (taux de conversion x3).
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par produit activé</span>
+                  <span className="text-orange-600 font-bold">Achat immédiat 1-clic</span>
+                </div>
+              </div>
               
               {/* CV Pro */}
               <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition flex flex-col justify-between">
