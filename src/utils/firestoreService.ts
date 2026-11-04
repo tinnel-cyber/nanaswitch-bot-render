@@ -1944,14 +1944,14 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
       badge: 'Freemium PLG',
       description: 'Démarrez gratuitement votre activité sans carte bancaire avec les 19 outils essentiels inclus.',
       features: [
-        'Caisse tactile POS de comptoir & hors-ligne',
+        'Caisse tactile POS de comptoir ou portable avec synchronisation Cloud',
         'Boutique en ligne nsore.shop offerte',
         'Publication Marketplace & catalogue public',
-        'Visioconférence Wameet Supra & messagerie',
         'Assistant IA décisionnel de base',
         'Impression tickets thermiques (Bluetooth/USB)',
         'Carnet d\'ardoises dettes & créances clients',
         'Formulaires devis & contact instantané',
+        'Souscription gratuite au service de livraison pendant le live shopping',
         '0% de commission sur vos encaissements'
       ],
       limits: {

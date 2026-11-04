@@ -1839,10 +1839,9 @@ export const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
         badge: "Freemium",
         isPopular: false,
         features: [
-          "Caisse tactile POS de comptoir & hors-ligne",
+          "Caisse tactile POS de comptoir ou portable avec synchronisation Cloud",
           "Boutique en ligne nsore.shop offerte",
           "Publication Marketplace & catalogue public",
-          "Visioconférence Wameet Supra & messagerie",
           "Assistant IA décisionnel de base",
           "Impression tickets thermiques (Bluetooth/USB)",
           "Carnet d'ardoises dettes & créances clients",
@@ -1854,12 +1853,11 @@ export const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
           "Simulateur de trésorerie (Cashflow)",
           "Extension Nanaswitch Cloud",
           "Revente & affiliation services partenaires",
-          "Livraison & suivi Live Shopping",
+          "Souscription gratuite au service de livraison pendant le live shopping",
           "Export tunnels formats compatibles",
           "Gestion & consultation multi-devises",
           "Notifications email de confirmation",
-          "0% de commission sur vos encaissements",
-          "Module CV Pro exclu (500 F à l'acte)"
+          "0% de commission sur vos encaissements"
         ],
         ctaText: "Commencer Gratuitement (0F)"
       },
