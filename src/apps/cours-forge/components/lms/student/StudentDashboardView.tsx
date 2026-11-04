@@ -44,7 +44,8 @@ import {
   RotateCcw,
   CheckSquare,
   AlertTriangle,
-  ShoppingBag
+  ShoppingBag,
+  UploadCloud
 } from 'lucide-react';
 import { Course } from '../../../../../types';
 import { DEFAULT_MASTERCLASS_COURSE } from '../mockCourses';
@@ -1286,6 +1287,16 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                 </div>
 
                 <div className="py-1.5">
+                  <a
+                    href="/academic/upload?role=etudiant"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full text-left px-4 py-2 text-xs font-bold text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 flex items-center gap-2.5 transition"
+                  >
+                    <UploadCloud className="w-4 h-4 text-blue-700" />
+                    <span>Déposer un Devoir / Rendu (R2)</span>
+                  </a>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1561,6 +1572,17 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                   <ShoppingBag className="w-4 h-4 text-[#1D4ED8] group-hover:scale-110 transition" />
                   <span>Explorer le Marketplace</span>
                 </button>
+
+                <a
+                  href="/academic/upload?role=etudiant"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-3.5 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-700/20 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer group"
+                  title="Déposer un devoir ou projet dans le coffre académique R2 (Compression ZIP)"
+                >
+                  <UploadCloud className="w-4 h-4 text-blue-200 group-hover:scale-110 transition" />
+                  <span>Dépôt Devoir R2</span>
+                </a>
               </div>
             </div>
 

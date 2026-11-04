@@ -111,7 +111,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .eq("is_public", true)
       .order("name", { ascending: true });
 
-    if (regError) throw regError;
+    let finalRegistry = registry || [];
+    if (regError || finalRegistry.length === 0) {
+      try {
+        const { CANONICAL_APP_REGISTRY } = await import("../../../src/config/appRegistry");
+        finalRegistry = CANONICAL_APP_REGISTRY.map((m) => ({
+          key: m.id,
+          name: m.name,
+          description: m.description,
+          category: m.category,
+          is_public: true,
+        }));
+      } catch {
+        if (regError) throw regError;
+      }
+    }
 
     let activeBlocks: any[] = [];
     if (orgId) {
@@ -122,7 +136,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       activeBlocks = blocks || [];
     }
 
-    const responseData = { success: true, registry: registry || [], activeBlocks };
+    const responseData = { success: true, registry: finalRegistry, activeBlocks };
     modulesMemoryCache.set(cacheKey, {
       data: responseData,
       expiry: Date.now() + MODULES_CACHE_TTL_MS,

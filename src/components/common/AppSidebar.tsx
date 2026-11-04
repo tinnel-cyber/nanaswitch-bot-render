@@ -169,6 +169,15 @@ export const ALL_SOLUTIONS_CATALOG: CatalogItem[] = [
     view: 'DOCUSIGN',
     route: '/docusign'
   },
+  {
+    id: 'app-academic-upload',
+    name: 'Espace Upload Académique',
+    taxonomy: 'APPLICATION',
+    category: 'Éducation & R2',
+    description: 'Module d\'upload unifié de cours, devoirs et rendus (Compression ZIP & R2).',
+    view: 'ACADEMIC_UPLOAD',
+    route: '/academic/upload'
+  },
 
   // --- SERVICES ---
   {

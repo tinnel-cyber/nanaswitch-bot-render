@@ -7,11 +7,16 @@ export interface Organization {
 
 export interface Product {
   id: string;
-  organization_id: string;
+  organization_id?: string;
+  vendor_id?: string | null;
+  title?: string | null;
   name: string;
   price: number;
-  stock: number;
-  category: string | null;
+  stock?: number;
+  file_key?: string | null;
+  file_type?: string | null;
+  file_size?: string | null;
+  category?: string | null;
   created_at?: string;
 }
 
@@ -129,6 +134,18 @@ export interface PlanModularPillar {
   enterprise_monthly_price: number;
   included_modules: string[];
   features_highlight: string[];
+}
+
+export interface AcademicUpload {
+  id?: string;
+  user_id: string;
+  role: 'professeur' | 'etudiant';
+  upload_type: 'cours' | 'rendu';
+  file_key: string;
+  file_size: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 

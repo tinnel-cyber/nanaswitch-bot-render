@@ -369,9 +369,20 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-300">
-                    Document Source (PDF)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-300">
+                      Document Source (PDF)
+                    </label>
+                    <a
+                      href="/academic/upload?role=professeur"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 hover:underline inline-flex items-center gap-1"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Upload R2 Direct</span>
+                    </a>
+                  </div>
                   <label className="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-8 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-950/60 transition">
                     <UploadCloud className="w-8 h-8 text-indigo-400" />
                     <span className="text-xs font-bold text-slate-200">

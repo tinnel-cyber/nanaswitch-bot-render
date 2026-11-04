@@ -46,7 +46,8 @@ import {
   LayoutGrid,
   ListOrdered,
   Mic,
-  Crown
+  Crown,
+  UploadCloud
 } from 'lucide-react';
 
 import { CourseNodeData, CourseNodeType, AdaptiveQuizQuestion, VideoLessonNodeConfig, CourseModule, CourseLesson, LessonResource, LiveSessionConfig, StoreSubscription, StoreUser } from '../../../../../types';
@@ -1022,6 +1023,17 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
               accept=".json"
               className="hidden"
             />
+
+            <a
+              href="/academic/upload?role=professeur"
+              target="_blank"
+              rel="noreferrer"
+              className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-bold text-xs transition border border-blue-500/30 flex items-center gap-1.5 cursor-pointer"
+              title="Téléverser des cours ou supports dans le vault Cloudflare R2 (Compression ZIP)"
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Upload R2</span>
+            </a>
           </div>
 
           {/* Bouton IA Auto-Build */}

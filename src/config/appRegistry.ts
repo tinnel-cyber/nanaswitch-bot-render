@@ -33,6 +33,8 @@ export interface CanonicalModule {
   icon?: string;              // Nom de l'icône Lucide associée
   keywords?: string[];        // Mots-clés de recherche Omnibar / Hub
   aliases?: string[];         // Identifiants alternatifs ou historiques supportés
+  requiredRoles?: string[];   // Rôles requis (ex: vendor, admin)
+  permissions?: string[];     // Permissions requises pour l'accès
 }
 
 // Rétro-compatibilité pour les composants existants
@@ -206,6 +208,23 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     icon: 'FileCheck',
     keywords: ['docusign', 'contrats', 'signature', 'juridique', 'legal'],
     aliases: ['app-docusign', 'digital_signature', 'contrats']
+  },
+  {
+    id: 'vendor-upload',
+    slug: 'academic-upload',
+    name: 'Espace Upload Académique',
+    route: '/academic/upload',
+    category: 'academic',
+    description: 'Module d\'upload unifié de cours, devoirs et rendus (Compression ZIP & R2)',
+    type: 'APPLICATION',
+    taxonomy: 'APPLICATION',
+    defaultActive: true,
+    requiredRoles: ['vendor', 'admin', 'professeur', 'etudiant'],
+    permissions: ['vendor', 'admin', 'professeur', 'etudiant'],
+    view: 'ACADEMIC_UPLOAD',
+    icon: 'UploadCloud',
+    keywords: ['upload', 'cours', 'devoir', 'remise', 'professeur', 'etudiant', 'étudiant', 'devoirs', 'r2', 'zip', 'rendu', 'campus'],
+    aliases: ['vendor-upload', 'academic-upload', 'studio-upload', 'upload-vendeur', 'upload-academique']
   }
 ];
 

@@ -34,6 +34,26 @@ export interface AppRegistryItem {
 }
 
 export const APPS_REGISTRY: AppRegistryItem[] = [
+  // Module Espace Upload Académique (Professeurs & Étudiants)
+  {
+    id: "vendor-upload",
+    appName: "Espace Upload Académique",
+    appLogo: "/assets/icons/apps/vault.svg",
+    shortDescription: "Upload unifié de cours, devoirs et rendus (Compression ZIP & R2)",
+    category: "academic",
+    keywords: ["upload", "cours", "devoir", "remise", "professeur", "etudiant", "étudiant", "devoirs", "r2", "zip", "rendu", "campus"],
+    route: "/academic/upload",
+    installationType: "instant",
+    trialType: "freemium",
+    priceMonthly: 0,
+    palmares: "🎓 Cloudflare Academic Vault",
+    badgePalmares: "⚡ Compression ZIP Maximale",
+    trialLabel: "Professeurs & Étudiants",
+    isPopular: true,
+    targetView: "ACADEMIC_UPLOAD",
+    badge: "Académique R2",
+    rating: 5.0
+  },
   // 1. Marketing & Studio IA
   {
     id: "nanagenerator",

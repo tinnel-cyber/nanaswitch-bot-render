@@ -1115,10 +1115,22 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
             <div className="space-y-5">
               {/* Ressources du cours */}
               <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                  <Download className="w-4 h-4" />
-                  <span>Supports & Fiches Pédagogiques Associées</span>
-                </h4>
+                <div className="flex items-center justify-between pb-1">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                    <Download className="w-4 h-4" />
+                    <span>Supports & Fiches Pédagogiques Associées</span>
+                  </h4>
+                  <a
+                    href="/academic/upload?role=professeur"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-bold transition cursor-pointer"
+                    title="Ajouter un support via l'Espace Upload Académique R2"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Upload Professeur R2</span>
+                  </a>
+                </div>
 
                 {activeLesson.resources && activeLesson.resources.length > 0 ? (
                   <div className="space-y-2">
@@ -1151,16 +1163,28 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
 
               {/* Zone de Dépôt de Devoir Pratique */}
               <div className="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-4">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-                    <UploadCloud className="w-4 h-4" />
-                    <span>Dépôt du Devoir Pratique (Cas Réel)</span>
-                  </h4>
-                  <p className="text-xs text-slate-300">
-                    {activeLesson.assignment 
-                      ? activeLesson.assignment.instructions 
-                      : "Soumettez vos captures d'écran de caisse ou documents de synthèse pour validation par le formateur."}
-                  </p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Dépôt du Devoir Pratique (Cas Réel)</span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      {activeLesson.assignment 
+                        ? activeLesson.assignment.instructions 
+                        : "Soumettez vos captures d'écran de caisse ou documents de synthèse pour validation par le formateur."}
+                    </p>
+                  </div>
+                  <a
+                    href="/academic/upload?role=etudiant"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold transition shrink-0 self-start sm:self-auto cursor-pointer"
+                    title="Déposer via l'Espace Upload Académique R2 avec compression ZIP"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Upload R2 Sécurisé</span>
+                  </a>
                 </div>
 
                 {isAiGradingHomework ? (
