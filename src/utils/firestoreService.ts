@@ -1974,21 +1974,22 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
       description: 'La formule tout-en-un pour les commerces actifs et les formateurs indépendants voulant encaisser sans aucune limite.',
       features: [
         'Caisse POS & Produits illimités',
-        'Étudiants & Formations illimités',
+        '10 Tunnels de vente (Option à l\'usage)',
+        'Jusqu\'à 50 cours hébergés & élèves illimités',
+        'Gestion jusqu\'à 5 caissiers (PIN)',
         'Module CV Pro inclus en illimité',
-        'Gestion jusqu\'à 10 caissiers (PIN)',
         'Passerelles directes à 0% de commission',
         'Certificats officiels sécurisés QR Code'
       ],
       limits: {
         maxProducts: -1,
         maxFunnels: 10,
-        maxCourses: -1,
+        maxCourses: 50,
         maxLiveShoppingSessions: 20,
         customDomainAllowed: true,
         aiAssistanceQueries: 100,
         docusignInvoices: 100,
-        maxCashiers: 10
+        maxCashiers: 5
       }
     },
     {

@@ -78,8 +78,8 @@ export const DEFAULT_COMPARISON_MATRIX: ComparisonFeatureItem[] = [
     isVipCrown: true,
     tooltip: 'Pages de capture, One-Click Upsell et Order Bump pour maximiser le panier moyen.',
     free: '1 tunnel',
-    starter: '3 tunnels',
-    pro: '10 tunnels',
+    starter: '10 tunnels (Option à l\'usage)',
+    pro: '10 tunnels (Option à l\'usage)',
     elite: 'Illimité'
   },
   {
@@ -100,8 +100,8 @@ export const DEFAULT_COMPARISON_MATRIX: ComparisonFeatureItem[] = [
     isVipCrown: true,
     tooltip: 'Comptes d\'accès dédiés avec verrouillage PIN individuel pour vos employés.',
     free: '1 caissier',
-    starter: '2 caissiers',
-    pro: '10 caissiers',
+    starter: '5 caissiers',
+    pro: '5 caissiers',
     elite: 'Illimité'
   },
   {
@@ -146,8 +146,8 @@ export const DEFAULT_COMPARISON_MATRIX: ComparisonFeatureItem[] = [
     isVipCrown: false,
     tooltip: 'Nombre de cours en ligne complets avec vidéos, quiz et devoirs.',
     free: '1 cours',
-    starter: '5 cours',
-    pro: 'Illimité',
+    starter: '50 cours',
+    pro: '50 cours',
     elite: 'Illimité'
   },
   {

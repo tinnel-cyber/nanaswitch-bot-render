@@ -1873,9 +1873,10 @@ export const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
         isPopular: true,
         features: [
           "Caisse POS & Produits illimités",
-          "Étudiants & Formations illimités",
+          "10 Tunnels de vente (Option à l'usage)",
+          "Jusqu'à 50 cours hébergés & élèves illimités",
+          "Gestion jusqu'à 5 caissiers (PIN)",
           "Module CV Pro inclus en illimité",
-          "Gestion jusqu'à 10 caissiers (PIN)",
           "Passerelles directes à 0% de commission",
           "Certificats officiels sécurisés QR Code"
         ],
