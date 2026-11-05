@@ -9,7 +9,7 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
-RUN mkdir -p /app/build
+RUN mkdir -p /app/dist /app/build
 
 # ==============================================================================
 # Étape 2 : Production (Image légère, runtime optimisé sous Node 26.13.0)
