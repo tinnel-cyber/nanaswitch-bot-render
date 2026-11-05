@@ -83,7 +83,8 @@ if (typeof window !== 'undefined') {
 }
 
 // 2. Enregistrement du Service Worker PWA (Hors-ligne & Installation avec mise à jour immédiate)
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+const isTestEnv = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && !isTestEnv) {
   // Purge proactive des caches obsolètes dans le navigateur client (v3, v4, v5, v6)
   if (typeof window !== 'undefined' && 'caches' in window) {
     caches.keys().then((keys) => {

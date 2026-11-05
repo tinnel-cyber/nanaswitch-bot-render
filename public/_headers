@@ -1,0 +1,22 @@
+# ==============================================================================
+# Cloudflare Pages Headers Configuration (_headers)
+# ==============================================================================
+
+# 1. Assets immuables hashés par Vite (Cache 1 an)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 2. Service Worker & Manifest PWA (Pas de mise en cache pour forcer la mise à jour)
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.json
+  Cache-Control: public, max-age=0, must-revalidate
+/.well-known/*
+  Cache-Control: public, max-age=0, must-revalidate
+  Access-Control-Allow-Origin: *
+
+# 3. En-têtes globaux de sécurité
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin

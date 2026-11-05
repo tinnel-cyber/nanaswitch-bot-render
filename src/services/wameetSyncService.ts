@@ -6,7 +6,7 @@
  * et permet au frontend Wameet de s'abonner aux diffusions en temps réel via WebSockets.
  */
 
-import {
+import type {
   PublishRoomRequestPayload,
   UpdateContentRequestPayload,
   SyncedVipRoomRecord

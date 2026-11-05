@@ -89,7 +89,8 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('firebaseio.com') ||
     url.hostname.includes('generativelanguage.googleapis.com') ||
     url.hostname.includes('identitytoolkit.googleapis.com') ||
-    url.pathname.startsWith('/api/')
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/v1/switch/')
   ) {
     return;
   }
