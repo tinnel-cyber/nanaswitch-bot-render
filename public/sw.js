@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v7-direct-clean';
+const CACHE_NAME = 'nanasore-v8-brevo-auth';
 const WASM_CACHE_NAME = 'nanasore-v7-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v7-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v3';
