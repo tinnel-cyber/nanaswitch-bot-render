@@ -21,18 +21,44 @@ const actionCodeSettings = {
   handleCodeInApp: true,
 };
 
+export type RegisterPayload = {
+  email: string;
+  password: string;
+  name?: string;
+  fullName?: string;
+  displayName?: string;
+  whatsapp?: string;
+};
+
 /**
  * Server Action : Inscription d'un utilisateur, génération du lien sécurisé
  * Firebase Admin ciblant https://nanasore.com/auth/action et expédition via Brevo.
+ * Supporte à la fois l'appel direct { email, password, name } et le binding FormData (useActionState).
  */
 export async function registerUserAndSendVerification(
-  prevState: AuthActionResult | null,
-  formData: FormData
+  input: RegisterPayload | FormData | AuthActionResult | null,
+  maybeFormData?: FormData
 ): Promise<AuthActionResult> {
-  const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "");
-  const displayName = String(formData.get("displayName") || formData.get("fullName") || "").trim();
-  const whatsapp = String(formData.get("whatsapp") || "").trim();
+  let email = "";
+  let password = "";
+  let displayName = "";
+  let whatsapp = "";
+
+  if (input && typeof input === "object" && "password" in input) {
+    // Appel direct : registerUserAndSendVerification({ email, password, name })
+    const payload = input as RegisterPayload;
+    email = String(payload.email || "").trim().toLowerCase();
+    password = String(payload.password || "");
+    displayName = String(payload.name || payload.fullName || payload.displayName || "").trim();
+    whatsapp = String(payload.whatsapp || "").trim();
+  } else {
+    // Appel via formulaire / useActionState : (prevState, formData)
+    const formData = (maybeFormData || input) as FormData;
+    email = String(formData?.get?.("email") || "").trim().toLowerCase();
+    password = String(formData?.get?.("password") || "");
+    displayName = String(formData?.get?.("name") || formData?.get?.("displayName") || formData?.get?.("fullName") || "").trim();
+    whatsapp = String(formData?.get?.("whatsapp") || "").trim();
+  }
 
   // 1. Validation des champs
   if (!email || !email.includes("@")) {
@@ -147,9 +173,19 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
 /**
  * Server Action : Demande de réinitialisation de mot de passe via Brevo
  * avec actionCodeSettings vers https://nanasore.com/auth/action
+ * Supporte string, { email: string }, ou FormData.
  */
-export async function requestPasswordReset(email: string): Promise<AuthActionResult> {
-  const cleanEmail = String(email || "").trim().toLowerCase();
+export async function requestPasswordReset(
+  input: string | { email: string } | FormData
+): Promise<AuthActionResult> {
+  let cleanEmail = "";
+  if (typeof input === "string") {
+    cleanEmail = input.trim().toLowerCase();
+  } else if (input && typeof input === "object" && "email" in input) {
+    cleanEmail = String(input.email || "").trim().toLowerCase();
+  } else if (input && typeof (input as FormData).get === "function") {
+    cleanEmail = String((input as FormData).get("email") || "").trim().toLowerCase();
+  }
 
   if (!cleanEmail || !cleanEmail.includes("@")) {
     return { success: false, error: "Adresse e-mail invalide." };

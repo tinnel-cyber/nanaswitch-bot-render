@@ -15,7 +15,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidationError(null);
 
@@ -29,15 +29,19 @@ export default function RegisterPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("email", email);
-    formData.append("password", password);
-    formData.append("fullName", fullName);
-    formData.append("whatsapp", whatsapp);
-
     startTransition(async () => {
-      const res = await registerUserAndSendVerification(null, formData);
-      setResult(res);
+      const res = await registerUserAndSendVerification({
+        email,
+        password,
+        name: fullName,
+        whatsapp,
+      });
+
+      if (!res.success) {
+        setValidationError(res.error || "Erreur lors de la création de compte.");
+      } else {
+        setResult(res);
+      }
     });
   };
 

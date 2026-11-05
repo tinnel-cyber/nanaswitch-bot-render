@@ -11,7 +11,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidationError(null);
 
@@ -22,8 +22,12 @@ export default function ForgotPasswordPage() {
     }
 
     startTransition(async () => {
-      const res = await requestPasswordReset(cleanEmail);
-      setResult(res);
+      const res = await requestPasswordReset({ email: cleanEmail });
+      if (!res.success) {
+        setValidationError(res.error || "Impossible d'envoyer le lien de réinitialisation.");
+      } else {
+        setResult(res);
+      }
     });
   };
 
