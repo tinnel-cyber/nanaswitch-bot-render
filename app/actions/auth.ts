@@ -39,6 +39,7 @@ export async function registerUserAndSendVerification(
   input: RegisterPayload | FormData | AuthActionResult | null,
   maybeFormData?: FormData
 ): Promise<AuthActionResult> {
+  console.log("=== EXÉCUTION SERVER ACTION BREVO ===");
   let email = "";
   let password = "";
   let displayName = "";
