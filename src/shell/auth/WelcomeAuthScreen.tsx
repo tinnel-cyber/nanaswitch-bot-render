@@ -378,6 +378,13 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       const user = await registerWithEmail(emailInput.trim(), passwordInput);
       playValidationBeep();
 
+      // Expédition de l'email de vérification officiel via Brevo & Server Action (contact@nanasore.com)
+      fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email || emailInput.trim() })
+      }).catch((e) => console.warn('[AUTH] Expédition email Brevo différée:', e));
+
       // Persistance Neutre Immédiate dans Supabase :
       // kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
       await syncAuthProfileWithSupabase({

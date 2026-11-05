@@ -8,8 +8,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInAnonymously,
-  sendEmailVerification,
-  sendPasswordResetEmail,
   setPersistence,
   browserLocalPersistence,
   User as FirebaseUser
@@ -218,35 +216,50 @@ export async function loginWithEmail(email: string, password: string): Promise<F
 
 /**
  * Création de compte avec Email et Mot de passe Firebase Auth
+ * NOTE: Les e-mails de vérification sont exclusivement délégués aux Server Actions
+ * côté serveur (@/app/actions/auth) via Brevo & Firebase Admin pour garantir la délivrabilité.
  */
 export async function registerWithEmail(email: string, password: string): Promise<FirebaseUser> {
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  // Envoi systématique du lien de validation email
-  try {
-    await sendEmailVerification(cred.user);
-    console.log('[FIREBASE AUTH] Email de vérification expédié à', cred.user.email);
-  } catch (err) {
-    console.warn('[FIREBASE AUTH] Impossible d\'envoyer le mail de vérification :', err);
-  }
   return cred.user;
 }
 
 /**
- * Renvoyer l'email de confirmation Firebase Auth
+ * Renvoyer l'email de confirmation via API serveur / Server Action
+ * (Aucun appel direct au SDK client Firebase sendEmailVerification dans le navigateur)
  */
 export async function resendVerificationEmail(): Promise<boolean> {
-  if (auth.currentUser) {
-    await sendEmailVerification(auth.currentUser);
-    return true;
+  const targetEmail = auth.currentUser?.email;
+  if (!targetEmail) return false;
+  try {
+    const res = await fetch('/api/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: targetEmail })
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[AUTH] Échec renvoi e-mail serveur:', err);
+    return false;
   }
-  return false;
 }
 
 /**
- * Réinitialisation du mot de passe par email via Firebase Auth
+ * Réinitialisation du mot de passe par email via API serveur / Server Action
+ * (Aucun appel direct au SDK client Firebase sendPasswordResetEmail dans le navigateur)
  */
 export async function resetPasswordEmail(email: string): Promise<void> {
-  await sendPasswordResetEmail(auth, email.trim());
+  const cleanEmail = email.trim();
+  if (!cleanEmail) throw new Error('Email requis pour la réinitialisation.');
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Erreur lors de la demande de réinitialisation.');
+  }
 }
 
 /**

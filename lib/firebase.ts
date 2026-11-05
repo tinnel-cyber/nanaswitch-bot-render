@@ -18,7 +18,7 @@ const serviceAccount = {
 
 if (!admin.apps.length) {
   try {
-    if (serviceAccount.private_key && serviceAccount.client_email) {
+    if (serviceAccount.private_key && serviceAccount.client_email && serviceAccount.private_key.startsWith('-----BEGIN PRIVATE KEY-----')) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount as any),
         projectId: serviceAccount.project_id,

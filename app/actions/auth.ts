@@ -16,7 +16,7 @@ export interface AuthActionResult {
 // Configuration officielle de redirection personnalisée vers nanasore.com/auth/action
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://nanasore.com').replace(/\/$/, '');
 
-export const actionCodeSettings = {
+const actionCodeSettings = {
   url: `${appUrl}/auth/action`,
   handleCodeInApp: true,
 };

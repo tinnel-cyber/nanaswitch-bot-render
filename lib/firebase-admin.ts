@@ -9,7 +9,7 @@ const privateKey = rawPrivateKey ? rawPrivateKey.replace(/\\n/g, '\n') : undefin
 
 if (!admin.apps.length) {
   try {
-    if (clientEmail && privateKey) {
+    if (clientEmail && privateKey && privateKey.startsWith('-----BEGIN PRIVATE KEY-----')) {
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId,
@@ -23,7 +23,7 @@ if (!admin.apps.length) {
       admin.initializeApp({
         projectId,
       });
-      console.warn('[FIREBASE_ADMIN] Initialisé en mode projet ID uniquement (sans clé privée complète).');
+      console.log('[FIREBASE_ADMIN] Initialisé en mode projet ID (environnement pos-app-1759a).');
     }
   } catch (error) {
     console.warn('[FIREBASE_ADMIN_WARN] Erreur initialisation Firebase Admin:', error);
