@@ -603,7 +603,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       setResetSuccessMsg('Un lien de réinitialisation sécurisé a été envoyé à votre adresse email.');
     } catch (err: any) {
       playCancelSound();
-      setResetErrorMsg(err.message || 'Impossible d\'envoyer le lien de réinitialisation.');
+      console.error("Erreur complète reset :", err);
+      setResetErrorMsg(err?.message || String(err) || "Erreur lors de la demande de réinitialisation.");
     } finally {
       setIsSendingReset(false);
     }

@@ -62,13 +62,13 @@ function ResetPasswordForm() {
         router.push("/dashboard");
       }, 3000);
     } catch (err: any) {
-      console.error("[RESET_PASSWORD_CONFIRM_ERROR]", err);
+      console.error("Erreur complète reset :", err);
       if (err.code === "auth/expired-action-code") {
         setError("Ce lien de réinitialisation a expiré. Veuillez refaire une demande.");
       } else if (err.code === "auth/invalid-action-code") {
         setError("Ce lien a déjà été utilisé ou est invalide.");
       } else {
-        setError(err.message || "Erreur lors du changement de mot de passe.");
+        setError(err?.message || "Erreur lors de la réinitialisation du mot de passe.");
       }
     } finally {
       setLoading(false);

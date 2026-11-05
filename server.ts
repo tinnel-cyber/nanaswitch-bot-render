@@ -607,6 +607,115 @@ async function startServer() {
     }
   });
 
+  // Route de réinitialisation de mot de passe via Brevo & Firebase Admin
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Adresse email invalide.' });
+      }
+
+      const { adminAuth } = await import('./app/utils/firebase.server');
+      const actionCodeSettings = {
+        url: 'https://nanasore.com/auth/action',
+        handleCodeInApp: true,
+      };
+
+      const resetLink = await adminAuth.generatePasswordResetLink(cleanEmail, actionCodeSettings);
+
+      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
+      if (apiKey) {
+        await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': apiKey,
+          },
+          body: JSON.stringify({
+            sender: {
+              name: process.env.BREVO_SENDER_NAME || 'Nanasore',
+              email: process.env.BREVO_SENDER_EMAIL || 'contact@nanasore.com',
+            },
+            to: [{ email: cleanEmail }],
+            subject: 'Réinitialisation de votre mot de passe Nanasore',
+            htmlContent: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2>Réinitialisation de mot de passe</h2>
+              <p>Une demande de réinitialisation de mot de passe a été reçue pour votre compte Nanasore.</p>
+              <p><a href="${resetLink}" style="background-color: #1d4ed8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Changer mon mot de passe →</a></p>
+              <p style="color: #64748b; font-size: 12px; margin-top: 24px;">Ce lien temporaire expire dans 1 heure.</p>
+            </div>`,
+          }),
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Le lien de réinitialisation a été envoyé à votre adresse e-mail.',
+      });
+    } catch (err: any) {
+      console.error('Erreur complète reset :', err);
+      return res.status(400).json({
+        success: false,
+        error: err?.message || 'Erreur lors de la réinitialisation du mot de passe.',
+      });
+    }
+  });
+
+  // Route de renvoi de confirmation via Brevo & Firebase Admin
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    try {
+      const { email } = req.body;
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Adresse email requise.' });
+      }
+
+      const { adminAuth } = await import('./app/utils/firebase.server');
+      const actionCodeSettings = {
+        url: 'https://nanasore.com/auth/action',
+        handleCodeInApp: true,
+      };
+
+      const verificationLink = await adminAuth.generateEmailVerificationLink(cleanEmail, actionCodeSettings);
+
+      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
+      if (apiKey) {
+        await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': apiKey,
+          },
+          body: JSON.stringify({
+            sender: {
+              name: process.env.BREVO_SENDER_NAME || 'Nanasore',
+              email: process.env.BREVO_SENDER_EMAIL || 'contact@nanasore.com',
+            },
+            to: [{ email: cleanEmail }],
+            subject: 'Vérifiez votre adresse e-mail Nanasore',
+            htmlContent: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2>Vérification de votre compte</h2>
+              <p>Merci de confirmer votre adresse e-mail pour activer votre compte Nanasore.</p>
+              <p><a href="${verificationLink}" style="background-color: #1d4ed8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Confirmer mon compte →</a></p>
+            </div>`,
+          }),
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Email de vérification envoyé avec succès.',
+      });
+    } catch (err: any) {
+      console.error('[RESEND_VERIFICATION_ERROR]', err);
+      return res.status(400).json({
+        success: false,
+        error: err?.message || 'Erreur lors du renvoi de vérification.',
+      });
+    }
+  });
+
   // Route de confirmation d'email via token
   app.get('/api/auth/confirm-email', async (req, res) => {
     try {

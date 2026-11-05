@@ -251,14 +251,20 @@ export async function resendVerificationEmail(): Promise<boolean> {
 export async function resetPasswordEmail(email: string): Promise<void> {
   const cleanEmail = email.trim();
   if (!cleanEmail) throw new Error('Email requis pour la réinitialisation.');
-  const res = await fetch('/api/auth/reset-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: cleanEmail })
-  });
-  if (!res.ok) {
+  try {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail })
+    });
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Erreur lors de la demande de réinitialisation.');
+    if (!res.ok || (data && data.success === false)) {
+      const detail = data?.error || `Erreur serveur HTTP ${res.status} ${res.statusText || ''}`.trim();
+      throw new Error(detail);
+    }
+  } catch (err: any) {
+    console.error("Erreur complète reset :", err);
+    throw err;
   }
 }
 

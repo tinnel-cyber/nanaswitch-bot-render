@@ -22,11 +22,17 @@ export default function ForgotPasswordPage() {
     }
 
     startTransition(async () => {
-      const res = await requestPasswordReset({ email: cleanEmail });
-      if (!res.success) {
-        setValidationError(res.error || "Impossible d'envoyer le lien de réinitialisation.");
-      } else {
-        setResult(res);
+      try {
+        const res = await requestPasswordReset({ email: cleanEmail });
+        if (!res.success) {
+          console.error("Erreur complète reset :", res.error);
+          setValidationError(res.error || "Erreur lors de la demande de réinitialisation.");
+        } else {
+          setResult(res);
+        }
+      } catch (err: any) {
+        console.error("Erreur complète reset :", err);
+        setValidationError(err?.message || String(err) || "Erreur lors de la demande de réinitialisation.");
       }
     });
   };
