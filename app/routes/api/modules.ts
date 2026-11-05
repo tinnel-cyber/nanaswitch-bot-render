@@ -5,6 +5,7 @@ const MODULES_CACHE_TTL_MS = 5 * 60 * 1000;
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { supabase } from "../../utils/supabase.server";
+import { getUserContextualProfile, evaluateModuleAccess } from "../../services/contextualLicensing.server";
 
 /**
  * Route API Remix : app/routes/api/modules.ts
@@ -93,7 +94,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const url = new URL(request.url);
     const orgId = url.searchParams.get("organizationId");
-    const cacheKey = `modules_${orgId || "all"}`;
+    const userId = url.searchParams.get("userId") || orgId || "";
+    const cacheKey = `modules_${orgId || "all"}_${userId || "anon"}`;
 
     const cached = modulesMemoryCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) {
@@ -105,17 +107,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
       });
     }
 
+    // Récupérer le profil utilisateur contextuel (solde portefeuille, KYC, pricing model)
+    const userProfile = userId ? await getUserContextualProfile(userId) : null;
+
     const { data: registry, error: regError } = await supabase
       .from("app_registry")
       .select("*")
       .eq("is_public", true)
       .order("name", { ascending: true });
 
-    let finalRegistry = registry || [];
-    if (regError || finalRegistry.length === 0) {
+    let rawRegistry = registry || [];
+    if (regError || rawRegistry.length === 0) {
       try {
         const { CANONICAL_APP_REGISTRY } = await import("../../../src/config/appRegistry");
-        finalRegistry = CANONICAL_APP_REGISTRY.map((m) => ({
+        rawRegistry = CANONICAL_APP_REGISTRY.map((m) => ({
           key: m.id,
           name: m.name,
           description: m.description,
@@ -126,6 +131,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
         if (regError) throw regError;
       }
     }
+
+    // Enrichissement contextuel avec la matrice d'accès
+    const finalRegistry = rawRegistry.map((mod: any) => {
+      const evalAccess = evaluateModuleAccess(userProfile, mod.key);
+      return {
+        ...mod,
+        read_only: evalAccess.readOnly,
+        requires_account_opening: evalAccess.requiresAccountOpening,
+        is_pay_per_use: evalAccess.isPayPerUse,
+        cta_label: evalAccess.ctaMessage || "Ouvrir mon compte pour utiliser ce module",
+      };
+    });
 
     let activeBlocks: any[] = [];
     if (orgId) {

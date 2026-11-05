@@ -270,3 +270,44 @@ export const getThemeDefinition = (themeId?: string): ThemeDefinition => {
   return def || AVAILABLE_THEMES[0];
 };
 
+/**
+ * Cartographie des licences contextuelles pour les thèmes Nanasore
+ */
+export const THEMES_BY_PRICING_MODEL = {
+  pay_per_use: ['theme-default', 'theme-electro-tech'],
+  free: ['theme-default', 'theme-electro-tech'],
+  commission: ['theme-digital-pro', 'theme-livestream-pro'],
+  subscription_training: ['theme-digital-pro', 'theme-livestream-pro'],
+  subscription_caisse_vitrine: [
+    'theme-default',
+    'theme-electro-tech',
+    'theme-electro-orange',
+    'theme-beauty-emerald',
+    'theme-mega-store-pro',
+    'theme-blank-custom',
+    'theme-livestream-pro'
+  ],
+  subscription_all: [
+    'theme-default',
+    'theme-digital-pro',
+    'theme-livestream-pro',
+    'theme-electro-tech',
+    'theme-electro-orange',
+    'theme-beauty-emerald',
+    'theme-mega-store-pro',
+    'theme-blank-custom'
+  ]
+} as const;
+
+export const isThemeAllowedByLicense = (
+  themeId: string,
+  enabledThemes?: string[] | null
+): boolean => {
+  const normalized = normalizeThemeId(themeId);
+  if (!enabledThemes || enabledThemes.length === 0) {
+    return normalized === 'theme-default';
+  }
+  return enabledThemes.includes(normalized);
+};
+
+

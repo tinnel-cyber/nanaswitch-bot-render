@@ -267,10 +267,26 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   const [apps, setApps] = useState<NanaMerchantApp[]>(INITIAL_APPS);
   const [selectedApp, setSelectedApp] = useState<NanaMerchantApp | null>(null);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
-  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
+  const [isKycModalOpen, setIsKycModalOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('create') === 'true' || p.get('action') === 'create' || window.location.hash === '#create';
+    }
+    return false;
+  });
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  /* Auto-open KYC Modal on create URL param */
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('create') === 'true' || p.get('action') === 'create' || window.location.hash === '#create') {
+        setIsKycModalOpen(true);
+      }
+    }
+  }, []);
 
   // KYC Form State (Particulier vs Entreprise & Mode BYOK vs AGREGATED)
   const [kycForm, setKycForm] = useState({

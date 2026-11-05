@@ -20,11 +20,55 @@ export interface Product {
   created_at?: string;
 }
 
+export type KycStatusTier = 'none' | 'light' | 'full';
+export type PricingModelTier = 'pay_per_use' | 'commission' | 'subscription';
+export type SubscriptionOptionTier = 'training' | 'caisse_vitrine' | 'all_inclusive';
+
 export interface Profile {
   id: string;
   organization_id: string | null;
   full_name: string | null;
+  email?: string | null;
   role: string | null;
+  wallet_balance: number;
+  kyc_status: KycStatusTier;
+  pricing_model: PricingModelTier;
+  enabled_themes: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AccountActivation {
+  id?: string;
+  user_id: string;
+  organization_id?: string | null;
+  pricing_model: PricingModelTier;
+  subscription_option?: SubscriptionOptionTier | null;
+  kyc_status: KycStatusTier;
+  wallet_balance: number;
+  enabled_themes: string[];
+  enabled_modules: string[];
+  read_only_modules: string[];
+  injected_carte_modules?: string[];
+  kyc_data: {
+    fullName?: string;
+    idCardUrl?: string;
+    photoCaptureUrl?: string;
+    email?: string;
+    paymentNumber?: string;
+    activityDomain?: string;
+    activityDescription?: string;
+    companyName?: string;
+    legalDocuments?: string[];
+    [key: string]: any;
+  };
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | 'active';
+  admin_notes?: string | null;
+  submitted_at?: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AppRegistryItem {

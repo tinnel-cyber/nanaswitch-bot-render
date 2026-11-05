@@ -10,7 +10,7 @@ export interface LoadingScreenProps {
  * LoadingScreen ultra-léger et Cyber-Premium pour transition fluide en Code Splitting / Lazy Loading
  */
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message, label }) => {
-  const displayLabel = message || label || 'Chargement de Nanasore — La Voie Facile...';
+  const displayLabel = message || label || 'Chargement de Nanasore...';
   return (
     <div className="min-h-screen w-full bg-[#020B1E] flex flex-col items-center justify-center p-4 text-slate-100 font-sans select-none">
       <div className="relative flex flex-col items-center justify-center mb-5">

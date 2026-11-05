@@ -24,7 +24,7 @@ export const Logo: React.FC<LogoProps> = ({
   size = 'md',
   className = '',
   onClick,
-  showTagline = true,
+  showTagline = false,
   variant = 'horizontal',
 }) => {
   const mappedSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl' =

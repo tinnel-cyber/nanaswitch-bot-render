@@ -54,7 +54,7 @@ export const StorefrontNeutralLoader: React.FC<StorefrontNeutralLoaderProps> = (
           <div className="flex items-baseline text-lg font-black tracking-tight">
             <span className="text-white">Nana</span>
             <span className="text-[#22D3EE]">sore</span>
-            <span className="text-xs font-semibold text-slate-300 ml-2">• La Voie Facile</span>
+            <span className="text-xs font-semibold text-slate-300 ml-2">• Plateforme Unifiée</span>
           </div>
         )}
         <div className="flex items-center gap-2">

@@ -1,7 +1,8 @@
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, Link, useSearchParams } from "@remix-run/react";
 import { useState } from "react";
-import archiver from "archiver";
+import * as _archiver from "archiver";
+const archiver = (_archiver as any).default || _archiver;
 import { PassThrough } from "stream";
 import { uploadFileToR2 } from "~/utils/r2.server";
 import { getSession } from "~/sessions.server";

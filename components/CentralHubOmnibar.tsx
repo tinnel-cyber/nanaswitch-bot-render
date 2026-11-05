@@ -25,9 +25,20 @@ import {
   Plus,
   Compass,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Eye,
+  Lock,
+  ShieldAlert,
+  CreditCard
 } from 'lucide-react';
 import { SlideModuleBlock } from './SlideModuleBlock';
+import {
+  evaluateClientModuleAccess,
+  getLocalUserLicense,
+  consumeWalletForPayPerUse,
+  buyModuleAlaCarte,
+} from '../src/services/contextualLicensingService';
+import { AccountActivationModal } from '../src/components/licensing/AccountActivationModal';
 
 export interface HubCardItem {
   id: string;
@@ -1317,6 +1328,66 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // États pour le système de licence contextuelle & ouverture de compte KYC
+  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
+  const [activationTargetModule, setActivationTargetModule] = useState<{ id: string; name: string } | null>(null);
+  const [licenseState, setLicenseState] = useState(() => getLocalUserLicense(currentTenantId));
+  const [walletFeedback, setWalletFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleLicenseUpdated = (e: any) => {
+      if (e?.detail) {
+        setLicenseState(e.detail);
+      }
+    };
+    window.addEventListener('nana_license_updated', handleLicenseUpdated);
+    return () => window.removeEventListener('nana_license_updated', handleLicenseUpdated);
+  }, []);
+
+  const handleOpenActivationModal = (moduleId: string, moduleName: string) => {
+    setActivationTargetModule({ id: moduleId, name: moduleName });
+    setIsActivationModalOpen(true);
+  };
+
+  const handlePayPerUseConsume = async (e: React.MouseEvent, moduleId: string, moduleName: string) => {
+    e.stopPropagation();
+    try {
+      const res = await consumeWalletForPayPerUse({
+        userId: currentTenantId || 'current-user',
+        moduleKey: moduleId,
+        amount: 250,
+        description: `Consommation usage module ${moduleName}`
+      });
+      if (res.success) {
+        setWalletFeedback(`✓ Débité de votre Wallet (Nouveau solde: ${res.new_balance} FCFA). Aucun KYC requis !`);
+        setTimeout(() => setWalletFeedback(null), 4000);
+      } else {
+        alert(res.error || "Solde insuffisant dans votre Portefeuille. Veuillez recharger votre solde.");
+      }
+    } catch (err: any) {
+      alert(err.message || "Erreur lors du paiement à l'usage");
+    }
+  };
+
+  const handleBuyAlaCarte = async (e: React.MouseEvent, moduleId: string, moduleName: string) => {
+    e.stopPropagation();
+    try {
+      const res = await buyModuleAlaCarte({
+        userId: currentTenantId || 'current-user',
+        moduleKey: moduleId,
+        price: 1500
+      });
+      if (res.success) {
+        setWalletFeedback(`✓ Module ${moduleName} injecté à la carte dans votre Thème Gratuit !`);
+        setTimeout(() => setWalletFeedback(null), 4000);
+      } else {
+        alert(res.error || "Erreur lors de l'achat à la carte");
+      }
+    } catch (err: any) {
+      alert(err.message || "Erreur lors de l'achat");
+    }
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -2082,6 +2153,14 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
               </button>
             </div>
 
+            {/* Bannière de notification Wallet / Feedback */}
+            {walletFeedback && (
+              <div className="px-5 py-2 bg-emerald-950/70 border-b border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center justify-between animate-in fade-in">
+                <span>{walletFeedback}</span>
+                <button type="button" onClick={() => setWalletFeedback(null)} className="text-emerald-400 hover:text-white cursor-pointer">✕</button>
+              </div>
+            )}
+
             {/* Catégories rapides en pilules horizontales */}
             {categories.length > 0 && (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-[#141420] border-b border-slate-800/80 overflow-x-auto text-xs shrink-0 scrollbar-none">
@@ -2165,19 +2244,36 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {dynamicModules.map((m) => {
                         const active = m.enabled;
+                        const access = evaluateClientModuleAccess(m.id, licenseState);
+                        const official = getOfficialModuleById(m.id);
+
                         return (
                           <div
                             key={m.id}
-                            className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                              active
-                                ? 'bg-slate-900/70 border-emerald-500/40 hover:border-emerald-500/60'
-                                : 'bg-slate-900/30 border-slate-800 hover:border-slate-700'
+                            className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
+                              access.readOnly
+                                ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60'
+                                : active
+                                  ? 'bg-slate-900/70 border-emerald-500/40 hover:border-emerald-500/60'
+                                  : 'bg-slate-900/30 border-slate-800 hover:border-slate-700'
                             }`}
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-xs text-white truncate">{m.name}</span>
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-slate-600'}`} />
+                                {access.readOnly && (
+                                  <span className="text-[9px] font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-500/30 flex items-center gap-1">
+                                    <Eye className="w-2.5 h-2.5" />
+                                    <span>Mode Lecture</span>
+                                  </span>
+                                )}
+                                {access.isPayPerUse && (
+                                  <span className="text-[9px] font-bold text-purple-400 bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-1">
+                                    <CreditCard className="w-2.5 h-2.5" />
+                                    <span>À l'usage (Sans KYC)</span>
+                                  </span>
+                                )}
                               </div>
                               <ExpandableModuleDescription 
                                 id={m.id}
@@ -2185,7 +2281,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                 defaultClamped="line-clamp-1"
                                 className="mt-0.5"
                               />
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className="text-[10px] text-slate-500 font-semibold">{m.category}</span>
                                 <span className="text-[9px] font-bold text-blue-400 bg-blue-950/40 px-1.5 py-0.2 rounded border border-blue-500/20">
                                   [{m.taxonomy}]
@@ -2197,22 +2293,60 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await toggleModule(m.id, !active);
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${
-                                  active
-                                    ? 'bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-500/40'
-                                    : 'bg-[#4169E1] hover:bg-blue-600 text-white shadow-xs'
-                                }`}
-                                title={active ? 'Désactiver dans Firebase RTDB' : 'Activer dans Firebase RTDB'}
-                              >
-                                {active ? 'Désactiver' : 'Activer'}
-                              </button>
+
+                            {/* Actions selon licence contextuelle */}
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                              {/* CTA d'activation ou indicateur */}
+                              {access.readOnly ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenActivationModal(m.id, m.name);
+                                  }}
+                                  className="px-2.5 py-1 bg-amber-500/90 hover:bg-amber-500 text-slate-950 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                  title="Ouvrir mon compte pour débloquer l'écriture sur ce module"
+                                >
+                                  <ShieldAlert className="w-3 h-3 text-slate-950" />
+                                  <span>Ouvrir mon compte pour utiliser ce module</span>
+                                </button>
+                              ) : access.isPayPerUse ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handlePayPerUseConsume(e, m.id, m.name)}
+                                    className="px-2 py-0.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/40 rounded text-[10px] font-bold transition cursor-pointer"
+                                    title="Débit Wallet sans KYC"
+                                  >
+                                    💳 Wallet
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleBuyAlaCarte(e, m.id, m.name)}
+                                    className="px-2 py-0.5 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/40 rounded text-[10px] font-bold transition cursor-pointer"
+                                    title="Achat à la carte dans le Thème Gratuit"
+                                  >
+                                    + Thème Gratuit
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await toggleModule(m.id, !active);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                    active
+                                      ? 'bg-rose-950/60 text-rose-300 border border-rose-500/40'
+                                      : 'bg-[#4169E1] text-white'
+                                  }`}
+                                >
+                                  {active ? 'Désactiver' : 'Activer'}
+                                </button>
+                              )}
+
+                              {/* Bouton d'accès en mode lecture ou complet */}
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2224,13 +2358,20 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                     mediaType: 'image',
                                     mediaUrl: getCardMediaUrl(official),
                                     routeUrl: m.route,
-                                    targetView: m.targetView
+                                    targetView: m.view || m.targetView
                                   });
                                 }}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
-                                title="Accéder au module"
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer flex items-center gap-1 shrink-0 ml-auto"
+                                title={access.readOnly ? "Consulter en mode lecture seule (aperçu)" : "Accéder au module"}
                               >
-                                Ouvrir
+                                {access.readOnly ? (
+                                  <>
+                                    <Eye className="w-3 h-3 text-amber-400" />
+                                    <span>Aperçu</span>
+                                  </>
+                                ) : (
+                                  <span>Ouvrir</span>
+                                )}
                               </button>
                             </div>
                           </div>
@@ -2368,41 +2509,108 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                               ▶️ Voir Tuto
                             </button>
                           )}
-                          {isModuleActive(structuredOutput.primaryModule.id) ? (
-                            <div className="flex items-center gap-2">
+                          {(() => {
+                            const primAccess = evaluateClientModuleAccess(structuredOutput.primaryModule.id, licenseState);
+                            
+                            if (primAccess.readOnly) {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenActivationModal(structuredOutput.primaryModule.id, structuredOutput.primaryModule.title);
+                                    }}
+                                    className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <ShieldAlert className="w-3.5 h-3.5" />
+                                    <span>Ouvrir mon compte pour utiliser ce module</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleActivateModule(e, { ...structuredOutput.primaryModule, isReadOnly: true })}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                                    title="Consulter en aperçu lecture seule"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-amber-400" />
+                                    <span>Aperçu</span>
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            if (primAccess.isPayPerUse) {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handlePayPerUseConsume(e, structuredOutput.primaryModule.id, structuredOutput.primaryModule.title)}
+                                    className="px-3 py-1.5 bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-500/50 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                                    title="Débit de votre portefeuille sans KYC requis"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5" />
+                                    <span>Utiliser via Wallet (Sans KYC)</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleBuyAlaCarte(e, structuredOutput.primaryModule.id, structuredOutput.primaryModule.title)}
+                                    className="px-2.5 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/50 rounded-lg text-xs font-bold transition cursor-pointer"
+                                    title="Injecter dans le Thème Gratuit"
+                                  >
+                                    + Thème Gratuit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
+                                    className="px-3 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>Ouvrir</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            if (isModuleActive(structuredOutput.primaryModule.id)) {
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await toggleModule(structuredOutput.primaryModule.id, false);
+                                    }}
+                                    className="px-3 py-1.5 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer group"
+                                    title="Désactiver ce module"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 group-hover:hidden" />
+                                    <X className="w-3.5 h-3.5 text-rose-400 hidden group-hover:inline" />
+                                    <span className="group-hover:hidden">✓ Actif</span>
+                                    <span className="hidden group-hover:inline">Désactiver</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
+                                    className="px-3.5 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95 flex items-center gap-1"
+                                  >
+                                    <span>Ouvrir</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            return (
                               <button 
                                 type="button"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await toggleModule(structuredOutput.primaryModule.id, false);
-                                }}
-                                className="px-3 py-1.5 bg-emerald-950/60 hover:bg-rose-950/60 text-emerald-300 hover:text-rose-300 border border-emerald-500/40 hover:border-rose-500/40 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer group"
-                                title="Désactiver ce module"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 group-hover:hidden" />
-                                <X className="w-3.5 h-3.5 text-rose-400 hidden group-hover:inline" />
-                                <span className="group-hover:hidden">✓ Actif</span>
-                                <span className="hidden group-hover:inline">Désactiver</span>
-                              </button>
-                              <button
-                                type="button"
                                 onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
-                                className="px-3.5 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition shadow-md active:scale-95 flex items-center gap-1"
+                                className="px-4 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-md shadow-[#4169E1]/20 flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
                               >
-                                <span>Ouvrir</span>
-                                <ArrowRight className="w-3.5 h-3.5" />
+                                <Zap className="w-3.5 h-3.5 fill-current" />
+                                <span>{getTaxonomyBadge(structuredOutput.primaryModule) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}</span>
                               </button>
-                            </div>
-                          ) : (
-                            <button 
-                              type="button"
-                              onClick={(e) => handleActivateModule(e, structuredOutput.primaryModule)}
-                              className="px-4 py-1.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-lg shadow-md shadow-[#4169E1]/20 flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
-                            >
-                              <Zap className="w-3.5 h-3.5 fill-current" />
-                              <span>{getTaxonomyBadge(structuredOutput.primaryModule) === 'Outil' ? '🛒 Acheter' : '⚡ Activer'}</span>
-                            </button>
-                          )}
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -2726,6 +2934,20 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Tunnel d'Ouverture de Compte & KYC Contextuel */}
+      <AccountActivationModal
+        isOpen={isActivationModalOpen}
+        onClose={() => setIsActivationModalOpen(false)}
+        targetModuleId={activationTargetModule?.id}
+        targetModuleName={activationTargetModule?.name}
+        userId={currentTenantId}
+        onSuccess={(res) => {
+          setIsActivationModalOpen(false);
+          setWalletFeedback("✓ Compte configuré avec succès ! Vos modules sont maintenant à jour.");
+          setTimeout(() => setWalletFeedback(null), 5000);
+        }}
+      />
     </>
   );
 };

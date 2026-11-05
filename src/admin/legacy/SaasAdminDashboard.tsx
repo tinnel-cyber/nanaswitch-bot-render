@@ -78,6 +78,7 @@ import {
 import { EscrowTripartiteChat } from '../../components/quotes/EscrowTripartiteChat';
 import { UpsellOpportunitiesWidget } from '../../components/quotas';
 import { LandingCmsTab } from './LandingCmsTab';
+import { publishLandingPricingToSupabase } from '../../services/landingPricingService';
 import { ComparisonMatrixAdminTab } from './ComparisonMatrixAdminTab';
 import { AdminTutorialsTab } from './AdminTutorialsTab';
 import {
@@ -757,12 +758,22 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     setIsSavingLandingConfig(true);
     playTapBeep();
     try {
+      // 1. Publication prioritaire vers Supabase (Table de publication des tarifs Landing Page)
+      if (landingConfig.pricingSection) {
+        await publishLandingPricingToSupabase(
+          landingConfig.pricingSection,
+          currentUser?.name || currentUser?.email || 'Super-Admin'
+        );
+      }
+
+      // 2. Sauvegarde miroir Firestore & Realtime Database pour synchronisation
       await saveLandingPageConfig(landingConfig, currentUser?.name || currentUser?.email || 'Super-Admin');
       await saveSuperAdminSettings({
         landingConfig
       }, currentUser?.email || 'Super-Admin');
+
       playCashChime();
-      setToastMessage('✅ Modifications Super Admin enregistrées et appliquées en direct !');
+      setToastMessage('✅ Tarifs et modules publiés dans Supabase et appliqués en direct sur la page d\'accueil !');
       setTimeout(() => setToastMessage(null), 4000);
     } catch (e) {
       playCancelSound();
@@ -940,7 +951,13 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         landingConfig,
       }, currentUser?.email || 'Super-Admin');
 
-      // 2. Persistance Firestore sans masquage d'erreurs (résolution complète du await)
+      // 2. Persistance Firestore et publication Supabase
+      if (landingConfig?.pricingSection) {
+        await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
+      }
+      if (landingConfig?.pricingSection) {
+        await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
+      }
       await savePlatformSubscriptions(updatedPlatform);
       await saveCentralPaymentConfig(updatedCentral);
 
@@ -1005,6 +1022,9 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         stores
       }, currentUser?.email || 'Super-Admin');
 
+      if (landingConfig?.pricingSection) {
+        await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
+      }
       await savePlatformSubscriptions(updatedPlatform);
       await saveCentralPaymentConfig(updatedCentral);
 
@@ -1080,6 +1100,9 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       await updateSubscriptionPlan(targetDocId, cleanedPlan);
 
       // 2. Résolution complète du await Firestore pour la configuration globale (platform_settings/subscriptions)
+      if (landingConfig?.pricingSection) {
+        await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
+      }
       await savePlatformSubscriptions(updatedPlatform);
 
       // 3. Résolution complète du await Firebase RTDB et localStorage

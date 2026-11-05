@@ -38,6 +38,7 @@ export const KNOWN_SUPERADMIN_UIDS = [
 export const SUPER_ADMIN_EMAILS = [
   'pousbila36@gmail.com',
   'pousbila04@gmail.com',
+  'contact@nanasore.com',
   'admin@nanasore.com'
 ];
 
@@ -597,4 +598,23 @@ export function getSuperAdminPaymentNumbers(): {
     mtnNumber: '+226 65 56 58 05',
     wavePaymentLink: 'https://pay.wave.com'
   };
+}
+
+/**
+ * Récupère les parcours des utilisateurs supervisés depuis la vue SQL admin_user_overview
+ * Réservée aux Super Admins pour filtrer : Usage Ponctuel, Branche Commission, Branche Abonnement.
+ */
+export async function fetchAdminUserOverview(parcoursFilter?: string): Promise<any[]> {
+  try {
+    const url = parcoursFilter 
+      ? `/api/admin-users?parcours=${encodeURIComponent(parcoursFilter)}`
+      : '/api/admin-users';
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.success ? data.users : [];
+  } catch (e) {
+    console.warn('[AdminUserOverview] Erreur chargement vue admin:', e);
+    return [];
+  }
 }

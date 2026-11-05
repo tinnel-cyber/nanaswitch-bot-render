@@ -29,7 +29,7 @@ import {
   LayoutDashboard,
   Store,
   ShoppingBag
-} from 'lucide-react';
+, Plus} from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { auth } from '../../../firebase';
 import { NaNaSwitchLogo } from '../components/NaNaSwitchLogo';
@@ -162,7 +162,7 @@ export const NaNaSwitchLandingPage: React.FC<NaNaSwitchLandingPageProps> = ({
   // 2. CHEMIN 2 : ESPACE MARCHAND (Tableau de bord & création de l'application boutique)
   const handleGoToMerchant = useCallback(() => {
     playTapBeep();
-    const destination = '/dashboard';
+    const destination = '/nana-switch/apps?create=true';
     if (onNavigate) {
       onNavigate(destination);
     } else if (typeof window !== 'undefined') {
@@ -425,7 +425,7 @@ exit;`
                       className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                     >
                       <LayoutDashboard className="w-4 h-4" />
-                      <span>Ouvrir l&apos;Espace Marchand (Dashboard) →</span>
+                      <span>Créer mon application (Espace Marchand) →</span>
                     </button>
                   </div>
                 </div>
@@ -1138,7 +1138,7 @@ exit;`
                 className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-emerald-50 text-slate-800 border-2 border-emerald-400 font-extrabold text-xs sm:text-sm transition cursor-pointer active:scale-95 inline-flex items-center justify-center gap-2"
               >
                 <LayoutDashboard className="w-4 h-4 text-emerald-600" />
-                <span>Espace Marchand (Dashboard) →</span>
+                <span>Créer mon application (Espace Marchand) →</span>
               </button>
             </div>
           </div>

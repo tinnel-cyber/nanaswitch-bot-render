@@ -141,7 +141,7 @@ export const PinKeypadModal: React.FC<PinKeypadModalProps> = ({
 
         {/* Titre & sous-titre */}
         <h2 className="text-xl font-black tracking-tight text-white mb-0.5">
-          Caisse Verrouillée
+          Espace Verrouillé
         </h2>
         <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1">
           <Store className="w-3.5 h-3.5 text-amber-400" />
@@ -150,7 +150,7 @@ export const PinKeypadModal: React.FC<PinKeypadModalProps> = ({
         <p className="text-[11px] text-slate-400 mb-4">
           {reason === 'TIMEOUT' 
             ? 'Inactivité de 15 min détectée. Entrez votre PIN 4 chiffres.' 
-            : `Bienvenue ${userName}. Saisissez votre PIN de caisse.`}
+            : `Bienvenue ${userName}. Saisissez votre code PIN secret.`}
         </p>
 
         {/* PIN Dots (4 Bulles indicatrices smartphone) */}

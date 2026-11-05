@@ -8,7 +8,8 @@ import {
   Crown,
   CreditCard,
   FileText,
-  Edit3
+  Edit3,
+  Database
 } from 'lucide-react';
 import {
   LandingPageConfig,
@@ -758,6 +759,36 @@ export const LandingCmsTab: React.FC<LandingCmsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'PRICING' && (
         <div className="space-y-6">
+          {/* Bannière de statut & synchronisation directe vers Supabase */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-black text-white flex items-center gap-2">
+                  <span>Publication Directe vers Supabase (PostgreSQL)</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    En Direct
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Toute modification enregistrée ici est immédiatement persistée dans Supabase et synchronisée sur la Landing Page publique.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-900/40 shrink-0 disabled:opacity-50 active:scale-95"
+            >
+              <CheckCircle2 className="w-4 h-4 text-white" />
+              <span>{isSaving ? 'Publication en cours...' : 'Publier vers Supabase'}</span>
+            </button>
+          </div>
+
           {/* En-tête de section & Bannière 0% de commission */}
           <div className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">

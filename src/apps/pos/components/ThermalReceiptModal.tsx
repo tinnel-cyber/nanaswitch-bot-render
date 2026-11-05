@@ -105,7 +105,7 @@ Merci de votre visite !`;
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Impression thermique directe & téléchargement PDF • La Voie Facile
+                  Impression thermique directe & téléchargement PDF • Nanasore
                 </p>
               </div>
             </div>

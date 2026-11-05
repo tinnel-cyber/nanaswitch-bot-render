@@ -533,7 +533,7 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
           <div
             onClick={handleLogoTap}
             className="flex items-center gap-1.5 cursor-pointer select-none active:scale-95 transition-transform shrink-0"
-            title="Nanasore — La Voie Facile"
+            title="Nanasore"
           >
             <NanasoreLogo variant="compact" size="sm" theme="dark" />
           </div>

@@ -1127,6 +1127,20 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       taxonomyType: 'Application'
     },
     {
+      id: 'mod-nanawallet',
+      category: 'COMMERCE',
+      title: 'nanawallet',
+      badge: 'Application',
+      badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+      description: 'Portefeuille mobile hybride : Solde XOF, recharges Mobile Money & crypto USDT.',
+      icon: Wallet,
+      iconColor: 'text-blue-400',
+      iconBg: 'bg-blue-500/10 border-blue-500/30',
+      actionText: 'Ouvrir nanawallet',
+      action: () => handleModuleClick('WALLET', '/wallet'),
+      taxonomyType: 'Application'
+    },
+    {
       id: 'mod-lms-academy',
       category: 'MARKETING',
       title: 'Centre de Formation et D\'Accompagnement',
@@ -1465,7 +1479,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
             <div 
               onClick={handleLogoTap}
               className="shrink-0 cursor-pointer active:scale-95 transition-transform flex items-center justify-center"
-              title="Nanasore — La Voie Facile"
+              title="Nanasore"
             >
               {settings.logoUrl && !settings.logoUrl.includes('images.unsplash.com/photo-1618005182384') && !settings.logoUrl.includes('nanasore-icon.svg') ? (
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 p-0.5 shadow-lg shadow-blue-900/30 overflow-hidden">

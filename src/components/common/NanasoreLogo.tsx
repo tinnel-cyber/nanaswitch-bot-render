@@ -34,7 +34,7 @@ export const NanasorePasserelleIcon: React.FC<{
       xmlns="http://www.w3.org/2000/svg"
       className={`select-none shrink-0 ${className}`}
       role="img"
-      aria-label="Nanasore — La Voie Facile"
+      aria-label="Nanasore"
     >
       {withSquircleBg && (
         <rect width="1024" height="1024" rx="228" fill="#FFFFFF" />
@@ -56,8 +56,8 @@ export const NanasoreLogo: React.FC<NanasoreLogoProps> = ({
   variant = 'horizontal',
   size = 'md',
   theme = 'dark',
-  showTagline = true,
-  tagline = 'La Voie Facile',
+  showTagline = false,
+  tagline = '',
   withSquircleBg = true,
   className = '',
 }) => {

@@ -42,6 +42,8 @@ import {
   FileCheck,
   Plug,
   Building2,
+  Scale,
+  SlidersHorizontal,
   Facebook,
   Twitter,
   Instagram,
@@ -62,6 +64,7 @@ import {
   PlatformLegalConfig
 } from '../../types';
 import { subscribeToLandingPageConfig, subscribeToPlatformSubscriptions, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
+import { subscribeToLandingPricing } from '../../services/landingPricingService';
 import { Logo } from '../../components/common/Logo';
 import { SubscriptionPaywallModal } from '../modals/SubscriptionPaywallModal';
 import { PricingComparisonMatrix } from '../modals/pricing/PricingComparisonMatrix';
@@ -116,7 +119,11 @@ interface WorkspaceModalProps {
   onSelectInstructor: () => void;
 }
 
-const WorkspaceModal: React.FC<WorkspaceModalProps> = ({
+const WorkspaceModal: React.FC<WorkspaceModalProps> = () => {
+  return null;
+};
+
+const _DisabledWorkspaceModal: React.FC<WorkspaceModalProps> = ({
   isOpen,
   onClose,
   onSelectMerchant,
@@ -939,7 +946,7 @@ const NextGenDarkSection: React.FC<{
                 {card.aiBadge && (
                   <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-50 via-purple-50 to-indigo-50 border border-blue-100/90 flex items-center justify-between text-[11px] mt-1">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <Bot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                       <span className="font-bold text-slate-900 text-[11px] truncate">{card.aiBadge}</span>
                     </div>
                     <span className="text-[10px] text-indigo-600 font-bold shrink-0 ml-1">Gemini • Claude • GPT</span>
@@ -1067,13 +1074,37 @@ const PricingSection: React.FC<PricingSectionProps> = ({
     ? config.plans
     : DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans;
 
-  // Garantir que le Plan Gratuit (Freemium) et les 4 plans sont toujours présents
+  // Garantir que le Plan Gratuit (Freemium) avec ses 19 modules officiels et les 4 plans sont toujours conformes
   const plans = useMemo(() => {
-    if (rawPlans.some(p => p.id === 'free')) {
-      return rawPlans;
-    }
-    const defaultFreePlan = DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans.find(p => p.id === 'free');
-    return defaultFreePlan ? [defaultFreePlan, ...rawPlans] : rawPlans;
+    const defaultPlans = DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans;
+    const defaultFreePlan = defaultPlans.find(p => p.id === 'free')!;
+
+    // Nettoyage et verrouillage strict des 19 fonctionnalités du Plan Gratuit
+    return defaultPlans.map(dp => {
+      const candidate = rawPlans.find(p => p.id?.toLowerCase() === dp.id?.toLowerCase());
+      if (!candidate) return dp;
+
+      // Plan Gratuit : toujours verrouiller les 19 fonctionnalités officielles
+      if (dp.id === 'free') {
+        return {
+          ...defaultFreePlan,
+          ctaText: candidate.ctaText || defaultFreePlan.ctaText
+        };
+      }
+
+      // Si le plan contient des tarifs obsolètes (4 900 F, 9 900 F, 19 900 F au lieu des tarifs officiels 15 000 F, 30 000 F, 60 000 F), conserver le tarif officiel
+      const isLegacyPrice = candidate.monthlyPriceFCFA === 4900 || candidate.monthlyPriceFCFA === 9900 || candidate.monthlyPriceFCFA === 19900;
+      if (isLegacyPrice) {
+        return dp;
+      }
+
+      return {
+        ...dp,
+        ...candidate,
+        monthlyPriceFCFA: candidate.monthlyPriceFCFA ?? dp.monthlyPriceFCFA,
+        features: (candidate.features && candidate.features.length >= 5) ? candidate.features : dp.features
+      };
+    });
   }, [rawPlans]);
 
   /**
@@ -1127,7 +1158,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
         {/* En-tête de section */}
         <div className="text-center max-w-3xl mx-auto mb-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold uppercase tracking-wider mb-4">
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <Scale className="w-3.5 h-3.5 text-blue-600" />
             <span>Architecture Tarifaire Hybride & Équitable</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 mb-4">
@@ -1262,11 +1293,12 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30">
-                      <Sparkles className="w-5 h-5 text-amber-200" />
+                      <SlidersHorizontal className="w-5 h-5 text-amber-200" />
                     </div>
                     <div>
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider mb-1">
-                        <span>✨ Tarification Modulaire & Sur-Mesure</span>
+                        <SlidersHorizontal className="w-3 h-3 text-amber-200" />
+                        <span>Tarification Modulaire & Sur-Mesure</span>
                       </div>
                       <h4 className="text-base sm:text-lg font-black tracking-tight">
                         Ne payez que ce que vous utilisez ! Personnalisez vos modules au choix lors de l'abonnement.
@@ -1646,6 +1678,56 @@ const PricingSection: React.FC<PricingSectionProps> = ({
             {/* Grille des services à l'usage */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
               
+              {/* Produit Supplémentaire (Pay-as-you-go) */}
+              <div className="bg-white rounded-2xl p-5 border border-indigo-300/90 bg-gradient-to-br from-indigo-50/40 via-white to-blue-50/30 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                      <ShoppingBag className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <span className="text-sm font-black text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200">
+                      1 000 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5 flex items-center gap-1.5">
+                    <span>Produit Supplémentaire</span>
+                    <span className="text-[10px] bg-indigo-600 text-white font-black px-1.5 py-0.2 rounded-full">Extension</span>
+                  </h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Ajoutez un produit supplémentaire actif au-delà des produits inclus dans le Plan Gratuit. Facturé une seule fois, injecté directement dans votre boutique sans abonnement via votre Wallet.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par produit activé</span>
+                  <span className="text-indigo-600 font-bold">Sans KYC • Wallet</span>
+                </div>
+              </div>
+
+              {/* Tunnel de Vente (Pay-as-you-go) */}
+              <div className="bg-white rounded-2xl p-5 border border-amber-300/90 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/30 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                      <Filter className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <span className="text-sm font-black text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">
+                      5 000 F CFA
+                    </span>
+                  </div>
+                  <h5 className="font-bold text-slate-900 text-sm mb-1.5 flex items-center gap-1.5">
+                    <span>Tunnel de Vente</span>
+                    <span className="text-[10px] bg-amber-600 text-white font-black px-1.5 py-0.2 rounded-full">Boost Ventes</span>
+                  </h5>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Créez et déployez un tunnel de vente complet et optimisé pour la conversion (Lead magnet, Page de capture, Order Bump, Upsell/Downsell). Débité directement sur votre Wallet.
+                  </p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span>Par tunnel créé</span>
+                  <span className="text-amber-600 font-bold">1-Clic • Sans engagement</span>
+                </div>
+              </div>
+
               {/* Voir Direct */}
               <div className="bg-white rounded-2xl p-5 border border-amber-300/90 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/30 shadow-sm hover:shadow-md transition flex flex-col justify-between">
                 <div>
@@ -1764,7 +1846,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                      <Sparkles className="w-5 h-5" />
+                      <Palette className="w-5 h-5" />
                     </div>
                     <span className="text-sm font-black text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
                       150 F CFA
@@ -1860,7 +1942,7 @@ const PartnerPreFooterSection: React.FC<{
             </div>
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 border border-white/30 text-white text-[10px] font-black uppercase tracking-wider mb-2 backdrop-blur-md">
-                <Sparkles className="w-3 h-3 text-white" />
+                <Award className="w-3 h-3 text-white" />
                 <span>Affiliation & Apporteurs d'Affaires</span>
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white">
@@ -2145,17 +2227,34 @@ export const NaNaLandingPage: React.FC<NaNaLandingPageProps> = ({
       if (platformConfig?.plans && Array.isArray(platformConfig.plans) && platformConfig.plans.length > 0) {
         setLandingConfig((prev) => {
           const currentPlans = prev.pricingSection?.plans || DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans;
+          const defaultFreePlan = DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans.find((p) => p.id === 'free');
           const mergedPlans = currentPlans.map((lp) => {
             const match = platformConfig.plans.find((p) => p.id?.toLowerCase() === lp.id?.toLowerCase());
             if (match) {
+              // Si le plan est le Plan Gratuit, sanctuariser impérativement la liste des 19 modules officiels
+              if (lp.id === 'free') {
+                return {
+                  ...lp,
+                  name: defaultFreePlan?.name || lp.name,
+                  badge: defaultFreePlan?.badge || lp.badge,
+                  description: defaultFreePlan?.description || lp.description,
+                  features: defaultFreePlan?.features || lp.features,
+                  monthlyPriceFCFA: 0,
+                  annualPriceFCFA: 0,
+                };
+              }
+              // Ignorer les anciens tarifs obsolètes (4900, 9900, 19900) issus d'anciens documents non migrés
+              const isLegacyStalePrice = match.price === 4900 || match.price === 9900 || match.price === 19900;
+              const effectivePrice = isLegacyStalePrice ? lp.monthlyPriceFCFA : (match.price !== undefined ? match.price : lp.monthlyPriceFCFA);
+
               return {
                 ...lp,
-                name: match.name || lp.name,
-                monthlyPriceFCFA: match.price !== undefined ? match.price : lp.monthlyPriceFCFA,
-                annualPriceFCFA: match.price !== undefined ? Math.round(match.price * 10) : lp.annualPriceFCFA,
+                name: isLegacyStalePrice ? lp.name : (match.name || lp.name),
+                monthlyPriceFCFA: effectivePrice,
+                annualPriceFCFA: effectivePrice !== undefined ? Math.round(effectivePrice * 10) : lp.annualPriceFCFA,
                 badge: match.badge || lp.badge,
-                description: match.description || lp.description,
-                features: match.features || lp.features,
+                description: isLegacyStalePrice ? lp.description : (match.description || lp.description),
+                features: (match.features && match.features.length >= 6 && !isLegacyStalePrice) ? match.features : lp.features,
               };
             }
             return lp;
@@ -2177,19 +2276,35 @@ export const NaNaLandingPage: React.FC<NaNaLandingPageProps> = ({
       const detail = e.detail;
       if (detail?.platformConfig?.plans) {
         const plans = detail.platformConfig.plans;
+        const defaultFreePlan = DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans.find((p) => p.id === 'free');
         setLandingConfig((prev) => {
           const currentPlans = prev.pricingSection?.plans || DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans;
           const mergedPlans = currentPlans.map((lp) => {
             const match = plans.find((p: any) => p.id?.toLowerCase() === lp.id?.toLowerCase());
             if (match) {
+              if (lp.id === 'free') {
+                return {
+                  ...lp,
+                  name: defaultFreePlan?.name || lp.name,
+                  badge: defaultFreePlan?.badge || lp.badge,
+                  description: defaultFreePlan?.description || lp.description,
+                  features: defaultFreePlan?.features || lp.features,
+                  monthlyPriceFCFA: 0,
+                  annualPriceFCFA: 0,
+                };
+              }
+              // Ignorer les anciens tarifs obsolètes (4900, 9900, 19900) issus d'anciens documents non migrés
+              const isLegacyStalePrice = match.price === 4900 || match.price === 9900 || match.price === 19900;
+              const effectivePrice = isLegacyStalePrice ? lp.monthlyPriceFCFA : (match.price !== undefined ? match.price : lp.monthlyPriceFCFA);
+
               return {
                 ...lp,
-                name: match.name || lp.name,
-                monthlyPriceFCFA: match.price !== undefined ? match.price : lp.monthlyPriceFCFA,
-                annualPriceFCFA: match.price !== undefined ? Math.round(match.price * 10) : lp.annualPriceFCFA,
+                name: isLegacyStalePrice ? lp.name : (match.name || lp.name),
+                monthlyPriceFCFA: effectivePrice,
+                annualPriceFCFA: effectivePrice !== undefined ? Math.round(effectivePrice * 10) : lp.annualPriceFCFA,
                 badge: match.badge || lp.badge,
-                description: match.description || lp.description,
-                features: match.features || lp.features,
+                description: isLegacyStalePrice ? lp.description : (match.description || lp.description),
+                features: (match.features && match.features.length >= 6 && !isLegacyStalePrice) ? match.features : lp.features,
               };
             }
             return lp;
@@ -2206,12 +2321,42 @@ export const NaNaLandingPage: React.FC<NaNaLandingPageProps> = ({
     };
     window.addEventListener('superAdminUpdated', handleSuperAdminEvent);
 
+    // 4. Écouteur prioritaire Supabase : Tarifs et modules publiés en direct depuis le Dashboard Super Admin
+    const unsubscribeSupabasePricing = subscribeToLandingPricing((supabasePricing) => {
+      if (supabasePricing?.plans && Array.isArray(supabasePricing.plans)) {
+        const hasLegacyPrices = supabasePricing.plans.some(
+          (p: any) => p.monthlyPriceFCFA === 4900 || p.monthlyPriceFCFA === 9900 || p.monthlyPriceFCFA === 19900
+        );
+        if (!hasLegacyPrices) {
+          setLandingConfig((prev) => ({
+            ...prev,
+            pricingSection: {
+              ...prev.pricingSection,
+              ...supabasePricing,
+              plans: supabasePricing.plans
+            }
+          }));
+        }
+      }
+    });
+
     return () => {
       if (typeof unsubscribeLanding === 'function') unsubscribeLanding();
       if (typeof unsubscribePlatformSubs === 'function') unsubscribePlatformSubs();
+      if (typeof unsubscribeSupabasePricing === 'function') unsubscribeSupabasePricing();
       window.removeEventListener('superAdminUpdated', handleSuperAdminEvent);
     };
   }, []);
+
+  // Handler d'authentification direct sans double demande ("vendre mon savoir / vendre mes produits")
+  const handleOpenAuthDirectly = () => {
+    playValidationBeep();
+    if (onOpenEmailAuth) {
+      onOpenEmailAuth();
+    } else if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  };
 
   return (
     <div 
@@ -2220,7 +2365,7 @@ export const NaNaLandingPage: React.FC<NaNaLandingPageProps> = ({
     >
       {/* 1. Barre de navigation Glassmorphism */}
       <LandingNavbar 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
         onOpenEmailAuth={onOpenEmailAuth}
         onOpenPartnerProgram={onOpenPartnerProgram}
         onOpenSecretAdmin={onOpenSecretAdmin}
@@ -2228,29 +2373,29 @@ export const NaNaLandingPage: React.FC<NaNaLandingPageProps> = ({
 
       {/* 1. Hero Section (Titre épuré) */}
       <HeroSection 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
         onExplore={onExplore}
       />
 
       {/* 2. Section Hybride (Les DEUX grandes cartes blanches : "Commerce Hybride" et "Académie") */}
       <HybridSection 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
       />
 
       {/* 3. Section Simulateur (La grande carte bleu foncé - Le Réseau Orbital) */}
       <ProductSimulatorBanner 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
       />
 
       {/* 4. Section Next-Gen Features */}
       <NextGenDarkSection 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
         config={landingConfig.featuresSection}
       />
 
       {/* 6. Grille de Tarifs & Bannière 0% de Commission */}
       <PricingSection 
-        onOpenModal={() => setIsWorkspaceModalOpen(true)}
+        onOpenModal={handleOpenAuthDirectly}
         onSelectFreePlan={() => {
           if (typeof window !== 'undefined') {
             window.history.pushState({ intent: 'vendor', plan: 'free' }, '', '/register?intent=vendor&plan=free');

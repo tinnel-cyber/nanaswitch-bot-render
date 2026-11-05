@@ -384,6 +384,10 @@ export interface StoreUser {
   subscription?: StoreSubscription | null;
   plan?: string;
   credits?: number; // Portefeuille de crédits Studio IA (15 crédits offerts par défaut)
+  wallet_balance?: number; // Solde réel du portefeuille Nanasore (XOF / FCFA)
+  kyc_status?: 'none' | 'light' | 'full'; // KYC contextuel standardisé
+  pricing_model?: 'pay_per_use' | 'commission' | 'subscription'; // Modèle de tarification
+  enabled_themes?: string[]; // Thèmes débloqués selon la licence
   // Annuaire Public B2B2C (NaNa Market)
   isListedInDirectory?: boolean;
   merchantType?: DirectoryMerchantType;
@@ -1840,7 +1844,7 @@ export const DEFAULT_LANDING_PAGE_CONFIG: LandingPageConfig = {
         isPopular: false,
         features: [
           "Caisse tactile POS de comptoir ou portable avec synchronisation Cloud",
-          "Boutique en ligne nsore.shop offerte",
+          "Site vitrine offert",
           "Publication Marketplace & catalogue public",
           "Assistant IA décisionnel de base",
           "Impression tickets thermiques (Bluetooth/USB)",
@@ -2183,4 +2187,26 @@ export interface CustomSectionInstance {
 export type CustomThemeSection = CustomSectionInstance;
 export type CustomThemeSectionType = CustomSectionType;
 export type CustomThemeButtonStyle = 'none' | 'md' | 'xl' | 'full';
+
+export interface SuperAdminRecord {
+  user_id: string;
+  role: string;
+  granted_at: string;
+}
+
+export type KycStatusTier = 'none' | 'light' | 'full' | 'verified' | string;
+export type PricingModelTier = 'none' | 'pay_per_use' | 'commission' | 'subscription' | string;
+
+export interface AdminUserOverviewItem {
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  wallet_balance: number;
+  kyc_status: KycStatusTier;
+  pricing_model: PricingModelTier;
+  business_option?: string | null;
+  enabled_themes: string[];
+  created_at: string;
+  parcours_actif: string;
+}
 

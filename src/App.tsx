@@ -123,6 +123,7 @@ const NaNaSwitchAppPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitch
 const NaNaSwitchDocsPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchDocsPage').then(m => ({ default: m.NaNaSwitchDocsPage || m.default })));
 const NaNaSwitchLandingPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchLandingPage').then(m => ({ default: m.NaNaSwitchLandingPage || m.default })));
 const NanaSwitchApp = React.lazy(() => import('./components/nanaSwitch/NanaSwitchApp').then(m => ({ default: m.NanaSwitchApp || m.default })));
+const NanaWalletHome = React.lazy(() => import('./apps/wallet/NanaWalletHome'));
 const WameetSupraApp = React.lazy(() => import('./pages/wameet/WameetSupraApp').then(m => ({ default: m.WameetSupraApp || m.default })));
 const SallesVipDiscoveryScreen = React.lazy(() => import('./components/vip/SallesVipDiscoveryScreen').then(m => ({ default: m.SallesVipDiscoveryScreen || m.default })));
 const SalleVipRoomView = React.lazy(() => import('./components/vip/SalleVipRoomView').then(m => ({ default: m.SalleVipRoomView || m.default })));
@@ -148,7 +149,7 @@ import { NanasoreLogo } from './components/common/NanasoreLogo';
 
 // 3. LoadingScreen ultra-léger et Cyber-Premium pour transition fluide en Code Splitting / Lazy Loading
 export const LoadingScreen: React.FC<{ message?: string; label?: string }> = ({ message, label }) => {
-  const displayLabel = message || label || 'Chargement de Nanasore — La Voie Facile...';
+  const displayLabel = message || label || 'Chargement de Nanasore...';
   return (
     <div className="min-h-screen w-full bg-[#020B1E] flex flex-col items-center justify-center p-4 text-slate-100 font-sans select-none">
       <div className="relative flex flex-col items-center justify-center mb-5">
@@ -338,7 +339,11 @@ export type AppView =
   | 'PRODUCTS'
   | 'products'
   | 'STANDALONE_APP'
-  | 'standalone_app';
+  | 'standalone_app'
+  | 'WALLET'
+  | 'wallet'
+  | 'NANA_WALLET'
+  | 'nanawallet';
 export default function App() {
   // Détection & Résolution Multi-Tenant Marque Blanche (Custom Domains)
   const { 
@@ -735,6 +740,24 @@ export default function App() {
         return 'NANA_SWITCH_DOCS';
       }
       // Sous-routes console (/nana-switch/auth, /nana-switch/overview...) → AppPage
+      // Route dédiée nanawallet (/wallet, /nanawallet)
+      if (
+        pathname === '/wallet' ||
+        pathname === '/nanawallet' ||
+        pathname === '/nana-wallet' ||
+        pathname === '/app/wallet' ||
+        pathname === '/apps/wallet' ||
+        pathname.startsWith('/wallet') ||
+        pathname.startsWith('/nanawallet') ||
+        pathname.startsWith('/nana-wallet') ||
+        params.get('view') === 'wallet' ||
+        params.get('view') === 'nanawallet' ||
+        params.get('page') === 'wallet' ||
+        params.get('page') === 'nanawallet'
+      ) {
+        return 'WALLET';
+      }
+
       if (pathname.startsWith('/nana-switch/') || pathname.startsWith('/nanaswitch/')) {
         return 'NANA_SWITCH_APP';
       }
@@ -1888,6 +1911,24 @@ export default function App() {
         params.get('view') === 'nana-switch-app'
       ) {
         setCurrentView('NANA_SWITCH_APP');
+        setShowWelcomeShowcase(false);
+        setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
+        return;
+      }
+
+      if (
+        pathname === '/wallet' ||
+        pathname === '/nanawallet' ||
+        pathname === '/nana-wallet' ||
+        pathname === '/app/wallet' ||
+        pathname === '/apps/wallet' ||
+        pathname.startsWith('/wallet') ||
+        pathname.startsWith('/nanawallet') ||
+        pathname.startsWith('/nana-wallet') ||
+        params.get('view') === 'wallet' ||
+        params.get('view') === 'nanawallet'
+      ) {
+        setCurrentView('WALLET');
         setShowWelcomeShowcase(false);
         setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
         return;
@@ -5383,10 +5424,15 @@ export default function App() {
         <React.Suspense fallback={<LoadingScreen message="Chargement NaNaSwitch Cloud..." />}>
           <NaNaSwitchLandingPage 
             onNavigate={(path) => {
-              if (path === '/dashboard' || path.startsWith('/dashboard')) {
+              if (path === '/dashboard' || (path.startsWith('/dashboard') && path !== '/dashboard/nanaswitch')) {
                 setCurrentView('MASTER_HUB');
                 window.history.pushState({}, '', path);
-              } else if (path.startsWith('/nana-switch') || path.startsWith('/nanaswitch')) {
+              } else if (
+                path.startsWith('/nana-switch') ||
+                path.startsWith('/nanaswitch') ||
+                path.startsWith('/app/nanaswitch') ||
+                path.startsWith('/dashboard/nanaswitch')
+              ) {
                 setCurrentView('NANA_SWITCH_APP');
                 window.history.pushState({}, '', path);
               } else {
@@ -5399,32 +5445,67 @@ export default function App() {
     );
   }
 
-  // 1cc. NaNaSwitch Partenaires B2B App : Application modulaire & multi-tenant B2B (/app/nanaswitch, /dashboard/nanaswitch, /nana-switch-app)
+  // 1cc. NaNaSwitch Partenaires B2B App : Application modulaire & multi-tenant B2B (/nana-switch/apps, /nana-switch/merchant, /app/nanaswitch, /dashboard/nanaswitch, /nana-switch-app)
   if (
     currentView === 'NANA_SWITCH_APP' ||
     currentView === 'nana_switch_app'
   ) {
     const swPath = typeof window !== 'undefined' ? window.location.pathname : '';
-    if (
-      swPath.startsWith('/nana-switch/') ||
-      swPath.startsWith('/nanaswitch/') ||
+    const swParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+
+    // L'Espace Marchand de NaNaSwitch (/nana-switch/apps, /nana-switch/merchant, /app/nanaswitch...)
+    // Affiche le Tableau de bord des applications marchandes NanaSwitchApp avec création d'application
+    const isMerchantAppsView =
+      swPath === '/nana-switch/apps' ||
+      swPath.startsWith('/nana-switch/apps') ||
+      swPath === '/nana-switch/merchant' ||
+      swPath.startsWith('/nana-switch/merchant') ||
+      swPath === '/nana-switch/create-app' ||
+      swPath === '/nana-switch/dashboard' ||
       swPath === '/nana-switch-app' ||
       swPath === '/nanaswitch-app' ||
-      swPath === '/nana-switch-apppage' ||
-      swPath === '/nanaswitch-apppage'
-    ) {
+      swPath === '/app/nanaswitch' ||
+      swPath === '/apps/nanaswitch' ||
+      swPath === '/dashboard/nanaswitch' ||
+      swParams.get('view') === 'merchant' ||
+      swParams.get('view') === 'apps' ||
+      swParams.get('create') === 'true';
+
+    if (isMerchantAppsView) {
       return (
-        <ModuleErrorBoundary moduleName="NaNaSwitch - AppPage Console">
-          <React.Suspense fallback={<LoadingScreen message="Connexion à NaNaSwitch Console..." />}>
-            <NaNaSwitchAppPage />
+        <ModuleErrorBoundary moduleName="NaNaSwitch - Application Partenaire">
+          <React.Suspense fallback={<LoadingScreen message="Connexion à NanaSwitch App..." />}>
+            <NanaSwitchApp onBack={() => { setCurrentView('NANA_SWITCH'); window.history.pushState({}, '', '/nana-switch'); }} />
           </React.Suspense>
         </ModuleErrorBoundary>
       );
     }
+
     return (
-      <ModuleErrorBoundary moduleName="NaNaSwitch - Application Partenaire">
-        <React.Suspense fallback={<LoadingScreen message="Connexion à NanaSwitch App..." />}>
-          <NanaSwitchApp onBack={() => { setCurrentView('MASTER_HUB'); window.history.pushState({}, '', '/'); }} />
+      <ModuleErrorBoundary moduleName="NaNaSwitch - AppPage Console">
+        <React.Suspense fallback={<LoadingScreen message="Connexion à NaNaSwitch Console..." />}>
+          <NaNaSwitchAppPage />
+        </React.Suspense>
+      </ModuleErrorBoundary>
+    );
+  }
+
+  // 1cc-wallet. nanawallet : Écran d'Accueil & Dashboard Portefeuille Mobile Hybride (/wallet, /nanawallet)
+  if (
+    currentView === 'WALLET' ||
+    currentView === 'wallet' ||
+    currentView === 'NANA_WALLET' ||
+    currentView === 'nanawallet'
+  ) {
+    return (
+      <ModuleErrorBoundary moduleName="nanawallet - Portefeuille Mobile">
+        <React.Suspense fallback={<LoadingScreen message="Chargement de nanawallet..." />}>
+          <NanaWalletHome 
+            onBackToHub={() => {
+              setCurrentView('MASTER_HUB');
+              window.history.pushState({}, '', '/');
+            }}
+          />
         </React.Suspense>
       </ModuleErrorBoundary>
     );

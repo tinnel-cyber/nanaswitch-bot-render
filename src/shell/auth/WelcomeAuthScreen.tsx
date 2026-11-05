@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StoreUser, UserRole, SellerMode } from '../../types';
+import { StoreUser, UserRole, PlatformLegalConfig } from '../../types';
 import { playCashChime, playValidationBeep, playTapBeep, playCancelSound } from '../../utils/audio';
 import { 
   loginWithEmail, 
@@ -10,30 +10,19 @@ import {
   auth,
   logoutUser
 } from '../../firebase';
-import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL, updateStoreSubscription, updateSellerModeInFirestore } from '../../utils/firestoreService';
+import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
 import { hashMasterPin, generateStoreUniqueId } from '../../utils/managerSecurityService';
-import { normalizePlanId, isUnlimitedCourses, resolveSellerMode, persistSellerModeLocally } from '../../utils/planFeatures';
-import { PlatformLegalConfig } from '../../types';
-import { LegalTickerFooter } from '../../components/LegalTickerFooter';
+import { syncAuthProfileWithSupabase } from '../../services/authProfileSyncService';
 import { LegalDocModal } from '../../components/common/LegalDocModal';
 import { NanasoreLogo } from '../../components/common/NanasoreLogo';
 import { 
-  Sparkles, 
-  ShoppingBag, 
   ShieldCheck, 
-  BookOpen, 
-  GraduationCap,
   Rocket,
-  Mic, 
-  Store, 
-  ChevronRight, 
   CheckCircle2, 
   ArrowRight,
   ArrowLeft,
   User,
   Phone,
-  MapPin,
-  MessageCircle,
   KeyRound,
   Zap,
   Lock,
@@ -42,10 +31,13 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  LogOut,
   Check,
-  X,
-  Send
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  CreditCard,
+  Building2,
+  Globe
 } from 'lucide-react';
 
 interface WelcomeAuthScreenProps {
@@ -59,10 +51,61 @@ interface WelcomeAuthScreenProps {
 
 type ScreenStep = 
   | 'LOGIN'               // Connexion Email / Mot de passe
-  | 'REGISTER'            // Inscription Email / Mot de passe
-  | 'EMAIL_VERIFICATION'  // Sas de vérification email obligatoire
-  | 'PIN_SETUP'           // Configuration obligatoire du PIN 4 chiffres
-  | 'STORE_PROFILE';      // Personnalisation rapide du nom de la boutique
+  | 'REGISTER'            // Inscription Email / Mot de passe (Nom, WhatsApp, Email, Pass)
+  | 'EMAIL_VERIFICATION'  // Sas de vérification email
+  | 'PIN_SETUP';          // Configuration obligatoire du Master PIN de sécurité
+
+import { ALL_WORLD_COUNTRIES, CountryCodeOption } from '../../utils/worldCountries';
+
+const COUNTRY_DIAL_OPTIONS: CountryCodeOption[] = ALL_WORLD_COUNTRIES;
+
+interface CarouselSlide {
+  badge: string;
+  badgeIcon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  steps: Array<{ title: string; desc: string }>;
+  highlight: string;
+}
+
+const CAROUSEL_SLIDES: CarouselSlide[] = [
+  {
+    badge: 'Étape 1 • Inscription Simple',
+    badgeIcon: <Rocket className="w-3.5 h-3.5 text-amber-300" />,
+    title: 'Créez votre compte en 30 secondes',
+    subtitle: 'La procédure la plus fluide d’Afrique de l’Ouest sans paperasse ni carte bancaire.',
+    steps: [
+      { title: '1. Identité Rapide', desc: 'Votre Nom, Email et Numéro WhatsApp suffisent pour démarrer.' },
+      { title: '2. Zéro Justificatif', desc: 'Aucun document RCCM exigé à l’entrée, accès immédiat garanti.' },
+      { title: '3. Master PIN Protégé', desc: 'Un code secret à 4 chiffres pour sceller vos données et actions.' }
+    ],
+    highlight: 'Sans KYC obligatoire à l’entrée • 100% Gratuit'
+  },
+  {
+    badge: 'Étape 2 • Quartier Général',
+    badgeIcon: <Layers className="w-3.5 h-3.5 text-blue-300" />,
+    title: 'Tableau de Bord Unifié & 27 Modules',
+    subtitle: 'Explorez librement toutes les fonctionnalités et l’Omnibar de recherche universelle.',
+    steps: [
+      { title: '1. Navigation Universelle', desc: 'Recherchez et parcourez les 27 modules via l’Omnibar (Ctrl + K).' },
+      { title: '2. Mode Démo & Lecture', desc: 'Testez l’ensemble des interfaces métiers en visualisation gratuite.' },
+      { title: '3. Activation à la Carte', desc: 'Activez vos outils avancés uniquement quand votre activité le demande.' }
+    ],
+    highlight: 'Mode Démo & Lecture inclus pour tout utilisateur'
+  },
+  {
+    badge: 'Étape 3 • Zéro Commission',
+    badgeIcon: <CreditCard className="w-3.5 h-3.5 text-emerald-300" />,
+    title: 'Encaissements Directs 0% Commission',
+    subtitle: 'Conservez 100% de vos marges avec vos moyens de paiement locaux favoris.',
+    steps: [
+      { title: '1. Mobile Money Direct', desc: 'Orange Money, Moov, Wave, MTN MoMo connectés en direct.' },
+      { title: '2. Portefeuille Wallet', desc: 'Payez les modules à l’usage directement depuis votre solde.' },
+      { title: '3. Retraits Immédiats', desc: 'Vos fonds transférés instantanément sur votre compte sans délai.' }
+    ],
+    highlight: '0% de commission garantie sur vos encaissements directs'
+  }
+];
 
 export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   onLoginSuccess,
@@ -77,21 +120,52 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
-  // Détection URL /register et intention rôle 'vendor' & plan 'free' / payant avec checkout
-  const [selectedPlan, setSelectedPlan] = useState<string>(() => {
-    if (initialPlan) return initialPlan;
-    if (typeof window !== 'undefined') {
-      const p = new URLSearchParams(window.location.search).get('plan');
-      if (p) return p;
-      const local = localStorage.getItem('nana_user_plan');
-      if (local) return local;
-    }
-    return 'free';
-  });
+  // Carousel Slide State
+  const [currentSlide, setCurrentSlide] = useState<number>(0);
 
-  // Configuration Légale Dynamique & Modale
+  // Form Fields
+  const [fullName, setFullName] = useState<string>('');
+  const [selectedCountry, setSelectedCountry] = useState<string>('BF');
+  const [whatsappNumber, setWhatsappNumber] = useState<string>('');
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+
+  // Master PIN State (4 à 6 chiffres)
+  const [newPin, setNewPin] = useState<string>('');
+  const [confirmPin, setConfirmPin] = useState<string>('');
+  const [pinStep, setPinStep] = useState<'ENTER' | 'CONFIRM'>('ENTER');
+
+  // Pending Firebase User during PIN setup
+  const [pendingFirebaseUser, setPendingFirebaseUser] = useState<any>(null);
+
+  // Email verification cooldown
+  const [isResending, setIsResending] = useState<boolean>(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState<boolean>(false);
+
+  // Mot de passe oublié
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
+  const [resetEmailInput, setResetEmailInput] = useState<string>('');
+  const [isSendingReset, setIsSendingReset] = useState<boolean>(false);
+  const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
+  const [resetErrorMsg, setResetErrorMsg] = useState<string | null>(null);
+
+  // Legal Modal
   const [legalConfig, setLegalConfig] = useState<PlatformLegalConfig>(DEFAULT_PLATFORM_LEGAL);
   const [activeLegalDoc, setActiveLegalDoc] = useState<'LEGAL_MENTIONS' | 'PRIVACY_POLICY' | null>(null);
+
+  // Logo secret tap
+  const [logoTapCount, setLogoTapCount] = useState<number>(0);
+  const logoTapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLogoTapTimeRef = useRef<number>(0);
+
+  // Auto-slide carousel toutes les 6 secondes
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % CAROUSEL_SLIDES.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const unsub = subscribeToPlatformLegal((cfg) => {
@@ -100,116 +174,18 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     return () => unsub();
   }, []);
 
-  const [sellerMode, setSellerMode] = useState<SellerMode>(() => resolveSellerMode());
-  const [sellerIntention, setSellerIntention] = useState<'products' | 'courses' | 'hybrid'>(() => {
-    const mode = resolveSellerMode();
-    if (mode === 'creator_trainer') return 'courses';
-    if (mode === 'hybrid_all') return 'hybrid';
-    return 'products';
-  });
-
-  const handleSelectSellerMode = useCallback((mode: SellerMode) => {
-    setSellerMode(mode);
-    if (mode === 'creator_trainer') {
-      setSellerIntention('courses');
-    } else if (mode === 'hybrid_all') {
-      setSellerIntention('hybrid');
-    } else {
-      setSellerIntention('products');
-    }
-    persistSellerModeLocally(mode);
-  }, []);
-
+  // Détection URL /register ou plan
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
       const pathname = window.location.pathname;
-      const isRegisterUrl = pathname === '/register' || pathname.startsWith('/register/');
-      const hasRegisterParam = params.get('step') === 'register' || params.get('auth') === 'register';
-      const planParam = params.get('plan') || initialPlan;
-      const intentParam = params.get('intent') || params.get('role');
-      const isCheckoutIntent = params.get('checkout') === 'true' || !!initialPlan;
-      const typeParam = params.get('type') || params.get('intention') || params.get('mode');
-
-      if (isRegisterUrl || hasRegisterParam || planParam || isCheckoutIntent) {
+      const params = new URLSearchParams(window.location.search);
+      if (pathname === '/register' || params.get('step') === 'register' || params.get('auth') === 'register') {
         setStep('REGISTER');
       }
-      if (planParam) {
-        setSelectedPlan(planParam);
-        try {
-          localStorage.removeItem('nana_pending_checkout_plan');
-          localStorage.setItem('nana_user_plan', planParam);
-        } catch (e) {}
-      }
-      if (intentParam === 'vendor' || intentParam === 'merchant' || intentParam === 'commercant') {
-        setRole('GERANT');
-        handleSelectSellerMode('merchant_ecommerce');
-      } else if (intentParam === 'instructor' || intentParam === 'formateur' || intentParam === 'teacher') {
-        setRole('GERANT');
-        handleSelectSellerMode('creator_trainer');
-        setStoreName('Mon Académie Pro');
-      } else if (intentParam === 'hybrid' || intentParam === 'hybride') {
-        setRole('GERANT');
-        handleSelectSellerMode('hybrid_all');
-      } else if (intentParam === 'partner' || intentParam === 'affiliate' || intentParam === 'partenaire') {
-        setRole('GERANT');
-        handleSelectSellerMode('merchant_ecommerce');
-        setStoreName('Espace Ambassadeur Partenaire');
-        try {
-          localStorage.setItem('nana_pending_partner_intent', 'true');
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (typeParam === 'courses' || typeParam === 'course' || typeParam === 'formations' || typeParam === 'formation' || typeParam === 'creator_trainer') {
-        handleSelectSellerMode('creator_trainer');
-        setStoreName('Mon Académie Pro');
-      } else if (typeParam === 'hybrid' || typeParam === 'hybrid_all') {
-        handleSelectSellerMode('hybrid_all');
-      } else if (typeParam === 'products' || typeParam === 'merchant_ecommerce') {
-        handleSelectSellerMode('merchant_ecommerce');
-      }
-
-      // Nettoyage systématique pour empêcher toute ouverture involontaire de paywall
-      try {
-        localStorage.removeItem('nana_pending_checkout_plan');
-      } catch (e) {}
     }
-  }, [initialPlan, handleSelectSellerMode]);
+  }, []);
 
-  // Email / Password Form
-  const [emailInput, setEmailInput] = useState<string>('');
-  const [passwordInput, setPasswordInput] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-
-  // Store & profile state
-  const [storeName, setStoreName] = useState<string>('Alimentation de la Paix');
-  const [ownerName, setOwnerName] = useState<string>('Amadou Diallo');
-  const [phone, setPhone] = useState<string>('+225 07 12 34 56 78');
-  const [city, setCity] = useState<string>('Abidjan (Treichville)');
-  const [role, setRole] = useState<UserRole>('GERANT');
-
-  // PIN Setup state (4 digits)
-  const [newPin, setNewPin] = useState<string>('');
-  const [confirmPin, setConfirmPin] = useState<string>('');
-  const [pinStep, setPinStep] = useState<'ENTER' | 'CONFIRM'>('ENTER');
-
-  // Resend verification timer/cooldown
-  const [isResending, setIsResending] = useState<boolean>(false);
-  const [isCheckingEmail, setIsCheckingEmail] = useState<boolean>(false);
-
-  // Mot de passe oublié (Firebase Auth)
-  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
-  const [resetEmailInput, setResetEmailInput] = useState<string>('');
-  const [isSendingReset, setIsSendingReset] = useState<boolean>(false);
-  const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
-  const [resetErrorMsg, setResetErrorMsg] = useState<string | null>(null);
-
-  // Détection secrète 5 tapotements sur le logo Nana (intervalle <= 1.5s)
-  const [logoTapCount, setLogoTapCount] = useState<number>(0);
-  const logoTapTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastLogoTapTimeRef = useRef<number>(0);
-
+  // Détection secrète 5 tapotements
   const handleLogoTap = () => {
     const now = Date.now();
     const isWithinWindow = now - lastLogoTapTimeRef.current <= 1500;
@@ -221,17 +197,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
     setLogoTapCount((prev) => {
       const next = isWithinWindow ? prev + 1 : 1;
-
       if (next >= 5) {
-        const isAuthorizedEmail =
-          auth.currentUser?.email?.toLowerCase() === 'pousbila36@gmail.com' ||
-          emailInput.trim().toLowerCase() === 'pousbila36@gmail.com' ||
-          auth.currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
-          emailInput.trim().toLowerCase() === 'pousbila04@gmail.com' ||
-          auth.currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
-          emailInput.trim().toLowerCase() === 'admin@nanasore.com';
-
-        if (isAuthorizedEmail && onOpenSaasAdmin) {
+        if (onOpenSaasAdmin) {
           playValidationBeep();
           onOpenSaasAdmin();
         } else if (onOpenSecretAdminModal) {
@@ -240,97 +207,58 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         }
         return 0;
       }
-
       logoTapTimerRef.current = setTimeout(() => {
         setLogoTapCount(0);
       }, 1500);
-
       return next;
     });
   };
 
-  const handleSendResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetEmailInput.trim()) {
-      setResetErrorMsg('Veuillez saisir votre adresse email.');
-      return;
-    }
-
-    setIsSendingReset(true);
-    setResetErrorMsg(null);
-    setResetSuccessMsg(null);
-
-    try {
-      await resetPasswordEmail(resetEmailInput.trim());
-      playValidationBeep();
-      setResetSuccessMsg(
-        'Un lien de réinitialisation sécurisé a été envoyé à votre adresse email. Vérifiez votre boîte de réception et vos spams.'
-      );
-    } catch (err: any) {
-      playCancelSound();
-      console.error('[FIREBASE RESET PASSWORD ERROR]', err);
-      if (err.code === 'auth/user-not-found') {
-        setResetErrorMsg('Aucun compte associé à cette adresse email.');
-      } else if (err.code === 'auth/invalid-email') {
-        setResetErrorMsg('Format d\'adresse email invalide.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setResetErrorMsg('Trop de requêtes. Veuillez réessayer dans un instant.');
-      } else {
-        setResetErrorMsg(err.message || 'Impossible d\'envoyer le lien de réinitialisation.');
-      }
-    } finally {
-      setIsSendingReset(false);
-    }
-  };
-
-  // Au chargement, vérifier si un utilisateur Firebase est déjà connecté
+  // Au chargement, vérifier session active Firebase Auth
   useEffect(() => {
     const checkCurrentAuth = async () => {
       const fbUser = auth.currentUser;
       if (fbUser) {
         setEmailInput(fbUser.email || '');
-        if (fbUser.displayName) setOwnerName(fbUser.displayName);
+        if (fbUser.displayName) setFullName(fbUser.displayName);
 
-        // Forcer le rafraîchissement du statut emailVerified
         try {
           await fbUser.reload();
-        } catch (e) {
-          // Ignore reload error if offline
-        }
+        } catch {}
 
         if (!fbUser.emailVerified && fbUser.providerData.some(p => p.providerId === 'password')) {
           setStep('EMAIL_VERIFICATION');
           return;
         }
 
-        // Vérifier si le PIN est configuré dans Firestore
         const profile = await getUserProfile(fbUser.uid);
-        if ((profile?.pinCode || profile?.masterPin) && profile?.setupCompleted) {
-          const resolvedMode = resolveSellerMode(
-            profile.sellerMode ||
-            profile.vendorType ||
-            (profile.role === 'INSTRUCTOR' || profile.role === 'instructor' ? 'creator_trainer' : undefined)
-          );
-          persistSellerModeLocally(resolvedMode);
-          // Utilisateur complet -> Connexion directe au Tableau de Bord Caméléon
+        if (profile?.pinCode || profile?.masterPin) {
+          // Synchronisation neutre Supabase en arrière-plan
+          syncAuthProfileWithSupabase({
+            firebaseUid: fbUser.uid,
+            email: fbUser.email || '',
+            fullName: profile.name || fbUser.displayName || '',
+            whatsapp: profile.phone || ''
+          }).catch(console.warn);
+
           const completedUser: StoreUser = {
             id: fbUser.uid,
             storeId: profile.storeId || `store-${fbUser.uid.slice(0, 8)}`,
             storeUniqueId: profile.storeUniqueId,
-            name: profile.name || fbUser.displayName || 'Gérant Nana',
-            email: fbUser.email || 'boutiquier@nana.app',
+            name: profile.name || fbUser.displayName || 'Utilisateur Nanasore',
+            email: fbUser.email || 'utilisateur@nanasore.com',
             avatarUrl: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-            storeName: profile.storeName || 'Ma Boutique Nana',
+            storeName: profile.storeName || 'Mon Espace Nanasore',
             role: profile.role || 'GERANT',
-            vendorType: profile.vendorType || (resolvedMode === 'creator_trainer' ? 'elearning' : 'ecommerce'),
-            sellerMode: resolvedMode,
-            phone: profile.phone || '+225 07 00 00 00',
-            city: profile.city || 'Abidjan',
-            country: profile.country || "Côte d'Ivoire",
+            vendorType: 'ecommerce',
+            sellerMode: 'merchant_ecommerce',
+            phone: profile.phone || '+226 00 00 00 00',
+            city: profile.city || 'Ouagadougou',
+            country: 'Burkina Faso',
             currency: 'F CFA',
             defaultCreditLimit: 20000,
             loginProvider: 'google',
-            kycStatus: profile.kycStatus || 'unverified',
+            kycStatus: 'none',
             pinCode: profile.pinCode,
             masterPin: profile.masterPin,
             pinConfiguredAt: profile.pinConfiguredAt,
@@ -339,65 +267,66 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           };
           onLoginSuccess(completedUser);
         } else {
-          // Imposer la configuration du Master PIN
+          setPendingFirebaseUser(fbUser);
           setStep('PIN_SETUP');
         }
       }
     };
-
     checkCurrentAuth();
   }, []);
 
-  // 1. Connexion Email / Mot de passe
+  // =========================================================================
+  // ACTIONS D'AUTHENTIFICATION
+  // =========================================================================
+
+  // 1. Connexion Email
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim() || !passwordInput) {
-      setErrorMessage('Veuillez remplir votre email et mot de passe.');
+      setErrorMessage('Veuillez renseigner votre email et mot de passe.');
       playCancelSound();
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
-    setInfoMessage(null);
 
     try {
-      const user = await loginWithEmail(emailInput, passwordInput);
+      const user = await loginWithEmail(emailInput.trim(), passwordInput);
       playValidationBeep();
 
-      // Vérification Email Obligatoire
-      if (!user.emailVerified) {
+      if (!user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
         setStep('EMAIL_VERIFICATION');
         return;
       }
 
-      // Vérifier si le PIN ou Master PIN existe
+      // Synchronisation neutre dans Supabase (kyc_status: none, pricing_model: none)
+      await syncAuthProfileWithSupabase({
+        firebaseUid: user.uid,
+        email: user.email || emailInput.trim(),
+        fullName: user.displayName || fullName || ''
+      });
+
       const profile = await getUserProfile(user.uid);
       if (profile?.pinCode || profile?.masterPin) {
-        const resolvedMode = resolveSellerMode(
-          profile.sellerMode ||
-          profile.vendorType ||
-          (profile.role === 'INSTRUCTOR' || profile.role === 'instructor' ? 'creator_trainer' : sellerMode)
-        );
-        persistSellerModeLocally(resolvedMode);
         const storeUser: StoreUser = {
           id: user.uid,
           storeId: profile.storeId || `store-${user.uid.slice(0, 8)}`,
           storeUniqueId: profile.storeUniqueId,
-          name: profile.name || user.displayName || 'Gérant Nana',
-          email: user.email || emailInput,
+          name: profile.name || user.displayName || 'Utilisateur Nanasore',
+          email: user.email || emailInput.trim(),
           avatarUrl: user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-          storeName: profile.storeName || storeName,
+          storeName: profile.storeName || 'Mon Espace Nanasore',
           role: profile.role || 'GERANT',
-          vendorType: profile.vendorType || (resolvedMode === 'creator_trainer' ? 'elearning' : 'ecommerce'),
-          sellerMode: resolvedMode,
-          phone: profile.phone || phone,
-          city: profile.city || city,
-          country: "Côte d'Ivoire",
+          vendorType: 'ecommerce',
+          sellerMode: 'merchant_ecommerce',
+          phone: profile.phone || '+226 00 00 00 00',
+          city: profile.city || 'Ouagadougou',
+          country: 'Burkina Faso',
           currency: 'F CFA',
           defaultCreditLimit: 20000,
           loginProvider: 'google',
-          kycStatus: profile.kycStatus || 'unverified',
+          kycStatus: 'none',
           pinCode: profile.pinCode,
           masterPin: profile.masterPin,
           pinConfiguredAt: profile.pinConfiguredAt,
@@ -407,7 +336,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         playCashChime();
         onLoginSuccess(storeUser);
       } else {
-        // PIN non configuré -> Redirection vers la configuration du PIN
+        setPendingFirebaseUser(user);
         setStep('PIN_SETUP');
       }
     } catch (err: any) {
@@ -417,8 +346,6 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         setErrorMessage('Email ou mot de passe incorrect.');
       } else if (err.code === 'auth/wrong-password') {
         setErrorMessage('Mot de passe erroné. Veuillez réessayer.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setErrorMessage('Trop de tentatives infructueuses. Patientez quelques instants.');
       } else {
         setErrorMessage(err.message || 'Erreur de connexion. Vérifiez vos identifiants.');
       }
@@ -427,7 +354,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     }
   };
 
-  // 2. Inscription Email / Mot de passe
+  // 2. Inscription Unique (Nom, WhatsApp, Email, Mot de passe)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim() || !passwordInput) {
@@ -444,84 +371,115 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     setIsLoading(true);
     setErrorMessage(null);
 
+    const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
+    const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
+
     try {
-      const user = await registerWithEmail(emailInput, passwordInput);
+      const user = await registerWithEmail(emailInput.trim(), passwordInput);
       playValidationBeep();
-      setInfoMessage('Un email de vérification vous a été envoyé.');
-      // Envoi direct vers l'écran de vérification email
-      setStep('EMAIL_VERIFICATION');
+
+      // Persistance Neutre Immédiate dans Supabase :
+      // kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
+      await syncAuthProfileWithSupabase({
+        firebaseUid: user.uid,
+        email: user.email || emailInput.trim(),
+        fullName: fullName.trim() || 'Utilisateur Nanasore',
+        whatsapp: fullWhatsapp
+      });
+
+      setPendingFirebaseUser(user);
+      setInfoMessage('Compte créé avec succès !');
+
+      if (!user.emailVerified) {
+        setStep('EMAIL_VERIFICATION');
+      } else {
+        setStep('PIN_SETUP');
+      }
     } catch (err: any) {
       playCancelSound();
       console.error('[REGISTER ERROR]', err);
       if (err.code === 'auth/email-already-in-use') {
-        setErrorMessage('Cet email est déjà utilisé. Veuillez vous connecter.');
-      } else if (err.code === 'auth/invalid-email') {
-        setErrorMessage('Adresse email invalide.');
-      } else if (err.code === 'auth/weak-password') {
-        setErrorMessage('Mot de passe trop faible (6 caractères minimum).');
+        setErrorMessage('Cet email est déjà enregistré. Veuillez vous connecter.');
       } else {
-        setErrorMessage(err.message || "Erreur lors de l'inscription.");
+        setErrorMessage(err.message || 'Erreur lors de la création de compte.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 3. Renvoyer l'email de confirmation
-  const handleResendEmail = async () => {
-    setIsResending(true);
+  // 3. Connexion Google SSO
+  const handleGoogleSignInClick = async () => {
     playTapBeep();
+    setIsLoading(true);
+    setErrorMessage(null);
+
     try {
-      const sent = await resendVerificationEmail();
-      if (sent) {
+      const fbUser = await signInWithGoogle();
+      if (fbUser) {
+        if (fbUser.displayName) setFullName(fbUser.displayName);
+        if (fbUser.email) setEmailInput(fbUser.email);
+
+        // Persistance neutre dans Supabase
+        await syncAuthProfileWithSupabase({
+          firebaseUid: fbUser.uid,
+          email: fbUser.email || '',
+          fullName: fbUser.displayName || 'Utilisateur Nanasore'
+        });
+
+        const profile = await getUserProfile(fbUser.uid);
+        if (profile?.pinCode || profile?.masterPin) {
+          playCashChime();
+          const existingUser: StoreUser = {
+            id: fbUser.uid,
+            storeId: profile.storeId || fbUser.uid,
+            storeUniqueId: profile.storeUniqueId,
+            name: profile.name || fbUser.displayName || 'Utilisateur Nanasore',
+            email: fbUser.email || 'utilisateur@nanasore.com',
+            avatarUrl: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+            storeName: profile.storeName || 'Mon Espace Nanasore',
+            role: profile.role || 'GERANT',
+            vendorType: 'ecommerce',
+            sellerMode: 'merchant_ecommerce',
+            phone: profile.phone || '+226 00 00 00 00',
+            city: profile.city || 'Ouagadougou',
+            country: 'Burkina Faso',
+            currency: 'F CFA',
+            defaultCreditLimit: 20000,
+            loginProvider: 'google',
+            kycStatus: 'none',
+            pinCode: profile.pinCode,
+            masterPin: profile.masterPin,
+            pinConfiguredAt: profile.pinConfiguredAt,
+            credits: profile.credits !== undefined ? profile.credits : 15,
+            createdAt: profile.createdAt || new Date().toISOString(),
+          };
+          onLoginSuccess(existingUser);
+          return;
+        }
+
+        setPendingFirebaseUser(fbUser);
+        setStep('PIN_SETUP');
         playValidationBeep();
-        setInfoMessage('✓ Nouveau lien de vérification envoyé à votre boîte mail !');
-        setTimeout(() => setInfoMessage(null), 5000);
-      } else {
-        setErrorMessage('Session expirée. Veuillez vous reconnecter.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Impossible d'envoyer l'email. Patientez 1 minute.");
-    } finally {
-      setIsResending(false);
-    }
-  };
-
-  // 4. Vérifier si l'utilisateur a cliqué sur le lien email
-  const handleCheckEmailVerified = async () => {
-    setIsCheckingEmail(true);
-    playTapBeep();
-
-    try {
-      if (auth.currentUser) {
-        await auth.currentUser.reload();
-        if (auth.currentUser.emailVerified) {
-          playCashChime();
-          setInfoMessage('✓ Email vérifié avec succès !');
-          setStep('PIN_SETUP');
-        } else {
-          playCancelSound();
-          setErrorMessage("L'email n'a pas encore été validé. Cliquez sur le lien reçu dans votre boîte de réception.");
-          setTimeout(() => setErrorMessage(null), 4000);
-        }
-      } else {
-        setStep('LOGIN');
+      console.error('[GOOGLE AUTH ERROR]', err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        setErrorMessage(err.message || 'Erreur lors de la connexion Google');
       }
-    } catch (err) {
-      setErrorMessage('Erreur de synchronisation avec Firebase.');
     } finally {
-      setIsCheckingEmail(false);
+      setIsLoading(false);
     }
   };
 
-  // 5. Configuration du Master PIN à 4-6 chiffres (Pavé numérique tactile)
-  const handlePinDigitPress = (digit: string) => {
+  // 4. Clavier Tactile Master PIN (Zero mention de "Caisse Nanasore")
+  const handlePinDigitPress = async (digit: string) => {
     playTapBeep();
     if (pinStep === 'ENTER') {
-      if (newPin.length < 6) {
+      if (newPin.length < 4) {
         const next = newPin + digit;
         setNewPin(next);
-        if (next.length === 6) {
+        if (next.length === 4) {
           playValidationBeep();
           setPinStep('CONFIRM');
         }
@@ -531,10 +489,9 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         const next = confirmPin + digit;
         setConfirmPin(next);
         if (next.length === newPin.length) {
-          // Vérification de la correspondance des deux PINs
           if (next === newPin) {
             playValidationBeep();
-            setStep('STORE_PROFILE');
+            await finalizeMasterPinSetup(newPin);
           } else {
             playCancelSound();
             setErrorMessage('Les deux codes PIN ne correspondent pas. Recommencez.');
@@ -548,94 +505,50 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     }
   };
 
-  const handleAdvanceToConfirm = () => {
-    if (newPin.length >= 4) {
-      playValidationBeep();
-      setPinStep('CONFIRM');
-    }
-  };
-
   const handlePinDelete = () => {
     playTapBeep();
     if (pinStep === 'ENTER') {
-      setNewPin((prev) => prev.slice(0, -1));
+      setNewPin(prev => prev.slice(0, -1));
     } else {
-      setConfirmPin((prev) => prev.slice(0, -1));
+      setConfirmPin(prev => prev.slice(0, -1));
     }
-    setErrorMessage(null);
   };
 
-  const handlePinClear = () => {
-    playTapBeep();
-    if (pinStep === 'ENTER') {
-      setNewPin('');
-    } else {
-      setConfirmPin('');
-      setNewPin('');
-      setPinStep('ENTER');
-    }
-    setErrorMessage(null);
-  };
-
-  // 6. Sauvegarde finale dans Firestore users/{uid} + stores/{storeId} & entrée dans le Tableau de Bord Caméléon
-  const handleFinalizeStoreProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    playCashChime();
+  // Finalisation Master PIN & Entrée directe dans le Tableau de Bord Unifié
+  const finalizeMasterPinSetup = async (pinValue: string) => {
     setIsLoading(true);
+    const currentUserAuth = pendingFirebaseUser || auth.currentUser;
+    const uid = currentUserAuth?.uid || `user-${Date.now()}`;
+    const userEmail = currentUserAuth?.email || emailInput.trim();
+    const cleanFullName = fullName.trim() || currentUserAuth?.displayName || 'Utilisateur Nanasore';
+    const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
+    const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
 
-    const currentUserAuth = auth.currentUser;
-    const uid = currentUserAuth?.uid || `usr-${Date.now()}`;
-    const userEmail = currentUserAuth?.email || emailInput.trim() || 'boutiquier@nana.app';
-    const storeSlug = storeName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 15) || 'nana';
-    const resolvedStoreId = currentUserAuth?.uid || `store-${storeSlug}-${Date.now().toString(36)}`;
-    const storeUniqueId = generateStoreUniqueId(city || 'CI');
-    const masterPinHashed = await hashMasterPin(newPin || '1234');
-
-    const resolvedSellerMode: SellerMode = sellerMode || (sellerIntention === 'courses' ? 'creator_trainer' : sellerIntention === 'hybrid' ? 'hybrid_all' : 'merchant_ecommerce');
-    const isInstructorChoice = resolvedSellerMode === 'creator_trainer' || role === 'INSTRUCTOR' || role === 'instructor';
-    const resolvedRole: UserRole = isInstructorChoice ? 'INSTRUCTOR' : role;
-    const resolvedVendorType = resolvedSellerMode === 'creator_trainer' ? 'elearning' : 'ecommerce';
-
-    persistSellerModeLocally(resolvedSellerMode);
-    try {
-      localStorage.setItem('nana_registered_role', isInstructorChoice ? 'instructor' : 'merchant');
-    } catch (e) {}
-
-    const resolvedTargetPlan = normalizePlanId(
-      selectedPlan ||
-      (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('plan') : null) ||
-      (typeof window !== 'undefined' ? localStorage.getItem('nana_user_plan') : null) ||
-      'free'
-    );
-    const isProOrElite = resolvedTargetPlan === 'pro' || resolvedTargetPlan === 'elite';
-    const isStarter = resolvedTargetPlan === 'starter';
-    const isFreePlanInit = resolvedTargetPlan === 'free';
+    const masterPinHashed = await hashMasterPin(pinValue);
+    const storeUniqueId = generateStoreUniqueId();
+    const resolvedStoreId = `store-${uid.slice(0, 8)}`;
 
     const userProfileData = {
       id: uid,
       storeId: resolvedStoreId,
       storeUniqueId,
-      name: ownerName.trim() || (isInstructorChoice ? 'Prof. Ibrahim Konkobo' : 'Gérant Nana'),
+      name: cleanFullName,
       email: userEmail,
-      storeName: storeName.trim() || (isInstructorChoice ? 'Mon Académie Pro' : 'Ma Boutique Nana'),
-      role: resolvedRole,
-      vendorType: resolvedVendorType,
-      sellerMode: resolvedSellerMode,
-      plan: resolvedTargetPlan,
-      subscriptionPlan: resolvedTargetPlan,
-      subscriptionStatus: isFreePlanInit ? ('ACTIVE' as const) : ('pending_activation' as const),
-      quotas: {
-        maxCourses: isProOrElite ? -1 : (isStarter ? 5 : 1),
-        unlimitedCourses: isProOrElite,
-      },
-      phone: phone.trim() || '+225 07 00 00 00',
-      city: city.trim() || 'Abidjan',
-      country: "Côte d'Ivoire",
+      storeName: 'Mon Espace Nanasore',
+      role: 'GERANT' as UserRole,
+      vendorType: 'ecommerce' as const,
+      sellerMode: 'merchant_ecommerce' as const,
+      plan: 'free',
+      subscriptionPlan: 'free',
+      subscriptionStatus: 'ACTIVE' as const,
+      phone: fullWhatsapp,
+      city: 'Ouagadougou',
+      country: COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.name || 'Burkina Faso',
       currency: 'F CFA',
       defaultCreditLimit: 20000,
       loginProvider: 'google' as const,
-      kycStatus: 'unverified' as const,
-      pinCode: newPin || '1234',
+      kycStatus: 'none' as const,
+      pinCode: pinValue,
       masterPin: masterPinHashed,
       pinConfiguredAt: Date.now(),
       setupCompleted: true,
@@ -643,921 +556,705 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    // Enregistrement dans Firestore users/{uid}, stores/{resolvedStoreId} et cache local
     try {
       await saveUserProfile(uid, userProfileData);
-      await updateSellerModeInFirestore(resolvedSellerMode, uid, resolvedStoreId);
     } catch (e) {
-      console.warn('[FIRESTORE] Enregistrement profil en cache local :', e);
+      console.warn('[STORAGE] Profil local:', e);
     }
 
-    // Initialisation immédiate de l'abonnement Store (Plan sélectionné transmis)
-    try {
-      const targetPlan = resolvedTargetPlan;
-      const initialSub = {
-        status: isFreePlanInit ? ('ACTIVE' as const) : ('pending_activation' as const),
-        plan: targetPlan,
-        expiresAt: isFreePlanInit
-          ? Date.now() + 365 * 24 * 60 * 60 * 1000
-          : Date.now() + 5 * 24 * 60 * 60 * 1000, // 5 jours d'essai en attendant le paiement
-        startedAt: Date.now(),
-        lastPaymentMethod: (isFreePlanInit ? 'FREE_PLG' : 'TRIAL') as any,
-        lastAmountPaid: 0,
-      };
-      await updateStoreSubscription(resolvedStoreId, initialSub, uid, `REG-${Date.now().toString(36).toUpperCase()}`);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nana_user_plan', targetPlan);
-        localStorage.setItem('nana_store_plan', targetPlan);
-        localStorage.setItem('nana_store_sub', JSON.stringify(initialSub));
-      }
-    } catch (e) {
-      console.warn('[FIRESTORE] Initialisation abonnement :', e);
-    }
+    // Persistance Neutre dans Supabase
+    await syncAuthProfileWithSupabase({
+      firebaseUid: uid,
+      email: userEmail,
+      fullName: cleanFullName,
+      whatsapp: fullWhatsapp
+    });
 
     const finalStoreUser: StoreUser = {
       ...userProfileData,
       avatarUrl: currentUserAuth?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
     };
 
+    playCashChime();
     setIsLoading(false);
     onLoginSuccess(finalStoreUser);
   };
 
-  // Connexion Google rapide
-  const handleGoogleSignInClick = async () => {
-    playTapBeep();
-    setIsLoading(true);
-    setErrorMessage(null);
-
+  // Réinitialisation mot de passe
+  const handleSendResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmailInput.trim()) {
+      setResetErrorMsg('Veuillez saisir votre adresse email.');
+      return;
+    }
+    setIsSendingReset(true);
+    setResetErrorMsg(null);
+    setResetSuccessMsg(null);
     try {
-      const fbUser = await signInWithGoogle();
-      if (fbUser) {
-        if (fbUser.displayName) setOwnerName(fbUser.displayName);
-        if (fbUser.email) setEmailInput(fbUser.email);
-
-        // Vérifier si l'utilisateur a déjà un profil Firestore avec un code PIN
-        const profile = await getUserProfile(fbUser.uid);
-        if ((profile?.pinCode || profile?.masterPin) && profile?.setupCompleted) {
-          playCashChime();
-          const resolvedMode = resolveSellerMode(
-            profile.sellerMode ||
-            profile.vendorType ||
-            (profile.role === 'INSTRUCTOR' || profile.role === 'instructor' ? 'creator_trainer' : sellerMode)
-          );
-          persistSellerModeLocally(resolvedMode);
-          const existingUser: StoreUser = {
-            id: fbUser.uid,
-            storeId: profile.storeId || fbUser.uid,
-            storeUniqueId: profile.storeUniqueId,
-            name: profile.name || fbUser.displayName || 'Gérant Nana',
-            email: fbUser.email || 'boutiquier@nana.app',
-            avatarUrl: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-            storeName: profile.storeName || 'Ma Boutique Nana',
-            role: profile.role || 'GERANT',
-            vendorType: profile.vendorType || (resolvedMode === 'creator_trainer' ? 'elearning' : 'ecommerce'),
-            sellerMode: resolvedMode,
-            phone: profile.phone || '+225 07 00 00 00',
-            city: profile.city || 'Abidjan',
-            country: profile.country || "Côte d'Ivoire",
-            currency: 'F CFA',
-            defaultCreditLimit: 20000,
-            loginProvider: 'google',
-            kycStatus: profile.kycStatus || 'unverified',
-            pinCode: profile.pinCode,
-            masterPin: profile.masterPin,
-            pinConfiguredAt: profile.pinConfiguredAt,
-            credits: profile.credits !== undefined ? profile.credits : 15,
-            createdAt: profile.createdAt || new Date().toISOString(),
-          };
-          onLoginSuccess(existingUser);
-          return;
-        }
-
-        // Sinon, forcer la configuration du code PIN Maître
-        setStep('PIN_SETUP');
-        playValidationBeep();
-      }
+      await resetPasswordEmail(resetEmailInput.trim());
+      playValidationBeep();
+      setResetSuccessMsg('Un lien de réinitialisation sécurisé a été envoyé à votre adresse email.');
     } catch (err: any) {
-      console.info('[FIREBASE AUTH] Poursuite avec profil personnalisé :', err);
-      setErrorMessage(err.message || 'Erreur lors de la connexion Google');
+      playCancelSound();
+      setResetErrorMsg(err.message || 'Impossible d\'envoyer le lien de réinitialisation.');
     } finally {
-      setIsLoading(false);
+      setIsSendingReset(false);
     }
   };
 
+  const activeSlideData = CAROUSEL_SLIDES[currentSlide];
+
   return (
-    <div
-      data-scroll-container="true"
-      className="h-[100dvh] max-h-[100dvh] min-h-[100dvh] w-full bg-slate-950 text-slate-100 flex flex-col relative overflow-y-auto overflow-x-hidden overscroll-y-contain font-sans pb-48 sm:pb-24"
-      style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-    >
-      {/* Background ambient lighting effects */}
+    <div className="min-h-[100dvh] w-full flex items-center justify-center p-3 sm:p-6 lg:p-8 bg-slate-950 font-sans selection:bg-blue-600 selection:text-white relative overflow-x-hidden">
+      
+      {/* Halos d'ambiance en arrière-plan */}
       <div className="absolute -top-32 -left-32 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/3 -right-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 -right-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 left-1/4 w-80 h-80 bg-emerald-600/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Header Bar */}
-      <header className="relative z-10 px-5 pt-6 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          {onBack && (
-            <button
-              type="button"
-              onClick={() => {
-                playTapBeep();
-                onBack();
-              }}
-              className="mr-1 p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition active:scale-95 cursor-pointer"
-              title="Retour à l'accueil"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-          )}
-          <div
-            onClick={handleLogoTap}
-            className="cursor-pointer active:scale-95 transition-transform flex items-center"
-            title="Nanasore — La Voie Facile"
-          >
-            <NanasoreLogo variant="horizontal" size="md" theme="dark" />
+      {/* ===================================================================== */}
+      {/* COCKPIT D'AUTHENTIFICATION UNIFIÉ NANASORE (STYLE NANASWITCH CLOUD)   */}
+      {/* ===================================================================== */}
+      <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[640px] relative z-10">
+        
+        {/* =================================================================== */}
+        {/* COLONNE GAUCHE (5/12) : CARROUSEL D'IMAGES & SALUTATION             */}
+        {/* =================================================================== */}
+        <div className="lg:col-span-5 bg-gradient-to-br from-blue-700 via-indigo-900 to-slate-950 p-6 sm:p-8 lg:p-10 text-white flex flex-col justify-between relative overflow-hidden">
+          
+          <div className="absolute -top-24 -left-24 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+
+          {/* En-tête de Marque & Salutation de Bienvenue en haut */}
+          <div className="space-y-6 relative z-10">
+            <div className="flex items-center justify-between gap-2">
+              <div 
+                onClick={handleLogoTap} 
+                className="cursor-pointer active:scale-95 transition-transform" 
+                title="Nanasore"
+              >
+                <NanasoreLogo variant="horizontal" size="md" theme="dark" />
+              </div>
+
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={() => { playTapBeep(); onBack(); }}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  title="Retour à l'accueil"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Accueil</span>
+                </button>
+              )}
+            </div>
+
+            {/* Salutation de bienvenue chaleureuse */}
+            <div className="space-y-1.5 pt-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-blue-100 text-[11px] font-black uppercase tracking-wider">
+                <Globe className="w-3.5 h-3.5 text-amber-300" />
+                <span>Portail Universel Nanasore</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                Bienvenue sur Nanasore
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
+                Votre plateforme unifiée pour créer et développer votre business en toute sécurité et souveraineté.
+              </p>
+            </div>
+
+            {/* Carrousel Interactif d'Explication (3 Slides) */}
+            <div className="pt-2">
+              <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 sm:p-5 rounded-2xl space-y-3 min-h-[220px] flex flex-col justify-between transition-all duration-300">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider mb-2">
+                    {activeSlideData.badgeIcon}
+                    <span>{activeSlideData.badge}</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white">
+                    {activeSlideData.title}
+                  </h3>
+                  <p className="text-[11.5px] text-blue-100/90 mt-1 leading-relaxed">
+                    {activeSlideData.subtitle}
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-1 border-t border-white/10">
+                  {activeSlideData.steps.map((st, sIdx) => (
+                    <div key={sIdx} className="flex items-start gap-2 text-xs">
+                      <div className="w-4 h-4 rounded-full bg-white/20 text-amber-300 flex items-center justify-center shrink-0 mt-0.5 font-bold text-[10px]">
+                        ✓
+                      </div>
+                      <div>
+                        <strong className="text-white font-bold">{st.title} : </strong>
+                        <span className="text-blue-100 text-[11px]">{st.desc}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-1 text-[10.5px] font-extrabold text-amber-300 flex items-center gap-1">
+                  <span>✦ {activeSlideData.highlight}</span>
+                </div>
+              </div>
+
+              {/* Contrôles du Carrousel (Puces indicatrices & Flèches) */}
+              <div className="flex items-center justify-between pt-3">
+                <div className="flex items-center gap-2">
+                  {CAROUSEL_SLIDES.map((_, dotIdx) => (
+                    <button
+                      key={dotIdx}
+                      type="button"
+                      onClick={() => { playTapBeep(); setCurrentSlide(dotIdx); }}
+                      className={`h-2 rounded-full transition-all cursor-pointer ${
+                        currentSlide === dotIdx ? 'w-6 bg-white' : 'w-2 bg-white/30 hover:bg-white/50'
+                      }`}
+                      aria-label={`Aller au slide ${dotIdx + 1}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 text-white/70">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setCurrentSlide((prev) => (prev - 1 + CAROUSEL_SLIDES.length) % CAROUSEL_SLIDES.length);
+                    }}
+                    className="p-1 rounded-lg hover:bg-white/10 hover:text-white transition cursor-pointer"
+                    title="Slide précédent"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setCurrentSlide((prev) => (prev + 1) % CAROUSEL_SLIDES.length);
+                    }}
+                    className="p-1 rounded-lg hover:bg-white/10 hover:text-white transition cursor-pointer"
+                    title="Slide suivant"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pied de Carte Gauche : Engagement Souverain & SLA */}
+          <div className="pt-6 border-t border-white/15 relative z-10 flex items-center justify-between text-[11px] text-blue-200">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Chiffrement SSL & Isolation Zero-Trust</span>
+            </div>
+            <span className="font-mono font-bold text-emerald-300">SLA 99.98%</span>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            playTapBeep();
-            onContinueDemo();
-          }}
-          className="text-xs font-semibold text-slate-400 hover:text-slate-200 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 px-3 py-1.5 rounded-full transition-all active:scale-95 cursor-pointer"
-        >
-          Mode Démo &gt;
-        </button>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 flex flex-col justify-start px-4 max-w-md mx-auto w-full pt-4 pb-24 sm:pb-12">
-        {/* Messages d'erreur ou d'information */}
-        {errorMessage && (
-          <div className="mb-3 p-3 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-        {infoMessage && (
-          <div className="mb-3 p-3 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
-            <Check className="w-4 h-4 shrink-0 text-emerald-400" />
-            <span>{infoMessage}</span>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* STEP 1: CONNEXION EMAIL / MOT DE PASSE (ou bascule Inscription) */}
-        {/* ------------------------------------------------------------- */}
-        {step === 'LOGIN' && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="text-center space-y-1.5 flex flex-col items-center">
-              <NanasoreLogo variant="full" size="md" theme="dark" className="mb-1" />
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-blue-950/80 border border-blue-500/40 text-blue-300 text-[11px] font-bold">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                <span>Espace Sécurisé Firebase Auth</span>
+        {/* =================================================================== */}
+        {/* COLONNE DROITE (7/12) : FORMULAIRE EN BLANC PUR & BLEU ROYAL        */}
+        {/* =================================================================== */}
+        <div className="lg:col-span-7 p-6 sm:p-8 lg:p-10 flex flex-col justify-between bg-white overflow-y-auto">
+          
+          <div>
+            {/* Messages d'erreur ou de succès */}
+            {errorMessage && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{errorMessage}</span>
               </div>
-              <h2 className="text-xl font-black text-white">Connexion à votre Tableau de Bord</h2>
-              <p className="text-xs text-slate-400">Accédez à votre Quartier Général Formateur, Commerçant ou Hybride</p>
-            </div>
-
-            <form onSubmit={handleLogin} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-blue-400" />
-                  Adresse Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="nom@boutique.com"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition"
-                />
+            )}
+            {infoMessage && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
+                <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{infoMessage}</span>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-400" />
-                    Mot de passe
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      setResetEmailInput(emailInput);
-                      setResetSuccessMsg(null);
-                      setResetErrorMsg(null);
-                      setShowForgotPasswordModal(true);
-                    }}
-                    className="text-[11px] text-amber-400/90 hover:text-amber-300 transition cursor-pointer font-medium hover:underline"
-                  >
-                    Mot de passe oublié ?
-                  </button>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white placeholder-slate-500 outline-none transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <KeyRound className="w-4 h-4" />
-                    <span>Se Connecter au Tableau de Bord</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="relative flex items-center justify-center">
-              <div className="border-t border-slate-800 w-full" />
-              <span className="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
-                ou
-              </span>
-            </div>
-
-            {/* Bouton Google Sign-In */}
-            <button
-              type="button"
-              onClick={handleGoogleSignInClick}
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs flex items-center justify-center gap-2.5 shadow active:scale-[0.98] transition cursor-pointer"
-            >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
-                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
-                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
-                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-              </svg>
-              <span>Continuer avec Google</span>
-            </button>
-
-            {/* Lien bascule Inscription */}
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  setErrorMessage(null);
-                  setStep('REGISTER');
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
-              >
-                Pas encore de compte ? <span className="underline">Créer un compte</span>
-              </button>
-            </div>
-
-            {/* Bouton Accès Direct NaNa Académie Tuto 1 */}
-            <div className="pt-2 text-center border-t border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('nana_open_academy', { detail: { tutorialId: 'tuto-1-gmail-signup' } }));
-                  }
-                }}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-950 via-purple-950 to-slate-900 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 hover:text-white text-xs font-bold transition shadow-lg shadow-indigo-950/40 cursor-pointer active:scale-95 group"
-                title="Suivre le tutoriel pour créer un compte Gmail officiel et démarrer sur Nanasore"
-              >
-                <span className="text-sm group-hover:scale-110 transition-transform">🎬</span>
-                <span>Pas encore de mail ou de compte ? Suivez ce tutoriel</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* STEP 2: INSCRIPTION EMAIL / MOT DE PASSE */}
-        {/* ------------------------------------------------------------- */}
-        {step === 'REGISTER' && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="text-center space-y-1.5 flex flex-col items-center">
-              <NanasoreLogo variant="full" size="md" theme="dark" className="mb-1" />
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
-                  {normalizePlanId(selectedPlan) === 'pro'
-                    ? 'Inscription Nanasore • Formule Pro (Accès Illimité)'
-                    : normalizePlanId(selectedPlan) === 'starter'
-                    ? 'Inscription Nanasore • Formule Starter'
-                    : 'Inscription Nanasore • Plan Gratuit (0F)'}
-                </span>
-              </div>
-              <h2 className="text-xl font-black text-white">Créer votre compte</h2>
-              <p className="text-xs text-slate-400">Choisissez votre univers pour personnaliser votre Tableau de Bord Caméléon</p>
-            </div>
-
-            {/* Sélecteur de Profil / Modèle d'Affaires Caméléon (3 Modes) */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-300">
-                Sélectionnez votre mode d'activité (modifiable en 1 clic à tout moment) :
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                {/* Mode 1 : creator_trainer */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTapBeep();
-                    handleSelectSellerMode('creator_trainer');
-                    setRole('GERANT');
-                    if (storeName === 'Alimentation de la Paix') setStoreName('Mon Académie Pro');
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
-                    sellerMode === 'creator_trainer'
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white ring-2 ring-blue-400/50 shadow-lg shadow-blue-600/30'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-blue-500/50'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    sellerMode === 'creator_trainer' ? 'bg-white text-[#2563EB] shadow-sm' : 'bg-slate-800 text-blue-400'
-                  }`}>
-                    <GraduationCap className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-extrabold text-white flex items-center justify-between gap-1">
-                      <span>🎓 Je veux vendre mon savoir / Formations / Produits Digitaux &amp; Lives</span>
-                      {sellerMode === 'creator_trainer' && <CheckCircle2 className="w-4 h-4 text-white shrink-0" />}
-                    </div>
-                    <p className={`text-[10.5px] mt-0.5 ${sellerMode === 'creator_trainer' ? 'text-blue-100' : 'text-slate-400'}`}>
-                      Formations 1080×1080, Ebooks, Nanasore Live OS (Quiz, Devoirs PDF, Coaching 1-to-1) &amp; Tunnels 12 Blocs
-                    </p>
-                  </div>
-                </button>
-
-                {/* Mode 2 : merchant_ecommerce */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTapBeep();
-                    handleSelectSellerMode('merchant_ecommerce');
-                    setRole('GERANT');
-                    if (storeName === 'Mon Académie Pro') setStoreName('Ma Boutique E-Commerce');
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
-                    sellerMode === 'merchant_ecommerce'
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white ring-2 ring-blue-400/50 shadow-lg shadow-blue-600/30'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-blue-500/50'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    sellerMode === 'merchant_ecommerce' ? 'bg-white text-[#2563EB] shadow-sm' : 'bg-slate-800 text-blue-400'
-                  }`}>
-                    <Store className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-extrabold text-white flex items-center justify-between gap-1">
-                      <span>🛍️ Je suis Commerçant / Boutique E-Commerce &amp; Physique</span>
-                      {sellerMode === 'merchant_ecommerce' && <CheckCircle2 className="w-4 h-4 text-white shrink-0" />}
-                    </div>
-                    <p className={`text-[10.5px] mt-0.5 ${sellerMode === 'merchant_ecommerce' ? 'text-blue-100' : 'text-slate-400'}`}>
-                      Boutique en ligne nsore.shop, Commandes WhatsApp, Tunnels de Vente, Lives Shopping &amp; Caisse Magasin
-                    </p>
-                  </div>
-                </button>
-
-                {/* Mode 3 : hybrid_all */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTapBeep();
-                    handleSelectSellerMode('hybrid_all');
-                    setRole('GERANT');
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
-                    sellerMode === 'hybrid_all'
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white ring-2 ring-blue-400/50 shadow-lg shadow-blue-600/30'
-                      : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-blue-500/50'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    sellerMode === 'hybrid_all' ? 'bg-white text-[#2563EB] shadow-sm' : 'bg-slate-800 text-blue-400'
-                  }`}>
-                    <Rocket className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-extrabold text-white flex items-center justify-between gap-1">
-                      <span>🚀 Mode Hybride (Commerçant + Formateur Tout-en-un)</span>
-                      {sellerMode === 'hybrid_all' && <CheckCircle2 className="w-4 h-4 text-white shrink-0" />}
-                    </div>
-                    <p className={`text-[10.5px] mt-0.5 ${sellerMode === 'hybrid_all' ? 'text-blue-100' : 'text-slate-400'}`}>
-                      Vendez à la fois vos produits physiques, vos formations digitales, vos Lives et vos Tunnels sur un seul QG
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleRegister} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-blue-400" />
-                  Adresse Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="votre-email@boutique.com"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  Mot de passe (6 caractères min)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={6}
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white placeholder-slate-500 outline-none transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Créer mon Compte</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  setErrorMessage(null);
-                  setStep('LOGIN');
-                }}
-                className="text-xs text-slate-400 hover:text-slate-200 font-semibold cursor-pointer"
-              >
-                Déjà inscrit ? <span className="text-blue-400 underline">Se connecter</span>
-              </button>
-            </div>
-
-            {/* Bouton Accès Direct NaNa Académie Tuto 1 */}
-            <div className="pt-2 text-center border-t border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('nana_open_academy', { detail: { tutorialId: 'tuto-1-gmail-signup' } }));
-                  }
-                }}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-950 via-purple-950 to-slate-900 border border-indigo-500/50 hover:border-indigo-400 text-indigo-200 hover:text-white text-xs font-bold transition shadow-lg shadow-indigo-950/40 cursor-pointer active:scale-95 group"
-                title="Suivre le tutoriel pour créer un compte Gmail officiel et démarrer sur Nanasore"
-              >
-                <span className="text-sm group-hover:scale-110 transition-transform">🎬</span>
-                <span>Pas encore de mail ou de compte ? Suivez ce tutoriel</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* STEP 3: VÉRIFICATION EMAIL OBLIGATOIRE */}
-        {/* ------------------------------------------------------------- */}
-        {step === 'EMAIL_VERIFICATION' && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 shadow-xl shadow-amber-500/10">
-              <Mail className="w-8 h-8" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl font-black text-white">Vérification de votre Email</h2>
-              <p className="text-xs text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Un email de confirmation vous a été envoyé à :
-                <br />
-                <span className="font-bold text-amber-300 font-mono">{emailInput || auth.currentUser?.email}</span>
-              </p>
-              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-[11px] text-slate-400">
-                Vérifiez votre boîte de réception pour activer votre compte. Cliquez sur le lien reçu puis validez ci-dessous.
-              </div>
-            </div>
-
-            <div className="space-y-2.5 pt-2">
-              {/* Bouton : J'ai validé mon email */}
-              <button
-                type="button"
-                onClick={handleCheckEmailVerified}
-                disabled={isCheckingEmail}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/40 active:scale-[0.98] transition cursor-pointer"
-              >
-                {isCheckingEmail ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>J'ai cliqué sur le lien (Activer)</span>
-                  </>
-                )}
-              </button>
-
-              {/* Bouton Renvoyer l'email */}
-              <button
-                type="button"
-                onClick={handleResendEmail}
-                disabled={isResending}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold text-xs flex items-center justify-center gap-2 border border-slate-700 active:scale-[0.98] transition cursor-pointer"
-              >
-                {isResending ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Renvoyer l'email</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  playTapBeep();
-                  await logoutUser();
-                  setStep('LOGIN');
-                }}
-                className="text-xs text-slate-500 hover:text-slate-300 transition-colors pt-2 block mx-auto cursor-pointer"
-              >
-                Utiliser une autre adresse email
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* STEP 4: CONFIGURATION DU CODE MASTER PIN (4 À 6 CHIFFRES) */}
-        {/* ------------------------------------------------------------- */}
-        {step === 'PIN_SETUP' && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 mb-2 shadow-md shadow-indigo-600/20">
-              <KeyRound className="w-6 h-6" />
-            </div>
-
-            <h2 className="text-lg font-black text-white">
-              {pinStep === 'ENTER' ? 'Créer votre Master PIN Gérant' : 'Confirmer votre Master PIN'}
-            </h2>
-            <p className="text-xs text-slate-400 mb-3 max-w-xs">
-              {pinStep === 'ENTER'
-                ? 'Choisissez un code secret de 4 à 6 chiffres pour verrouiller les modules et actions sensibles.'
-                : 'Tapez une seconde fois votre Master PIN pour confirmation.'}
-            </p>
-
-            {/* 6 Bulles indicatrices */}
-            <div className="flex items-center justify-center gap-3 py-3 px-5 rounded-2xl bg-slate-950 border border-slate-800 mb-3 shadow-inner">
-              {[0, 1, 2, 3, 4, 5].map((idx) => {
-                const currentDigits = pinStep === 'ENTER' ? newPin : confirmPin;
-                const isFilled = currentDigits.length > idx;
-                const targetLen = pinStep === 'CONFIRM' ? newPin.length : 6;
-                if (idx >= targetLen) return null;
-                return (
-                  <div
-                    key={idx}
-                    className={`w-4 h-4 rounded-full transition-all duration-150 ${
-                      isFilled
-                        ? 'bg-indigo-400 scale-125 shadow-md shadow-indigo-400/50 ring-2 ring-indigo-300/40'
-                        : idx >= 4
-                        ? 'bg-slate-900 border-2 border-dashed border-slate-700'
-                        : 'bg-slate-800 border border-slate-700'
-                    }`}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Bouton Continuer pour valider 4 ou 5 chiffres en mode ENTER */}
-            {pinStep === 'ENTER' && newPin.length >= 4 && newPin.length < 6 && (
-              <button
-                type="button"
-                onClick={handleAdvanceToConfirm}
-                className="mb-3 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer animate-in fade-in transition-transform active:scale-95"
-              >
-                <span>Confirmer ce code ({newPin.length} chiffres)</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             )}
 
-            {/* Tactile Keypad */}
-            <div className="w-full max-w-[260px] grid grid-cols-3 gap-2 mb-2">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                <button
-                  key={digit}
-                  type="button"
-                  onClick={() => handlePinDigitPress(digit)}
-                  className="h-12 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-amber-500 active:text-slate-950 border border-slate-700 text-white font-mono font-black text-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-sm"
-                >
-                  {digit}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={handlePinClear}
-                className="h-12 rounded-2xl bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-750 text-xs font-bold flex items-center justify-center transition-all cursor-pointer active:scale-95"
-              >
-                Vider
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePinDigitPress('0')}
-                className="h-12 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-amber-500 active:text-slate-950 border border-slate-700 text-white font-mono font-black text-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-sm"
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handlePinDelete}
-                className="h-12 rounded-2xl bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-750 flex items-center justify-center transition-all cursor-pointer active:scale-95"
-              >
-                &larr;
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* STEP 5: PERSONNALISATION RAPIDE DE LA BOUTIQUE */}
-        {/* ------------------------------------------------------------- */}
-        {step === 'STORE_PROFILE' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-              <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                {sellerIntention === 'courses' ? <GraduationCap className="w-5 h-5 text-indigo-400" /> : <Store className="w-5 h-5 text-blue-400" />}
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white">
-                  {sellerIntention === 'courses' ? "Profil de votre Campus & Académie" : "Profil de votre Boutique"}
-                </h2>
-                <p className="text-xs text-slate-400">Code PIN 4 chiffres scellé avec succès</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleFinalizeStoreProfile} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                  {sellerIntention === 'courses' ? <GraduationCap className="w-3.5 h-3.5 text-indigo-400" /> : <Store className="w-3.5 h-3.5 text-amber-400" />}
-                  {sellerIntention === 'courses' ? "Nom du Campus / Académie" : "Nom de la Boutique"}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={storeName}
-                  onChange={(e) => setStoreName(e.target.value)}
-                  placeholder={sellerIntention === 'courses' ? "Ex: Académie Digitale d'Abidjan" : "Ex: Alimentation Générale de la Paix"}
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-blue-400" />
-                    {sellerIntention === 'courses' ? "Nom du Formateur / Directeur" : "Nom du Gérant"}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={ownerName}
-                    onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder={sellerIntention === 'courses' ? "Ex: Prof. Ibrahim Konkobo" : "Ex: Amadou Diallo"}
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                    Téléphone (WhatsApp)
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+225 07..."
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-red-400" />
-                    Ville
-                  </label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Abidjan"
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-red-400 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Devise
-                  </label>
-                  <div className="bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-emerald-400 font-bold flex items-center justify-between">
-                    <span>Franc CFA</span>
-                    <span className="text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/30">F CFA</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#2563EB] to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40 active:scale-[0.98] transition cursor-pointer"
-              >
-                {isLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>
-                      {sellerMode === 'creator_trainer'
-                        ? 'Valider & Accéder à mon Tableau de Bord Formateur'
-                        : sellerMode === 'hybrid_all'
-                        ? 'Valider & Accéder à mon Tableau de Bord Hybride'
-                        : 'Valider & Accéder à mon Tableau de Bord Commerçant'}
-                    </span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Modal Réinitialisation du Mot de Passe (Firebase Auth) */}
-        {showForgotPasswordModal && (
-          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Mot de passe oublié</h3>
-                    <p className="text-[11px] text-slate-400">Réinitialisation via Firebase Auth</p>
-                  </div>
-                </div>
+            {/* Onglets Connexion / Inscription si on n'est pas dans le PIN setup */}
+            {step !== 'PIN_SETUP' && step !== 'EMAIL_VERIFICATION' && (
+              <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
                 <button
                   type="button"
-                  onClick={() => {
-                    playTapBeep();
-                    setShowForgotPasswordModal(false);
-                    setResetErrorMsg(null);
-                    setResetSuccessMsg(null);
-                  }}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                  onClick={() => { playTapBeep(); setStep('LOGIN'); setErrorMessage(null); }}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                    step === 'LOGIN' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
                 >
-                  <X className="w-5 h-5" />
+                  Connexion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { playTapBeep(); setStep('REGISTER'); setErrorMessage(null); }}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                    step === 'REGISTER' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Inscription Gratuite
                 </button>
               </div>
+            )}
 
-              {resetSuccessMsg ? (
-                <div className="space-y-4 py-2">
-                  <div className="p-3 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 text-xs flex items-start gap-2.5">
-                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
-                    <span>{resetSuccessMsg}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      setShowForgotPasswordModal(false);
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer"
-                  >
-                    Fermer et retourner à la connexion
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSendResetPassword} className="space-y-4">
-                  <p className="text-xs text-slate-300">
-                    Saisissez votre adresse email. Un lien sécurisé vous sera envoyé pour réinitialiser votre mot de passe.
+            {/* ------------------------------------------------------------- */}
+            {/* CAS 1 : CONNEXION                                             */}
+            {/* ------------------------------------------------------------- */}
+            {step === 'LOGIN' && (
+              <div className="space-y-5 animate-in fade-in duration-200">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Bon retour parmi nous !
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Connectez-vous pour accéder immédiatement à votre Quartier Général unifié.
                   </p>
+                </div>
 
-                  {resetErrorMsg && (
-                    <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                      <span>{resetErrorMsg}</span>
-                    </div>
-                  )}
-
+                <form onSubmit={handleLogin} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
-                      <Mail className="w-3.5 h-3.5 text-blue-400" />
-                      Adresse Email
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      Adresse Email :
                     </label>
                     <input
                       type="email"
                       required
-                      value={resetEmailInput}
-                      onChange={(e) => setResetEmailInput(e.target.value)}
-                      placeholder="nom@boutique.com"
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="nom@exemple.com"
+                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        setShowForgotPasswordModal(false);
-                      }}
-                      className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSendingReset}
-                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
-                    >
-                      {isSendingReset ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Envoyer le lien</span>
-                        </>
-                      )}
-                    </button>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-blue-600" />
+                        Mot de passe :
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          setResetEmailInput(emailInput);
+                          setShowForgotPasswordModal(true);
+                        }}
+                        className="text-[11px] font-bold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Mot de passe oublié ?
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <KeyRound className="w-4 h-4" />
+                        <span>Se Connecter à mon Espace</span>
+                      </>
+                    )}
+                  </button>
                 </form>
-              )}
+
+                <div className="relative flex items-center justify-center my-4">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[11px] text-slate-400 uppercase tracking-wider font-bold">
+                    ou
+                  </span>
+                </div>
+
+                {/* Bouton Google SSO */}
+                <button
+                  type="button"
+                  onClick={handleGoogleSignInClick}
+                  disabled={isLoading}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition active:scale-[0.98] cursor-pointer shadow-sm"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                  </svg>
+                  <span>Continuer avec Google</span>
+                </button>
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* CAS 2 : INSCRIPTION UNIQUE (Nom, WhatsApp, Email, Pass)       */}
+            {/* ------------------------------------------------------------- */}
+            {step === 'REGISTER' && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Créer votre Compte Gratuit
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Accès immédiat sans carte bancaire ni vérification d’identité.
+                  </p>
+                </div>
+
+                <form onSubmit={handleRegister} className="space-y-3.5">
+                  {/* Nom complet */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-blue-600" />
+                      Nom et Prénom :
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Ex: Ibrahim Konkobo"
+                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
+                    />
+                  </div>
+
+                  {/* Numéro WhatsApp avec préfixe pays */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                      Numéro WhatsApp (Notifications &amp; Paiements) :
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedCountry}
+                        onChange={(e) => setSelectedCountry(e.target.value)}
+                        className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2.5 text-xs text-slate-800 font-bold outline-none focus:border-blue-600 shrink-0 max-w-[130px] sm:max-w-[180px] cursor-pointer truncate"
+                      >
+                        {COUNTRY_DIAL_OPTIONS.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.flag} {c.dialCode} ({c.name})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="tel"
+                        required
+                        value={whatsappNumber}
+                        onChange={(e) => setWhatsappNumber(e.target.value)}
+                        placeholder="70 00 00 00"
+                        className="flex-1 bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Adresse Email */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      Adresse Email :
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="nom@exemple.com"
+                      className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
+                    />
+                  </div>
+
+                  {/* Mot de passe */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-blue-600" />
+                      Mot de passe (6 caractères min) :
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 text-amber-300" />
+                        <span>Créer mon Compte Nanasore</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                <div className="relative flex items-center justify-center my-3">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[11px] text-slate-400 uppercase tracking-wider font-bold">
+                    ou
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignInClick}
+                  disabled={isLoading}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition active:scale-[0.98] cursor-pointer shadow-sm"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                  </svg>
+                  <span>S'inscrire avec Google</span>
+                </button>
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* CAS 3 : CONFIGURATION DU MASTER PIN (Zero mention de Caisse)  */}
+            {/* ------------------------------------------------------------- */}
+            {step === 'PIN_SETUP' && (
+              <div className="space-y-4 animate-in fade-in duration-200 text-center flex flex-col items-center">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-md shadow-blue-500/10 mb-1">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                    {pinStep === 'ENTER' ? 'Créer votre Master PIN de Sécurité Nanasore' : 'Confirmer votre Master PIN'}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                    {pinStep === 'ENTER'
+                      ? 'Définissez votre code secret à 4 chiffres pour protéger votre espace et sécuriser vos accès.'
+                      : 'Tapez une seconde fois votre code secret à 4 chiffres pour validation.'}
+                  </p>
+                </div>
+
+                {/* 4 Bulles Indicatrices */}
+                <div className="flex items-center justify-center gap-3.5 py-3 px-6 rounded-2xl bg-slate-100 border border-slate-200 my-2">
+                  {[0, 1, 2, 3].map((idx) => {
+                    const currentDigits = pinStep === 'ENTER' ? newPin : confirmPin;
+                    const isFilled = currentDigits.length > idx;
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-4 h-4 rounded-full transition-all duration-150 ${
+                          isFilled
+                            ? 'bg-blue-600 scale-125 shadow-md shadow-blue-500/40 ring-2 ring-blue-300'
+                            : 'bg-slate-300'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Pavé Numérique Tactile */}
+                <div className="grid grid-cols-3 gap-2.5 max-w-[260px] w-full pt-1">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handlePinDigitPress(digit)}
+                      className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-black text-lg transition active:scale-95 cursor-pointer shadow-sm border border-slate-200"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setNewPin('');
+                      setConfirmPin('');
+                      setPinStep('ENTER');
+                    }}
+                    className="h-12 rounded-xl bg-slate-50 hover:bg-slate-200 text-slate-500 font-bold text-xs transition active:scale-95 cursor-pointer border border-slate-200"
+                  >
+                    Effacer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePinDigitPress('0')}
+                    className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 font-black text-lg transition active:scale-95 cursor-pointer shadow-sm border border-slate-200"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePinDelete}
+                    className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition active:scale-95 cursor-pointer border border-slate-200 flex items-center justify-center"
+                  >
+                    ⌫
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* CAS 4 : VÉRIFICATION EMAIL                                    */}
+            {/* ------------------------------------------------------------- */}
+            {step === 'EMAIL_VERIFICATION' && (
+              <div className="space-y-4 text-center animate-in fade-in duration-200 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-md">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">
+                    Vérifiez votre boîte de réception
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                    Un email de confirmation a été envoyé à <strong>{emailInput}</strong>. Cliquez sur le lien pour valider votre compte.
+                  </p>
+                </div>
+                <div className="pt-2 flex flex-col gap-2 w-full max-w-xs">
+                  <button
+                    type="button"
+                    onClick={() => { playValidationBeep(); setStep('PIN_SETUP'); }}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                  >
+                    J'ai validé mon email • Continuer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsResending(true);
+                      await resendVerificationEmail();
+                      setIsResending(false);
+                      setInfoMessage('✓ Nouveau lien envoyé !');
+                    }}
+                    disabled={isResending}
+                    className="w-full py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
+                  >
+                    {isResending ? 'Envoi...' : 'Renvoyer le lien'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Pied de Carte Droite : Mode Démo & Mentions Légales */}
+          <div className="pt-6 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <button
+              type="button"
+              onClick={() => { playTapBeep(); onContinueDemo(); }}
+              className="text-blue-600 hover:underline font-bold cursor-pointer"
+            >
+              Explorer en Mode Démo →
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveLegalDoc('LEGAL_MENTIONS')}
+                className="hover:text-slate-600 transition cursor-pointer"
+              >
+                Mentions Légales
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => setActiveLegalDoc('PRIVACY_POLICY')}
+                className="hover:text-slate-600 transition cursor-pointer"
+              >
+                Confidentialité
+              </button>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      </div>
 
-      {/* Footer légal avec défilement fluide et accès aux documents */}
-      <footer className="relative z-10 w-full mt-auto pb-10 sm:pb-4">
-        <LegalTickerFooter
-          tickerText={legalConfig.ticker_text}
-          showTicker={legalConfig.show_ticker}
-          onOpenDoc={(docType) => setActiveLegalDoc(docType)}
-        />
-      </footer>
+      {/* Modale Mot de Passe Oublié */}
+      {showForgotPasswordModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setShowForgotPasswordModal(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900">
+                Réinitialiser votre mot de passe
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowForgotPasswordModal(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Saisissez votre adresse email pour recevoir un lien sécurisé de réinitialisation.
+            </p>
+            {resetSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs">
+                {resetSuccessMsg}
+              </div>
+            )}
+            {resetErrorMsg && (
+              <div className="p-3 rounded-xl bg-rose-50 text-rose-800 text-xs">
+                {resetErrorMsg}
+              </div>
+            )}
+            <form onSubmit={handleSendResetPassword} className="space-y-3">
+              <input
+                type="email"
+                required
+                value={resetEmailInput}
+                onChange={(e) => setResetEmailInput(e.target.value)}
+                placeholder="nom@exemple.com"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-600"
+              />
+              <button
+                type="submit"
+                disabled={isSendingReset}
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow transition cursor-pointer disabled:opacity-50"
+              >
+                {isSendingReset ? 'Envoi...' : 'Envoyer le lien'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
-      {/* Modale d'affichage des textes légaux sans casser la session */}
+      {/* Modale Mentions Légales & Confidentialité */}
       <LegalDocModal
-        isOpen={!!activeLegalDoc}
+        isOpen={activeLegalDoc !== null}
         initialDoc={activeLegalDoc || 'LEGAL_MENTIONS'}
         onClose={() => setActiveLegalDoc(null)}
         legalConfig={legalConfig}

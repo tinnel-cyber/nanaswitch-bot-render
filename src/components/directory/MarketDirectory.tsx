@@ -519,7 +519,7 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
                   <span className="text-xl font-black tracking-tight text-slate-900">Nana<span className="text-sky-600">sore</span></span>
                   <span className="text-xl font-black text-blue-600">Market</span>
                   <span className="hidden sm:inline-block px-1.5 py-0.2 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                    La Voie Facile
+                    Plateforme Unifiée
                   </span>
                 </div>
               </div>
@@ -1599,11 +1599,10 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
         <div className="flex items-center justify-center gap-2 text-gray-700 font-bold mb-1">
           <NanasorePasserelleIcon pixelSize={24} />
           <span className="text-slate-900 font-black">Nana<span className="text-sky-600">sore</span> Market</span>
-          <span>• La Voie Facile</span>
         </div>
         <p>Paiements sécurisés par Wave, Orange Money, MTN MoMo et Cartes Bancaires.</p>
         <p className="text-[11px] text-gray-400">
-          © {new Date().getFullYear()} Nanasore — La Voie Facile. Tous droits réservés.
+          © {new Date().getFullYear()} Nanasore. Tous droits réservés.
         </p>
       </footer>
     </div>
