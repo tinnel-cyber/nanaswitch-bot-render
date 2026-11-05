@@ -38,7 +38,7 @@ export function meta({ params, location, data }) {
     { property: "og:type", content: "video.other" },
     {
       property: "og:image",
-      content: "https://pos-app-1759a.web.app/wameet-og-preview.png",
+      content: "https://nanasore.com/wameet-og-preview.png",
     },
   ];
 }

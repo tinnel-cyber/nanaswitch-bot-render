@@ -550,7 +550,7 @@ export async function triggerPendingSmsFallbacks(
       // Si le délai de 3 minutes est dépassé
       if (scheduledMillis > 0 && now >= scheduledMillis) {
         const textSample = (data.text || (data.type === 'voice' ? 'Note vocale' : data.type) || 'message').substring(0, 45);
-        const smsMessage = `Wameet: Nouveau message de ${data.senderName || '@' + data.senderHandle} : "${textSample}...". Répondre en direct : https://pos-app-1759a.web.app`;
+        const smsMessage = `Wameet: Nouveau message de ${data.senderName || '@' + data.senderHandle} : "${textSample}...". Répondre en direct : https://nanasore.com`;
 
         const res = await sendTransactionalSms({
           to: recipientPhone,

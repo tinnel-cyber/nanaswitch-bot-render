@@ -11,8 +11,6 @@ export default defineConfig(() => {
       'process.env.VITE_PAYMENT_API_URL': JSON.stringify(process.env.VITE_PAYMENT_API_URL || 'https://nana-payment-api.onrender.com'),
       'process.env.AWS_REGION': JSON.stringify(process.env.AWS_REGION || process.env.VITE_AWS_REGION || 'eu-west-3'),
       'process.env.AWS_BUCKET_NAME': JSON.stringify(process.env.AWS_BUCKET_NAME || process.env.VITE_AWS_BUCKET_NAME || 'nsore-video-storage'),
-      'process.env.AWS_ACCESS_KEY_ID': JSON.stringify(process.env.AWS_ACCESS_KEY_ID || process.env.VITE_AWS_ACCESS_KEY_ID || ''),
-      'process.env.AWS_SECRET_ACCESS_KEY': JSON.stringify(process.env.AWS_SECRET_ACCESS_KEY || process.env.VITE_AWS_SECRET_ACCESS_KEY || ''),
     },
     plugins: [react(), tailwindcss()],
     resolve: {

@@ -260,7 +260,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
   const [campaignPromoCode, setCampaignPromoCode] = useState('FLASH30');
   const [campaignDiscountBadge, setCampaignDiscountBadge] = useState('-30% DE RÉDUCTION');
   const [campaignCtaText, setCampaignCtaText] = useState('Découvrir la Sélection en Promo');
-  const [campaignCtaUrl, setCampaignCtaUrl] = useState('https://pos-app-1759a.web.app');
+  const [campaignCtaUrl, setCampaignCtaUrl] = useState('https://nanasore.com');
   const [campaignPreviewDevice, setCampaignPreviewDevice] = useState<'DESKTOP' | 'MOBILE'>('DESKTOP');
 
   // Test Email

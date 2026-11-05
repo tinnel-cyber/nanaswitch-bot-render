@@ -1357,7 +1357,7 @@ if (isset($response['redirect_url'])) {
             {/* Image QR Code Haute Définition */}
             <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-blue-300 inline-block">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent('https://pos-app-1759a.web.app/nana-switch/app')}&margin=10&color=2563eb&bgcolor=ffffff`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent('https://nanasore.com/nana-switch/app')}&margin=10&color=2563eb&bgcolor=ffffff`}
                 alt="QR Code NaNaSwitch Cloud Mobile"
                 className="w-52 h-52 mx-auto rounded-xl shadow-md"
               />
@@ -1395,8 +1395,8 @@ if (isset($response['redirect_url'])) {
                 type="button"
                 onClick={() => {
                   playTapBeep();
-                  navigator.clipboard.writeText('https://pos-app-1759a.web.app/nana-switch/app');
-                  setToastMessage('Lien https://pos-app-1759a.web.app/nana-switch/app copié !');
+                  navigator.clipboard.writeText('https://nanasore.com/nana-switch/app');
+                  setToastMessage('Lien https://nanasore.com/nana-switch/app copié !');
                   setTimeout(() => setToastMessage(null), 3000);
                 }}
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer"

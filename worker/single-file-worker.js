@@ -18,7 +18,7 @@ export default {
     const path = url.pathname;
 
     // Hôtes de destination
-    const FRONTEND_HOST = env.FRONTEND_HOST || "pos-app-1759a.web.app";
+    const FRONTEND_HOST = env.FRONTEND_HOST || "nanasore.com";
     const PAYMENT_HOST = env.PAYMENT_HOST || "nana-payment-api.onrender.com";
     const RENDER_HOST = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
 

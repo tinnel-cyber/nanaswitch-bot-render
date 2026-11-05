@@ -1,0 +1,8 @@
+# Reverse-Proxy transparent des requêtes API vers le backend Render
+/api/*  https://nanasore.onrender.com/api/:splat  200
+
+# Reverse-Proxy transparent des paiements vers le microservice NanaSwitch
+/v1/switch/*  https://nana-payment-api.onrender.com/v1/switch/:splat  200
+
+# Fallback universel SPA pour React Router / History API (évite les 404)
+/*  /index.html  200

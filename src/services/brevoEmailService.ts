@@ -202,7 +202,7 @@ export function generateBrevoHtmlContent(campaign: Partial<EmailCampaign>, store
   const promoCode = campaign.promoCode;
   const discountBadge = campaign.discountBadge || 'OFFRE LIMITÉE';
   const ctaText = campaign.ctaText || 'Accéder à la Boutique';
-  const ctaUrl = campaign.ctaUrl || 'https://pos-app-1759a.web.app';
+  const ctaUrl = campaign.ctaUrl || 'https://nanasore.com';
   const previewText = campaign.previewText || 'Découvrez notre offre exclusive en un clic.';
 
   return `<!DOCTYPE html>
@@ -291,7 +291,7 @@ export const INITIAL_EMAIL_CAMPAIGNS: EmailCampaign[] = [
     promoCode: 'FLASH30',
     discountBadge: '-30% DE RÉDUCTION',
     ctaText: 'Découvrir la Sélection en Promo',
-    ctaUrl: 'https://pos-app-1759a.web.app',
+    ctaUrl: 'https://nanasore.com',
     status: 'SENT',
     sentAt: 'Il y a 2 jours',
     stats: {
@@ -317,7 +317,7 @@ export const INITIAL_EMAIL_CAMPAIGNS: EmailCampaign[] = [
     promoCode: 'VIP2026',
     discountBadge: 'NOUVEAUTÉS',
     ctaText: 'Commander avec Retrait Express',
-    ctaUrl: 'https://pos-app-1759a.web.app',
+    ctaUrl: 'https://nanasore.com',
     status: 'SENT',
     sentAt: 'Il y a 6 jours',
     stats: {

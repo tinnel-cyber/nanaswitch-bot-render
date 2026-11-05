@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "dev:next": "next dev",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:pages": "vite build",
     "build:next": "next build",
     "build:all": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && next build",
     "start": "node dist/server.cjs",

@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (wameetHandleInput && wameetQrImg) {
     wameetHandleInput.addEventListener('input', () => {
-      const val = wameetHandleInput.value.trim() || 'https://pos-app-1759a.web.app/wameet';
+      const val = wameetHandleInput.value.trim() || 'https://nanasore.com/wameet';
       wameetQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(val)}&margin=8&color=2563eb&bgcolor=ffffff`;
     });
   }

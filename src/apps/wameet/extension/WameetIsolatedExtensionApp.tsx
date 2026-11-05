@@ -82,7 +82,7 @@ export const WameetIsolatedExtensionApp: React.FC<WameetIsolatedExtensionAppProp
     if (typeof window !== 'undefined') {
       return `${window.location.origin}/wameet`;
     }
-    return 'https://pos-app-1759a.web.app/wameet';
+    return 'https://nanasore.com/wameet';
   });
   const [spaceLinkCopied, setSpaceLinkCopied] = useState<boolean>(false);
 

@@ -49,7 +49,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
 <p>Vous pouvez consulter les détails complets de vos transactions directement depuis votre Tableau de Bord Central.</p>
 <br/>
 <p style="text-align:center;">
-  <a href="https://pos-app-1759a.web.app" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Accéder au Central Master Hub</a>
+  <a href="https://nanasore.com" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Accéder au Central Master Hub</a>
 </p>
 <br/>
 <p style="font-size:12px;color:#64748b;">Cordialement,<br/><strong>L'équipe NaNa POS & Nanasore</strong><br/>Support : admin@nanasore.com</p>`);
@@ -106,7 +106,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
     } else if (tag === 'h2') {
       setHtmlContent(prev => prev + '\n<h2 style="color:#0f172a;font-size:18px;font-weight:bold;margin:16px 0 8px 0;">Nouveau Sous-Titre</h2>\n');
     } else if (tag === 'btn') {
-      setHtmlContent(prev => prev + `\n<p style="text-align:center;margin:20px 0;"><a href="https://pos-app-1759a.web.app" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Bouton d'Action</a></p>\n`);
+      setHtmlContent(prev => prev + `\n<p style="text-align:center;margin:20px 0;"><a href="https://nanasore.com" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Bouton d'Action</a></p>\n`);
     } else if (tag === 'hr') {
       setHtmlContent(prev => prev + '\n<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;" />\n');
     } else if (tag === 'callout') {
