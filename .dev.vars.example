@@ -1,0 +1,26 @@
+# ==============================================================================
+# Variables d'Environnement Locales Cloudflare Worker (Wrangler dev)
+# Dupliquez ce fichier sous le nom '.dev.vars' à la racine du projet :
+#   cp .dev.vars.example .dev.vars
+# ==============================================================================
+
+# Environnement d'exécution
+ENVIRONMENT="development"
+
+# ------------------------------------------------------------------------------
+# Supabase Configuration (Projet PostgreSQL & Auth)
+# Retrouvez ces clés dans : Dashboard Supabase -> Project Settings -> API
+# ------------------------------------------------------------------------------
+SUPABASE_URL="https://xxxxxxxxxxxxxxxxxxxx.supabase.co"
+SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHh4eHh4eHh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4eHh4eHh4eHh4eHh4eHh4eHh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# ------------------------------------------------------------------------------
+# Brevo (anciennement Sendinblue) Configuration Transactionnelle (SMTP API v3)
+# Clé API générée depuis : Brevo -> SMTP & API -> API Keys (v3)
+# ------------------------------------------------------------------------------
+BREVO_API_KEY="xkeysib-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx"
+
+# Nom et email de l'expéditeur vérifié dans Brevo (Senders & IP)
+BREVO_SENDER_NAME="Nanasore Team"
+BREVO_SENDER_EMAIL="contact@nanasore.com"

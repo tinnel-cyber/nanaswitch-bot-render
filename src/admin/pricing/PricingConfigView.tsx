@@ -17,6 +17,7 @@ import {
   fetchSuperAdminSettingsFromFirebase,
   SuperAdminSettings
 } from '../../services/superAdminService';
+import { savePlatformPricingToSupabase } from '../../services/superAdminSupabaseService';
 import { formatCFA } from '../../utils/audio';
 
 export const PricingConfigView: React.FC = () => {
@@ -63,6 +64,11 @@ export const PricingConfigView: React.FC = () => {
       await saveSuperAdminSettings({
         paymentRouting: updatedRouting
       });
+
+      // Synchronisation directe vers Supabase (table landing_pricing_config et plans)
+      if (settings.platformConfig) {
+        await savePlatformPricingToSupabase(settings.platformConfig, 'Super-Admin');
+      }
 
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);

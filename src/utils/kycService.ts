@@ -14,34 +14,7 @@ import { isDemoAccount, showDemoBlockedToast, DEMO_BLOCKED_MESSAGE } from './dem
 import { isSuperAdminLocally } from '../services/superAdminService';
 
 // Initial realistic demonstration KYC requests for the Super Admin
-const INITIAL_DEMO_KYC: KycSubmission[] = [
-  {
-    id: 'kyc-store-nana-1',
-    storeId: 'store-nana-1',
-    storeName: 'Alimentation Générale de la Paix',
-    managerFullName: 'Amadou Diallo',
-    managerPhotoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-    whatsappPhone: '+225 07 12 34 56 78',
-    documentType: 'CNIB',
-    documentPhotoUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=80',
-    status: 'pending_approval',
-    submittedAt: new Date(Date.now() - 3600000 * 4).toISOString()
-  },
-  {
-    id: 'kyc-store-2',
-    storeId: 'store-2',
-    storeName: 'Boutique Étoile du Sahel',
-    managerFullName: 'Fatoumata Bamba',
-    managerPhotoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    whatsappPhone: '+226 70 88 99 00',
-    documentType: 'PASSPORT_AES_CEDEAO',
-    documentPhotoUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
-    status: 'verified',
-    submittedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    reviewedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    reviewedBy: 'pousbila36@gmail.com'
-  }
-];
+const INITIAL_DEMO_KYC: KycSubmission[] = [];
 
 /**
  * Compresse une image vers un Data URL Base64 via Canvas

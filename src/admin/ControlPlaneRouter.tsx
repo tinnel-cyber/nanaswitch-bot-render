@@ -21,7 +21,10 @@ import { NanasoreLogo } from '../components/common/NanasoreLogo';
 // Import dynamique du Hub Builder pour ne charger les éditeurs lourds que si nécessaire
 const HubBuilderPage = React.lazy(() => import('../pages/admin/HubBuilder'));
 
-export type ControlPlaneTab = 'dashboard' | 'tenants' | 'pricing' | 'system-health' | 'hub-builder';
+// Import dynamique du Grand Tableau de Bord Super Admin (12 modules complets)
+const SaasAdminDashboard = React.lazy(() => import('./legacy/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
+
+export type ControlPlaneTab = 'dashboard' | 'tenants' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin';
 
 export interface ControlPlaneRouterProps {
   initialTab?: ControlPlaneTab;
@@ -53,6 +56,8 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
         setCurrentTab('system-health');
       } else if (path.includes('/admin/hub-builder') || path.includes('/admin/hubbuilder')) {
         setCurrentTab('hub-builder');
+      } else if (path.includes('/admin/saas') || path.includes('/admin/legacy') || path.includes('/admin/modules') || path.includes('/admin/mega')) {
+        setCurrentTab('saas-admin');
       } else if (path === '/admin' || path === '/admin/' || path.includes('/admin/dashboard')) {
         setCurrentTab('dashboard');
       }
@@ -145,6 +150,17 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
               >
                 Hub Builder
               </button>
+              <button
+                onClick={() => navigateToTab('saas-admin')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border ${
+                  currentTab === 'saas-admin'
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-400/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                }`}
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Grand Dashboard (12 Modules)</span>
+              </button>
             </nav>
           </div>
 
@@ -192,6 +208,12 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
           >
             Hub Builder
           </button>
+          <button
+            onClick={() => navigateToTab('saas-admin')}
+            className={`px-3 py-1 rounded-lg shrink-0 font-bold ${currentTab === 'saas-admin' ? 'bg-amber-400 text-slate-950 font-black' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'}`}
+          >
+            Grand Dashboard (12 Modules)
+          </button>
         </div>
 
         {/* Content View */}
@@ -203,6 +225,13 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
           {currentTab === 'hub-builder' && (
             <React.Suspense fallback={<div className="p-8 text-center text-slate-500">Chargement Hub Builder...</div>}>
               <HubBuilderPage />
+            </React.Suspense>
+          )}
+          {currentTab === 'saas-admin' && (
+            <React.Suspense fallback={<div className="p-12 text-center text-slate-400 animate-pulse">Chargement du Grand Tableau de Bord Fondateur (12 Modules)...</div>}>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-2xl">
+                <SaasAdminDashboard onBackToPOS={() => navigateToTab('dashboard')} />
+              </div>
             </React.Suspense>
           )}
         </main>

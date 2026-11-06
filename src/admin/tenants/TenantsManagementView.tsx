@@ -24,16 +24,27 @@ import {
   SuperAdminSettings
 } from '../../services/superAdminService';
 import { SaasStore, StoreApprovalStatus } from '../../types';
-import { INITIAL_SAAS_STORES } from '../../data/saasNetworkData';
+import { 
+  fetchOrganizationsAsStoresFromSupabase,
+  syncStoreApprovalToSupabase 
+} from '../../services/superAdminSupabaseService';
 import { updateStoreApprovalStatus } from '../../utils/firestoreService';
 
 export const TenantsManagementView: React.FC = () => {
   const [settings, setSettings] = useState<SuperAdminSettings>(() => getSuperAdminSettingsLocal() || {});
+  const [liveSupabaseStores, setLiveSupabaseStores] = useState<SaasStore[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'APPROVED' | 'PENDING' | 'REJECTED' | 'SUSPENDED'>('ALL');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    // Lecture directe depuis les tables SQL Supabase
+    fetchOrganizationsAsStoresFromSupabase().then((stores) => {
+      if (stores && stores.length > 0) {
+        setLiveSupabaseStores(stores);
+      }
+    });
+
     fetchSuperAdminSettingsFromFirebase().then((data) => {
       if (data) setSettings(data);
     });
@@ -46,12 +57,14 @@ export const TenantsManagementView: React.FC = () => {
   }, []);
 
   const allStores: SaasStore[] = useMemo(() => {
-    const list = settings.stores && settings.stores.length > 0 ? settings.stores : INITIAL_SAAS_STORES;
+    const list = liveSupabaseStores.length > 0 
+      ? liveSupabaseStores 
+      : (settings.stores && settings.stores.length > 0 ? settings.stores : []);
     return list.map((store) => {
       const liveStatus = settings.approvalStatuses?.[store.id] || store.approvalStatus || 'APPROVED';
       return { ...store, approvalStatus: liveStatus };
     });
-  }, [settings]);
+  }, [liveSupabaseStores, settings]);
 
   const filteredStores = useMemo(() => {
     return allStores.filter((store) => {
@@ -71,7 +84,8 @@ export const TenantsManagementView: React.FC = () => {
       const currentStatuses = { ...(settings.approvalStatuses || {}) };
       currentStatuses[storeId] = newStatus;
 
-      // Sauvegarde Cloud & Locale
+      // Sauvegarde Supabase SQL & Cloud & Locale
+      await syncStoreApprovalToSupabase(storeId, newStatus);
       await updateStoreApprovalStatus(storeId, newStatus);
       await saveSuperAdminSettings({ approvalStatuses: currentStatuses });
 

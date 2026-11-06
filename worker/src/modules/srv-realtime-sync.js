@@ -7,7 +7,7 @@
 export async function handleRealtimeSyncModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
 
   // 1. Échange et validation de Token Firebase -> Supabase RLS à l'Edge (POST /api/realtime/token-exchange)
   if (request.method === "POST" && path.includes("/token-exchange")) {

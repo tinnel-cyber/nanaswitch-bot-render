@@ -1,8 +1,9 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { adminAuth } from "@/lib/firebase-admin";
 import { sendEmailVerification, sendNanasoreEmail } from "@/lib/brevo";
-import { syncFirebaseProfileToSupabase } from "@/lib/supabase";
+import { syncFirebaseProfileToSupabase, getSupabaseClient } from "@/lib/supabase";
 
 export interface AuthActionResult {
   success: boolean;
@@ -99,6 +100,37 @@ export async function registerUserAndSendVerification(
         fullName: displayName,
         whatsapp,
       });
+
+      // 3b. Attribution automatique du parrainage d'affiliation (Cookie 'Propulsé par Nanasore')
+      try {
+        const cookieStore = await cookies();
+        const refCode = cookieStore.get("nanasore_affiliate_ref")?.value;
+        const refTenantId = cookieStore.get("nanasore_referrer_tenant_id")?.value;
+
+        if (refCode || refTenantId) {
+          console.log(`[AUTH_AFFILIATE] Nouvel utilisateur rattaché au parrain : ${refCode || refTenantId}`);
+          const supabase = getSupabaseClient(true);
+          let referrerId = refTenantId;
+
+          if (!referrerId && refCode) {
+            const { data: refTenant } = await supabase
+              .from("tenants")
+              .select("id")
+              .eq("slug", refCode.toLowerCase())
+              .maybeSingle();
+            referrerId = refTenant?.id;
+          }
+
+          if (referrerId) {
+            await supabase
+              .from("profiles")
+              .update({ referred_by_tenant_id: referrerId })
+              .eq("email", email);
+          }
+        }
+      } catch (affiliateErr) {
+        console.warn("[AUTH_AFFILIATE_NOTICE] Enregistrement parrain différé:", affiliateErr);
+      }
     } catch (syncErr) {
       console.warn("[AUTH_SYNC_NOTICE] Synchronisation Supabase profil différée:", syncErr);
     }

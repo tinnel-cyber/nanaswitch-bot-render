@@ -15,8 +15,26 @@ import {
   Server,
   Lock,
   ExternalLink,
-  CheckCircle2
+  CheckCircle2,
+  Tag,
+  Check,
+  X,
+  Clock
 } from "lucide-react";
+
+interface PendingAffiliate {
+  id: string;
+  fullName: string;
+  email: string;
+  whatsapp: string;
+  affiliateCode: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedItemTitle: string;
+  payoutChannel: string;
+  payoutDetails: string;
+  tenantName: string;
+  createdAt: string;
+}
 
 interface AdminDashboardClientProps {
   isSuperAdmin: boolean;
@@ -24,6 +42,7 @@ interface AdminDashboardClientProps {
   totalStores: number;
   activeUsers: number;
   monthlyRevenueCFA: number;
+  pendingAffiliates?: PendingAffiliate[];
 }
 
 export default function AdminDashboardClient({
@@ -32,8 +51,11 @@ export default function AdminDashboardClient({
   totalStores,
   activeUsers,
   monthlyRevenueCFA,
+  pendingAffiliates = [],
 }: AdminDashboardClientProps) {
-  const [selectedTab, setSelectedTab] = useState<"overview" | "users" | "security">("overview");
+  const [selectedTab, setSelectedTab] = useState<"overview" | "affiliates" | "security">("overview");
+  const [affiliatesList, setAffiliatesList] = useState<PendingAffiliate[]>(pendingAffiliates);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   if (!isSuperAdmin) {
     return (
@@ -59,6 +81,29 @@ export default function AdminDashboardClient({
       </div>
     );
   }
+
+  async function handleDecision(affiliateId: string, decision: 'approved' | 'rejected') {
+    setActionLoading(affiliateId);
+    try {
+      const res = await fetch('/api/admin/affiliates/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ affiliate_id: affiliateId, decision }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAffiliatesList((prev) =>
+          prev.map((item) => (item.id === affiliateId ? { ...item, status: decision } : item))
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  const pendingCount = affiliatesList.filter((a) => a.status === 'pending').length;
 
   return (
     <div className="min-h-screen bg-[#030712] text-slate-100 font-sans pb-16">
@@ -104,20 +149,124 @@ export default function AdminDashboardClient({
                 Supervision Générale de la Plateforme
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-                Contrôle d'accès RLS Supabase actif, synchronisation Firebase UID et gestion des flux Cloudflare R2.
+                Contrôle central des validations d'affiliés pour les marchands standard, RLS Supabase et Cloudflare SaaS.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <Link
-                href="/vendor/upload"
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition active:scale-95 flex items-center gap-1.5"
+              <button
+                onClick={() => setSelectedTab(selectedTab === "affiliates" ? "overview" : "affiliates")}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition active:scale-95 flex items-center gap-1.5 shadow-lg shadow-emerald-900/30"
               >
-                <Store className="w-4 h-4" />
-                <span>Tester Upload R2</span>
-              </Link>
+                <Tag className="w-4 h-4" />
+                <span>Affiliations Standard ({pendingCount})</span>
+              </button>
             </div>
           </div>
+        </div>
+
+        {/* Section Spécifique : Validation des Affiliations Tenants Standard */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4" />
+                Validation Centrale des Affiliés (Tenants Standard)
+              </div>
+              <h2 className="text-xl font-bold text-white mt-1">
+                Demandes d'Affiliation pour les Boutiques & Cours Standard
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Règle appliquée : les demandes sur les boutiques Standard sont soumises à la validation Super Admin, tandis que les Whitelabel sont autonomes.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>En attente : <strong className="text-white">{pendingCount}</strong></span>
+            </div>
+          </div>
+
+          {affiliatesList.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-slate-950/50 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+              Aucune demande d'affiliation standard en attente pour le moment.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-4">Affilié</th>
+                    <th className="py-3 px-4">Code</th>
+                    <th className="py-3 px-4">Boutique / Cours</th>
+                    <th className="py-3 px-4">Paiement Wave/OM</th>
+                    <th className="py-3 px-4">Statut</th>
+                    <th className="py-3 px-4 text-right">Action Super Admin</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {affiliatesList.map((aff) => (
+                    <tr key={aff.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-white">{aff.fullName}</div>
+                        <div className="text-[11px] text-slate-500">{aff.email} • {aff.whatsapp}</div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-bold text-emerald-400">
+                        {aff.affiliateCode}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="text-white font-medium line-clamp-1">{aff.requestedItemTitle}</div>
+                        <div className="text-[10px] text-slate-500">Tenant : {aff.tenantName}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="text-slate-300 font-semibold">{aff.payoutChannel}</div>
+                        <div className="text-[10px] text-slate-500">{aff.payoutDetails}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {aff.status === 'pending' && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold uppercase">
+                            En Attente
+                          </span>
+                        )}
+                        {aff.status === 'approved' && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold uppercase">
+                            Validé ✓
+                          </span>
+                        )}
+                        {aff.status === 'rejected' && (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold uppercase">
+                            Refusé ✕
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {aff.status === 'pending' ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              disabled={actionLoading === aff.id}
+                              onClick={() => handleDecision(aff.id, 'approved')}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 transition shadow active:scale-95 disabled:opacity-50"
+                            >
+                              <Check className="w-3 h-3" /> Valider
+                            </button>
+                            <button
+                              disabled={actionLoading === aff.id}
+                              onClick={() => handleDecision(aff.id, 'rejected')}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] flex items-center gap-1 transition shadow active:scale-95 disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3" /> Rejeter
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 italic">Traité</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* KPIs Grid */}
@@ -150,35 +299,6 @@ export default function AdminDashboardClient({
             </div>
             <div className="text-2xl font-black text-white">{monthlyRevenueCFA.toLocaleString("fr-FR")} FCFA</div>
             <div className="text-[11px] text-slate-400 mt-1">Encaissements souverains directs</div>
-          </div>
-        </div>
-
-        {/* Détails Sécurité & RLS */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 sm:p-8">
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            Statut des Règles de Sécurité & RLS
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start gap-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-white">Table Supabase `super_admins`</p>
-                <p className="text-slate-400 mt-0.5">
-                  Politique RLS active : seuls les super admins déclarés peuvent consulter ou modifier les tables sensibles.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start gap-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-white">Stockage Cloudflare R2 Vault</p>
-                <p className="text-slate-400 mt-0.5">
-                  Compression zlib niveau 9 en RAM. Liens signés temporaires (expiration 3600 sec).
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </main>

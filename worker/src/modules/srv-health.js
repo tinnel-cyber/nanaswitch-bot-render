@@ -7,7 +7,7 @@
 export async function handleHealthModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
 
   // 1. Réponse instantanée de santé à l'Edge (ex: /health, /ping) sans surcharger Render
   if (path === "/health" || path === "/ping" || path === "/api/health") {

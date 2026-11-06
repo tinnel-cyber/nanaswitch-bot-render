@@ -14,26 +14,41 @@ import {
   CheckCircle2, 
   Clock,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Crown
 } from 'lucide-react';
 import { 
   getSuperAdminSettingsLocal, 
   fetchSuperAdminSettingsFromFirebase, 
   SuperAdminSettings 
 } from '../../services/superAdminService';
-import { SAAS_GLOBAL_KPI } from '../../data/saasNetworkData';
+import { 
+  fetchOrganizationsAsStoresFromSupabase, 
+  calculateRealKpiMetrics 
+} from '../../services/superAdminSupabaseService';
 import { formatCFA } from '../../utils/audio';
 
 export interface AdminDashboardViewProps {
-  onNavigateTab?: (tab: 'dashboard' | 'tenants' | 'pricing' | 'system-health' | 'hub-builder') => void;
+  onNavigateTab?: (tab: 'dashboard' | 'tenants' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin') => void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNavigateTab }) => {
   const [settings, setSettings] = useState<SuperAdminSettings>(() => getSuperAdminSettingsLocal() || {});
+  const [liveStoresCount, setLiveStoresCount] = useState<number>(0);
+  const [liveKpis, setLiveKpis] = useState(() => calculateRealKpiMetrics([]));
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+    
+    // Chargement des données réelles depuis les tables SQL Supabase
+    fetchOrganizationsAsStoresFromSupabase().then((stores) => {
+      if (isMounted && stores.length > 0) {
+        setLiveStoresCount(stores.length);
+        setLiveKpis(calculateRealKpiMetrics(stores));
+      }
+    });
+
     fetchSuperAdminSettingsFromFirebase().then((data) => {
       if (isMounted && data) {
         setSettings(data);
@@ -51,9 +66,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
     };
   }, []);
 
-  const totalStores = settings.stores?.length || SAAS_GLOBAL_KPI.activeStoresCount || 342;
+  const totalStores = liveStoresCount || settings.stores?.length || 0;
   const pendingApprovals = Object.values(settings.approvalStatuses || {}).filter(s => s === 'PENDING').length;
-  const activeMrr = SAAS_GLOBAL_KPI.mrrMonthlyCFA || 1850000;
+  const activeMrr = liveKpis.monthlyRecurringRevenueMRR || 0;
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -74,7 +89,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => onNavigateTab?.('saas-admin')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 active:scale-95 border border-amber-300"
+            >
+              <Crown className="w-4 h-4 text-slate-950" />
+              <span>Grand Dashboard (12 Modules)</span>
+            </button>
             <button
               onClick={() => onNavigateTab?.('tenants')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 active:scale-95"

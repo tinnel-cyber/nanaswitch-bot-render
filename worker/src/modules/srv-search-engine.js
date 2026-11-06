@@ -7,7 +7,7 @@
 export async function handleSearchEngineModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
 
   // 1. Vérification du Cache Edge pour les requêtes de recherche et index de catalogues (GET)
   if (request.method === "GET" && (path.includes("/query") || path.includes("/catalog-search") || path.includes("/suggestions"))) {

@@ -1,6 +1,12 @@
+# ==============================================================================
+# Cloudflare Worker Configuration (wrangler.toml)
+# Architecture : Cloudflare Edge Router + Stock Circuit Breaker + Supabase & Brevo
+# ==============================================================================
+
 name = "nanasore"
 main = "worker/src/index.js"
 compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Routes et Domaines personnalisés
 routes = [
@@ -12,7 +18,9 @@ routes = [
 [vars]
 ENVIRONMENT = "production"
 APP_NAME = "Nanasore Edge Router & Stock Circuit Breaker"
-RENDER_BACKEND_URL = "nanasore.onrender.com"
+RENDER_BACKEND_URL = "nanaswitch-bot-render-0kqp.onrender.com"
+BREVO_SENDER_NAME = "Nanasore Team"
+BREVO_SENDER_EMAIL = "contact@nanasore.com"
 
 # Liaison Cloudflare KV pour le cache et circuit breaker de stock temps réel à l'Edge
 [[kv_namespaces]]

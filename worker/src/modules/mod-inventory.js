@@ -7,7 +7,7 @@
 export async function handleInventoryModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
 
   // 1. Vérification rapide des alertes de stock en KV Edge (ex: /api/inventory/alert-check)
   if (path.includes("/alert-check") && env.PRODUCT_STOCK_KV) {

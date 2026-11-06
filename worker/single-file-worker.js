@@ -20,7 +20,7 @@ export default {
     // Hôtes de destination
     const FRONTEND_HOST = env.FRONTEND_HOST || "nanasore.com";
     const PAYMENT_HOST = env.PAYMENT_HOST || "nana-payment-api.onrender.com";
-    const RENDER_HOST = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+    const RENDER_HOST = env.RENDER_BACKEND_URL || "nanaswitch-bot-render-0kqp.onrender.com";
 
     // 1. Réponse immédiate aux requêtes de pré-vol CORS (OPTIONS)
     if (request.method === "OPTIONS") {

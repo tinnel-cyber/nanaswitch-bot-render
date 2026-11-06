@@ -26,11 +26,6 @@ import {
 import { SPaymentGateway, PaymentSuccessDetails } from '../../components/payment/SPaymentGateway';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG, getQrCodeUrl } from '../../utils/countryPaymentMatrix';
 import { 
-  INITIAL_SAAS_STORES, 
-  INITIAL_SAAS_TASKS, 
-  SAAS_GLOBAL_KPI 
-} from '../../data/saasNetworkData';
-import { 
   formatCFA, 
   playTapBeep, 
   playValidationBeep, 
@@ -154,12 +149,20 @@ import {
   AlertCircle,
   LayoutGrid
 } from 'lucide-react';
-import { db, rtdb } from '../../firebase';
-import { collection, doc, onSnapshot, updateDoc, setDoc, query as fsQuery, orderBy, limit as fsLimit } from 'firebase/firestore';
-import { ref as rtdbRef, onValue, query as rtdbQuery, limitToLast as rtdbLimitToLast } from 'firebase/database';
+import {
+  supabase,
+  fetchOrganizationsAsStoresFromSupabase,
+  calculateRealKpiMetrics,
+  syncStoreApprovalToSupabase,
+  fetchKycSubmissionsFromSupabase,
+  updateKycStatusInSupabase,
+  savePlatformPricingToSupabase,
+  subscribeToRealtimePendingPayments,
+  validatePaymentInSupabase,
+  subscribeToRealtimeEscrowProjects,
+  broadcastEscrowActionToSupabase
+} from '../../services/superAdminSupabaseService';
 import { WameetLogo } from '../../components/wameet/WameetLogo';
-
-
 
 interface SaasAdminDashboardProps {
   onBackToPOS: () => void;
@@ -170,10 +173,11 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   onBackToPOS,
   currentUser,
 }) => {
-  // SaaS Network Data State
-  const [stores, setStores] = useState<SaasStore[]>(INITIAL_SAAS_STORES);
-  const [tasks, setTasks] = useState<SaasActionTask[]>(INITIAL_SAAS_TASKS);
-  const [kpiMetrics, setKpiMetrics] = useState(SAAS_GLOBAL_KPI);
+  // SaaS Network Data State — 100% chargé en direct depuis Supabase, zéro mock hardcodé
+  const [stores, setStores] = useState<SaasStore[]>([]);
+  const [tasks, setTasks] = useState<SaasActionTask[]>([]);
+  const [kpiMetrics, setKpiMetrics] = useState(() => calculateRealKpiMetrics([]));
+  const [isLoadingSupabaseData, setIsLoadingSupabaseData] = useState<boolean>(true);
 
   // Filters
   const [selectedCountry, setSelectedCountry] = useState<string>('ALL');
@@ -298,15 +302,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   const [rejectingKycStore, setRejectingKycStore] = useState<KycSubmission | null>(null);
   const [kycRejectionReason, setKycRejectionReason] = useState('Pièce d\'identité illisible ou photo floue');
 
-  // Store Approvals & Cash Subscriptions State
-  const [approvalStatuses, setApprovalStatuses] = useState<Record<string, StoreApprovalStatus>>({
-    'store-yennenga': 'APPROVED',
-    'store-marche-central': 'APPROVED',
-    'store-cocody-2': 'APPROVED',
-    'store-adjame': 'APPROVED',
-    'store-lome-grand': 'PENDING',
-    'store-cotonou-dantokpa': 'PENDING',
-  });
+  // Store Approvals & Cash Subscriptions State (zéro mock hardcodé)
+  const [approvalStatuses, setApprovalStatuses] = useState<Record<string, StoreApprovalStatus>>({});
 
   const [cashSubModalStore, setCashSubModalStore] = useState<SaasStore | null>(null);
   const [cashSubPlan, setCashSubPlan] = useState<SubscriptionPlan>('QUARTERLY_3');
@@ -322,10 +319,11 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
   const [isSavingGlobal, setIsSavingGlobal] = useState<boolean>(false);
 
-  // Chargement prioritaire absolu depuis Firebase Realtime Database et localStorage
+  // Chargement prioritaire unifié depuis les tables SQL Supabase et synchronisation
   useEffect(() => {
     let isMounted = true;
     const loadSuperAdminData = async () => {
+      setIsLoadingSupabaseData(true);
       // 1. Lecture synchrone immédiate du cache local
       const localData = getSuperAdminSettingsLocal();
       if (localData && isMounted) {
@@ -343,6 +341,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         }
         if (localData.stores && localData.stores.length > 0) {
           setStores(localData.stores);
+          setKpiMetrics(calculateRealKpiMetrics(localData.stores));
         }
         if (localData.landingConfig) {
           setLandingConfig(localData.landingConfig);
@@ -356,14 +355,30 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         }
       }
 
-      // 2. Vérification et validation des privilèges Super Admin Firebase (/admins/{uid})
+      // 2. Chargement direct des organisations réelles depuis Supabase (table organizations & profiles & sales)
       try {
-        await verifySuperAdminPrivileges(auth.currentUser);
+        const liveStores = await fetchOrganizationsAsStoresFromSupabase();
+        if (isMounted && liveStores.length > 0) {
+          setStores(liveStores);
+          setKpiMetrics(calculateRealKpiMetrics(liveStores));
+        }
       } catch (e) {
-        console.warn('Vérification Super Admin non-bloquante:', e);
+        console.warn('[SUPABASE_SUPERADMIN] Erreur fetchOrganizationsAsStores :', e);
       }
 
-      // 3. Fetch en direct depuis Firebase Realtime Database
+      // 3. Chargement des demandes KYC réelles depuis Supabase (table account_activations)
+      try {
+        const liveKyc = await fetchKycSubmissionsFromSupabase();
+        if (isMounted) {
+          setKycRequests(liveKyc);
+        }
+      } catch (e) {
+        console.warn('[SUPABASE_SUPERADMIN] Erreur fetchKycSubmissions :', e);
+      } finally {
+        if (isMounted) setIsLoadingSupabaseData(false);
+      }
+
+      // 4. Synchronisation avec les paramètres plateforme
       try {
         const cloudData = await fetchSuperAdminSettingsFromFirebase();
         if (cloudData && isMounted) {
@@ -378,9 +393,6 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
           }
           if (cloudData.approvalStatuses) {
             setApprovalStatuses(prev => ({ ...prev, ...cloudData.approvalStatuses }));
-          }
-          if (cloudData.stores && cloudData.stores.length > 0) {
-            setStores(cloudData.stores);
           }
           if (cloudData.landingConfig) {
             setLandingConfig(cloudData.landingConfig);
@@ -468,50 +480,15 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     }
   };
 
-  // Cash Requests list
-  const [cashRequests, setCashRequests] = useState<AdminCashRequest[]>([
-    {
-      id: 'CASH-REQ-01',
-      storeId: 'store-lome-grand',
-      storeName: 'Grand Marché Assigamé',
-      ownerName: 'Koffi Mensah',
-      phone: '+228 90 12 34 56',
-      plan: 'QUARTERLY_3',
-      planMonths: 3,
-      amountRequested: 14000,
-      status: 'PENDING',
-      createdAt: Date.now() - 3600000,
-    },
-  ]);
+  // Cash Requests list (zéro mock hardcodé)
+  const [cashRequests, setCashRequests] = useState<AdminCashRequest[]>([]);
 
-  // Affiliation State
+  // Affiliation State (zéro mock hardcodé)
   const [affiliateCommissionRate, setAffiliateCommissionRate] = useState<number>(15);
-  const [affiliateWithdrawals, setAffiliateWithdrawals] = useState<AffiliateWithdrawal[]>([
-    {
-      id: 'WITH-001',
-      affiliateId: 'aff_store-nana-1',
-      affiliateName: 'Amadou Diallo',
-      phone: '+225 07 12 34 56',
-      amount: 10000,
-      provider: 'ORANGE_MONEY',
-      status: 'PENDING',
-      createdAt: Date.now() - 7200000,
-    },
-    {
-      id: 'WITH-002',
-      affiliateId: 'aff_store-adjame',
-      affiliateName: 'Ibrahim Touré',
-      phone: '+225 05 98 76 54',
-      amount: 15000,
-      provider: 'WAVE',
-      status: 'PAID',
-      createdAt: Date.now() - 86400000,
-      paidAt: Date.now() - 40000000,
-    },
-  ]);
+  const [affiliateWithdrawals, setAffiliateWithdrawals] = useState<AffiliateWithdrawal[]>([]);
 
   // =========================================================================
-  // GESTION DES PAIEMENTS EN ATTENTE & PONT BANCAIRE FIXIE (TEMPS RÉEL)
+  // GESTION DES PAIEMENTS EN ATTENTE & CAISSE POS (SUPABASE REALTIME LIVE)
   // =========================================================================
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [isManualValidatingId, setIsManualValidatingId] = useState<string | null>(null);
@@ -521,32 +498,26 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   const [isCheckingPaymentApi, setIsCheckingPaymentApi] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Écoute Firestore sur la collection 'payment_intents' (alimentée par le webhook Render)
-    let unsubIntents: (() => void) | undefined;
-    try {
-      if (db) {
-        const qIntents = fsQuery(collection(db, 'payment_intents'), orderBy('createdAt', 'desc'), fsLimit(60));
-        unsubIntents = onSnapshot(qIntents, (snap) => {
-          const list = snap.docs.map(docSnap => ({
-            id: docSnap.id,
-            ...docSnap.data()
-          }));
-          setPendingPayments(list);
-        }, (err) => {
-          console.warn('[ADMIN] Notice écouteur Firestore payment_intents :', err?.message);
-        });
-      }
-    } catch (e) {
-      console.warn('[ADMIN] Initialisation listener payment_intents :', e);
-    }
+    // 1. Écoute Supabase Realtime sur les transactions / paiements de caisse en direct
+    const unsubscribePayments = subscribeToRealtimePendingPayments((payments) => {
+      setPendingPayments(payments);
+    });
 
-    // 2. Vérification de santé du micro-service Render (IP Fixie)
+    // 2. Écoute Supabase Realtime sur les projets et arbitrages Escrow
+    const unsubscribeEscrow = subscribeToRealtimeEscrowProjects((projects) => {
+      if (projects && projects.length > 0) {
+        setEscrowProjects(projects);
+      }
+    });
+
+    // 3. Vérification de santé du micro-service Render (IP Fixie)
     getPaymentServiceHealth().then((health) => {
       setPaymentApiHealth(health);
     }).catch(() => {});
 
     return () => {
-      if (unsubIntents) unsubIntents();
+      unsubscribePayments();
+      unsubscribeEscrow();
     };
   }, []);
 
@@ -556,39 +527,10 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     playTapBeep();
 
     try {
-      // 1. Mettre à jour payment_intents dans Firestore
-      const intentRef = doc(db, 'payment_intents', payment.id);
-      await updateDoc(intentRef, {
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        isPaid: true,
-        validatedManually: true,
-        validatedAt: Date.now(),
-        validatedBy: currentUser?.name || 'Super Admin'
-      }).catch(async () => {
-        await setDoc(intentRef, {
-          status: 'COMPLETED',
-          paymentStatus: 'PAID',
-          isPaid: true,
-          validatedManually: true,
-          validatedAt: Date.now(),
-          validatedBy: currentUser?.name || 'Super Admin'
-        }, { merge: true });
-      });
+      // 1. Mettre à jour la transaction dans Supabase (Realtime Live)
+      await validatePaymentInSupabase(payment.id, currentUser?.email || 'Super-Admin');
 
-      // 2. Mettre à jour dans RTDB si initialisé
-      if (rtdb) {
-        try {
-          const { set: setRtdbValue } = await import('firebase/database');
-          await setRtdbValue(rtdbRef(rtdb, `payment_intents/${payment.id}`), {
-            status: 'COMPLETED',
-            validatedManually: true,
-            validatedAt: Date.now()
-          });
-        } catch {}
-      }
-
-      // 3. Si lié à une boutique (abonnement), activer l'abonnement du commerçant (synchronisation stores & users)
+      // 2. Si lié à une boutique (abonnement), mettre à jour la souscription
       if (payment.storeId && payment.storeId !== 'nanasore_central_hub') {
         const targetPlan = payment.plan || 'PRO';
         const months = payment.planMonths || 1;
@@ -607,21 +549,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         await updateStoreSubscription(payment.storeId, subData, targetUserId, payment.transactionRef || payment.id).catch(() => {});
       }
 
-      // 4. Si lié à une commande boutique
-      const orderId = payment.orderId || payment.targetOrderId;
-      const targetStore = payment.storeId || payment.targetStoreId;
-      if (orderId && targetStore && targetStore !== 'nanasore_central_hub') {
-        const orderRef = doc(db, 'stores', targetStore, 'orders', orderId);
-        await updateDoc(orderRef, {
-          status: 'paye',
-          paymentStatus: 'PAID',
-          paidAt: Date.now(),
-          transactionId: payment.id,
-          updatedAt: Date.now()
-        }).catch(() => {});
-      }
-
-      // 5. Journaliser l'encaissement
+      // 3. Journaliser l'encaissement
       try {
         await persistAdminPaymentLog({
           id: `LOG-${Date.now()}`,
@@ -958,6 +886,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       if (landingConfig?.pricingSection) {
         await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
       }
+      // Sauvegarde directe dans Supabase (table landing_pricing_config et plans)
+      await savePlatformPricingToSupabase(updatedPlatform, currentUser?.email || 'Super-Admin');
       await savePlatformSubscriptions(updatedPlatform);
       await saveCentralPaymentConfig(updatedCentral);
 
@@ -1025,6 +955,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       if (landingConfig?.pricingSection) {
         await publishLandingPricingToSupabase(landingConfig.pricingSection, currentUser?.name || currentUser?.email || 'Super-Admin');
       }
+      // Sauvegarde directe dans Supabase (table landing_pricing_config et plans)
+      await savePlatformPricingToSupabase(updatedPlatform, currentUser?.email || 'Super-Admin');
       await savePlatformSubscriptions(updatedPlatform);
       await saveCentralPaymentConfig(updatedCentral);
 
@@ -1288,31 +1220,37 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
   const handleApproveKyc = async (storeId: string) => {
     playTapBeep();
+    // Synchronisation directe vers Supabase (table profiles & account_activations)
+    await updateKycStatusInSupabase(storeId, 'verified', currentUser?.email || 'Super-Admin');
     await updateKycRequestStatus(storeId, 'verified', undefined, currentUser?.email || 'pousbila36@gmail.com');
     const updatedStatuses = { ...approvalStatuses, [storeId]: 'APPROVED' as StoreApprovalStatus };
     setApprovalStatuses(updatedStatuses);
+    await syncStoreApprovalToSupabase(storeId, 'APPROVED', currentUser?.email || 'Super-Admin');
     await saveSuperAdminSettings({
       approvalStatuses: updatedStatuses
     }, currentUser?.email || 'Super-Admin');
     playCashChime();
-    showToast("✅ Boutique certifiée avec succès ! Modifications enregistrées et appliquées en direct !");
-    const updated = await getAllKycRequests();
+    showToast("✅ Boutique certifiée avec succès ! Modifications enregistrées et appliquées en direct sur Supabase !");
+    const updated = await fetchKycSubmissionsFromSupabase();
     setKycRequests(updated);
   };
 
   const handleApproveEnterpriseKyc = async (sub: KycSubmission) => {
     playTapBeep();
     const userId = sub.userId || sub.storeId || '';
+    // Synchronisation directe vers Supabase
+    await updateKycStatusInSupabase(userId, 'verified', currentUser?.email || 'Super-Admin');
     await approveKycSubmission(sub.id, userId, sub.storeId, currentUser?.email || 'pousbila36@gmail.com');
     if (sub.storeId) {
       const updatedStatuses = { ...approvalStatuses, [sub.storeId]: 'APPROVED' as StoreApprovalStatus };
       setApprovalStatuses(updatedStatuses);
+      await syncStoreApprovalToSupabase(sub.storeId, 'APPROVED', currentUser?.email || 'Super-Admin');
       await saveSuperAdminSettings({
         approvalStatuses: updatedStatuses
       }, currentUser?.email || 'Super-Admin');
     }
     playCashChime();
-    showToast(`✅ Document Entreprise approuvé ! Rôle 'vendor' activé — Enregistré et appliqué en direct !`);
+    showToast(`✅ Document Entreprise approuvé ! Rôle 'vendor' activé — Synchronisé sur Supabase en direct !`);
     await fetchEnterpriseKyc();
   };
 
@@ -1474,19 +1412,21 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     showToast('✓ Nouvelle tâche prioritaire ajoutée au planning Super-Admin !');
   };
 
-  // Handle Store Approval toggle
+  // Handle Store Approval toggle avec synchronisation Supabase en direct
   const handleToggleStoreApproval = async (storeId: string, currentStatus: StoreApprovalStatus) => {
     playTapBeep();
     const nextStatus: StoreApprovalStatus = currentStatus === 'APPROVED' ? 'SUSPENDED' : 'APPROVED';
     const updatedStatuses = { ...approvalStatuses, [storeId]: nextStatus };
     setApprovalStatuses(updatedStatuses);
     try {
+      // 1. Synchronisation SQL Supabase directe (table organizations & account_activations)
+      await syncStoreApprovalToSupabase(storeId, nextStatus, currentUser?.email || 'Super-Admin');
       await updateStoreApprovalStatus(storeId, nextStatus, currentUser?.id);
       await saveSuperAdminSettings({
         approvalStatuses: updatedStatuses
       }, currentUser?.email || 'Super-Admin');
       playValidationBeep();
-      showToast(`✅ Statut de ${storeId} passé à ${nextStatus} — Enregistré et appliqué en direct !`);
+      showToast(`✅ Statut de ${storeId} passé à ${nextStatus} — Synchronisé sur Supabase et appliqué en direct !`);
     } catch (e) {
       console.warn('Erreur mise à jour statut boutique :', e);
     }
@@ -2645,12 +2585,25 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                           </button>
                         )}
 
-                        {store.id === 'store-yennenga' && store.subscriptionStatus === 'EXPIRED' && (
+                        {store.subscriptionStatus === 'EXPIRED' && (
                           <button
                             type="button"
                             onClick={() => {
-                              const yennengaTask = tasks.find((t) => t.storeId === 'store-yennenga');
-                              if (yennengaTask) handleRelanceAbonnement(yennengaTask);
+                              const expiredTask = tasks.find((t) => t.storeId === store.id) || {
+                                id: `task-sub-${store.id}`,
+                                title: `Relance abonnement ${store.name}`,
+                                description: `Abonnement expiré. Contacter le gérant ${store.ownerName} (${store.phone}).`,
+                                storeId: store.id,
+                                storeName: store.name,
+                                priority: 'URGENT' as const,
+                                category: 'SUBSCRIPTION' as const,
+                                dueDate: "Aujourd'hui",
+                                completed: false,
+                                actionType: 'RENEW_SUB' as const,
+                                actionPayload: store.phone,
+                                createdAt: new Date().toISOString()
+                              };
+                              handleRelanceAbonnement(expiredTask);
                             }}
                             className="px-3 py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                           >
@@ -7147,7 +7100,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 <label className="font-bold text-slate-300 block mb-1">Ou saisir un identifiant utilisateur (UID) :</label>
                 <input
                   type="text"
-                  placeholder="ex: user_abc123 ou store-yennenga"
+                  placeholder="ex: ID utilisateur ou organisation Supabase"
                   value={selectedCreditTargetUid}
                   onChange={(e) => setSelectedCreditTargetUid(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-amber-500"

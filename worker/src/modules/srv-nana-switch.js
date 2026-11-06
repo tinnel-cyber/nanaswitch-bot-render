@@ -7,7 +7,7 @@
 export async function handleNanaSwitchModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = env.RENDER_BACKEND_URL || "nanasore.onrender.com";
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
 
   // 1. Interception de la bascule de boutique (ex: /switch-store?target=boutique_b)
   const targetStore = url.searchParams.get("target") || url.searchParams.get("store_id");
