@@ -88,7 +88,8 @@ import {
   getSuperAdminSettingsLocal,
   isSuperAdminLocally,
   verifySuperAdminPrivileges,
-  KNOWN_SUPERADMIN_UIDS
+  KNOWN_SUPERADMIN_UIDS,
+  isDemoStore
 } from '../../services/superAdminService';
 import {
   ShieldAlert,
@@ -340,8 +341,12 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
           setApprovalStatuses(prev => ({ ...prev, ...localData.approvalStatuses }));
         }
         if (localData.stores && localData.stores.length > 0) {
-          setStores(localData.stores);
-          setKpiMetrics(calculateRealKpiMetrics(localData.stores));
+          const cleanStores = localData.stores.filter((s: any) => !isDemoStore(s));
+          setStores(cleanStores);
+          setKpiMetrics(calculateRealKpiMetrics(cleanStores));
+        } else {
+          setStores([]);
+          setKpiMetrics(calculateRealKpiMetrics([]));
         }
         if (localData.landingConfig) {
           setLandingConfig(localData.landingConfig);
@@ -358,12 +363,17 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       // 2. Chargement direct des organisations réelles depuis Supabase (table organizations & profiles & sales)
       try {
         const liveStores = await fetchOrganizationsAsStoresFromSupabase();
-        if (isMounted && liveStores.length > 0) {
-          setStores(liveStores);
-          setKpiMetrics(calculateRealKpiMetrics(liveStores));
+        if (isMounted) {
+          const cleanLive = (liveStores || []).filter(s => !isDemoStore(s));
+          setStores(cleanLive);
+          setKpiMetrics(calculateRealKpiMetrics(cleanLive));
         }
       } catch (e) {
         console.warn('[SUPABASE_SUPERADMIN] Erreur fetchOrganizationsAsStores :', e);
+        if (isMounted) {
+          setStores([]);
+          setKpiMetrics(calculateRealKpiMetrics([]));
+        }
       }
 
       // 3. Chargement des demandes KYC réelles depuis Supabase (table account_activations)
@@ -376,37 +386,6 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         console.warn('[SUPABASE_SUPERADMIN] Erreur fetchKycSubmissions :', e);
       } finally {
         if (isMounted) setIsLoadingSupabaseData(false);
-      }
-
-      // 4. Synchronisation avec les paramètres plateforme
-      try {
-        const cloudData = await fetchSuperAdminSettingsFromFirebase();
-        if (cloudData && isMounted) {
-          if (cloudData.platformConfig?.plans && cloudData.platformConfig.plans.length > 0) {
-            setPlatformConfig(cloudData.platformConfig);
-          }
-          if (cloudData.centralPaymentConfig) {
-            setCentralPaymentConfig(cloudData.centralPaymentConfig);
-            if (cloudData.centralPaymentConfig.deliveryZones) {
-              setDeliveryZonesInput(cloudData.centralPaymentConfig.deliveryZones.join(', '));
-            }
-          }
-          if (cloudData.approvalStatuses) {
-            setApprovalStatuses(prev => ({ ...prev, ...cloudData.approvalStatuses }));
-          }
-          if (cloudData.landingConfig) {
-            setLandingConfig(cloudData.landingConfig);
-          }
-          if (cloudData.legalConfig) {
-            setLegalConfig(cloudData.legalConfig);
-            setTickerTextEdit(cloudData.legalConfig.ticker_text);
-            setLegalMentionsEdit(cloudData.legalConfig.legal_mentions_content);
-            setPrivacyPolicyEdit(cloudData.legalConfig.privacy_policy_content);
-            setShowTickerEdit(cloudData.legalConfig.show_ticker);
-          }
-        }
-      } catch (err) {
-        console.warn('Erreur chargement cloud SuperAdmin:', err);
       }
     };
 
@@ -860,11 +839,11 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       const findOpNum = (name: string) => operators.find(o => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
 
       const paymentRouting = {
-        orangeNumber: findOpNum('orange') || '+226 65 56 58 05',
-        moovNumber: findOpNum('moov') || '+226 60 00 00 00',
-        waveNumber: findOpNum('wave') || '+225 07 00 00 00',
-        mtnNumber: findOpNum('mtn') || '+225 05 00 00 00',
-        wavePaymentLink: 'https://pay.wave.com',
+        orangeNumber: findOpNum('orange') || '',
+        moovNumber: findOpNum('moov') || '',
+        waveNumber: findOpNum('wave') || '',
+        mtnNumber: findOpNum('mtn') || '',
+        wavePaymentLink: '',
         enabledMethods: ['orange_money', 'moov_money', 'wave', 'mtn_momo', 'cod']
       };
 
@@ -935,11 +914,11 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       const findOpNum = (name: string) => operators.find(o => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
 
       const paymentRouting = {
-        orangeNumber: findOpNum('orange') || '+226 65 56 58 05',
-        moovNumber: findOpNum('moov') || '+226 60 00 00 00',
-        waveNumber: findOpNum('wave') || '+225 07 00 00 00',
-        mtnNumber: findOpNum('mtn') || '+225 05 00 00 00',
-        wavePaymentLink: 'https://pay.wave.com',
+        orangeNumber: findOpNum('orange') || '',
+        moovNumber: findOpNum('moov') || '',
+        waveNumber: findOpNum('wave') || '',
+        mtnNumber: findOpNum('mtn') || '',
+        wavePaymentLink: '',
         enabledMethods: ['orange_money', 'moov_money', 'wave', 'mtn_momo', 'cod']
       };
 

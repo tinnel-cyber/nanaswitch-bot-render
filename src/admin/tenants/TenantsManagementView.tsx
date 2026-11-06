@@ -20,7 +20,8 @@ import {
 import { 
   getSuperAdminSettingsLocal, 
   saveSuperAdminSettings, 
-  SuperAdminSettings
+  SuperAdminSettings,
+  isDemoStore
 } from '../../services/superAdminService';
 import { SaasStore, StoreApprovalStatus } from '../../types';
 import { 
@@ -36,11 +37,9 @@ export const TenantsManagementView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Lecture directe et exclusive depuis les tables SQL Supabase
+    // Lecture directe et exclusive depuis les tables SQL Supabase (aucun fallback mock)
     fetchOrganizationsAsStoresFromSupabase().then((stores) => {
-      if (stores && stores.length > 0) {
-        setLiveSupabaseStores(stores);
-      }
+      setLiveSupabaseStores(stores.filter(s => !isDemoStore(s)));
     });
 
     const handleUpdate = () => {
@@ -51,10 +50,8 @@ export const TenantsManagementView: React.FC = () => {
   }, []);
 
   const allStores: SaasStore[] = useMemo(() => {
-    const list = liveSupabaseStores.length > 0 
-      ? liveSupabaseStores 
-      : (settings.stores && settings.stores.length > 0 ? settings.stores : []);
-    return list.map((store) => {
+    // Uniquement les boutiques réelles issues de Supabase, zéro boutique hardcodée
+    return liveSupabaseStores.filter(s => !isDemoStore(s)).map((store) => {
       const liveStatus = settings.approvalStatuses?.[store.id] || store.approvalStatus || 'APPROVED';
       return { ...store, approvalStatus: liveStatus };
     });
@@ -244,8 +241,10 @@ export const TenantsManagementView: React.FC = () => {
 
               {filteredStores.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    Aucune boutique ne correspond aux critères de recherche.
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <Store className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="font-bold text-slate-300">Aucune boutique enregistrée pour le moment</p>
+                    <p className="text-xs text-slate-500 mt-1">La plateforme est propre et prête à accueillir vos premiers marchands.</p>
                   </td>
                 </tr>
               )}

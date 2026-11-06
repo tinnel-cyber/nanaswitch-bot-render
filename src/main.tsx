@@ -1,5 +1,11 @@
 import './initGlobalReact';
 import React, { StrictMode, useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
+import { purgeLegacyMockStorage } from './services/superAdminService';
+
+// Purge immédiate de tout cache localStorage pollué par des données démo/mock
+if (typeof window !== 'undefined') {
+  purgeLegacyMockStorage();
+}
 
 // Bouclier Anti-Crash & Anti-ReferenceError Global : Exposition immédiate des hooks
 if (typeof window !== 'undefined') {

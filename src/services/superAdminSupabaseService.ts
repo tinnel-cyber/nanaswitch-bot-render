@@ -23,6 +23,7 @@ import {
   EscrowChatMessage,
   SubscriptionPlan
 } from '../types';
+import { isDemoStore } from './superAdminService';
 import { DEFAULT_PLATFORM_SUBSCRIPTIONS } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 
@@ -98,9 +99,10 @@ export async function fetchOrganizationsAsStoresFromSupabase(): Promise<SaasStor
       revenueByOrg.set(orgId, current);
     });
 
-    // 4. Mappage vers l'interface standard SaasStore
+    // 4. Mappage vers l'interface standard SaasStore (filtre strict contre tout mock)
     if (orgs && orgs.length > 0) {
-      const mappedStores: SaasStore[] = orgs.map(org => {
+      const realOrgs = orgs.filter(o => !isDemoStore(o));
+      const mappedStores: SaasStore[] = realOrgs.map(org => {
         const profile = profileByOrg.get(org.id);
         const rev = revenueByOrg.get(org.id) || { total: 0, monthly: 0 };
         const isSuspended = org.status === 'SUSPENDED';
@@ -141,29 +143,48 @@ export async function fetchOrganizationsAsStoresFromSupabase(): Promise<SaasStor
 }
 
 // ==============================================================================
-// 2. CALCUL DYNAMIQUE DES KPI GLOBAUX DU RÉSEAU (SQL RÉEL)
+// 2. CALCUL DYNAMIQUE DES KPI GLOBAUX DU RÉSEAU (SQL RÉEL — STRICTEMENT ZÉRO SI VIDE)
 // ==============================================================================
 
 export function calculateRealKpiMetrics(stores: SaasStore[]) {
-  const activeStoresCount = stores.filter(s => s.subscriptionStatus === 'ACTIVE').length;
-  const totalStoresCount = stores.length;
-  const totalNetworkGMV = stores.reduce((acc, s) => acc + (s.totalRevenue || 0), 0);
-  const monthlyRecurringRevenueMRR = activeStoresCount * 20000; // Estimation base PRO
+  // Filtrer tout mock qui aurait pu subsister
+  const realStores = (stores || []).filter(s => !isDemoStore(s));
+  const totalStoresCount = realStores.length;
+
+  if (totalStoresCount === 0) {
+    return {
+      activeStoresCount: 0,
+      totalStoresCount: 0,
+      newStoresThisMonth: 0,
+      totalNetworkGMV: 0,
+      growthRateGMV: '0%',
+      totalTransactionsCount: 0,
+      monthlyRecurringRevenueMRR: 0,
+      averageBasketSizeNetwork: 0,
+      countriesCovered: [],
+      healthyStoresRate: 100,
+      atRiskStoresCount: 0,
+    };
+  }
+
+  const activeStoresCount = realStores.filter(s => s.subscriptionStatus === 'ACTIVE').length;
+  const totalNetworkGMV = realStores.reduce((acc, s) => acc + (s.totalRevenue || 0), 0);
+  const monthlyRecurringRevenueMRR = activeStoresCount * 20000;
 
   return {
-    activeStoresCount: activeStoresCount || totalStoresCount,
+    activeStoresCount: activeStoresCount,
     totalStoresCount: totalStoresCount,
-    newStoresThisMonth: Math.min(totalStoresCount, 3),
+    newStoresThisMonth: 0,
     totalNetworkGMV: totalNetworkGMV,
-    growthRateGMV: '+15.2%',
-    totalTransactionsCount: Math.max(stores.length * 12, 1),
+    growthRateGMV: '0%',
+    totalTransactionsCount: 0,
     monthlyRecurringRevenueMRR: monthlyRecurringRevenueMRR,
-    averageBasketSizeNetwork: 4500,
-    countriesCovered: ['Burkina Faso', 'Côte d\'Ivoire', 'Sénégal', 'Mali', 'Bénin', 'Togo'],
+    averageBasketSizeNetwork: 0,
+    countriesCovered: Array.from(new Set(realStores.map(s => s.country).filter(Boolean))),
     healthyStoresRate: totalStoresCount > 0 
-      ? Math.round((stores.filter(s => s.health === 'HEALTHY').length / totalStoresCount) * 100) 
+      ? Math.round((realStores.filter(s => s.health === 'HEALTHY').length / totalStoresCount) * 100) 
       : 100,
-    atRiskStoresCount: stores.filter(s => s.health === 'DANGER' || s.health === 'WARNING').length,
+    atRiskStoresCount: realStores.filter(s => s.health === 'DANGER' || s.health === 'WARNING').length,
   };
 }
 

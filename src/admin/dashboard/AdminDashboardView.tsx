@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import { 
   getSuperAdminSettingsLocal, 
-  SuperAdminSettings 
+  SuperAdminSettings,
+  isDemoStore
 } from '../../services/superAdminService';
 import { 
   fetchOrganizationsAsStoresFromSupabase, 
@@ -42,9 +43,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
     
     // Chargement exclusif des données réelles depuis les tables SQL Supabase
     fetchOrganizationsAsStoresFromSupabase().then((stores) => {
-      if (isMounted && stores.length > 0) {
-        setLiveStoresCount(stores.length);
-        setLiveKpis(calculateRealKpiMetrics(stores));
+      if (isMounted) {
+        const clean = (stores || []).filter(s => !isDemoStore(s));
+        setLiveStoresCount(clean.length);
+        setLiveKpis(calculateRealKpiMetrics(clean));
       }
     });
 
@@ -59,8 +61,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
     };
   }, []);
 
-  const totalStores = liveStoresCount || settings.stores?.length || 0;
-  const pendingApprovals = Object.values(settings.approvalStatuses || {}).filter(s => s === 'PENDING').length;
+  const totalStores = liveStoresCount;
+  const pendingApprovals = 0;
   const activeMrr = liveKpis.monthlyRecurringRevenueMRR || 0;
 
   return (
@@ -121,7 +123,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
           <div className="text-2xl font-black text-white tracking-tight">{totalStores}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 mt-2 font-medium">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>{totalStores > 0 ? `${totalStores} boutique(s) en base Supabase` : 'Prêt à accueillir des marchands'}</span>
+            <span>{totalStores > 0 ? `${totalStores} boutique(s) en base Supabase` : '0 boutique en base Supabase'}</span>
           </div>
         </div>
 
@@ -150,7 +152,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
           </div>
           <div className="text-2xl font-black text-white tracking-tight">{pendingApprovals}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-amber-400 mt-2 font-medium">
-            <span>Dossiers KYC & boutiques à valider</span>
+            <span>{pendingApprovals > 0 ? `${pendingApprovals} dossier(s) à valider` : '0 dossier en attente'}</span>
           </div>
         </div>
 

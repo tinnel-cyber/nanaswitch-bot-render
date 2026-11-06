@@ -32,159 +32,8 @@ export interface UpsellOpportunitiesWidgetProps {
   onContactCandidate?: (candidate: TenantUpsellCandidate) => void;
 }
 
-// Données réalistes des Gérants (Clients) ayant atteint 80% ou 100% de leurs quotas ce mois-ci
-export const INITIAL_UPSELL_CANDIDATES: TenantUpsellCandidate[] = [
-  {
-    id: 'cand-1',
-    storeId: 'store-yennenga',
-    storeName: 'Boutique Yennenga',
-    managerName: 'Moussa Kaboré',
-    email: 'moussa.kabore@yennenga-shop.bf',
-    phone: '+226 70 11 22 33',
-    city: 'Ouagadougou',
-    country: 'Burkina Faso',
-    countryFlag: '🇧🇫',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Starter',
-    criticalQuota: {
-      name: 'Live Flash & Webinaires',
-      current: 3,
-      max: 3,
-      formatted: 'Live Flash 3/3',
-      percentage: 100,
-      isSaturated: true,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Il y a 10 min',
-    contactStatus: 'NOT_CONTACTED'
-  },
-  {
-    id: 'cand-2',
-    storeId: 'store-yacouba',
-    storeName: 'Chez Yacouba Alimentation',
-    managerName: 'Yacouba Koné',
-    email: 'yacouba.kone@treichville-market.ci',
-    phone: '+225 07 45 89 12',
-    city: 'Abidjan',
-    country: "Côte d'Ivoire",
-    countryFlag: '🇨🇮',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Starter',
-    criticalQuota: {
-      name: 'Produits en Stock / Vitrine',
-      current: 50,
-      max: 50,
-      formatted: 'Produits 50/50',
-      percentage: 100,
-      isSaturated: true,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Il y a 2 heures',
-    contactStatus: 'NOT_CONTACTED'
-  },
-  {
-    id: 'cand-3',
-    storeId: 'store-bamako-mode',
-    storeName: 'Bamako Mode & Beauté',
-    managerName: 'Aïcha Traoré',
-    email: 'aicha.traore@bamakomode.ml',
-    phone: '+223 66 11 22 33',
-    city: 'Bamako',
-    country: 'Mali',
-    countryFlag: '🇲🇱',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Starter',
-    criticalQuota: {
-      name: 'Assistant IA Marketing',
-      current: 10,
-      max: 10,
-      formatted: 'IA Marketing 10/10',
-      percentage: 100,
-      isSaturated: true,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Il y a 25 min',
-    contactStatus: 'NOT_CONTACTED'
-  },
-  {
-    id: 'cand-4',
-    storeId: 'store-adjame',
-    storeName: 'Marché Adjamé Supérette',
-    managerName: 'Bakary Fofana',
-    email: 'bakary.fofana@adjame-sup.ci',
-    phone: '+225 05 67 89 01',
-    city: 'Abidjan',
-    country: "Côte d'Ivoire",
-    countryFlag: '🇨🇮',
-    avatarUrl: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Starter',
-    criticalQuota: {
-      name: 'Devis & Factures DocuSign',
-      current: 19,
-      max: 20,
-      formatted: 'Devis & Factures 19/20',
-      percentage: 95,
-      isSaturated: false,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Il y a 1 heure',
-    contactStatus: 'NOT_CONTACTED'
-  },
-  {
-    id: 'cand-5',
-    storeId: 'store-lome-btp',
-    storeName: 'Lomé BTP & Quincaillerie',
-    managerName: 'Koffi Mensah',
-    email: 'koffi.mensah@lomebtp.tg',
-    phone: '+228 90 12 34 56',
-    city: 'Lomé',
-    country: 'Togo',
-    countryFlag: '🇹🇬',
-    avatarUrl: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Essai Gratuit',
-    criticalQuota: {
-      name: 'Live Flash & Webinaires',
-      current: 3,
-      max: 3,
-      formatted: 'Live Flash 3/3',
-      percentage: 100,
-      isSaturated: true,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Il y a 4 heures',
-    contactStatus: 'NOT_CONTACTED'
-  },
-  {
-    id: 'cand-6',
-    storeId: 'store-dakar-fintech',
-    storeName: 'Dakar High-Tech Express',
-    managerName: 'Ibrahima Diop',
-    email: 'ibrahima.diop@dakarhightech.sn',
-    phone: '+221 77 345 67 89',
-    city: 'Dakar',
-    country: 'Sénégal',
-    countryFlag: '🇸🇳',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    currentPlan: 'Starter',
-    criticalQuota: {
-      name: 'SMS Campagnes & WhatsApp',
-      current: 88,
-      max: 100,
-      formatted: 'SMS & WhatsApp 88/100',
-      percentage: 88,
-      isSaturated: false,
-      isCritical: true
-    },
-    mrrPotential: 35000,
-    lastActive: 'Hier',
-    contactStatus: 'NOT_CONTACTED'
-  }
-];
+// Données initiales des opportunités d'upsell — zéro mock hardcodé
+export const INITIAL_UPSELL_CANDIDATES: TenantUpsellCandidate[] = [];
 
 export const UpsellOpportunitiesWidget: React.FC<UpsellOpportunitiesWidgetProps> = ({
   className = '',
@@ -477,8 +326,10 @@ Contact direct : +226 70 00 00 00`;
           <tbody className="divide-y divide-slate-800/60 font-medium">
             {filteredCandidates.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-slate-500">
-                  Aucun gérant ne correspond aux critères de recherche.
+                <td colSpan={4} className="py-10 text-center text-slate-400">
+                  <Flame className="w-7 h-7 text-slate-600 mx-auto mb-2" />
+                  <p className="font-bold text-slate-300">Aucun gérant en dépassement de quota</p>
+                  <p className="text-xs text-slate-500 mt-1">Tous les marchands opèrent dans les limites normales de leurs forfaits.</p>
                 </td>
               </tr>
             ) : (

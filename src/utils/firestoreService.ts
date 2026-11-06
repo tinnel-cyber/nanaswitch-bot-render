@@ -2056,38 +2056,38 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
     }
   ],
   paymentSettings: {
-    scrollingMarquee: 'Composez le code indiqué pour valider votre paiement. Après paiement, votre compte ou commande sera automatiquement activé sans délai.',
-    supportW: '+22665565805',
+    scrollingMarquee: 'Composez le code indiqué pour valider votre paiement. Déblocage automatique dès confirmation.',
+    supportW: '',
     checkoutInstructions: 'Veuillez composer le code USSD ci-dessous depuis votre téléphone pour valider votre règlement instantané :',
     operators: [
       { 
         id: 'bf-orange', 
         country: 'Burkina Faso', 
         operator: 'Orange Money', 
-        merchantNumber: '+226 65 56 58 05', 
-        merchantCode: '65565805', 
-        ussdCode: '*144*10*65565805*{montant}#', 
-        ussdTemplate: '*144*10*{merchantCode}*{montant}#',
-        instructions: 'Veuillez composer le code suivant sur votre téléphone pour valider votre paiement :',
-        isActive: true 
+        merchantNumber: '', 
+        merchantCode: '', 
+        ussdCode: '', 
+        ussdTemplate: '',
+        instructions: 'Veuillez renseigner vos coordonnées pour valider le paiement :',
+        isActive: false 
       },
       { 
         id: 'bf-moov', 
         country: 'Burkina Faso', 
         operator: 'Moov Money', 
-        merchantNumber: '+226 60 00 00 00', 
-        merchantCode: '60000000',
-        ussdCode: '*555*6*{montant}#', 
-        ussdTemplate: '*555*6*{montant}#',
-        instructions: 'Composez *555*6*Montant# sur Moov Money',
-        isActive: true 
+        merchantNumber: '', 
+        merchantCode: '',
+        ussdCode: '', 
+        ussdTemplate: '',
+        instructions: 'Veuillez renseigner vos coordonnées pour valider le paiement :',
+        isActive: false 
       },
-      { id: 'ci-wave', country: "Côte d'Ivoire", operator: 'Wave CI', merchantNumber: '+225 07 00 00 00', ussdCode: 'Scanner QR / Numéro Wave', isActive: true },
-      { id: 'ci-orange', country: "Côte d'Ivoire", operator: 'Orange Money CI', merchantNumber: '+225 07 12 34 56', ussdCode: '*144*{montant}#', ussdTemplate: '*144*{montant}#', isActive: true },
-      { id: 'ci-mtn', country: "Côte d'Ivoire", operator: 'MTN MoMo CI', merchantNumber: '+225 05 00 00 00', ussdCode: '*133*{montant}#', ussdTemplate: '*133*{montant}#', isActive: true },
-      { id: 'sn-wave', country: 'Sénégal', operator: 'Wave SN', merchantNumber: '+221 77 00 00 00', ussdCode: 'Scanner QR / Numéro Wave', isActive: true },
-      { id: 'sn-orange', country: 'Sénégal', operator: 'Orange Money SN', merchantNumber: '+221 77 12 34 56', ussdCode: '*144# ou App Orange', isActive: true },
-      { id: 'ml-orange', country: 'Mali', operator: 'Orange Money ML', merchantNumber: '+223 70 00 00 00', ussdCode: '*144*{montant}#', ussdTemplate: '*144*{montant}#', isActive: true }
+      { id: 'ci-wave', country: "Côte d'Ivoire", operator: 'Wave CI', merchantNumber: '', ussdCode: '', isActive: false },
+      { id: 'ci-orange', country: "Côte d'Ivoire", operator: 'Orange Money CI', merchantNumber: '', ussdCode: '', ussdTemplate: '', isActive: false },
+      { id: 'ci-mtn', country: "Côte d'Ivoire", operator: 'MTN MoMo CI', merchantNumber: '', ussdCode: '', ussdTemplate: '', isActive: false },
+      { id: 'sn-wave', country: 'Sénégal', operator: 'Wave SN', merchantNumber: '', ussdCode: '', isActive: false },
+      { id: 'sn-orange', country: 'Sénégal', operator: 'Orange Money SN', merchantNumber: '', ussdCode: '', isActive: false },
+      { id: 'ml-orange', country: 'Mali', operator: 'Orange Money ML', merchantNumber: '', ussdCode: '', ussdTemplate: '', isActive: false }
     ]
   }
 };

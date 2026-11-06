@@ -14,7 +14,8 @@ import {
 import { 
   getSuperAdminSettingsLocal, 
   saveSuperAdminSettings, 
-  SuperAdminSettings
+  SuperAdminSettings,
+  isDemoPhone
 } from '../../services/superAdminService';
 import { supabase, savePlatformPricingToSupabase } from '../../services/superAdminSupabaseService';
 import { formatCFA } from '../../utils/audio';
@@ -24,16 +25,16 @@ export const PricingConfigView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  // Form State
+  // Form State — 100% propre, zéro numéro ou montant factice
   const [orangeNumber, setOrangeNumber] = useState('');
   const [moovNumber, setMoovNumber] = useState('');
   const [waveNumber, setWaveNumber] = useState('');
   const [mtnNumber, setMtnNumber] = useState('');
 
-  // Plans prices (chargés depuis Supabase)
-  const [zeroFeePercent, setZeroFeePercent] = useState(3.5);
-  const [creatorMonthlyPrice, setCreatorMonthlyPrice] = useState(9900);
-  const [merchantMonthlyPrice, setMerchantMonthlyPrice] = useState(19900);
+  // Plans prices (chargés depuis Supabase — zéro par défaut tant qu'aucun tarif n'est enregistré)
+  const [zeroFeePercent, setZeroFeePercent] = useState<number>(0);
+  const [creatorMonthlyPrice, setCreatorMonthlyPrice] = useState<number>(0);
+  const [merchantMonthlyPrice, setMerchantMonthlyPrice] = useState<number>(0);
 
   useEffect(() => {
     // 1. Chargement des tarifs depuis la table SQL landing_pricing_config de Supabase
@@ -46,18 +47,25 @@ export const PricingConfigView: React.FC = () => {
         if (!error && data?.plans && Array.isArray(data.plans)) {
           const creator = data.plans.find((p: any) => p.id === 'creator');
           const merchant = data.plans.find((p: any) => p.id === 'merchant' || p.id === 'pro');
-          if (creator?.priceMonthly) setCreatorMonthlyPrice(creator.priceMonthly);
-          if (merchant?.priceMonthly) setMerchantMonthlyPrice(merchant.priceMonthly);
+          const zero = data.plans.find((p: any) => p.id === 'zero');
+          if (typeof zero?.commissionRate === 'number') setZeroFeePercent(zero.commissionRate);
+          if (typeof creator?.priceMonthly === 'number') setCreatorMonthlyPrice(creator.priceMonthly);
+          if (typeof merchant?.priceMonthly === 'number') setMerchantMonthlyPrice(merchant.priceMonthly);
         }
       });
 
-    // 2. Coordonnées passerelle locales
+    // 2. Coordonnées passerelle locales — purge stricte de tout numéro démo/fake
     const local = getSuperAdminSettingsLocal();
     if (local?.paymentRouting) {
-      setOrangeNumber(local.paymentRouting.orangeNumber || '');
-      setMoovNumber(local.paymentRouting.moovNumber || '');
-      setWaveNumber(local.paymentRouting.waveNumber || '');
-      setMtnNumber(local.paymentRouting.mtnNumber || '');
+      const o = local.paymentRouting.orangeNumber;
+      const m = local.paymentRouting.moovNumber;
+      const w = local.paymentRouting.waveNumber;
+      const mtn = local.paymentRouting.mtnNumber;
+
+      setOrangeNumber(isDemoPhone(o) ? '' : (o || ''));
+      setMoovNumber(isDemoPhone(m) ? '' : (m || ''));
+      setWaveNumber(isDemoPhone(w) ? '' : (w || ''));
+      setMtnNumber(isDemoPhone(mtn) ? '' : (mtn || ''));
     }
   }, []);
 

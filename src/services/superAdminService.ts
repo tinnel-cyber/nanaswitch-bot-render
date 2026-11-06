@@ -230,11 +230,120 @@ export async function verifySuperAdminPrivileges(userArg?: FirebaseUser | null):
   return isSuperAdminLocally();
 }
 
+export function isDemoStore(s: any): boolean {
+  if (!s || !s.id) return false;
+  const id = String(s.id).toLowerCase();
+  const name = String(s.name || '').toLowerCase();
+  return (
+    id.startsWith('store-yennenga') ||
+    id.startsWith('store-yacouba') ||
+    id.startsWith('store-adjame') ||
+    id.startsWith('store-sankarare') ||
+    id.startsWith('store-faso') ||
+    id.startsWith('store-plateau') ||
+    id.startsWith('store-paix') ||
+    id.startsWith('store-bamako') ||
+    id.startsWith('store-lome') ||
+    id.startsWith('store-dakar') ||
+    id.includes('demo') ||
+    name.includes('yennenga') ||
+    name.includes('yacouba') ||
+    name.includes('adjamé') ||
+    name.includes('adjame') ||
+    name.includes('sankararé') ||
+    name.includes('sankarare') ||
+    name.includes('plateau express') ||
+    name.includes('alimentation de la paix')
+  );
+}
+
+export function isDemoPhone(phone?: string): boolean {
+  if (!phone) return false;
+  const clean = String(phone).replace(/\s+/g, '');
+  return (
+    clean.includes('65565805') ||
+    clean.includes('60000000') ||
+    clean.includes('07000000') ||
+    clean.includes('05000000') ||
+    clean.includes('123456') ||
+    clean.includes('000000')
+  );
+}
+
+/**
+ * Purge absolue de tout résidu factice ou hardcodé dans le localStorage
+ */
+export function purgeLegacyMockStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const keysToCheck = [
+      'nana_super_admin_settings',
+      'nana_superadmin_supabase_cache',
+      'nana_all_kyc_requests',
+      'nana_seller_payment_config',
+      'nana_payment_routing_settings',
+      'nana_approval_statuses',
+      'nana_platform_subscriptions',
+      'nana_central_payment_config'
+    ];
+
+    keysToCheck.forEach(k => {
+      const raw = localStorage.getItem(k);
+      if (raw && (
+        raw.includes('store-yennenga') || 
+        raw.includes('Chez Yacouba') || 
+        raw.includes('216150000') || 
+        raw.includes('160000') || 
+        raw.includes('65 56 58 05') || 
+        raw.includes('60 00 00 00') ||
+        raw.includes('07 00 00 00') ||
+        raw.includes('05 00 00 00')
+      )) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.stores)) {
+              parsed.stores = parsed.stores.filter((s: any) => !isDemoStore(s));
+            }
+            if (parsed.paymentRouting) {
+              if (isDemoPhone(parsed.paymentRouting.orangeNumber)) parsed.paymentRouting.orangeNumber = '';
+              if (isDemoPhone(parsed.paymentRouting.moovNumber)) parsed.paymentRouting.moovNumber = '';
+              if (isDemoPhone(parsed.paymentRouting.waveNumber)) parsed.paymentRouting.waveNumber = '';
+              if (isDemoPhone(parsed.paymentRouting.mtnNumber)) parsed.paymentRouting.mtnNumber = '';
+            }
+            if (parsed.approvalStatuses) {
+              Object.keys(parsed.approvalStatuses).forEach(key => {
+                if (key.startsWith('store-') || key.includes('demo') || key.includes('yennenga')) {
+                  delete parsed.approvalStatuses[key];
+                }
+              });
+            }
+            localStorage.setItem(k, JSON.stringify(parsed));
+          } else {
+            localStorage.removeItem(k);
+          }
+        } catch {
+          localStorage.removeItem(k);
+        }
+      }
+    });
+
+    localStorage.removeItem('nana_all_kyc_requests');
+  } catch (e) {
+    console.warn('[PURGE] Nettoyage local storage :', e);
+  }
+}
+
 /**
  * Récupère immédiatement la configuration Super Admin depuis le cache mémoire ou localStorage
  */
 export function getSuperAdminSettingsLocal(): SuperAdminSettings | null {
-  if (memoryCache) return memoryCache;
+  if (memoryCache) {
+    if (Array.isArray(memoryCache.stores)) {
+      memoryCache.stores = memoryCache.stores.filter(s => !isDemoStore(s));
+    }
+    return memoryCache;
+  }
   if (typeof window === 'undefined') return null;
 
   try {
@@ -242,6 +351,22 @@ export function getSuperAdminSettingsLocal(): SuperAdminSettings | null {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.stores)) {
+          parsed.stores = parsed.stores.filter((s: any) => !isDemoStore(s));
+        }
+        if (parsed.approvalStatuses) {
+          Object.keys(parsed.approvalStatuses).forEach(k => {
+            if (k.startsWith('store-') || k.includes('demo') || k.includes('yennenga') || k.includes('yacouba')) {
+              delete parsed.approvalStatuses[k];
+            }
+          });
+        }
+        if (parsed.paymentRouting) {
+          if (isDemoPhone(parsed.paymentRouting.orangeNumber)) parsed.paymentRouting.orangeNumber = '';
+          if (isDemoPhone(parsed.paymentRouting.moovNumber)) parsed.paymentRouting.moovNumber = '';
+          if (isDemoPhone(parsed.paymentRouting.waveNumber)) parsed.paymentRouting.waveNumber = '';
+          if (isDemoPhone(parsed.paymentRouting.mtnNumber)) parsed.paymentRouting.mtnNumber = '';
+        }
         memoryCache = parsed;
         return parsed;
       }
@@ -568,35 +693,37 @@ export function getSuperAdminPaymentNumbers(): {
   if (settings?.paymentRouting) {
     const pr = settings.paymentRouting;
     return {
-      orangeNumber: pr.orangeNumber || '+226 65 56 58 05',
-      moovNumber: pr.moovNumber || '+226 65 56 58 05',
-      waveNumber: pr.waveNumber && !pr.waveNumber.includes('07 00 00') ? pr.waveNumber : '+226 65 56 58 05',
-      mtnNumber: pr.mtnNumber || '+226 65 56 58 05',
-      wavePaymentLink: pr.wavePaymentLink || 'https://pay.wave.com'
+      orangeNumber: isDemoPhone(pr.orangeNumber) ? '' : (pr.orangeNumber || ''),
+      moovNumber: isDemoPhone(pr.moovNumber) ? '' : (pr.moovNumber || ''),
+      waveNumber: isDemoPhone(pr.waveNumber) ? '' : (pr.waveNumber || ''),
+      mtnNumber: isDemoPhone(pr.mtnNumber) ? '' : (pr.mtnNumber || ''),
+      wavePaymentLink: pr.wavePaymentLink || ''
     };
   }
 
   // 2. Vérification dans platformConfig.paymentSettings.operators
   if (settings?.platformConfig?.paymentSettings?.operators) {
     const ops = settings.platformConfig.paymentSettings.operators;
-    const findOp = (name: string) => ops.find((o: any) => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
-    const foundWave = findOp('wave');
+    const findOp = (name: string) => {
+      const num = ops.find((o: any) => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
+      return isDemoPhone(num) ? '' : (num || '');
+    };
     return {
-      orangeNumber: findOp('orange') || '+226 65 56 58 05',
-      moovNumber: findOp('moov') || '+226 65 56 58 05',
-      waveNumber: foundWave && !foundWave.includes('07 00 00') ? foundWave : '+226 65 56 58 05',
-      mtnNumber: findOp('mtn') || '+226 65 56 58 05',
-      wavePaymentLink: 'https://pay.wave.com'
+      orangeNumber: findOp('orange'),
+      moovNumber: findOp('moov'),
+      waveNumber: findOp('wave'),
+      mtnNumber: findOp('mtn'),
+      wavePaymentLink: ''
     };
   }
 
-  // 3. Fallback officiel : Trésorerie Marchand Nanasore (+226 65 56 58 05)
+  // 3. Pas de données configurées -> champs vides
   return {
-    orangeNumber: '+226 65 56 58 05',
-    moovNumber: '+226 65 56 58 05',
-    waveNumber: '+226 65 56 58 05',
-    mtnNumber: '+226 65 56 58 05',
-    wavePaymentLink: 'https://pay.wave.com'
+    orangeNumber: '',
+    moovNumber: '',
+    waveNumber: '',
+    mtnNumber: '',
+    wavePaymentLink: ''
   };
 }
 

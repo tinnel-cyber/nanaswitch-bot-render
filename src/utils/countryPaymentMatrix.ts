@@ -8,24 +8,24 @@ import { formatCFA } from './audio';
 
 export const DEFAULT_CENTRAL_PAYMENT_CONFIG: CentralPaymentConfig = {
   orangeMoneyBurkina: {
-    merchantCode: '65565805',
+    merchantCode: '',
     ussdTemplate: '*144*10*{merchantCode}*{montant}#',
     instructions: 'Composez le code USSD ci-dessous pour régler directement avec votre compte Orange Money Burkina Faso.'
   },
   internationalRecipient: {
-    phone: '+226 65 56 58 05',
+    phone: '',
     name: 'Nanasore Trésorerie',
     country: 'Burkina Faso'
   },
   cryptoWallets: {
-    usdtTrc20: 'TYDzsYUEWz2k2U41fXnF8GfK9w28mK1X87',
-    moneroXmr: '888tNkZrPN6JsEGGST4h3k5gC5hH7U3aJm6gJmQkC9r24bV6bB7z3b4v5kL8wXyZ9mQ1r',
-    bitcoinBtc: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh'
+    usdtTrc20: '',
+    moneroXmr: '',
+    bitcoinBtc: ''
   },
   cardGatewayKeys: {
-    publicKey: 'pk_live_51Mxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    publicKey: '',
     provider: 'Stripe',
-    active: true
+    active: false
   },
   deliveryZones: [
     'Ouagadougou',
@@ -40,12 +40,12 @@ export const DEFAULT_CENTRAL_PAYMENT_CONFIG: CentralPaymentConfig = {
   ],
   toggles: {
     enableMobileMoney: true,
-    enableCard: true,
-    enableCrypto: true,
+    enableCard: false,
+    enableCrypto: false,
     enableCashOnDelivery: true
   },
-  scrollingMarquee: 'Composez le code indiqué pour valider votre paiement. Déblocage automatique dès réception du SMS !',
-  supportW: '+22665565805'
+  scrollingMarquee: 'Composez le code indiqué pour valider votre paiement. Déblocage automatique dès confirmation.',
+  supportW: ''
 };
 
 export interface SupportedCountry {
