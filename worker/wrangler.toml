@@ -1,4 +1,4 @@
-name = "nanasore-edge-router"
+name = "nanasore"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
