@@ -280,7 +280,7 @@ export const ComparisonMatrixAdminTab: React.FC<ComparisonMatrixAdminTabProps> =
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
               Espace Super Admin
             </span>
-            <span className="text-xs text-slate-400">• Firestore : platform_settings/comparison_matrix</span>
+            <span className="text-xs text-slate-400">• Base : Supabase & Cache Local</span>
           </div>
           <h2 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
             <SlidersHorizontal className="w-5 h-5 text-indigo-400" />
@@ -319,7 +319,7 @@ export const ComparisonMatrixAdminTab: React.FC<ComparisonMatrixAdminTabProps> =
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition active:scale-95 cursor-pointer disabled:opacity-50"
           >
             {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{isSaving ? 'Enregistrement...' : 'Enregistrer sur Firestore'}</span>
+            <span>{isSaving ? 'Enregistrement...' : 'Enregistrer la matrice'}</span>
           </button>
         </div>
       </div>

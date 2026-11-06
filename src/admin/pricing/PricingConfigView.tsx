@@ -14,10 +14,9 @@ import {
 import { 
   getSuperAdminSettingsLocal, 
   saveSuperAdminSettings, 
-  fetchSuperAdminSettingsFromFirebase,
   SuperAdminSettings
 } from '../../services/superAdminService';
-import { savePlatformPricingToSupabase } from '../../services/superAdminSupabaseService';
+import { supabase, savePlatformPricingToSupabase } from '../../services/superAdminSupabaseService';
 import { formatCFA } from '../../utils/audio';
 
 export const PricingConfigView: React.FC = () => {
@@ -31,23 +30,35 @@ export const PricingConfigView: React.FC = () => {
   const [waveNumber, setWaveNumber] = useState('');
   const [mtnNumber, setMtnNumber] = useState('');
 
-  // Plans prices
+  // Plans prices (chargés depuis Supabase)
   const [zeroFeePercent, setZeroFeePercent] = useState(3.5);
   const [creatorMonthlyPrice, setCreatorMonthlyPrice] = useState(9900);
   const [merchantMonthlyPrice, setMerchantMonthlyPrice] = useState(19900);
 
   useEffect(() => {
-    fetchSuperAdminSettingsFromFirebase().then((data) => {
-      if (data) {
-        setSettings(data);
-        if (data.paymentRouting) {
-          setOrangeNumber(data.paymentRouting.orangeNumber || '');
-          setMoovNumber(data.paymentRouting.moovNumber || '');
-          setWaveNumber(data.paymentRouting.waveNumber || '');
-          setMtnNumber(data.paymentRouting.mtnNumber || '');
+    // 1. Chargement des tarifs depuis la table SQL landing_pricing_config de Supabase
+    supabase
+      .from('landing_pricing_config')
+      .select('*')
+      .eq('id', 'current')
+      .single()
+      .then(({ data, error }) => {
+        if (!error && data?.plans && Array.isArray(data.plans)) {
+          const creator = data.plans.find((p: any) => p.id === 'creator');
+          const merchant = data.plans.find((p: any) => p.id === 'merchant' || p.id === 'pro');
+          if (creator?.priceMonthly) setCreatorMonthlyPrice(creator.priceMonthly);
+          if (merchant?.priceMonthly) setMerchantMonthlyPrice(merchant.priceMonthly);
         }
-      }
-    });
+      });
+
+    // 2. Coordonnées passerelle locales
+    const local = getSuperAdminSettingsLocal();
+    if (local?.paymentRouting) {
+      setOrangeNumber(local.paymentRouting.orangeNumber || '');
+      setMoovNumber(local.paymentRouting.moovNumber || '');
+      setWaveNumber(local.paymentRouting.waveNumber || '');
+      setMtnNumber(local.paymentRouting.mtnNumber || '');
+    }
   }, []);
 
   const handleSave = async () => {
@@ -61,14 +72,42 @@ export const PricingConfigView: React.FC = () => {
         mtnNumber
       };
 
+      // 1. Sauvegarde locale synchrone
       await saveSuperAdminSettings({
         paymentRouting: updatedRouting
       });
 
-      // Synchronisation directe vers Supabase (table landing_pricing_config et plans)
-      if (settings.platformConfig) {
-        await savePlatformPricingToSupabase(settings.platformConfig, 'Super-Admin');
-      }
+      // 2. Synchronisation directe vers Supabase (table landing_pricing_config et plans)
+      await supabase
+        .from('landing_pricing_config')
+        .upsert({
+          id: 'current',
+          plans: [
+            {
+              id: 'zero',
+              name: 'Formule Zéro Fixe',
+              priceMonthly: 0,
+              commissionRate: zeroFeePercent,
+              badge: 'Sans engagement'
+            },
+            {
+              id: 'creator',
+              name: 'Formule Créateur',
+              priceMonthly: creatorMonthlyPrice,
+              commissionRate: 0,
+              badge: 'Populaire'
+            },
+            {
+              id: 'merchant',
+              name: 'Formule Commerçant PRO',
+              priceMonthly: merchantMonthlyPrice,
+              commissionRate: 0,
+              badge: 'Recommandé'
+            }
+          ],
+          updated_by: 'Super-Admin',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
 
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);

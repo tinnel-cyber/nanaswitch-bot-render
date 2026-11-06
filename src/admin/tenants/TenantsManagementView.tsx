@@ -20,7 +20,6 @@ import {
 import { 
   getSuperAdminSettingsLocal, 
   saveSuperAdminSettings, 
-  fetchSuperAdminSettingsFromFirebase,
   SuperAdminSettings
 } from '../../services/superAdminService';
 import { SaasStore, StoreApprovalStatus } from '../../types';
@@ -28,7 +27,6 @@ import {
   fetchOrganizationsAsStoresFromSupabase,
   syncStoreApprovalToSupabase 
 } from '../../services/superAdminSupabaseService';
-import { updateStoreApprovalStatus } from '../../utils/firestoreService';
 
 export const TenantsManagementView: React.FC = () => {
   const [settings, setSettings] = useState<SuperAdminSettings>(() => getSuperAdminSettingsLocal() || {});
@@ -38,15 +36,11 @@ export const TenantsManagementView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Lecture directe depuis les tables SQL Supabase
+    // Lecture directe et exclusive depuis les tables SQL Supabase
     fetchOrganizationsAsStoresFromSupabase().then((stores) => {
       if (stores && stores.length > 0) {
         setLiveSupabaseStores(stores);
       }
-    });
-
-    fetchSuperAdminSettingsFromFirebase().then((data) => {
-      if (data) setSettings(data);
     });
 
     const handleUpdate = () => {
@@ -84,9 +78,8 @@ export const TenantsManagementView: React.FC = () => {
       const currentStatuses = { ...(settings.approvalStatuses || {}) };
       currentStatuses[storeId] = newStatus;
 
-      // Sauvegarde Supabase SQL & Cloud & Locale
+      // Sauvegarde Supabase SQL & Locale
       await syncStoreApprovalToSupabase(storeId, newStatus);
-      await updateStoreApprovalStatus(storeId, newStatus);
       await saveSuperAdminSettings({ approvalStatuses: currentStatuses });
 
       setSettings((prev) => ({

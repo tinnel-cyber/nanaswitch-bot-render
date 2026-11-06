@@ -3216,10 +3216,10 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               disabled={isArchiving}
               onClick={handleTriggerArchival}
               className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 transition active:scale-95 cursor-pointer"
-              title="Agrège les ventes de plus de 90 jours dans des résumés mensuels pour réduire les lectures Firestore"
+              title="Agrège les ventes de plus de 90 jours dans des résumés mensuels pour optimiser la base de données"
             >
               <Archive className={`w-3.5 h-3.5 text-amber-400 ${isArchiving ? 'animate-spin' : ''}`} />
-              <span>{isArchiving ? 'Optimisation en cours...' : 'Optimiser Firestore (>90j)'}</span>
+              <span>{isArchiving ? 'Optimisation en cours...' : 'Optimiser les ventes (>90j)'}</span>
             </button>
           </div>
         </div>
@@ -4153,7 +4153,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/40">
                 Gouvernance & Conformité
               </span>
-              <span className="text-xs text-slate-400">• Firestore : platform_settings/legal</span>
+              <span className="text-xs text-slate-400">• Base : Supabase PostgreSQL</span>
             </div>
             <h2 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-400" />
@@ -4182,7 +4182,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95 transition cursor-pointer disabled:opacity-50"
             >
               <CheckCheck className="w-4 h-4" />
-              <span>{isSavingLegal ? 'Enregistrement Firestore...' : 'Enregistrer les modifications'}</span>
+              <span>{isSavingLegal ? 'Enregistrement Supabase...' : 'Enregistrer les modifications'}</span>
             </button>
           </div>
         </div>
@@ -4334,7 +4334,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95 transition cursor-pointer disabled:opacity-50"
           >
             <CheckCheck className="w-4 h-4" />
-            <span>{isSavingLegal ? 'Enregistrement...' : 'Enregistrer les modifications sur Firestore'}</span>
+            <span>{isSavingLegal ? 'Enregistrement...' : 'Enregistrer les modifications sur Supabase'}</span>
           </button>
         </div>
       </div>
@@ -4352,7 +4352,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 Administration SaaS
               </span>
-              <span className="text-xs text-slate-400">• Firestore : platform_settings/subscriptions</span>
+              <span className="text-xs text-slate-400">• Base : Supabase PostgreSQL (plans)</span>
             </div>
             <h2 className="text-base sm:text-lg font-black text-white mt-1">
               Gestion Dynamique des Abonnements & Écran de Paiement
@@ -4629,7 +4629,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 {/* Bouton de sauvegarde dédié au Plan sélectionné (ex: Plan Starter) */}
                 <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="text-[11px] text-slate-400">
-                    Cible Firestore : <span className="font-mono text-amber-300 font-bold">subscription_plans/{platformConfig.plans[selectedEditPlanIdx].id}</span>
+                    Cible Supabase : <span className="font-mono text-amber-300 font-bold">plans/{platformConfig.plans[selectedEditPlanIdx].id}</span>
                   </div>
                   <button
                     type="button"
@@ -4932,7 +4932,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Firestore : parametres/paiement
+                  Supabase : central_payment_config
                 </span>
                 <span className="text-xs text-slate-400">• Moteur Multi-Pays</span>
               </div>
@@ -5368,7 +5368,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             </div>
             <div>
               <div className="text-xs font-black text-white">Sauvegarde & Synchronisation Globale Immédiate</div>
-              <div className="text-[11px] text-slate-300">Enregistre les tarifs, numéros de paiement, limites et quotas dans Firebase RTDB + Firestore + LocalStorage en temps réel.</div>
+              <div className="text-[11px] text-slate-300">Enregistre les tarifs, numéros de paiement, limites et quotas dans Supabase PostgreSQL & Realtime en temps réel.</div>
             </div>
           </div>
           <button
@@ -5932,7 +5932,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                       Paiements Mobile Money & Supervision API Pont Render
                     </h2>
                     <p className="text-xs text-slate-400 max-w-3xl">
-                      Supervisez en direct les flux financiers acheminés par l'API <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-300 font-mono text-[11px]">nana-payment-api.onrender.com</code>. Sortie IP statique Fixie déclarée auprès des banques partenaires. Les transactions et webhooks sont synchronisés en temps réel dans Firestore.
+                      Supervisez en direct les flux financiers acheminés par le backend Render. Sortie IP statique déclarée auprès des banques partenaires. Les transactions sont synchronisées en temps réel dans Supabase Realtime.
                     </p>
                   </div>
 
@@ -6624,7 +6624,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   <span className="text-sm font-black text-emerald-400">{formatCFA(cashSubAmount)}</span>
                 </div>
                 <div className="text-[11px] text-slate-300">
-                  En cliquant sur confirmer, l'abonnement sera immédiatement prolongé de <span className="font-bold text-white">{cashSubMonths} mois</span> dans Firestore et une quittance comptable sera archivée.
+                  En cliquant sur confirmer, l'abonnement sera immédiatement prolongé de <span className="font-bold text-white">{cashSubMonths} mois</span> dans Supabase et une quittance comptable sera archivée.
                 </div>
               </div>
 

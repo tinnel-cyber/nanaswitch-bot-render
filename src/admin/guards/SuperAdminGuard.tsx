@@ -25,7 +25,7 @@ export interface SuperAdminGuardProps {
  * SUPER ADMIN GUARD — CONTRÔLE D'ACCÈS DU CONTROL PLANE
  * ============================================================================
  * Garantit l'étanchéité absolue de l'espace Super Admin :
- * 1. Vérification cryptographique des UIDs et adresses autorisées dans Firebase RTDB / Firestore.
+ * 1. Vérification des UIDs, emails et rôles autorisés (Table super_admins & whitelist).
  * 2. Rejet immédiat de tout marchand ou utilisateur standard.
  * 3. Redirection automatique vers l'espace marchand (/dashboard ou /pos).
  */
@@ -52,7 +52,7 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({
         return;
       }
 
-      // Vérification asynchrone auprès de Firebase (RTDB & Firestore)
+      // Vérification asynchrone des privilèges Super Admin
       try {
         const hasRights = await verifySuperAdminPrivileges(auth.currentUser);
         if (!isCancelled) {

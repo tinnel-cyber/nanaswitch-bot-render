@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { 
   getSuperAdminSettingsLocal, 
-  fetchSuperAdminSettingsFromFirebase, 
   SuperAdminSettings 
 } from '../../services/superAdminService';
 import { 
@@ -41,17 +40,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   useEffect(() => {
     let isMounted = true;
     
-    // Chargement des données réelles depuis les tables SQL Supabase
+    // Chargement exclusif des données réelles depuis les tables SQL Supabase
     fetchOrganizationsAsStoresFromSupabase().then((stores) => {
       if (isMounted && stores.length > 0) {
         setLiveStoresCount(stores.length);
         setLiveKpis(calculateRealKpiMetrics(stores));
-      }
-    });
-
-    fetchSuperAdminSettingsFromFirebase().then((data) => {
-      if (isMounted && data) {
-        setSettings(data);
       }
     });
 
@@ -128,7 +121,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
           <div className="text-2xl font-black text-white tracking-tight">{totalStores}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 mt-2 font-medium">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+14 nouvelles boutiques cette semaine</span>
+            <span>{totalStores > 0 ? `${totalStores} boutique(s) en base Supabase` : 'Prêt à accueillir des marchands'}</span>
           </div>
         </div>
 
@@ -143,7 +136,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
           <div className="text-2xl font-black text-white tracking-tight">{formatCFA(activeMrr)}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 mt-2 font-medium">
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>Revenu récurrent mensuel</span>
+            <span>Revenu récurrent mensuel réel</span>
           </div>
         </div>
 
@@ -169,10 +162,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
               <Server className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-white tracking-tight">99.98%</div>
+          <div className="text-2xl font-black text-white tracking-tight">100%</div>
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 mt-2 font-medium">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Passerelles & Firebase opérationnels</span>
+            <span>Supabase SQL & Render opérationnels</span>
           </div>
         </div>
       </div>

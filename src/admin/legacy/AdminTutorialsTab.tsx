@@ -67,10 +67,10 @@ export const AdminTutorialsTab: React.FC = () => {
     try {
       const data = await loadTutorialsFromFirebase();
       setTutorials(data);
-      showToast('✅ Tutoriels synchronisés depuis Firebase RTDB');
+      showToast('✅ Tutoriels synchronisés');
       playValidationBeep();
     } catch (e) {
-      showToast('❌ Erreur de chargement Firebase');
+      showToast('❌ Erreur de chargement des tutoriels');
     } finally {
       setIsSyncing(false);
     }
@@ -222,9 +222,9 @@ export const AdminTutorialsTab: React.FC = () => {
       setIsCreatingNew(false);
       setEditingTutorial(null);
       playValidationBeep();
-      showToast('🎉 Tutoriel enregistré et synchronisé dans Firebase RTDB + LocalStorage !');
+      showToast('🎉 Tutoriel enregistré et synchronisé avec succès !');
     } else {
-      showToast('⚠️ Erreur réseau lors de la synchronisation Firebase');
+      showToast('⚠️ Erreur réseau lors de la synchronisation');
     }
   };
 
@@ -279,7 +279,7 @@ export const AdminTutorialsTab: React.FC = () => {
             onClick={handleReloadFromFirebase}
             disabled={isSyncing}
             className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-            title="Recharger depuis Firebase RTDB"
+            title="Recharger les tutoriels"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>Actualiser</span>
