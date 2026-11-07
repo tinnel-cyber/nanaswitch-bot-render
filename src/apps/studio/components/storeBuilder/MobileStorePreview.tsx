@@ -1842,7 +1842,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
                           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                           <div>
                             <strong className="block text-amber-300 font-bold">Réglementation Togo :</strong>
-                            <span>Paiement opéré <strong className="underline text-white">exclusivement via Wave Togo</strong> vers notre numéro international (+226 65 56 58 05).</span>
+                            <span>Paiement opéré <strong className="underline text-white">exclusivement via Wave Togo</strong> vers notre numéro international Marchand.</span>
                           </div>
                         </div>
                       )}
@@ -1977,7 +1977,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
                           type="tel"
                           value={orderCustomerPhone}
                           onChange={(e) => setOrderCustomerPhone(e.target.value)}
-                          placeholder="Ex: +226 65 56 58 05"
+                          placeholder="Ex: +226 XX XX XX XX"
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-orange-400 font-semibold"
                         />
                       </div>

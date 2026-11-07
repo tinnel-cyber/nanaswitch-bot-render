@@ -258,16 +258,17 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
     return ['orange_money', 'moov_money', 'wave', 'mtn_momo', 'cod'];
   });
 
-  // Numéros et liens marchands personnalisés
+  // Numéros et liens marchands personnalisés (zéro valeur factice par défaut)
   const [orangeNumber, setOrangeNumber] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('nana_seller_payment_config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.operatorNumbers?.orange_money || '+226 65 56 58 05';
+        const val = parsed.operatorNumbers?.orange_money;
+        return val && !val.includes('65 56 58 05') ? val : '';
       }
     } catch {}
-    return '+226 65 56 58 05';
+    return '';
   });
 
   const [moovNumber, setMoovNumber] = useState<string>(() => {
@@ -275,10 +276,11 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
       const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('nana_seller_payment_config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.operatorNumbers?.moov_money || '+226 65 56 58 05';
+        const val = parsed.operatorNumbers?.moov_money;
+        return val && !val.includes('65 56 58 05') ? val : '';
       }
     } catch {}
-    return '+226 65 56 58 05';
+    return '';
   });
 
   const [waveNumber, setWaveNumber] = useState<string>(() => {
@@ -286,10 +288,11 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
       const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('nana_seller_payment_config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.operatorNumbers?.wave || '+226 65 56 58 05';
+        const val = parsed.operatorNumbers?.wave;
+        return val && !val.includes('65 56 58 05') ? val : '';
       }
     } catch {}
-    return '+226 65 56 58 05';
+    return '';
   });
 
   const [wavePaymentLink, setWavePaymentLink] = useState<string>(() => {
@@ -297,10 +300,10 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
       const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('nana_seller_payment_config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.wavePaymentLink || 'https://pay.wave.com';
+        return parsed.wavePaymentLink || '';
       }
     } catch {}
-    return 'https://pay.wave.com';
+    return '';
   });
 
   const [mtnNumber, setMtnNumber] = useState<string>(() => {
@@ -308,10 +311,11 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
       const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('nana_seller_payment_config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return parsed.operatorNumbers?.mtn_momo || '+226 65 56 58 05';
+        const val = parsed.operatorNumbers?.mtn_momo;
+        return val && !val.includes('65 56 58 05') ? val : '';
       }
     } catch {}
-    return '+226 65 56 58 05';
+    return '';
   });
 
   const [allowCod, setAllowCod] = useState<boolean>(() => {
@@ -396,12 +400,12 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
       allowCod: activeCod,
       enabledMethods: finalMethods,
       operatorNumbers: {
-        orange_money: orangeNumber.trim() || '+226 65 56 58 05',
-        moov_money: moovNumber.trim() || '+226 65 56 58 05',
-        wave: waveNumber.trim() || '+226 65 56 58 05',
-        mtn_momo: mtnNumber.trim() || '+226 65 56 58 05',
+        orange_money: orangeNumber.trim(),
+        moov_money: moovNumber.trim(),
+        wave: waveNumber.trim(),
+        mtn_momo: mtnNumber.trim(),
       },
-      wavePaymentLink: wavePaymentLink.trim() || 'https://pay.wave.com',
+      wavePaymentLink: wavePaymentLink.trim(),
       updatedAt: Date.now(),
     };
 
@@ -701,7 +705,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
                     type="tel"
                     value={orangeNumber}
                     onChange={(e) => setOrangeNumber(e.target.value)}
-                    placeholder="+226 65 56 58 05"
+                    placeholder="+226 XX XX XX XX"
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-500"
                   />
                 </div>
@@ -733,7 +737,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
                     type="tel"
                     value={moovNumber}
                     onChange={(e) => setMoovNumber(e.target.value)}
-                    placeholder="+226 65 56 58 05"
+                    placeholder="+226 XX XX XX XX"
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -766,7 +770,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
                       type="tel"
                       value={waveNumber}
                       onChange={(e) => setWaveNumber(e.target.value)}
-                      placeholder="+226 65 56 58 05"
+                      placeholder="+226 XX XX XX XX"
                       className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -811,7 +815,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
                     type="tel"
                     value={mtnNumber}
                     onChange={(e) => setMtnNumber(e.target.value)}
-                    placeholder="+226 65 56 58 05"
+                    placeholder="+226 XX XX XX XX"
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-yellow-500"
                   />
                 </div>

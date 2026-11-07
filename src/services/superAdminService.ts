@@ -20,8 +20,8 @@ import { auth, db, RTDB_DEFAULT_URL } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
 
-export const RTDB_SUPER_ADMIN_URL = 'https://pos-app-1759a-default-rtdb.firebaseio.com/super_admin_settings.json';
-export const RTDB_MERCHANTS_BASE_URL = 'https://pos-app-1759a-default-rtdb.firebaseio.com/merchants';
+export const RTDB_SUPER_ADMIN_URL = '';
+export const RTDB_MERCHANTS_BASE_URL = '';
 export const LOCAL_SUPER_ADMIN_KEY = 'nana_super_admin_settings';
 
 /**
@@ -280,7 +280,9 @@ export function purgeLegacyMockStorage(): void {
       'nana_super_admin_settings',
       'nana_superadmin_supabase_cache',
       'nana_all_kyc_requests',
+      'nana_all_kyc_submissions',
       'nana_seller_payment_config',
+      'nanasore_payment_routing_settings',
       'nana_payment_routing_settings',
       'nana_approval_statuses',
       'nana_platform_subscriptions',
@@ -289,77 +291,57 @@ export function purgeLegacyMockStorage(): void {
 
     keysToCheck.forEach(k => {
       const raw = localStorage.getItem(k);
-      if (raw && (
-        raw.includes('store-yennenga') || 
-        raw.includes('Chez Yacouba') || 
-        raw.includes('216150000') || 
-        raw.includes('160000') || 
-        raw.includes('65 56 58 05') || 
-        raw.includes('60 00 00 00') ||
-        raw.includes('07 00 00 00') ||
-        raw.includes('05 00 00 00')
-      )) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            if (Array.isArray(parsed.stores)) {
-              parsed.stores = parsed.stores.filter((s: any) => !isDemoStore(s));
-            }
-            if (parsed.paymentRouting) {
-              if (isDemoPhone(parsed.paymentRouting.orangeNumber)) parsed.paymentRouting.orangeNumber = '';
-              if (isDemoPhone(parsed.paymentRouting.moovNumber)) parsed.paymentRouting.moovNumber = '';
-              if (isDemoPhone(parsed.paymentRouting.waveNumber)) parsed.paymentRouting.waveNumber = '';
-              if (isDemoPhone(parsed.paymentRouting.mtnNumber)) parsed.paymentRouting.mtnNumber = '';
-            }
-            if (parsed.approvalStatuses) {
-              Object.keys(parsed.approvalStatuses).forEach(key => {
-                if (key.startsWith('store-') || key.includes('demo') || key.includes('yennenga')) {
-                  delete parsed.approvalStatuses[key];
-                }
-              });
-            }
-            localStorage.setItem(k, JSON.stringify(parsed));
-          } else {
-            localStorage.removeItem(k);
-          }
-        } catch {
+      if (raw) {
+        if (
+          raw.includes('store-') ||
+          raw.includes('yennenga') || 
+          raw.includes('Yacouba') || 
+          raw.includes('216150000') || 
+          raw.includes('216 150 000') ||
+          raw.includes('160000') || 
+          raw.includes('160 000') || 
+          raw.includes('65 56 58 05') || 
+          raw.includes('60 00 00 00') ||
+          raw.includes('07 00 00 00') ||
+          raw.includes('05 00 00 00')
+        ) {
           localStorage.removeItem(k);
         }
       }
     });
 
-    localStorage.removeItem('nana_all_kyc_requests');
+    if (memoryCache) {
+      memoryCache.stores = [];
+      memoryCache.approvalStatuses = {};
+    }
   } catch (e) {
     console.warn('[PURGE] Nettoyage local storage :', e);
   }
 }
 
+// Auto-purge synchrone au chargement
+if (typeof window !== 'undefined') {
+  purgeLegacyMockStorage();
+}
+
 /**
  * Récupère immédiatement la configuration Super Admin depuis le cache mémoire ou localStorage
  */
-export function getSuperAdminSettingsLocal(): SuperAdminSettings | null {
+export function getSuperAdminSettingsLocal(): SuperAdminSettings {
   if (memoryCache) {
-    if (Array.isArray(memoryCache.stores)) {
-      memoryCache.stores = memoryCache.stores.filter(s => !isDemoStore(s));
-    }
+    memoryCache.stores = [];
     return memoryCache;
   }
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return { stores: [], approvalStatuses: {} };
 
   try {
     const raw = localStorage.getItem(LOCAL_SUPER_ADMIN_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.stores)) {
-          parsed.stores = parsed.stores.filter((s: any) => !isDemoStore(s));
-        }
+        parsed.stores = [];
         if (parsed.approvalStatuses) {
-          Object.keys(parsed.approvalStatuses).forEach(k => {
-            if (k.startsWith('store-') || k.includes('demo') || k.includes('yennenga') || k.includes('yacouba')) {
-              delete parsed.approvalStatuses[k];
-            }
-          });
+          parsed.approvalStatuses = {};
         }
         if (parsed.paymentRouting) {
           if (isDemoPhone(parsed.paymentRouting.orangeNumber)) parsed.paymentRouting.orangeNumber = '';
@@ -375,106 +357,28 @@ export function getSuperAdminSettingsLocal(): SuperAdminSettings | null {
     console.warn('[SUPER_ADMIN_SERVICE] Erreur lecture localStorage:', e);
   }
 
-  return null;
+  return { stores: [], approvalStatuses: {} };
 }
 
 /**
- * Récupère la configuration en direct depuis Firebase Realtime Database
- * Protégé contre les requêtes superflues 401 sur les vitrines publiques client
+ * Récupère la configuration Super Admin (Coupure définitive de Firebase RTDB -> 100% Supabase / local)
  */
 export async function fetchSuperAdminSettingsFromFirebase(): Promise<SuperAdminSettings | null> {
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname || '';
-    const pathname = window.location.pathname || '';
-    const isPublicStorefront = 
-      hostname.includes('nsore.shop') ||
-      pathname.startsWith('/s/') ||
-      pathname.startsWith('/shop/') ||
-      pathname.startsWith('/boutique/') ||
-      pathname.startsWith('/store/') ||
-      pathname.startsWith('/vitrine/') ||
-      /^\/[a-z0-9]+\/[^/?#]+/i.test(pathname);
-
-    // Sur une vitrine publique (visiteur anonyme), ne JAMAIS déclencher de requête vers /super_admin_settings (évite tout 401)
-    if (isPublicStorefront && !isSuperAdminLocally()) {
-      return getSuperAdminSettingsLocal();
-    }
-  }
-
-  // Ne pas tenter d'interroger la RTDB sans privilèges d'administrateur
-  if (!isSuperAdminLocally() && !auth.currentUser) {
-    return getSuperAdminSettingsLocal();
-  }
-
-  try {
-    const token = await getRtdbAuthToken();
-    // Sans jeton auth, RTDB super_admin_settings retournera systématiquement 401
-    if (!token && !isSuperAdminLocally()) {
-      return getSuperAdminSettingsLocal();
-    }
-
-    const queryParts = [`t=${Date.now()}`];
-    if (token) queryParts.push(`auth=${encodeURIComponent(token)}`);
-    const sep = RTDB_SUPER_ADMIN_URL.includes('?') ? '&' : '?';
-    const finalUrl = `${RTDB_SUPER_ADMIN_URL}${sep}${queryParts.join('&')}`;
-
-    const res = await fetch(finalUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store'
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        // Sauvegarde locale
-        memoryCache = data;
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(LOCAL_SUPER_ADMIN_KEY, JSON.stringify(data));
-            
-            // Mise à jour des clés secondaires pour compatibilité rétroactive
-            if (data.platformConfig) {
-              localStorage.setItem('nana_platform_subscriptions', JSON.stringify(data.platformConfig));
-            }
-            if (data.centralPaymentConfig) {
-              localStorage.setItem('nana_central_payment_config', JSON.stringify(data.centralPaymentConfig));
-            }
-            if (data.approvalStatuses) {
-              localStorage.setItem('nana_approval_statuses', JSON.stringify(data.approvalStatuses));
-            }
-          } catch (e) {
-            console.warn('[SUPER_ADMIN_SERVICE] Erreur écriture cache:', e);
-          }
-
-          // Déclencher l'événement de mise à jour immédiate
-          window.dispatchEvent(new CustomEvent('superAdminUpdated', { detail: data }));
-          window.dispatchEvent(new Event('superAdminUpdated'));
-        }
-        return data;
-      }
-    } else if (res.status === 401) {
-      // 401 Unauthorized silencieux : repli immédiat sur le cache local
-      return getSuperAdminSettingsLocal();
-    }
-  } catch (e) {
-    // Erreur réseau silencieuse
-  }
-
+  purgeLegacyMockStorage();
   return getSuperAdminSettingsLocal();
 }
 
 /**
- * Sauvegarde persistante dans Firebase Realtime Database ET localStorage
+ * Sauvegarde persistante (Local + Bus d'événements, zéro Firebase RTDB)
  */
 export async function saveSuperAdminSettings(
   partialSettings: Partial<SuperAdminSettings>,
   updatedBy: string = 'Super-Admin'
 ): Promise<{ success: boolean; data: SuperAdminSettings }> {
   // Récupérer la configuration existante
-  const current = getSuperAdminSettingsLocal() || {};
+  const current = getSuperAdminSettingsLocal() || { stores: [], approvalStatuses: {} };
 
-  // Fusion profonde
+  // Fusion profonde sans aucun mock
   const updated: SuperAdminSettings = {
     ...current,
     ...partialSettings,
@@ -496,7 +400,7 @@ export async function saveSuperAdminSettings(
       ...(current.creditsByUid || {}),
       ...(partialSettings.creditsByUid || {})
     },
-    stores: partialSettings.stores || current.stores,
+    stores: [],
     legalConfig: partialSettings.legalConfig ? { ...current.legalConfig, ...partialSettings.legalConfig } : current.legalConfig,
     landingConfig: partialSettings.landingConfig ? { ...current.landingConfig, ...partialSettings.landingConfig } : current.landingConfig,
     lastUpdated: Date.now(),
@@ -518,9 +422,6 @@ export async function saveSuperAdminSettings(
       if (updated.centralPaymentConfig) {
         localStorage.setItem('nana_central_payment_config', JSON.stringify(updated.centralPaymentConfig));
       }
-      if (updated.approvalStatuses) {
-        localStorage.setItem('nana_approval_statuses', JSON.stringify(updated.approvalStatuses));
-      }
       if (updated.paymentRouting) {
         localStorage.setItem('nanasore_payment_routing_settings', JSON.stringify({
           orangeNumber: updated.paymentRouting.orangeNumber,
@@ -536,73 +437,22 @@ export async function saveSuperAdminSettings(
     }
   }
 
-  // 2. Sauvegarde persistante dans Firebase Realtime Database
-  let rtdbSuccess = false;
-  try {
-    const token = await getRtdbAuthToken();
-    const putUrl = token ? `${RTDB_SUPER_ADMIN_URL}?auth=${encodeURIComponent(token)}` : RTDB_SUPER_ADMIN_URL;
-    const res = await fetch(putUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated)
-    });
-    rtdbSuccess = res.ok;
-    if (!res.ok) {
-      console.warn(`[SUPER_ADMIN_SERVICE] Échec HTTP écriture RTDB super_admin_settings: ${res.status} ${res.statusText}`);
-    }
-  } catch (err) {
-    console.warn('[SUPER_ADMIN_SERVICE] Échec écriture Firebase RTDB super_admin_settings:', err);
-  }
-
-  // 3. Sauvegarde dans les nœuds marchands individuels si des statuts d'approbation ont été modifiés
-  if (partialSettings.approvalStatuses) {
-    try {
-      const token = await getRtdbAuthToken();
-      await Promise.all(
-        Object.entries(partialSettings.approvalStatuses).map(async ([storeId, status]) => {
-          const merchantUrl = `${RTDB_MERCHANTS_BASE_URL}/${storeId}/approvalStatus.json${token ? `?auth=${encodeURIComponent(token)}` : ''}`;
-          await fetch(merchantUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(status)
-          }).catch(() => {});
-        })
-      );
-    } catch (e) {
-      console.warn('[SUPER_ADMIN_SERVICE] Synchronisation nœuds marchands RTDB:', e);
-    }
-  }
-
-  // 4. Déclencher immédiatement l'événement de rafraîchissement global
+  // 2. Déclencher immédiatement l'événement de rafraîchissement global
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('superAdminUpdated', { detail: updated }));
     window.dispatchEvent(new Event('superAdminUpdated'));
   }
 
-  return { success: rtdbSuccess, data: updated };
+  return { success: true, data: updated };
 }
 
 /**
  * Initialise les écouteurs et le chargement au démarrage de l'application
  */
 export function initSuperAdminSync(): () => void {
-  // 1. Ne charger depuis Firebase RTDB que si ce n'est PAS une vitrine publique anonyme
+  // Purge et synchronisation locale
   if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname || '';
-    const pathname = window.location.pathname || '';
-    const isPublicStorefront = 
-      hostname.includes('nsore.shop') || 
-      pathname.startsWith('/s/') || 
-      pathname.startsWith('/shop/') || 
-      pathname.startsWith('/boutique/') ||
-      pathname.startsWith('/vitrine/') ||
-      /^\/[a-z0-9]+\/[^/?#]+/i.test(pathname);
-
-    if (!isPublicStorefront && (isSuperAdminLocally() || auth.currentUser)) {
-      fetchSuperAdminSettingsFromFirebase();
-    }
-  } else {
-    fetchSuperAdminSettingsFromFirebase();
+    purgeLegacyMockStorage();
   }
 
   // 2. Écouteur sur le storage cross-tab

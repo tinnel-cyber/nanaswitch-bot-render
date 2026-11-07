@@ -1334,21 +1334,22 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     }, 1000);
   };
 
-  // 3. Relance abonnement Yennenga via WhatsApp
+  // 3. Relance abonnement marchand via WhatsApp
   const handleRelanceAbonnement = (task: SaasActionTask) => {
     playValidationBeep();
-    const phoneClean = '+22670112233';
+    const phoneClean = (task.actionPayload || '').replace(/[^0-9+]/g, '');
     const message = encodeURIComponent(
-      "Bonjour M. Kaboré (Boutique Yennenga), votre abonnement mensuel NaNa POS Pro (20 000 F CFA) est arrivé à échéance. Cliquez ici pour renouveler via Wave ou Orange Money : https://pay.nana.app/sub/yennenga"
+      `Bonjour ${task.storeName || 'Commerçant'}, votre abonnement Nanasore est arrivé à échéance. Veuillez procéder au renouvellement depuis votre espace marchand.`
     );
-    window.open(`https://wa.me/${phoneClean}?text=${message}`, '_blank');
+    if (phoneClean) {
+      window.open(`https://wa.me/${phoneClean}?text=${message}`, '_blank');
+    }
 
-    // Auto mark task as completed or add follow-up
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, completed: true } : t))
     );
 
-    showToast("Relance WhatsApp envoyée à M. Kaboré (Boutique Yennenga) avec le lien de paiement.");
+    showToast(`Relance envoyée pour ${task.storeName || 'la boutique'}.`);
   };
 
   // 4. Contact store for personal expenses alert
@@ -2410,11 +2411,11 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   onChange={(e) => setSelectedCountry(e.target.value)}
                   className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-300 outline-none cursor-pointer"
                 >
-                  <option value="ALL">Tous les pays (48)</option>
-                  <option value="Côte d'Ivoire">Côte d'Ivoire (26)</option>
-                  <option value="Sénégal">Sénégal (12)</option>
-                  <option value="Burkina Faso">Burkina Faso (6)</option>
-                  <option value="Mali">Mali (4)</option>
+                  <option value="ALL">Tous les pays</option>
+                  <option value="Côte d'Ivoire">Côte d'Ivoire</option>
+                  <option value="Sénégal">Sénégal</option>
+                  <option value="Burkina Faso">Burkina Faso</option>
+                  <option value="Mali">Mali</option>
                 </select>
               </div>
             </div>
@@ -2610,6 +2611,13 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   </div>
                 );
               })}
+              {dangerStores.length === 0 && (
+                <div className="p-8 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80">
+                  <ShieldCheck className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                  <p className="font-bold text-slate-300 text-sm">Toutes les boutiques sont saines</p>
+                  <p className="text-xs text-slate-500 mt-1">Aucune alerte de trésorerie ou rupture critique détectée.</p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -2737,73 +2745,14 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                         {/* Direct Action Buttons per Task */}
                         {!task.completed && (
                           <div className="pt-2 flex items-center gap-2 flex-wrap">
-                            {/* Action 1 : Relancer la boutique 'Yennenga' pour renouvellement d'abonnement */}
-                            {task.id === 'task-1' && (
-                              <button
-                                type="button"
-                                onClick={() => handleRelanceAbonnement(task)}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-900/30 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                <span>Relancer Yennenga (WhatsApp + Wave)</span>
-                              </button>
-                            )}
-
-                            {/* Action 2 : Valider la synchronisation de 12 transactions en attente */}
-                            {task.id === 'task-2' && (
-                              <button
-                                type="button"
-                                onClick={() => handleValidateSync(task)}
-                                disabled={syncInProgress}
-                                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-blue-900/30 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                <RefreshCw className={`w-3.5 h-3.5 ${syncInProgress ? 'animate-spin' : ''}`} />
-                                <span>Valider la synchronisation (12 tx)</span>
-                              </button>
-                            )}
-
-                            {/* Action 3 : Alerte de gestion Yacouba */}
-                            {task.id === 'task-3' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const yacoubaStore = stores.find((s) => s.id === 'store-yacouba');
-                                  if (yacoubaStore) handleContactPersonalExpenses(yacoubaStore);
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-red-950 hover:bg-red-900 text-red-200 border border-red-800 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <Phone className="w-3.5 h-3.5 text-red-400" />
-                                <span>Appeler Yacouba (+225 07 45 89 12)</span>
-                              </button>
-                            )}
-
-                            {/* Action 4 : Grossiste Adjamé */}
-                            {task.id === 'task-4' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  playValidationBeep();
-                                  showToast("Centrale d'achat NaNa activée : Bon de commande Riz/Sucre transmis au grossiste d'Adjamé.");
-                                  handleToggleTask(task.id);
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <Package className="w-3.5 h-3.5" />
-                                <span>Transmettre Bon Grossiste Riz/Sucre</span>
-                              </button>
-                            )}
-
-                            {/* Generic Task Complete button if not covered */}
-                            {!['task-1', 'task-2', 'task-3', 'task-4'].includes(task.id) && (
-                              <button
-                                type="button"
-                                onClick={() => handleToggleTask(task.id)}
-                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 active:scale-95 cursor-pointer"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>Marquer comme exécuté</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTask(task.id)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Marquer comme exécuté</span>
+                            </button>
                           </div>
                         )}
                       </div>
@@ -2811,6 +2760,13 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   </div>
                 );
               })}
+              {filteredTasks.length === 0 && (
+                <div className="p-8 text-center rounded-2xl bg-slate-900/40 border border-slate-800/80">
+                  <CheckCheck className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                  <p className="font-bold text-slate-300 text-sm">Toutes les tâches sont traitées</p>
+                  <p className="text-xs text-slate-500 mt-1">Aucune action urgente en attente.</p>
+                </div>
+              )}
             </div>
           </section>
         </div>
@@ -6438,7 +6394,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   required
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Ex: Relancer Boutique Yennenga pour renouvellement..."
+                  placeholder="Ex: Relancer le marchand pour renouvellement d'abonnement..."
                   className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-400 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 outline-none"
                 />
               </div>

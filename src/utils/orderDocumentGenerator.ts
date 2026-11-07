@@ -141,7 +141,7 @@ export const downloadOrderDocumentPdf = (
 
     const storeName = (storeUser?.storeName || 'BOUTIQUE NANASORE').toUpperCase();
     const storeCity = storeUser?.city || 'Abidjan / Dakar';
-    const storePhone = storeUser?.phone || '+225 07 00 00 00 00';
+    const storePhone = storeUser?.phone || '';
     const storeEmail = storeUser?.email || '';
     const docTypeLabel = getDocumentTypeLabel(order.type).toUpperCase();
 

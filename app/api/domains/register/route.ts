@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/supabase';
 
 interface RegisterDomainBody {
-  tenant_id: string;
-  custom_domain: string;
+  tenantId?: string;
+  tenant_id?: string;
+  domain?: string;
+  custom_domain?: string;
 }
 
 /**
@@ -28,15 +30,17 @@ export async function POST(request: Request) {
   try {
     const body: RegisterDomainBody = await request.json().catch(() => null);
 
-    if (!body || !body.tenant_id || !body.custom_domain) {
+    const tenantId = body?.tenantId || body?.tenant_id;
+    const rawDomain = body?.domain || body?.custom_domain;
+
+    if (!body || !tenantId || !rawDomain) {
       return NextResponse.json(
-        { error: 'Les champs tenant_id et custom_domain sont obligatoires.' },
+        { error: 'Les champs tenantId et domain sont obligatoires.' },
         { status: 400 }
       );
     }
 
-    const tenantId = body.tenant_id;
-    const cleanDomain = normalizeDomain(body.custom_domain);
+    const cleanDomain = normalizeDomain(rawDomain);
 
     // Validation syntaxique élémentaire du domaine
     const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i;

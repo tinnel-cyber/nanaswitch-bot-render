@@ -33,6 +33,7 @@ export interface Tenant {
   custom_domain: string | null;
   domain_status: TenantDomainStatus;
   cloudflare_hostname_id: string | null;
+  dns_records?: Record<string, any>;
   logo_url: string | null;
   primary_color: string;
   secondary_color: string;

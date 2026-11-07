@@ -130,10 +130,10 @@ export function getCountryPaymentOptions(
   config?: CentralPaymentConfig | null
 ): CountryPaymentOption[] {
   const cfg = config || DEFAULT_CENTRAL_PAYMENT_CONFIG;
-  const merchantCode = cfg.orangeMoneyBurkina.merchantCode || '65565805';
+  const merchantCode = cfg.orangeMoneyBurkina.merchantCode || '';
   const cleanAmount = Math.max(0, Math.round(amount));
-  const internationalPhone = cfg.internationalRecipient.phone || '+226 65 56 58 05';
-  const rawRecipient = internationalPhone.replace(/[^0-9]/g, ''); // e.g. 22665565805
+  const internationalPhone = cfg.internationalRecipient.phone || '';
+  const rawRecipient = internationalPhone.replace(/[^0-9]/g, '');
 
   switch (countryCode) {
     case 'BF': {
@@ -298,7 +298,7 @@ export function getCountryPaymentOptions(
             `1. Ouvrez l'application Taptap Send sur votre smartphone`,
             `2. Sélectionnez le pays destinataire : Burkina Faso`,
             `3. Méthode de réception : 'Orange Money'`,
-            `4. Numéro de téléphone bénéficiaire : +226 65 56 58 05`,
+            `4. Numéro de téléphone bénéficiaire : ${internationalPhone || 'Non configuré'}`,
             `5. Nom bénéficiaire : Nanasore Trésorerie`,
             `6. Indiquez la valeur équivalente à ${formatCFA(cleanAmount)} et validez par carte.`
           ]
@@ -310,11 +310,11 @@ export function getCountryPaymentOptions(
           badge: 'Europe Direct',
           type: 'CROSS_BORDER',
           recipientNumber: internationalPhone,
-          instructions: `Ouvrez l'application Orange Money Europe > Transférer vers Burkina Faso > Destinataire : +226 65 56 58 05.`,
+          instructions: `Ouvrez l'application Orange Money Europe > Transférer vers Burkina Faso > Destinataire : ${internationalPhone || 'Numéro Marchand'}.`,
           steps: [
             `1. Ouvrez votre compte Orange Money Europe`,
             `2. Cliquez sur 'Envoyer de l\'argent' vers le Burkina Faso`,
-            `3. Renseignez le numéro : +226 65 56 58 05`,
+            `3. Renseignez le numéro : ${internationalPhone || 'Numéro Marchand'}`,
             `4. Validez le montant équivalent à ${formatCFA(cleanAmount)}.`
           ]
         }

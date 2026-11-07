@@ -7,7 +7,7 @@ export const DEFAULT_RESUME_DATA: ResumeData = {
     fullName: 'Amadou Diallo',
     title: 'Responsable d\'Exploitation Commerciale & Consultant Juridique',
     email: 'amadou.diallo@email.com',
-    phone: '+226 65 56 58 05',
+    phone: '',
     location: 'Bobo-Dioulasso, Secteur 16 • Burkina Faso',
     linkedin: 'linkedin.com/in/amadou-diallo',
     portfolio: 'diallo-consulting.pro',

@@ -30,14 +30,15 @@ export function attachCustomDomainsRoutes(app: Express): void {
    */
   app.post('/api/domains/register', async (req: Request, res: Response): Promise<void> => {
     try {
-      const { tenant_id, custom_domain } = req.body || {};
+      const tenantId = req.body?.tenantId || req.body?.tenant_id;
+      const rawDomain = req.body?.domain || req.body?.custom_domain;
 
-      if (!tenant_id || !custom_domain) {
-        res.status(400).json({ error: 'Les champs tenant_id et custom_domain sont obligatoires.' });
+      if (!tenantId || !rawDomain) {
+        res.status(400).json({ error: 'Les champs tenantId (ou tenant_id) et domain (ou custom_domain) sont obligatoires.' });
         return;
       }
 
-      const cleanDomain = normalizeDomain(custom_domain);
+      const cleanDomain = normalizeDomain(rawDomain);
       const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i;
       if (!domainRegex.test(cleanDomain) || cleanDomain.includes('localhost')) {
         res.status(400).json({ error: `Le nom de domaine '${cleanDomain}' n'est pas un domaine valide.` });
@@ -51,7 +52,7 @@ export function attachCustomDomainsRoutes(app: Express): void {
         .from('tenants')
         .select('id, name')
         .eq('custom_domain', cleanDomain)
-        .neq('id', tenant_id)
+        .neq('id', tenantId)
         .maybeSingle();
 
       if (existingDomainTenant) {
@@ -79,11 +80,12 @@ export function attachCustomDomainsRoutes(app: Express): void {
             settings: {
               min_tls_version: '1.2',
               http2: 'on',
+              tls_1_3: 'on',
             },
             cloudflare_branding: true,
           },
           custom_metadata: {
-            tenant_id,
+            tenant_id: tenantId,
             app: 'nanasore',
           },
         };
@@ -153,6 +155,24 @@ export function attachCustomDomainsRoutes(app: Express): void {
         };
       }
 
+      const dnsRecordsPayload = {
+        cname: {
+          type: 'CNAME',
+          name: cleanDomain.includes('.') && cleanDomain.split('.').length > 2 ? cleanDomain.split('.')[0] : '@',
+          value: cfFallbackOrigin,
+        },
+        ownership: {
+          type: 'TXT',
+          name: ownershipVerification?.name || `_cf-custom-hostname.${cleanDomain}`,
+          value: ownershipVerification?.value || '',
+        },
+        ssl_dcv: {
+          type: 'TXT',
+          name: sslVerificationData?.validation_records?.[0]?.txt_name || sslVerificationData?.validation_records?.[0]?.name || '',
+          value: sslVerificationData?.validation_records?.[0]?.txt_value || sslVerificationData?.validation_records?.[0]?.value || '',
+        },
+      };
+
       // 3. Mise à jour Supabase
       await supabase
         .from('tenants')
@@ -161,18 +181,20 @@ export function attachCustomDomainsRoutes(app: Express): void {
           routing_type: 'custom',
           domain_status: 'pending',
           cloudflare_hostname_id: cfHostnameId,
+          dns_records: dnsRecordsPayload,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', tenant_id);
+        .eq('id', tenantId);
 
       res.status(200).json({
         success: true,
         message: `Domaine '${cleanDomain}' enregistré avec succès en attente de validation DNS.`,
-        tenant_id,
+        tenant_id: tenantId,
         custom_domain: cleanDomain,
         routing_type: 'custom',
         domain_status: cfStatus,
         cloudflare_hostname_id: cfHostnameId,
+        dns_records: dnsRecordsPayload,
         dns_instructions: {
           cname: {
             record_type: 'CNAME',
@@ -191,21 +213,20 @@ export function attachCustomDomainsRoutes(app: Express): void {
   });
 
   /**
-   * POST /api/domains/verify
+   * Helper unifié de vérification de domaine
    */
-  app.post('/api/domains/verify', async (req: Request, res: Response): Promise<void> => {
+  async function handleVerify(tenantId: string, res: Response) {
     try {
-      const { tenant_id } = req.body || {};
-      if (!tenant_id) {
-        res.status(400).json({ error: 'tenant_id est requis.' });
+      if (!tenantId) {
+        res.status(400).json({ error: 'tenantId (ou tenant_id) est requis.' });
         return;
       }
 
       const supabase = getSupabase();
       const { data: tenant } = await supabase
         .from('tenants')
-        .select('id, name, custom_domain, domain_status, cloudflare_hostname_id')
-        .eq('id', tenant_id)
+        .select('id, name, custom_domain, domain_status, cloudflare_hostname_id, dns_records')
+        .eq('id', tenantId)
         .maybeSingle();
 
       if (!tenant || !tenant.custom_domain) {
@@ -244,15 +265,16 @@ export function attachCustomDomainsRoutes(app: Express): void {
         await supabase
           .from('tenants')
           .update({ domain_status: newStatus, updated_at: new Date().toISOString() })
-          .eq('id', tenant_id);
+          .eq('id', tenantId);
       }
 
       res.status(200).json({
         success: true,
-        tenant_id,
+        tenant_id: tenantId,
         custom_domain: tenant.custom_domain,
         domain_status: newStatus,
         is_active: isDomainActive,
+        dns_records: tenant.dns_records || {},
         cloudflare_details: cfHostnameData || {
           hostname: tenant.custom_domain,
           status: cfStatus,
@@ -262,5 +284,21 @@ export function attachCustomDomainsRoutes(app: Express): void {
       console.error('[API Express domains/verify] Exception:', err);
       res.status(500).json({ error: 'Erreur vérification DNS', message: err?.message });
     }
+  }
+
+  /**
+   * POST /api/domains/verify
+   */
+  app.post('/api/domains/verify', async (req: Request, res: Response): Promise<void> => {
+    const tenantId = req.body?.tenantId || req.body?.tenant_id;
+    await handleVerify(tenantId, res);
+  });
+
+  /**
+   * GET /api/domains/verify
+   */
+  app.get('/api/domains/verify', async (req: Request, res: Response): Promise<void> => {
+    const tenantId = (req.query?.tenantId || req.query?.tenant_id) as string;
+    await handleVerify(tenantId, res);
   });
 }

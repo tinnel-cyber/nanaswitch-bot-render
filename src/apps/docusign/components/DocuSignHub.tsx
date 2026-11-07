@@ -513,7 +513,7 @@ export default function DocuSignHub({
   const [stampMention, setStampMention] = useState<string>('LU ET APPROUVÉ');
   const [stampContact, setStampContact] = useState<string>(() => {
     const city = currentUser?.city || 'Abidjan';
-    const phone = currentUser?.phone || '+225 07 00 00 00';
+    const phone = currentUser?.phone || '';
     return `${city} • ${phone}`;
   });
   const [stampShape, setStampShape] = useState<'RECTANGULAR' | 'CIRCULAR'>('RECTANGULAR');

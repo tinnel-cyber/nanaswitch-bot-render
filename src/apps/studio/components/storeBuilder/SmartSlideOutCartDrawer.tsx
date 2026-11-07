@@ -77,7 +77,7 @@ export const SmartSlideOutCartDrawer: React.FC<SmartSlideOutCartDrawerProps> = (
   onClose: propOnClose,
   storeName = 'Boutique Officielle',
   storeSlug = 'boutique',
-  whatsappNumber = '+225 07 00 00 00',
+  whatsappNumber = '',
   products = [],
   onOpenFunnel,
   currency = 'FCFA'

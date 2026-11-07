@@ -32,7 +32,7 @@ export interface MobileAppBottomTabBarProps {
 
 export const MobileAppBottomTabBar: React.FC<MobileAppBottomTabBarProps> = ({
   storeName = 'Boutique',
-  whatsappNumber = '+225 07 00 00 00',
+  whatsappNumber = '',
   allProducts = [],
   categories = [],
   selectedCategory = 'Tous les produits',

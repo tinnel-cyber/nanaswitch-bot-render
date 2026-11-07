@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.tenants (
     custom_domain TEXT UNIQUE NULL,
     domain_status tenant_domain_status NOT NULL DEFAULT 'none',
     cloudflare_hostname_id TEXT NULL,
+    dns_records JSONB NOT NULL DEFAULT '{}'::jsonb,
     logo_url TEXT NULL,
     primary_color TEXT NOT NULL DEFAULT '#000000',
     secondary_color TEXT NOT NULL DEFAULT '#ffffff',

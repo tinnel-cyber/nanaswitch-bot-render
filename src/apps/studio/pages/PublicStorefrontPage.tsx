@@ -163,7 +163,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(() => {
     const base: StoreConfig = {
       storeName: isSandboxMode ? (sandboxDraftConfig?.storeName || 'Sandbox Tech & Commerce') : 'Boutique Officielle',
-      whatsappPhone: isSandboxMode ? (sandboxDraftConfig?.whatsappNumber || '+225 07 00 00 00') : '+225 07 00 00 00',
+      whatsappPhone: isSandboxMode ? (sandboxDraftConfig?.whatsappNumber || '') : '',
       welcomeText: isSandboxMode ? (sandboxDraftConfig?.heroSubtitle || 'Mode Sandbox Super-Admin') : 'Bienvenue sur notre boutique en ligne',
       logoUrl: isSandboxMode ? (sandboxDraftConfig?.logoUrl || '') : '',
       bannerImage: isSandboxMode ? (sandboxDraftConfig?.heroBannerImageUrl || '') : '',

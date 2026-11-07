@@ -687,7 +687,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
   let sampleDebtText = smsConfig.debtReminderTemplate
     .replace('{client}', previewClient.name)
     .replace('{montant}', formatCFA(previewClient.totalDebt || 18500))
-    .replace('{boutique}', currentUser?.storeName || 'Alimentation de la Paix')
+    .replace('{boutique}', currentUser?.storeName || 'Ma Boutique')
     .replace('{echeance}', '15 Septembre');
   // Élimine toute éventuelle répétition résiduelle "F CFA F CFA"
   sampleDebtText = sampleDebtText.replace(/F CFA\s+F CFA/gi, 'F CFA');

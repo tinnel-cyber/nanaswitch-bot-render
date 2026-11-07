@@ -71,7 +71,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
 }) => {
   const safeStoreId = currentUser?.storeId || 'store-nana-1';
   const safeName = currentUser?.name || 'Partenaire Ambassadeur';
-  const safePhone = currentUser?.phone || '+225 07 00 00 00';
+  const safePhone = currentUser?.phone || '';
   const affiliateCode = (currentUser as any)?.affiliateCode || (currentUser as any)?.affiliateId || safeStoreId.replace('store-', 'AMB-').toUpperCase();
   
   const siteOrigin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://nanasore.com';

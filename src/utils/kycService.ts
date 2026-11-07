@@ -129,7 +129,7 @@ export async function getStoreKycRequest(storeId: string): Promise<KycSubmission
       documentType: 'CNIB',
       createdAt: Date.now(),
       managerFullName: 'Super Administrateur',
-      whatsappPhone: '+226 65 56 58 05'
+      whatsappPhone: ''
     } as KycSubmission;
   }
 

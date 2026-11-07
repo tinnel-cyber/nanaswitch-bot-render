@@ -174,7 +174,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
     } catch {}
     return {
       storeName: currentUser?.storeName || 'Ma Boutique Studio',
-      whatsappPhone: currentUser?.phone || '+225 07 00 00 00',
+      whatsappPhone: currentUser?.phone || '',
       welcomeText: 'Bienvenue sur notre boutique officielle',
       logoUrl: '',
       bannerImage: '',

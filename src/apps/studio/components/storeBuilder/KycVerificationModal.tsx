@@ -53,7 +53,7 @@ export const KycVerificationModal: React.FC<KycVerificationModalProps> = ({
 
   const activeStoreId = propStoreId || currentUser?.storeId || 'store-nana-1';
   const [managerFullName, setManagerFullName] = useState(managerName || currentUser?.name || '');
-  const [whatsappPhone, setWhatsappPhone] = useState(managerPhone || currentUser?.phone || '+225 07 00 00 00');
+  const [whatsappPhone, setWhatsappPhone] = useState(managerPhone || currentUser?.phone || '');
   const [documentType, setDocumentType] = useState<KycDocumentType>('CNIB');
 
   // Photos & Compression Base64
@@ -167,7 +167,7 @@ export const KycVerificationModal: React.FC<KycVerificationModalProps> = ({
       storeName: storeName || currentUser?.storeName || 'Ma Boutique',
       managerFullName: managerFullName.trim(),
       managerPhotoUrl,
-      whatsappPhone: whatsappPhone.trim() || '+225 07 00 00 00',
+      whatsappPhone: whatsappPhone.trim(),
       documentType,
       documentPhotoUrl,
       status: 'pending',
