@@ -44,16 +44,29 @@ import {
   Star as StarIcon,
   Reply,
   MoreVertical,
-  Maximize2
+  Maximize2,
+  CheckCircle2,
+  Paintbrush,
+  Layers,
+  Flame,
+  Crown
 } from 'lucide-react';
 
 export interface EmailBlock {
   id: string;
-  type: 'logo' | 'heading' | 'text' | 'button' | 'image' | 'footer' | 'divider' | 'badge' | 'testimonial';
+  type: 'logo' | 'banner' | 'heading' | 'text' | 'button' | 'image' | 'footer' | 'divider' | 'badge' | 'testimonial';
   content: string;
   url?: string;
   headingLevel?: 'h1' | 'h2' | 'h3';
   logoWidth?: number;
+  bannerConfig?: {
+    subtitle?: string;
+    gradientPreset?: 'royal' | 'luxury' | 'sunset' | 'emerald' | 'cyber' | 'pastel' | 'image';
+    imageUrl?: string;
+    height?: 'compact' | 'standard' | 'large';
+    borderRadius?: 'rounded' | 'sharp';
+    badgeText?: string;
+  };
   styles?: {
     align?: 'left' | 'center' | 'right';
     textColor?: string;
@@ -71,6 +84,75 @@ export interface EmailBuilderStudioProps {
   initialSenderName?: string;
 }
 
+// Bannières vectorielles ultra-légères (0 Ko) & optimisées
+export const BANNER_PRESETS: Record<string, { 
+  name: string; 
+  gradient: string; 
+  textColor: string; 
+  subtextColor: string; 
+  badgeBg: string; 
+  weightLabel: string;
+  isImage?: boolean;
+}> = {
+  royal: {
+    name: 'Bleu Royal Nanasore',
+    gradient: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 50%, #3B82F6 100%)',
+    textColor: '#ffffff',
+    subtextColor: '#DBEAFE',
+    badgeBg: 'rgba(255,255,255,0.22)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  luxury: {
+    name: 'Prestige & Or Sombre',
+    gradient: 'linear-gradient(135deg, #0F172A 0%, #1E293B 60%, #B45309 100%)',
+    textColor: '#ffffff',
+    subtextColor: '#FDE68A',
+    badgeBg: 'rgba(217,119,6,0.3)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  sunset: {
+    name: 'Vente Flash Sunset',
+    gradient: 'linear-gradient(135deg, #DC2626 0%, #EA580C 50%, #F59E0B 100%)',
+    textColor: '#ffffff',
+    subtextColor: '#FEF3C7',
+    badgeBg: 'rgba(255,255,255,0.25)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  emerald: {
+    name: 'Émeraude & Nature',
+    gradient: 'linear-gradient(135deg, #064E3B 0%, #059669 60%, #10B981 100%)',
+    textColor: '#ffffff',
+    subtextColor: '#D1FAE5',
+    badgeBg: 'rgba(255,255,255,0.22)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  cyber: {
+    name: 'Indigo & Cyber Tech',
+    gradient: 'linear-gradient(135deg, #312E81 0%, #4F46E5 50%, #7C3AED 100%)',
+    textColor: '#ffffff',
+    subtextColor: '#E0E7FF',
+    badgeBg: 'rgba(255,255,255,0.25)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  pastel: {
+    name: 'Crème & Ambre Doux',
+    gradient: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 50%, #FBBF24 100%)',
+    textColor: '#78350F',
+    subtextColor: '#92400E',
+    badgeBg: 'rgba(120,53,15,0.15)',
+    weightLabel: '⚡ 0 Ko (Poids Plume)'
+  },
+  image: {
+    name: 'Image WebP Compressée (<30 Ko)',
+    gradient: 'linear-gradient(rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.72))',
+    textColor: '#ffffff',
+    subtextColor: '#E2E8F0',
+    badgeBg: 'rgba(255,255,255,0.25)',
+    weightLabel: '🖼️ WebP Optimisé (< 30 Ko)',
+    isImage: true
+  }
+};
+
 export function EmailBuilderStudio({
   onTemplateSave,
   initialSubject = '🔥 Offre exclusive de la semaine !',
@@ -81,12 +163,15 @@ export function EmailBuilderStudio({
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>('1');
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>('banner-hero');
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
-  const [inboxClient, setInboxClient] = useState<'gmail' | 'apple'>('gmail');
 
-  // Palette de couleurs pour entreprise
+  // Couleurs d'arrière-plan configurables
+  const [emailBgColor, setEmailBgColor] = useState<string>('#FBF9F5');
+  const [cardBgColor, setCardBgColor] = useState<string>('#FFFFFF');
+
+  // Palette de couleurs de texte pour entreprise
   const colorPresets = [
     { label: 'Bleu Royal Nanasore', value: '#2563EB' },
     { label: 'Bleu Sombre', value: '#1D4ED8' },
@@ -97,7 +182,7 @@ export function EmailBuilderStudio({
     { label: 'Rouge Flash', value: '#EF4444' }
   ];
 
-  // Blocs dynamiques enrichis avec Logo, H1/H2/H3, liens cliquables
+  // Blocs dynamiques enrichis avec Logo, Bannière Stylisée 0 Ko, H1/H2/H3, Liens
   const [blocks, setBlocks] = useState<EmailBlock[]>([
     {
       id: '1',
@@ -107,10 +192,24 @@ export function EmailBuilderStudio({
       logoWidth: 150,
       styles: { align: 'center' }
     },
+    {
+      id: 'banner-hero',
+      type: 'banner',
+      content: '🎉 GRANDES VENTES PRIVÉES • JUSQU\'À -50%',
+      url: 'https://nanasore.com',
+      bannerConfig: {
+        subtitle: 'Valable ce week-end uniquement sur l\'ensemble du catalogue boutique',
+        gradientPreset: 'royal',
+        badgeText: '⚡ OFFRE FLASH',
+        height: 'standard',
+        borderRadius: 'rounded'
+      },
+      styles: { align: 'center', textColor: '#ffffff' }
+    },
     { 
       id: '2', 
       type: 'badge', 
-      content: '⚡ OFFRE FLASH LIMITÉE • -30% CE WEEK-END', 
+      content: '⚡ ÉDITION LIMITÉE • ACCÈS PRIORITAIRE CLIENTS', 
       styles: { align: 'center', textColor: '#2563EB', backgroundColor: '#EFF6FF' } 
     },
     { 
@@ -154,8 +253,20 @@ export function EmailBuilderStudio({
     let defaultUrl: string | undefined = undefined;
     let headingLevel: EmailBlock['headingLevel'] = undefined;
     let logoWidth: number | undefined = undefined;
+    let bannerConfig: EmailBlock['bannerConfig'] = undefined;
 
-    if (type === 'logo') {
+    if (type === 'banner') {
+      defaultContent = '🔥 OFFRE SPÉCIALE • JUSQU\'À -40%';
+      defaultUrl = 'https://nanasore.com';
+      defaultStyles = { align: 'center', textColor: '#ffffff' };
+      bannerConfig = {
+        subtitle: 'Profitez de tarifs préférentiels pendant 48 heures seulement',
+        gradientPreset: 'royal',
+        badgeText: '⚡ VENTES FLASH',
+        height: 'standard',
+        borderRadius: 'rounded'
+      };
+    } else if (type === 'logo') {
       defaultContent = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=300&auto=format&fit=crop';
       defaultUrl = 'https://nanasore.com';
       logoWidth = 140;
@@ -190,7 +301,8 @@ export function EmailBuilderStudio({
       styles: defaultStyles,
       url: defaultUrl,
       headingLevel,
-      logoWidth
+      logoWidth,
+      bannerConfig
     };
 
     setBlocks(prev => [...prev, newBlock]);
@@ -216,12 +328,42 @@ export function EmailBuilderStudio({
     setBlocks(newBlocks);
   };
 
+  // Positionnement rapide de la bannière : En haut ou juste sous le logo
+  const placeBannerPosition = (id: string, underLogo: boolean) => {
+    const blockIndex = blocks.findIndex(b => b.id === id);
+    if (blockIndex === -1) return;
+    const target = blocks[blockIndex];
+    const remaining = blocks.filter(b => b.id !== id);
+
+    if (!underLogo) {
+      // Tout en haut (position 0)
+      setBlocks([target, ...remaining]);
+    } else {
+      // Juste après le logo si existant
+      const logoIdx = remaining.findIndex(b => b.type === 'logo');
+      if (logoIdx !== -1) {
+        const next = [...remaining];
+        next.splice(logoIdx + 1, 0, target);
+        setBlocks(next);
+      } else {
+        setBlocks([target, ...remaining]);
+      }
+    }
+  };
+
   const updateBlockContent = (id: string, content: string) => {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b));
   };
 
   const updateBlockUrl = (id: string, url: string) => {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, url } : b));
+  };
+
+  const updateBannerConfig = (id: string, configUpdates: Partial<NonNullable<EmailBlock['bannerConfig']>>) => {
+    setBlocks(prev => prev.map(b => b.id === id ? {
+      ...b,
+      bannerConfig: { ...b.bannerConfig, ...configUpdates }
+    } : b));
   };
 
   const updateBlockStyles = (id: string, styleUpdates: Partial<NonNullable<EmailBlock['styles']>>) => {
@@ -251,14 +393,14 @@ export function EmailBuilderStudio({
 
     if (selectedBlockId) {
       const activeBlock = blocks.find(b => b.id === selectedBlockId);
-      if (activeBlock && (activeBlock.type === 'text' || activeBlock.type === 'heading' || activeBlock.type === 'button')) {
+      if (activeBlock && (activeBlock.type === 'text' || activeBlock.type === 'heading' || activeBlock.type === 'button' || activeBlock.type === 'banner')) {
         updateBlockContent(selectedBlockId, activeBlock.content + ' ' + variable);
       }
     }
   };
 
   const insertEmoji = (emoji: string) => {
-    const targetId = selectedBlockId || blocks.find(b => b.type === 'text' || b.type === 'heading')?.id;
+    const targetId = selectedBlockId || blocks.find(b => b.type === 'text' || b.type === 'heading' || b.type === 'banner')?.id;
     if (targetId) {
       const target = blocks.find(b => b.id === targetId);
       if (target) {
@@ -269,6 +411,9 @@ export function EmailBuilderStudio({
 
   // Génération du code HTML brut compatible Brevo, Gmail, Apple Mail et Outlook
   const generateHtmlOutput = () => {
+    const isCardDark = cardBgColor.toLowerCase() === '#0f172a' || cardBgColor.toLowerCase() === '#1e293b';
+    const defaultTextColor = isCardDark ? '#f8fafc' : '#1e293b';
+
     return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -276,19 +421,59 @@ export function EmailBuilderStudio({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject || 'Campagne E-mailing Nanasore'}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #FBF9F5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
-  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FBF9F5; padding: 30px 10px;">
+<body style="margin: 0; padding: 0; background-color: ${emailBgColor}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: ${defaultTextColor}; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: ${emailBgColor}; padding: 30px 10px;">
     <tr>
       <td align="center">
-        <!-- Conteneur Carte Blanche -->
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.03);">
+        <!-- Conteneur Carte Email Personnalisée -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: ${cardBgColor}; border-radius: 20px; border: 1px solid ${isCardDark ? '#334155' : '#e2e8f0'}; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.04);">
           
           <!-- Corps de l'E-mail -->
           <tr>
             <td style="padding: 32px 32px 24px 32px;">
               ${blocks.map(b => {
                 const align = b.styles?.align || 'left';
-                const color = b.styles?.textColor || '#1e293b';
+                const color = b.styles?.textColor || defaultTextColor;
+
+                // BLOC : BANNIÈRE STYLISÉE (0 Ko OU HAUTE COMPRESSION)
+                if (b.type === 'banner') {
+                  const presetKey = b.bannerConfig?.gradientPreset || 'royal';
+                  const preset = BANNER_PRESETS[presetKey] || BANNER_PRESETS['royal'];
+                  const height = b.bannerConfig?.height || 'standard';
+                  const padY = height === 'compact' ? '18px' : height === 'large' ? '36px' : '26px';
+                  const titleSize = height === 'compact' ? '17px' : height === 'large' ? '24px' : '20px';
+                  const bRadius = b.bannerConfig?.borderRadius === 'sharp' ? '0px' : '16px';
+                  const textColor = preset.textColor || '#ffffff';
+                  const subColor = preset.subtextColor || '#f8fafc';
+                  const bgStyle = presetKey === 'image' && b.bannerConfig?.imageUrl
+                    ? `background: linear-gradient(rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.72)), url('${b.bannerConfig.imageUrl}'); background-size: cover; background-position: center;`
+                    : `background: ${preset.gradient};`;
+
+                  const contentHtml = `
+                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px; border-radius: ${bRadius}; overflow: hidden; ${bgStyle} box-shadow: 0 4px 14px rgba(0,0,0,0.12);">
+                      <tr>
+                        <td align="center" style="padding: ${padY} 24px; text-align: center;">
+                          ${b.bannerConfig?.badgeText ? `
+                            <div style="margin-bottom: 8px;">
+                              <span style="display: inline-block; background-color: ${preset.badgeBg}; color: ${textColor}; font-size: 10px; font-weight: 800; padding: 4px 12px; border-radius: 50px; text-transform: uppercase; letter-spacing: 0.6px; border: 1px solid rgba(255,255,255,0.35);">
+                                ${b.bannerConfig.badgeText}
+                              </span>
+                            </div>` : ''}
+                          <h2 style="margin: 0; color: ${textColor}; font-size: ${titleSize}; font-weight: 800; line-height: 1.3; letter-spacing: -0.3px;">
+                            ${b.content}
+                          </h2>
+                          ${b.bannerConfig?.subtitle ? `
+                            <p style="margin: 8px 0 0 0; color: ${subColor}; font-size: 13px; font-weight: 500; opacity: 0.95; line-height: 1.4;">
+                              ${b.bannerConfig.subtitle}
+                            </p>` : ''}
+                        </td>
+                      </tr>
+                    </table>`;
+
+                  return b.url 
+                    ? `<a href="${b.url}" target="_blank" style="text-decoration: none; display: block;">${contentHtml}</a>` 
+                    : contentHtml;
+                }
 
                 // BLOC : LOGO HEADER
                 if (b.type === 'logo') {
@@ -375,8 +560,8 @@ export function EmailBuilderStudio({
 
           <!-- Pied de page officiel Nanasore -->
           <tr>
-            <td style="padding: 16px 32px 24px 32px; background-color: #fafaf9; border-top: 1px solid #f1f5f9; text-align: center;">
-              <p style="margin: 0; font-size: 10px; color: #a8a29e; font-weight: 600;">
+            <td style="padding: 16px 32px 24px 32px; background-color: ${isCardDark ? '#111827' : '#fafaf9'}; border-top: 1px solid ${isCardDark ? '#374151' : '#f1f5f9'}; text-align: center;">
+              <p style="margin: 0; font-size: 10px; color: ${isCardDark ? '#9ca3af' : '#a8a29e'}; font-weight: 600;">
                 Expédié avec la suite Nanasore E-mailing • Conforme RGPD & CAN-SPAM
               </p>
             </td>
@@ -402,26 +587,26 @@ export function EmailBuilderStudio({
   const preheaderText = blocks.find(b => b.type === 'text')?.content.slice(0, 75) || 'Découvrez nos promotions et nouveautés en exclusivité...';
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[820px]">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[860px]">
       
       {/* =========================================================================
-          PANNEAU GAUCHE : OUTILS, H1/H2/H3, LIENS, COULEURS & BLOCS (5 COLS)
+          PANNEAU GAUCHE : OUTILS, COULEUR DE FOND, BANNIÈRES, H1/H2/H3, BLOCS
          ========================================================================= */}
-      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[880px]">
+      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[920px]">
         
         {/* Titre & Sous-titre */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full">
-              Studio Pro 4.0
+              Studio Pro 4.2
             </span>
           </div>
           <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
             <Layout className="w-5 h-5 text-blue-600" /> Studio Éditeur & Blocs
           </h2>
           <p className="text-xs text-slate-500">
-            Personnalisez vos titres H1/H2/H3, textes cliquables, logo et métadonnées.
+            Personnalisez vos fonds de mail, bannières stylisées 0 Ko, logo et titres cliquables.
           </p>
         </div>
 
@@ -459,17 +644,120 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* Bibliothèque de Blocs Modulaires Étendue (avec Logo Header) */}
+        {/* =====================================================================
+            NOUVEAU : PERSONNALISATION DE LA COULEUR D'ARRIÈRE-PLAN DU MAIL
+           ===================================================================== */}
+        <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Paintbrush className="w-3.5 h-3.5 text-blue-600" /> Couleurs d'Arrière-Plan
+            </h3>
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              Thème Visuel
+            </span>
+          </div>
+
+          {/* 1. Fond Externe (Canvas global) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">Fond Externe du Mail</label>
+              <div className="flex items-center gap-1.5">
+                <input 
+                  type="color" 
+                  value={emailBgColor} 
+                  onChange={(e) => setEmailBgColor(e.target.value)}
+                  className="w-5 h-5 rounded cursor-pointer border border-slate-300 p-0"
+                  title="Choisir une couleur personnalisée"
+                />
+                <span className="font-mono text-[10px] text-slate-500 font-bold">{emailBgColor}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-6 gap-1.5">
+              {[
+                { label: 'Blanc Cassé Nanasore', value: '#FBF9F5', border: 'border-slate-300' },
+                { label: 'Blanc Pur', value: '#FFFFFF', border: 'border-slate-300' },
+                { label: 'Gris Ardoise Clair', value: '#F1F5F9', border: 'border-slate-300' },
+                { label: 'Bleu Nuit Doux', value: '#0F172A', border: 'border-slate-700' },
+                { label: 'Crème Dorée', value: '#FEF3C7', border: 'border-amber-300' },
+                { label: 'Bleu Ciel Pastel', value: '#EFF6FF', border: 'border-blue-300' }
+              ].map((bg) => (
+                <button
+                  key={bg.value}
+                  type="button"
+                  onClick={() => setEmailBgColor(bg.value)}
+                  className={`h-7 rounded-lg border-2 transition-all cursor-pointer ${
+                    emailBgColor.toLowerCase() === bg.value.toLowerCase() ? 'ring-2 ring-blue-600 ring-offset-1 scale-105' : bg.border
+                  }`}
+                  style={{ backgroundColor: bg.value }}
+                  title={bg.label}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Fond Carte Centrale (Contenu) */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">Fond Carte Contenu</label>
+              <div className="flex items-center gap-1.5">
+                <input 
+                  type="color" 
+                  value={cardBgColor} 
+                  onChange={(e) => setCardBgColor(e.target.value)}
+                  className="w-5 h-5 rounded cursor-pointer border border-slate-300 p-0"
+                  title="Choisir une couleur personnalisée"
+                />
+                <span className="font-mono text-[10px] text-slate-500 font-bold">{cardBgColor}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: 'Blanc Pur', value: '#FFFFFF', name: 'Blanc' },
+                { label: 'Blanc Cassé', value: '#FAFAF9', name: 'Cassé' },
+                { label: 'Crème Douce', value: '#FFFDF7', name: 'Crème' },
+                { label: 'Ardoise Pro', value: '#1E293B', name: 'Sombre' }
+              ].map((card) => (
+                <button
+                  key={card.value}
+                  type="button"
+                  onClick={() => setCardBgColor(card.value)}
+                  className={`py-1.5 px-2 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    cardBgColor.toLowerCase() === card.value.toLowerCase() 
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-400" style={{ backgroundColor: card.value }} />
+                  <span>{card.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Bibliothèque de Blocs Modulaires Étendue */}
         <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
               Ajouter un bloc modulaire
             </h3>
-            <span className="text-[10px] text-blue-600 font-bold">8 types</span>
+            <span className="text-[10px] text-blue-600 font-bold">9 types</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {/* 1. Bloc Logo Header */}
+            {/* 1. NOUVEAU : Bloc Bannière Stylisée (0 Ko / Ultra-Légère) */}
+            <button 
+              type="button"
+              onClick={() => addBlock('banner')} 
+              className="col-span-2 p-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer hover:shadow-md active:scale-98"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Bannière Stylisée (0 Ko / Compressée)</span>
+            </button>
+
+            {/* 2. Bloc Logo Header */}
             <button 
               type="button"
               onClick={() => addBlock('logo')} 
@@ -478,7 +766,7 @@ export function EmailBuilderStudio({
               <ImageIcon className="w-4 h-4 text-blue-600" /> Logo Header
             </button>
 
-            {/* 2. Bloc Titre */}
+            {/* 3. Bloc Titre */}
             <button 
               type="button"
               onClick={() => addBlock('heading')} 
@@ -487,7 +775,7 @@ export function EmailBuilderStudio({
               <Type className="w-4 h-4 text-blue-600" /> Titre (H1/H2/H3)
             </button>
 
-            {/* 3. Bloc Texte */}
+            {/* 4. Bloc Texte */}
             <button 
               type="button"
               onClick={() => addBlock('text')} 
@@ -496,16 +784,16 @@ export function EmailBuilderStudio({
               <FileText className="w-4 h-4 text-blue-600" /> Paragraphe
             </button>
 
-            {/* 4. Bloc Bouton CTA */}
+            {/* 5. Bloc Bouton CTA */}
             <button 
               type="button"
               onClick={() => addBlock('button')} 
               className="p-2.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer hover:border-blue-300"
             >
-              <Sparkles className="w-4 h-4 text-blue-600" /> Bouton CTA
+              <Zap className="w-4 h-4 text-blue-600" /> Bouton CTA
             </button>
 
-            {/* 5. Bloc Image */}
+            {/* 6. Bloc Image */}
             <button 
               type="button"
               onClick={() => addBlock('image')} 
@@ -514,7 +802,7 @@ export function EmailBuilderStudio({
               <ImageIcon className="w-4 h-4 text-blue-600" /> Image URL
             </button>
 
-            {/* 6. Bloc Badge */}
+            {/* 7. Bloc Badge */}
             <button 
               type="button"
               onClick={() => addBlock('badge')} 
@@ -523,7 +811,7 @@ export function EmailBuilderStudio({
               <Tag className="w-4 h-4 text-blue-600" /> Badge Promo
             </button>
 
-            {/* 7. Bloc Footer Légal */}
+            {/* 8. Bloc Footer Légal */}
             <button 
               type="button"
               onClick={() => addBlock('footer')} 
@@ -535,18 +823,141 @@ export function EmailBuilderStudio({
         </div>
 
         {/* =====================================================================
-            BARRE D'ÉDITION RICHE DU BLOC ACTIF (H1/H2/H3, LIEN CLIQUABLE, COULEURS)
+            BARRE D'ÉDITION DU BLOC SÉLECTIONNÉ (BANNIÈRE, H1/H2/H3, LIENS, STYLES)
            ===================================================================== */}
         {selectedBlock && (
           <div className="space-y-3 bg-white p-4 rounded-2xl border-2 border-blue-600/30 shadow-xs animate-in fade-in">
             <div className="flex items-center justify-between">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5" /> Personnalisation avancée ({selectedBlock.type})
+                <Sliders className="w-3.5 h-3.5" /> Configuration Bloc ({selectedBlock.type})
               </h3>
               <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full">
-                Bloc Sélectionné
+                Actif
               </span>
             </div>
+
+            {/* =================================================================
+                CONFIGURATION SPÉCIFIQUE : BANNIÈRE STYLISÉE (0 KO / COMPRESSÉE)
+               ================================================================= */}
+            {selectedBlock.type === 'banner' && (
+              <div className="space-y-3 pt-1">
+                {/* Positionnement Rapide au Header ou sous le logo */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1.5 flex items-center gap-1">
+                    <Layers className="w-3.5 h-3.5 text-blue-600" /> Positionnement dans le Header
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => placeBannerPosition(selectedBlock.id, false)}
+                      className="px-2.5 py-1.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:text-blue-600 transition-all cursor-pointer text-center"
+                    >
+                      🔝 Tout en haut (Header)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => placeBannerPosition(selectedBlock.id, true)}
+                      className="px-2.5 py-1.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:text-blue-600 transition-all cursor-pointer text-center"
+                    >
+                      👇 Sous le Logo Header
+                    </button>
+                  </div>
+                </div>
+
+                {/* Choix du style de bannière stylisée */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1.5 flex items-center justify-between">
+                    <span>Style Graphique de la Bannière</span>
+                    <span className="text-[9px] font-bold text-emerald-600">⚡ 0 Ko / Poids Plume</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.entries(BANNER_PRESETS).map(([key, preset]) => {
+                      const isActive = (selectedBlock.bannerConfig?.gradientPreset || 'royal') === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => updateBannerConfig(selectedBlock.id, { gradientPreset: key as any })}
+                          className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                            isActive ? 'ring-2 ring-blue-600 border-blue-600 shadow-xs' : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div 
+                            className="h-5 rounded-md mb-1.5 w-full flex items-center justify-center text-[9px] font-black text-white"
+                            style={{ background: preset.gradient }}
+                          >
+                            Aa
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-800 truncate">{preset.name}</span>
+                          <span className="text-[9px] text-slate-400 font-medium">{preset.weightLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Si Image Haute Compression sélectionnée */}
+                {selectedBlock.bannerConfig?.gradientPreset === 'image' && (
+                  <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 space-y-2">
+                    <label className="block text-[10px] font-bold text-blue-900">
+                      URL de l'image de bannière compressée
+                    </label>
+                    <input 
+                      type="url"
+                      value={selectedBlock.bannerConfig?.imageUrl || ''}
+                      onChange={(e) => updateBannerConfig(selectedBlock.id, { imageUrl: e.target.value })}
+                      placeholder="https://images.unsplash.com/...&auto=format&fit=crop&q=70&w=600"
+                      className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono"
+                    />
+                    <div className="flex items-center gap-1.5 text-[9px] text-blue-700 font-semibold">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Optimisation automatique WebP active (&lt; 30 Ko)
+                    </div>
+                  </div>
+                )}
+
+                {/* Hauteur de la Bannière */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Format & Hauteur de Bannière
+                  </label>
+                  <div className="grid grid-cols-3 gap-1 bg-[#FBF9F5] p-1 rounded-xl border border-slate-200">
+                    {[
+                      { id: 'compact', label: 'Compacte (75px)' },
+                      { id: 'standard', label: 'Standard (120px)' },
+                      { id: 'large', label: 'Large (170px)' }
+                    ].map((h) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        onClick={() => updateBannerConfig(selectedBlock.id, { height: h.id as any })}
+                        className={`py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                          (selectedBlock.bannerConfig?.height || 'standard') === h.id
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {h.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Badge d'Accroche de Bannière */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    Badge d'Accroche (Optionnel)
+                  </label>
+                  <input 
+                    type="text"
+                    value={selectedBlock.bannerConfig?.badgeText || ''}
+                    onChange={(e) => updateBannerConfig(selectedBlock.id, { badgeText: e.target.value })}
+                    placeholder="Ex: ⚡ VENTE FLASH, EXCLUSIVITÉ, NOUVEAUTÉ..."
+                    className="w-full px-3 py-1.5 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Sélecteur Spécifique H1 / H2 / H3 pour les titres */}
             {selectedBlock.type === 'heading' && (
@@ -601,8 +1012,8 @@ export function EmailBuilderStudio({
               </div>
             )}
 
-            {/* CHAMP LIEN CLIQUABLE (Hypertexte pour Texte, Titre, Image ou Logo) */}
-            {(selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'image' || selectedBlock.type === 'logo') && (
+            {/* CHAMP LIEN CLIQUABLE (Hypertexte pour Bannière, Texte, Titre, Image ou Logo) */}
+            {(selectedBlock.type === 'banner' || selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'image' || selectedBlock.type === 'logo') && (
               <div className="pt-1">
                 <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
                   <Link className="w-3.5 h-3.5 text-blue-600" />
@@ -612,7 +1023,7 @@ export function EmailBuilderStudio({
                   type="url"
                   value={selectedBlock.url || ''}
                   onChange={(e) => updateBlockUrl(selectedBlock.id, e.target.value)}
-                  placeholder="https://maboutique.com/produit ou https://wa.me/..."
+                  placeholder="https://maboutique.com/promo ou https://wa.me/..."
                   className="w-full px-3 py-2 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -679,23 +1090,25 @@ export function EmailBuilderStudio({
             </div>
 
             {/* Palette de Couleurs */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Couleur du texte</label>
-              <div className="flex items-center gap-2">
-                {colorPresets.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => updateBlockStyles(selectedBlock.id, { textColor: c.value })}
-                    className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer ${
-                      selectedBlock.styles?.textColor === c.value ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : 'border-white'
-                    }`}
-                    style={{ backgroundColor: c.value }}
-                    title={c.label}
-                  />
-                ))}
+            {selectedBlock.type !== 'banner' && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Couleur du texte</label>
+                <div className="flex items-center gap-2">
+                  {colorPresets.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => updateBlockStyles(selectedBlock.id, { textColor: c.value })}
+                      className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer ${
+                        selectedBlock.styles?.textColor === c.value ? 'ring-2 ring-blue-500 ring-offset-2 scale-110' : 'border-white'
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                      title={c.label}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -752,7 +1165,7 @@ export function EmailBuilderStudio({
       </div>
 
       {/* =========================================================================
-          PANNEAU DROITE : PREVIEW EN HAUT & BOÎTE MAIL SIMULÉE (7 COLS)
+          PANNEAU DROITE : PREVIEW EN HAUT & BOÎTE MAIL SIMULÉE
          ========================================================================= */}
       <div className="w-full lg:w-7/12 bg-slate-100 p-6 flex flex-col justify-between">
         
@@ -824,14 +1237,20 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* CONTAINER DE L'ÉDITEUR / PRÉVISUALISEUR */}
-        <div className="flex-1 flex items-center justify-center overflow-auto py-2">
-          <div className={`bg-[#FBF9F5] border border-slate-300 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 flex flex-col ${
-            previewMode === 'mobile' ? 'w-[375px] min-h-[640px]' : 'w-full max-w-xl min-h-[640px]'
-          }`}>
+        {/* CONTAINER DE L'ÉDITEUR AVEC FOND PERSONNALISÉ */}
+        <div 
+          className="flex-1 flex items-center justify-center overflow-auto p-4 transition-colors duration-300 rounded-2xl border border-slate-200/60"
+          style={{ backgroundColor: emailBgColor }}
+        >
+          <div 
+            style={{ backgroundColor: cardBgColor }}
+            className={`shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 flex flex-col border border-slate-300/80 ${
+              previewMode === 'mobile' ? 'w-[375px] min-h-[640px]' : 'w-full max-w-xl min-h-[640px]'
+            }`}
+          >
             
             {/* Header du simulateur */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-500">
+            <div className="bg-white/80 backdrop-blur-xs border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-500">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black">
                   {senderName.charAt(0).toUpperCase()}
@@ -844,7 +1263,7 @@ export function EmailBuilderStudio({
             </div>
 
             {/* Contenu visuel des blocs ou code HTML */}
-            <div className="p-5 space-y-3.5 flex-1 overflow-y-auto max-h-[600px]">
+            <div className="p-5 space-y-3.5 flex-1 overflow-y-auto max-h-[620px]">
               {activeTab === 'visual' ? (
                 blocks.map((block) => {
                   const isSelected = selectedBlockId === block.id;
@@ -860,7 +1279,7 @@ export function EmailBuilderStudio({
                       }`}
                     >
                       {/* Actions rapides sur le bloc */}
-                      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity z-10">
                         <button 
                           type="button"
                           onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 'up'); }}
@@ -888,13 +1307,74 @@ export function EmailBuilderStudio({
                       </div>
 
                       <div className="flex items-center gap-2 text-[10px] uppercase font-black text-slate-400 tracking-wider">
-                        <span>Bloc • {block.type}</span>
+                        <span>Bloc • {block.type === 'banner' ? 'Bannière Stylisée 0 Ko' : block.type}</span>
                         {block.url && (
                           <span className="text-blue-600 font-bold lowercase flex items-center gap-0.5">
                             <Link className="w-2.5 h-2.5" /> cliquable
                           </span>
                         )}
                       </div>
+
+                      {/* NOUVEAU : BLOC BANNIÈRE STYLISÉE */}
+                      {block.type === 'banner' && (
+                        <div className="space-y-2">
+                          <div 
+                            style={{
+                              borderRadius: block.bannerConfig?.borderRadius === 'sharp' ? '0px' : '14px',
+                              background: block.bannerConfig?.gradientPreset === 'image' && block.bannerConfig?.imageUrl
+                                ? `linear-gradient(rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.72)), url('${block.bannerConfig.imageUrl}') center/cover`
+                                : (BANNER_PRESETS[block.bannerConfig?.gradientPreset || 'royal']?.gradient || BANNER_PRESETS.royal.gradient),
+                              color: BANNER_PRESETS[block.bannerConfig?.gradientPreset || 'royal']?.textColor || '#ffffff',
+                              padding: block.bannerConfig?.height === 'compact' ? '14px 16px' : block.bannerConfig?.height === 'large' ? '28px 20px' : '20px 18px'
+                            }}
+                            className="text-center shadow-md relative overflow-hidden transition-all rounded-2xl"
+                          >
+                            <div className="absolute top-2 right-2">
+                              <span className="text-[9px] font-black bg-black/40 backdrop-blur-xs text-white px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/20">
+                                <Zap className="w-2.5 h-2.5 text-amber-300" />
+                                {BANNER_PRESETS[block.bannerConfig?.gradientPreset || 'royal']?.weightLabel || '⚡ 0 Ko'}
+                              </span>
+                            </div>
+
+                            {block.bannerConfig?.badgeText && (
+                              <span className="inline-block text-[9px] font-black tracking-wider uppercase bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full mb-1.5 border border-white/30">
+                                {block.bannerConfig.badgeText}
+                              </span>
+                            )}
+
+                            <h3 className="font-black text-sm md:text-base leading-tight">
+                              {block.content}
+                            </h3>
+
+                            {block.bannerConfig?.subtitle && (
+                              <p className="text-[11px] opacity-90 mt-1 font-medium">
+                                {block.bannerConfig.subtitle}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                            <div>
+                              <input 
+                                type="text"
+                                value={block.content}
+                                onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                                placeholder="Titre de la bannière..."
+                                className="w-full text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <input 
+                                type="text"
+                                value={block.bannerConfig?.subtitle || ''}
+                                onChange={(e) => updateBannerConfig(block.id, { subtitle: e.target.value })}
+                                placeholder="Sous-titre / Slogan..."
+                                className="w-full text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* BLOC : LOGO HEADER */}
                       {block.type === 'logo' && (
@@ -1164,11 +1644,40 @@ export function EmailBuilderStudio({
                     </div>
                   </div>
 
-                  {/* Corps de l'email rendu */}
-                  <div className="p-6 bg-[#FBF9F5]/40 max-h-[380px] overflow-y-auto">
-                    <div className="max-w-md mx-auto bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                  {/* Corps de l'email rendu avec les vraies couleurs de fond */}
+                  <div 
+                    className="p-6 max-h-[380px] overflow-y-auto transition-colors"
+                    style={{ backgroundColor: emailBgColor }}
+                  >
+                    <div 
+                      className="max-w-md mx-auto p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3"
+                      style={{ backgroundColor: cardBgColor }}
+                    >
                       {blocks.map((b) => (
                         <div key={b.id} style={{ textAlign: b.styles?.align || 'left' }}>
+                          {b.type === 'banner' && (
+                            <div 
+                              style={{
+                                borderRadius: b.bannerConfig?.borderRadius === 'sharp' ? '0px' : '12px',
+                                background: b.bannerConfig?.gradientPreset === 'image' && b.bannerConfig?.imageUrl
+                                  ? `linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)), url('${b.bannerConfig.imageUrl}') center/cover`
+                                  : (BANNER_PRESETS[b.bannerConfig?.gradientPreset || 'royal']?.gradient || BANNER_PRESETS.royal.gradient),
+                                color: BANNER_PRESETS[b.bannerConfig?.gradientPreset || 'royal']?.textColor || '#ffffff',
+                                padding: b.bannerConfig?.height === 'compact' ? '12px 14px' : '18px 16px'
+                              }}
+                              className="text-center shadow-xs mb-2"
+                            >
+                              {b.bannerConfig?.badgeText && (
+                                <span className="inline-block text-[8px] font-black uppercase bg-white/20 px-2 py-0.5 rounded-full mb-1">
+                                  {b.bannerConfig.badgeText}
+                                </span>
+                              )}
+                              <h4 className="font-black text-xs">{b.content}</h4>
+                              {b.bannerConfig?.subtitle && (
+                                <p className="text-[10px] opacity-90 mt-0.5">{b.bannerConfig.subtitle}</p>
+                              )}
+                            </div>
+                          )}
                           {b.type === 'logo' && (
                             <img src={b.content} alt="Logo" style={{ maxWidth: `${b.logoWidth || 140}px` }} className="inline-block" />
                           )}
