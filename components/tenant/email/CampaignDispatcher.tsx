@@ -348,23 +348,25 @@ export function CampaignDispatcher({
         })
       });
 
-      if (res.ok) {
-        setIsSending(false);
-        onCreditsDrained(requiredCredits);
-        setSuccessMsg(`🚀 Campagne diffusée avec succès à ${requiredCredits} contacts cochés via l'API Brevo !`);
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        const sentCount = data.sentCount || requiredCredits;
+        onCreditsDrained(sentCount);
+        setSuccessMsg(
+          `🚀 Campagne diffusée avec succès à ${sentCount} contact(s) via l'API Brevo v3 ! ${
+            data.remainingCredits !== undefined ? `(Crédits restants : ${data.remainingCredits})` : ''
+          }`
+        );
       } else {
-        setTimeout(() => {
-          setIsSending(false);
-          onCreditsDrained(requiredCredits);
-          setSuccessMsg(`🚀 Campagne diffusée avec succès à ${requiredCredits} contacts cochés via l'API Brevo !`);
-        }, 1200);
+        const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne via Brevo.");
+        setErrorMsg(errorDetail);
       }
-    } catch {
-      setTimeout(() => {
-        setIsSending(false);
-        onCreditsDrained(requiredCredits);
-        setSuccessMsg(`🚀 Campagne diffusée avec succès à ${requiredCredits} contacts cochés via l'API Brevo !`);
-      }, 1200);
+    } catch (networkErr: any) {
+      console.error('[CAMPAIGN_DISPATCH] Erreur réseau:', networkErr);
+      setErrorMsg("Erreur réseau : impossible de joindre le serveur d'envoi Brevo.");
+    } finally {
+      setIsSending(false);
     }
   };
 

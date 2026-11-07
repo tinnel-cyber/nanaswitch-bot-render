@@ -60,6 +60,7 @@ export default function TenantEmailingDashboardPage() {
     if (senderName) setSavedSenderName(senderName);
     if (senderEmail) setSavedSenderEmail(senderEmail);
     setFlashBanner(`✨ Modèle "${subject || 'Sans titre'}" enregistré avec succès ! Vous pouvez maintenant le diffuser.`);
+    setActiveTab('dispatch');
     setTimeout(() => setFlashBanner(null), 5000);
   };
 

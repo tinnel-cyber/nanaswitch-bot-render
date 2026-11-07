@@ -49,7 +49,9 @@ import {
   Paintbrush,
   Layers,
   Flame,
-  Crown
+  Crown,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 export interface EmailBlock {
@@ -253,6 +255,10 @@ export function EmailBuilderStudio({
     start?: number;
     end?: number;
   } | null>(null);
+
+  // État d'envoi d'e-mail de test via l'API Brevo
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // Palette de couleurs de texte pour entreprise
   const colorPresets = [
@@ -577,6 +583,51 @@ export function EmailBuilderStudio({
       if (target) {
         updateBlockContent(targetId, target.content + ' ' + emoji);
       }
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    const destination = prompt("Entrez l'adresse e-mail de destination pour recevoir ce modèle en conditions réelles :", senderEmail || 'mon-email@domaine.com');
+    if (!destination || !destination.includes('@')) return;
+
+    setIsSendingTest(true);
+    setTestFeedback(null);
+
+    try {
+      const res = await fetch('/api/campaigns/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          testEmail: destination.trim(),
+          subject: `[TEST] ${subject || 'Offre Spéciale Nanasore'}`,
+          senderName,
+          senderEmail,
+          htmlContent: generateHtmlOutput(),
+          segment: 'test'
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        setTestFeedback({
+          type: 'success',
+          msg: `E-mail de test expédié avec succès à ${destination} via l'API Brevo v3 !`
+        });
+      } else {
+        setTestFeedback({
+          type: 'error',
+          msg: data.error || "Échec de l'envoi de l'e-mail de test."
+        });
+      }
+    } catch {
+      setTestFeedback({
+        type: 'error',
+        msg: "Erreur réseau lors de la communication avec l'API Brevo."
+      });
+    } finally {
+      setIsSendingTest(false);
+      setTimeout(() => setTestFeedback(null), 8000);
     }
   };
 
@@ -1403,7 +1454,7 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* Bouton de sauvegarde */}
+        {/* Bouton de sauvegarde principale */}
         <button
           type="button"
           onClick={() => onTemplateSave(generateHtmlOutput(), subject, senderName, senderEmail)}
@@ -1412,6 +1463,44 @@ export function EmailBuilderStudio({
           <Send className="w-4 h-4" />
           Enregistrer le modèle & Passer à la diffusion
         </button>
+
+        {/* Bouton secondaire : Envoyer un e-mail de test via Brevo */}
+        <div className="pt-1">
+          {testFeedback && (
+            <div className={`p-3 mb-2 rounded-xl text-xs font-bold flex items-center gap-2 ${
+              testFeedback.type === 'success' 
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`}>
+              {testFeedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{testFeedback.msg}</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={isSendingTest}
+            onClick={handleSendTestEmail}
+            className="w-full py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs hover:border-slate-400"
+            title="Envoyer un exemplaire sur votre boîte mail pour vérifier le rendu"
+          >
+            {isSendingTest ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                <span>Envoi du test en cours via Brevo...</span>
+              </>
+            ) : (
+              <>
+                <Mail className="w-3.5 h-3.5 text-blue-600" />
+                <span>Envoyer un e-mail de test sur ma boîte</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* =========================================================================
