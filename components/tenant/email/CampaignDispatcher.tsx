@@ -333,13 +333,18 @@ export function CampaignDispatcher({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          tenantId: 'default',
           subject: savedSubject || 'Campagne E-mailing Spéciale',
           senderName: savedSenderName || 'Ma Boutique Pro',
           senderEmail: savedSenderEmail || 'contact@maboutique.com',
           htmlContent: savedTemplateHtml || '<p>Bonjour {{FIRSTNAME}}, profitez de nos offres !</p>',
           segment: filterType,
           recipientCount: requiredCredits,
-          recipientsSample: selectedContactsData.slice(0, 5).map(c => c.email)
+          recipients: selectedContactsData.map(c => ({
+            email: c.email,
+            first_name: c.name.split(' ')[0] || '',
+            last_name: c.name.split(' ').slice(1).join(' ') || ''
+          }))
         })
       });
 

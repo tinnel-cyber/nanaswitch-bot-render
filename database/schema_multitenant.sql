@@ -219,3 +219,65 @@ CREATE POLICY "funnels_public_read_published" ON public.funnels FOR SELECT USING
 
 DROP POLICY IF EXISTS "funnels_admin_manage" ON public.funnels;
 CREATE POLICY "funnels_admin_manage" ON public.funnels FOR ALL USING (public.is_tenant_member(tenant_id));
+
+-- ==============================================================================
+-- 10. Module E-mailing & Campagnes Brevo
+-- ==============================================================================
+
+-- Ajout des quotas d'e-mails sur la table tenants
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tenants' AND column_name = 'email_credits') THEN
+        ALTER TABLE public.tenants ADD COLUMN email_credits INTEGER NOT NULL DEFAULT 1500;
+        CREATE INDEX IF NOT EXISTS idx_tenants_email_credits ON public.tenants (email_credits);
+    END IF;
+END $$;
+
+-- Table des clients du tenant pour le ciblage et la segmentation e-mailing
+CREATE TABLE IF NOT EXISTS public.customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    phone TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'unsubscribed')),
+    total_spent_cfa NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    orders_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_customers_tenant_email UNIQUE (tenant_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON public.customers (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON public.customers (status);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON public.customers (LOWER(email));
+
+-- Table de l'historique des campagnes e-mailing diffusées via Brevo
+CREATE TABLE IF NOT EXISTS public.email_campaigns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    sender_name TEXT NOT NULL,
+    sender_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    html_content TEXT NOT NULL,
+    segment TEXT NOT NULL DEFAULT 'all',
+    recipients_count INTEGER NOT NULL DEFAULT 0,
+    brevo_message_id TEXT,
+    status TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('draft', 'sending', 'sent', 'failed')),
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_campaigns_tenant_id ON public.email_campaigns (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_email_campaigns_sent_at ON public.email_campaigns (sent_at DESC);
+
+-- RLS pour customers et email_campaigns
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.email_campaigns ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "customers_tenant_manage" ON public.customers;
+CREATE POLICY "customers_tenant_manage" ON public.customers FOR ALL USING (public.is_tenant_member(tenant_id));
+
+DROP POLICY IF EXISTS "campaigns_tenant_manage" ON public.email_campaigns;
+CREATE POLICY "campaigns_tenant_manage" ON public.email_campaigns FOR ALL USING (public.is_tenant_member(tenant_id));
+
