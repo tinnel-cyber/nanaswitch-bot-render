@@ -48,20 +48,20 @@ export const NANASORE_29_MODULES = [
   { id: 'deal-builder', name: 'Studio Promotions & Ventes Flash', category: 'Marketing & Vente', desc: 'Création d’offres promotionnelles temporaires et comptes à rebours d’urgence d’achat.' },
 
   // Pilier 2 : Marketing, Conversion & Intelligence Artificielle (6 modules)
-  { id: 'emailing', name: 'Studio E-mailing & Campagnes Pro', category: 'Marketing & Vente', desc: 'Relais SMTP haute délivrabilité, segmentation d’audience CRM et rentabilité moyenne de 38 € pour 1 € investi.' },
+  { id: 'emailing', name: 'Studio E-mailing & Campagnes Pro', category: 'Marketing & Vente', desc: 'Relais SMTP haute délivrabilité, segmentation d’audience CRM et réactivation de clients dormants.' },
   { id: 'nanagenerator', name: 'Rédacteur Marketing & Annonces IA', category: 'Intelligence Artificielle', desc: 'Génération instantanée d’annonces publicitaires, de fiches produits et de messages WhatsApp percutants.' },
-  { id: 'ultimate-funnel', name: 'Ultimate Funnel Builder', category: 'Marketing & Vente', desc: 'Tunnels de vente monopage à très haute conversion avec upsells 1-clic et checkout express.' },
+  { id: 'ultimate-funnel', name: 'Ultimate Funnel Builder', category: 'Marketing & Vente', desc: 'Tunnels de vente monopage à très haute conversion avec upsells 1-clic et vente de livres, e-books ou produits vedettes.' },
   { id: 'modular-funnel', name: 'Tunnels Modulaires & Pages de Capture', category: 'Marketing & Vente', desc: 'Pages de capture de prospects (lead magnets) et formulaires qualifiés pour nourrir votre CRM.' },
   { id: 'pixels-crm', name: 'Suivi Pixels (Meta & TikTok) & Tracking', category: 'Marketing & Données', desc: 'Traçabilité intégrale des conversions pour diviser par deux le coût par acquisition publicitaire.' },
-  { id: 'ai-advisor', name: 'Directeur de Croissance (Agent Nsore)', category: 'Intelligence Artificielle', desc: 'Votre conseiller commercial d’élite pour arbitrer vos modèles économiques, activer vos modules et maximiser vos profits.' },
+  { id: 'ai-advisor', name: 'Directeur de Croissance (Agent Nsore)', category: 'Intelligence Artificielle', desc: 'Votre conseiller commercial d’élite pour arbitrer vos modèles économiques, activer vos modules et conclure vos ventes.' },
 
   // Pilier 3 : Formation, Savoir & Infopreneuriat (6 modules)
-  { id: 'cours-forge', name: 'NaNa Cours Forge - Studio LMS', category: 'Formation & Savoir', desc: 'Hébergement et monétisation de formations vidéo et PDF sécurisés contre le piratage.' },
+  { id: 'cours-forge', name: 'NaNa Cours Forge - Studio LMS', category: 'Formation & Savoir', desc: 'Hébergement et monétisation de formations vidéo et livres numériques sécurisés contre le piratage.' },
   { id: 'course-create', name: 'Créateur de Cours & Formations', category: 'Formation & Savoir', desc: 'Structuration pédagogique au format carré 1080x1080, idéal pour l’apprentissage mobile.' },
   { id: 'webinar', name: 'Salles VIP & Masterclasses Interactives', category: 'Formation & Savoir', desc: 'Diffusion de webinaires privés en direct, sessions de coaching payantes et billetterie exclusive.' },
   { id: 'docusign', name: 'Signature Électronique & Contrats Numériques', category: 'Juridique & Vente', desc: 'Signature légale de devis, partenariats et conventions commerciales sans papier.' },
   { id: 'academy-support', name: 'Support Pédagogique & Micro-Learning', category: 'Formation & Savoir', desc: 'Tutoriels interactifs et guidage pas à pas pour maîtriser chaque levier de la plateforme.' },
-  { id: 'vendor-upload', name: 'Espace Documents & Dépôt Fichiers Sécurisé', category: 'Stockage & Outils', desc: 'Stockage Cloud R2 haute vitesse pour vos ressources numériques, fiches et supports téléchargeables.' },
+  { id: 'vendor-upload', name: 'Espace Documents & Dépôt Fichiers Sécurisé', category: 'Stockage & Outils', desc: 'Stockage Cloud R2 haute vitesse pour vos ressources numériques, livres PDF et livrables téléchargeables.' },
 
   // Pilier 4 : Finance, Fintech & Passerelle Souveraine (4 modules)
   { id: 'gateway', name: 'Passerelle de Paiement Souveraine Sebpay', category: 'Paiements & Fintech', desc: 'Encaissement local sans intermédiaire via Mobile Money (Orange Money, Moov, Wave) et Cartes Bancaires.' },
@@ -82,52 +82,59 @@ export const NANASORE_29_MODULES = [
 /**
  * SYSTEM PROMPT D'ÉLITE POUR L'AGENT NSORE (NANASORE)
  */
-const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale officiel de la plateforme SaaS NANASORE (et non d'une société tierce).
-Ton rôle : Guider, convaincre et accompagner avec brio chaque entrepreneur vers le succès commercial et la souscription au plan idéal sur Nanasore.
+const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale officiel de la plateforme SaaS NANASORE.
+
+POSTURE ET PERSONNALITÉ FONDAMENTALE :
+Tu n'es PAS un simple professeur théorique qui donne des leçons sans chercher à vendre.
+Tu es un PROFESSEUR DE MARKETING COMMERÇANT PRATIQUANT :
+- Tu allie la pédagogie et la clarté d'un grand professeur de marketing à la pugnacité, au pragmatisme et à l'orientation résultat d'un commerçant de terrain chevronné.
+- Ton but absolu à chaque échange est de faire grandir l'entreprise du client, de lever ses doutes, et de l'AMENER À SOUSCRIRE AU BON PLAN, OUVRIR SON COMPTE ET VALIDER SON KYC.
+- Tu ne laisses JAMAIS une réponse sans closing ou sans question qui pousse à l'action.
 
 =============================================================================
-1. CONNAISSANCE PARFAITE DES 29 MODULES DE NANASORE :
+1. PAS D'OBSESSION SUR L'E-MAILING : COUVRE LES 29 MODULES AVEC ÉQUITÉ :
 =============================================================================
-Nanasore compte EXACTEMENT 29 MODULES pré-intégrés dans le Cloud, répartis en 5 piliers :
-- Pilier Caisse & Vente (6) : Caisse POS, Vitrine E-Shop, Stocks/Inventaire, Scanner Code-barres, Livre des Dettes, Promotions/Deal Builder.
-- Pilier Marketing, Conversion & IA (6) : Studio E-mailing Pro, Rédacteur IA Nanagenerator, Ultimate Funnel Builder, Tunnels Modulaires, Pixels CRM (Meta/TikTok), Directeur de Croissance (Agent Nsore).
-- Pilier Formation, Savoir & LMS (6) : Cours Forge LMS, Créateur 1080x1080, Salles VIP Webinaires, Signature Docusign, Support Académie, Dépôt Fichiers R2.
-- Pilier Fintech & Paiements (4) : Passerelle Souveraine Sebpay (Orange Money/Moov/Wave), Analytics/Courbe des gains, NaNa Switch API, Espace Affiliation Partenaires (15-20%).
-- Pilier Gestion, Identité & Juridique (7) : Chaîne KYC (P1 Gérant + P2 Société), CRM & Connecteurs (WooCommerce/SMS), Éditeur de Thème, Gestion d’Équipe/Caissiers, NaNa CV Pro, Import/Export Excel, Wameet Négociation Vidéo.
+Nanasore dispose de 29 modules complets couvrant tous les métiers. Ne focalise JAMAIS toutes tes réponses sur l'e-mailing !
+Adapte ton conseil au produit réel du marchand :
+- Pour un livre / e-book : Recommande le module Ultimate Funnel (page de vente monopage), Cours Forge (LMS livre numérique), et le plan Pay-as-you-go ou Commission.
+- Pour une boutique physique / magasin : Recommande la Caisse POS, le Scanner Caméra, le suivi des Stocks et le Livre des Dettes.
+- Pour un formateur / coach : Recommande Cours Forge LMS, les Salles VIP Webinaires et la Signature Docusign.
+- Pour un commerçant en ligne : Recommande la Vitrine E-Shop WhatsApp, les Promotions Deal Builder et la Passerelle Sebpay.
 
 =============================================================================
-2. COMMENT RÉPONDRE À : "COMMENT ACTIVER LES MODULES ?" :
+2. SCHÉMAS DE RAISONNEMENT STRATÉGIQUES EXIGÉS :
 =============================================================================
-Lorsque l'utilisateur demande comment activer les modules, réponds avec précision chirurgicale :
-1. LOCALISATION CLOUD : Tous les 29 modules sont déjà hébergés et prêts à l'emploi dans le Cloud Nanasore.
-2. ACCÈS INSTANTANÉ VIA L'OMNIBAR : Il lui suffit de taper le nom d'un service, application, module ou outil dans la barre de recherche Omnibar (au sommet central du tableau de bord) pour l'ouvrir, le tester en démo ou l'activer.
-3. CONDITION LÉGALE & KYC : Les modules gratuits et Pay-as-you-go (ex: quotas e-mails) sont utilisables immédiatement. Mais pour activer les modules commerciaux avancés et commencer à encaisser de l'argent réel sur son compte marchand, il doit OBLIGATOIREMENT finaliser sa Chaîne d'Identification KYC (Partie 1 Gérant + Partie 2 Entreprise) et ouvrir son compte boutique.
-4. ACCOMPAGNEMENT PROACTIF : Propose-lui immédiatement de l'accompagner pas à pas à remplir son KYC en moins de 3 minutes chrono !
+
+SCHÉMA A : CONSEIL PRODUIT -> PLAN -> QUESTION OUVERTURE DE COMPTE -> CLOSING
+Exemple : L'utilisateur demande quel plan souscrire pour vendre son livre (ou son produit) :
+1. Réponse courte et percutante : Recommande le plan Pay-as-you-go ou la formule à la Commission (0 FCFA de frais fixes).
+2. Justification de commerçant pratiquant : "Vous déployez votre page de vente sans risque et ne payez qu'une commission minime sur les ventes réelles."
+3. Question de qualification immédiate : "Avez-vous déjà ouvert votre compte / boutique sur Nanasore ?"
+4. S'il répond NON : Explique-lui qu'il doit ouvrir son compte boutique pour activer le plan et encaisser ses clients, que cela prend 2 minutes et propose de l'accompagner tout de suite !
+
+SCHÉMA B : LA "QUESTION RETOUR" (POUR LES QUESTIONS NÉCESSITANT UNE ACTION PRÉALABLE)
+Exemple : L'utilisateur demande "Comment activer les modules pour le Pay-as-you-go ?" ou "Comment encaisser mes ventes ?" :
+1. Ne pas déballer un guide technique complexe ! Pose la Question Retour de clarification :
+   "Avant de vous répondre en détail, permettez-moi de vous poser une question essentielle : avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?"
+2. Si le client répond OUI : Donne l'explication directe (Recherche du module dans l'Omnibar en haut -> Démo / Activer en 1 clic).
+3. Si le client répond NON : Explique-lui avec bienveillance que le KYC est la clé indispensable pour débloquer les encaissements réels et les modules, mais que la bonne nouvelle c'est que c'est très simple (3 minutes) et que tu es là pour l'accompagner pas à pas dès maintenant.
 
 =============================================================================
-3. RAISONNEMENT COMPLET DE VENTE : DU DIAGNOSTIC AU CLOSING :
+3. COMMENT ACTIVER LES 29 MODULES (VÉRITÉ TECHNIQUE) :
 =============================================================================
-Chaque prise de parole doit conduire logiquement à une conclusion (closing) :
-- Diagnostic du profil : Commerçant physique ? E-commerçant ? Formateur / Infopreneur ?
-- Proposition d'un Pack Lucratif combinant plusieurs modules :
-  * Pack E-commerce : Caisse POS + E-Shop WhatsApp + Studio E-mailing Pro + Dettes.
-  * Pack Formateur : Cours Forge LMS + Webinaires VIP + Certificats + Affiliation 20%.
-  * Pack Agence : Ultimate Funnel + Pixels Meta/TikTok + Campagnes E-mailing Pro.
-- Conclusion vers le Plan Économique :
-  * Démarrage / Test : Modèle à la Commission (0 FCFA de coût fixe, Nanasore gagne seulement quand il vend).
-  * Vitesse de croisière : Abonnement Fixe Pro (pour protéger 100% de sa marge nette).
-  * Besoins ponctuels : Pay-as-you-go (crédits e-mails à la demande).
+- Localisation Cloud : Les 29 modules sont tous pré-intégrés dans le Cloud Nanasore.
+- Accès Omnibar : Taper le nom du module dans la barre de recherche Omnibar (au sommet central du tableau de bord) pour le voir, le prévisualiser en démo ou l'activer.
+- Condition légale & KYC : Les modules gratuits sont immédiats. Les modules commerciaux et passerelles d'encaissement exigent la validation du KYC (Partie 1 Gérant + Partie 2 Entreprise) et l'ouverture du compte.
 
 =============================================================================
-4. RÈGLES DE PSYCHOLOGIE COMMERCIALE & COMPORTEMENT HUMAIN :
+4. INTELLIGENCE ÉMOTIONNELLE ET GESTION DES SITUATIONS :
 =============================================================================
-- RÈGLE DU PING-PONG : Messages concis (2 à 4 phrases percutantes). Termine TOUJOURS par UNE SEULE question de relance engageante.
-- SI L'UTILISATEUR S'AGACE : Fais preuve d'une humilité exemplaire. Présente des excuses sincères : explique que ton intention n'était aucunement de le vexer, mais uniquement de le propulser vers la réussite. Demande-lui comment il préfère orienter l'échange.
-- SI LA QUESTION EST CONFUSE : Ne réponds pas à côté ! Dis poliment que tu veux t'assurer de lui offrir la solution la plus lucrative et invite-le à reformuler son besoin.
-- FACE À UNE CRITIQUE OU DÉVALORISATION : Ne sois jamais agressif. Recadre élégamment en rappelant que Nanasore réunit 29 modules souverains sans dépendre de solutions étrangères fragiles, garantissant pérennité et souveraineté.
-- FACE À UN COMPLIMENT : Remercie chaleureusement et complimente en retour la vision business de l'entrepreneur.
-- FACE AU DOUTE : Rassure avec force, chiffres et arguments concrets sur la rentabilité.
-- SÉCURITÉ ABSOLUE : Zéro mot de passe, zéro clé API, zéro donnée confidentielle.
+- SI L'UTILISATEUR S'AGACE : Excuses humbles et sincères immédiates ("Je vous présente mes sincères excuses, mon intention n'était absolument pas de vous contrarier...").
+- SI LA QUESTION EST CONFUSE : Demande poliment et avec tact de reformuler sous un autre angle.
+- SI QUESTION DÉVALORISANTE / CRITIQUE : Recadre avec assurance et élégance en mettant en avant les 29 modules souverains et la passerelle Mobile Money locale.
+- SI COMPLIMENT : Remercie chaleureusement et complimente l'ambition du marchand.
+- FACE AU DOUTE : Rassure avec des chiffres et la sécurité du modèle à la commission.
+- SÉCURITÉ ABSOLUE : Jamais de mot de passe, de clé API ni de secret.
 
 Format obligatoire : Rédige d'abord ton bloc <analyse_interne>...</analyse_interne>, puis ton message humain.`;
 
@@ -137,7 +144,8 @@ Format obligatoire : Rédige d'abord ton bloc <analyse_interne>...</analyse_inte
 function generateComprehensiveStrategicFallback(
   query: string,
   merchantContext: any,
-  isLeakAttempt: boolean
+  isLeakAttempt: boolean,
+  lastMessages: any[] = []
 ): { reply: string; thought: string } {
   const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
   const greeting = firstName ? `Bonjour ${firstName}` : `Salutations distinguées`;
@@ -147,96 +155,139 @@ function generateComprehensiveStrategicFallback(
   if (isLeakAttempt) {
     return {
       thought: `Tentative d'accès à des données de sécurité sensibles. Rappel de la confidentialité bancaire et recentrage sur la stratégie.`,
-      reply: `${greeting}. Pour la sécurité absolue de votre entreprise, vos mots de passe et clés d'accès sont strictement scellés sous chiffrement bancaire et ne doivent jamais être échangés dans cet espace.\n\nRegardons plutôt comment développer le chiffre d'affaires de ${storeName} : sur quel module souhaitez-vous que nous travaillions aujourd'hui ?`
+      reply: `${greeting}. Pour la sécurité absolue de votre entreprise, vos mots de passe et clés d'accès sont strictement scellés sous chiffrement bancaire et ne doivent jamais être échangés dans cet espace.\n\nRegardons plutôt comment développer le chiffre d'affaires de ${storeName} : quel produit ou service souhaitez-vous vendre en priorité aujourd'hui ?`
     };
   }
 
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
 
-  // Scénario A : Comment activer les modules ?
-  if (q.includes('activer') || q.includes('activation') || q.includes('comment activer') || (q.includes('module') && q.includes('comment'))) {
+  // Analyse du contexte du dernier message de l'IA pour traiter les réponses "oui" / "non"
+  const previousAiMsg = [...lastMessages].reverse().find(m => m.sender === 'ai' || m.role === 'model')?.text?.toLowerCase() || '';
+
+  // Cas 1 : Réponse "non" à la question sur l'ouverture de compte
+  if ((q === 'non' || q.includes('pas encore') || q.includes('pas de compte') || q.includes('pas créé')) && (previousAiMsg.includes('ouvert votre compte') || previousAiMsg.includes('boutique sur nanasore'))) {
     return {
-      thought: `Question explicite sur l'activation des 29 modules. Explication : Omnibar pour chercher + KYC pour débloquer les modules commerciaux et encaissements réels. Proposition d'accompagnement KYC immédiat.`,
-      reply: `Les 29 modules de Nanasore sont déjà hébergés et prêts à l'emploi dans notre Cloud ! Il vous suffit de saisir le nom de n'importe quel service ou outil dans l'**Omnibar** (la barre de recherche située en haut de votre écran) pour le tester en démo ou l'activer en un clic.\n\nPour débloquer les encaissements réels et les modules commerciaux avancés, vous devez simplement finaliser votre **Chaîne d'Identification KYC** (Partie 1 Gérant + Partie 2 Entreprise). Puis-je vous accompagner pas à pas pour remplir votre KYC en 3 minutes chrono dès maintenant ?`
+      thought: `Le client n'a pas encore ouvert son compte. Accompagnement immédiat à la création de compte pour débloquer la vente de son produit.`,
+      reply: `C'est tout à fait normal ! Pour activer votre formule et commencer à encaisser vos clients en toute conformité, la première étape indispensable est d'ouvrir votre compte boutique. La bonne nouvelle, c'est que cela ne prend que 2 minutes et je peux vous accompagner dès maintenant. Souhaitez-vous que nous procédions à l'ouverture ensemble tout de suite ?`
     };
   }
 
-  // Scénario B : Accompagnement KYC / Ouverture de compte
-  if (q.includes('kyc') || q.includes('identité') || q.includes('ouvrir compte') || q.includes('verification') || q.includes('vérification')) {
+  // Cas 2 : Réponse "oui" à la question sur l'ouverture de compte
+  if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait') || q.includes('j\'ai un compte')) && (previousAiMsg.includes('ouvert votre compte') || previousAiMsg.includes('boutique sur nanasore'))) {
     return {
-      thought: `Accompagnement KYC. Rassurer sur la rapidité (3 minutes), expliquer P1 (CNIB/Passeport gérant) et P2 (Entreprise/IFU), et lancer l'action.`,
-      reply: `La validation KYC sur Nanasore est un gage de sécurité juridique et financière qui protège vos encaissements Mobile Money et Cartes. Elle se déroule en 2 étapes très simples : la **Partie 1** (votre pièce d'identité officielle et selfie) et la **Partie 2** (le nom et coordonnées de votre entreprise).\n\nAvez-vous votre pièce d'identité sous la main pour que nous validions la Partie 1 ensemble en 2 minutes ?`
+      thought: `Le compte est déjà ouvert. Orientation directe vers l'Omnibar pour activer le module de vente et fixer le prix.`,
+      reply: `Parfait, vous avez une longueur d'avance ! Il vous suffit désormais de taper **Ultimate Funnel** (si c'est un produit vedette ou un livre) ou **Vitrine E-Shop** dans l'Omnibar en haut de votre écran pour créer votre page et fixer votre prix. Avez-vous déjà déterminé le prix de vente de votre produit ?`
     };
   }
 
-  // Scénario C : Agacement / Irritation de l'utilisateur
-  if (q.includes('enerve') || q.includes('énerv') || q.includes('agace') || q.includes('n\'importe quoi') || q.includes('rien a voir') || q.includes('reponds pas')) {
+  // Cas 3 : Réponse "non" à la Question Retour KYC
+  if ((q === 'non' || q.includes('pas encore') || q.includes('c\'est quoi kyc')) && (previousAiMsg.includes('rempli votre kyc') || previousAiMsg.includes('votre kyc'))) {
     return {
-      thought: `Détection d'agacement client. Excuses sincères, humilité, désamorçage immédiat et reprise en main bienveillante.`,
-      reply: `Je vous présente mes excuses les plus sincères, ${firstName || 'cher partenaire'}. Mon intention n'était absolument pas de vous contrarier, mais uniquement de vous apporter le meilleur accompagnement commercial.\n\nReprenons calmement : quelle est votre question prioritaire à cet instant précis pour que je vous réponde de manière directe et limpide ?`
+      thought: `Le client n'a pas encore fait son KYC. Explication bienveillante de la nécessité légale et proposition d'accompagnement immédiat en 3 minutes.`,
+      reply: `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant. Avez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`
     };
   }
 
-  // Scénario D : Question confuse / Incompréhension
-  if (q.length < 3 || q.includes('quoi ?') || q.includes('hein') || q.includes('pas compris') || q.includes('reexplique')) {
+  // Cas 4 : Réponse "oui" à la Question Retour KYC
+  if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait')) && (previousAiMsg.includes('rempli votre kyc') || previousAiMsg.includes('votre kyc'))) {
     return {
-      thought: `Incompréhension ou question confuse. Demande polie de clarification sans prétention.`,
-      reply: `Pardonnez-moi, je veux m'assurer de vous apporter la réponse la plus rentable et la plus précise possible. Pourriez-vous me préciser votre besoin sous un autre angle ou me décrire l'objectif immédiat de votre entreprise ?`
+      thought: `KYC validé. Explication directe de l'activation des modules via l'Omnibar.`,
+      reply: `Félicitations, vos voyants sont au vert ! Pour activer n'importe quel module, tapez simplement son nom dans l'**Omnibar** en haut de votre écran, cliquez sur 'Activer' ou 'Tester en démo', et il est immédiatement prêt à l'emploi. Quel module souhaitez-vous lancer en premier ?`
     };
   }
 
-  // Scénario E : Question dévalorisante / Scepticisme
-  if (q.includes('arnaque') || q.includes('cher') || q.includes('nul') || q.includes('pourquoi vous') || q.includes('mieux ailleurs')) {
+  // Cas 5 : Vente de Livre / E-book / Produit spécifique (Schéma A)
+  if (q.includes('livre') || q.includes('ebook') || q.includes('e-book') || q.includes('roman') || q.includes('manuel')) {
     return {
-      thought: `Question sceptique ou critique. Défense élégante : 29 modules tout-en-un, souveraineté des paiements locaux, zéro frais cachés.`,
-      reply: `C'est une excellente question, et votre esprit critique est la marque des grands entrepreneurs. Là où d'autres solutions vous obligent à empiler 10 abonnements coûteux et dépendants de banques étrangères, Nanasore réunit **29 modules souverains** dans un seul écosystème avec encaissement Mobile Money direct et formule à la commission à risque zéro.\n\nSouhaitez-vous que nous fassions une simulation chiffrée de vos économies mensuelles par rapport à vos outils actuels ?`
+      thought: `Schéma A : Vente de livre. Prescription Pay-as-you-go ou Commission + Question de qualification immédiate sur l'ouverture de compte.`,
+      reply: `Pour vendre votre livre en toute rentabilité, le plan **Pay-as-you-go** ou la formule à la **Commission (0 FCFA de frais fixes)** est la solution idéale : vous déployez votre page de vente sans risque et ne payez qu'une commission modérée par exemplaire vendu.\n\nAvez-vous déjà ouvert votre compte boutique sur Nanasore ?`
     };
   }
 
-  // Scénario F : Compliment de l'utilisateur
+  // Cas 6 : Question Retour Prérequis - Comment activer pour pay as you go / comment activer modules (Schéma B)
+  if (q.includes('comment activer') || (q.includes('activer') && (q.includes('pay as you go') || q.includes('pay-as-you-go') || q.includes('module')))) {
+    return {
+      thought: `Schéma B : Question Retour. Avant d'expliquer l'activation, poser la question de clarification KYC oui ou non.`,
+      reply: `Avant de vous guider dans l'activation, permettez-moi de vous poser une question essentielle : avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?`
+    };
+  }
+
+  // Cas 7 : Accompagnement KYC / Définition KYC
+  if (q.includes('kyc') || q.includes('identité') || q.includes('verification') || q.includes('vérification')) {
+    return {
+      thought: `Définition claire du KYC et accompagnement pas à pas P1 (Gérant) et P2 (Société).`,
+      reply: `Le KYC (Know Your Customer) est la vérification officielle d'identité obligatoire qui sécurise vos encaissements Mobile Money et Cartes. Elle se déroule en 2 étapes très simples : la **Partie 1** (votre pièce d'identité et selfie) et la **Partie 2** (le nom et coordonnées de votre entreprise).\n\nPuis-je vous accompagner pour remplir la Partie 1 dès maintenant en 2 minutes ?`
+    };
+  }
+
+  // Cas 8 : Définition de l'Omnibar
+  if (q.includes('omnibar') || q.includes('barre de recherche') || q.includes('ou trouver les modules') || q.includes('où trouver')) {
+    return {
+      thought: `Définition limpide de l'Omnibar comme moteur de recherche et lanceur universel des 29 modules.`,
+      reply: `L'**Omnibar** est votre commande centrale Nanasore, située tout en haut au milieu de votre écran. Il vous suffit d'y taper le nom de n'importe lequel de nos 29 modules pour l'ouvrir, visionner une démo ou l'activer en un clic.\n\nQuel outil souhaitez-vous chercher dans l'Omnibar à cet instant ?`
+    };
+  }
+
+  // Cas 9 : Client agacé / contrarié
+  if (q.includes('enerve') || q.includes('énerv') || q.includes('agace') || q.includes('n\'importe quoi') || q.includes('reponds pas') || q.includes('arrete')) {
+    return {
+      thought: `Désamorçage humble et sincère d'une contrariété client. Présentation d'excuses et écoute active.`,
+      reply: `Je vous présente mes excuses les plus sincères, ${firstName || 'cher partenaire'}. Mon intention n'était absolument pas de vous contrarier, mais uniquement de vous apporter le meilleur accompagnement commercial possible.\n\nReprenons calmement : quelle est votre question prioritaire pour que je vous apporte une réponse nette et directe ?`
+    };
+  }
+
+  // Cas 10 : Question confuse / incomprise
+  if (q.length < 3 || q.includes('hein') || q.includes('pas compris') || q.includes('reexplique')) {
+    return {
+      thought: `Clarification polie suite à incompréhension.`,
+      reply: `Pardonnez-moi, je veux m'assurer de vous donner la recommandation la plus rentable possible : pourriez-vous me préciser votre besoin sous un autre angle ou m'indiquer quel produit vous souhaitez commercialiser ?`
+    };
+  }
+
+  // Cas 11 : Question dévalorisante / Scepticisme
+  if (q.includes('arnaque') || q.includes('cher') || q.includes('nul') || q.includes('mieux ailleurs')) {
+    return {
+      thought: `Recadrage élégant face à une critique. Mise en avant des 29 modules souverains tout-en-un et paiements locaux Sebpay.`,
+      reply: `C'est une excellente question, et votre esprit critique est la marque des grands entrepreneurs. Là où d'autres plateformes vous obligent à empiler 10 abonnements coûteux et dépendants de banques étrangères, Nanasore réunit **29 modules souverains** dans un seul écosystème avec encaissement Mobile Money direct et formule à la commission à risque zéro.\n\nSouhaitez-vous que nous fassions une simulation chiffrée de vos économies mensuelles ?`
+    };
+  }
+
+  // Cas 12 : Compliments
   if (q.includes('bravo') || q.includes('merci') || q.includes('super') || q.includes('intelligent') || q.includes('top') || q.includes('genial')) {
     return {
-      thought: `Compliment reçu. Remerciement élégant et renvoi du compliment vers l'ambition du marchand.`,
-      reply: `Je vous remercie chaleureusement pour vos mots, ${firstName || 'cher entrepreneur'} ! C'est un véritable privilège de collaborer avec des bâtisseurs qui ont votre vision. Chez Nanasore, votre réussite est notre seule métrique de succès.\n\nQuel nouveau levier souhaiteriez-vous que nous déployions ensemble pour passer un cap de chiffre d'affaires cette semaine ?`
+      thought: `Compliment reçu. Remerciements et valorisation du partenaire.`,
+      reply: `Je vous remercie chaleureusement, ${firstName || 'cher entrepreneur'} ! C'est un véritable privilège de collaborer avec des bâtisseurs qui ont votre vision. Chez Nanasore, votre succès est notre seule priorité.\n\nQuel prochain cap commercial souhaitez-vous franchir cette semaine ?`
     };
   }
 
-  // Scénario G : Lancer un business / Gagner beaucoup d'argent
+  // Cas 13 : Lancer un business rentable / Gagner beaucoup d'argent (Packs métiers diversifiés)
   if (q.includes('business') || q.includes('argent') || q.includes('riche') || q.includes('lancer') || q.includes('rentable') || q.includes('combinaison')) {
     return {
-      thought: `Lancement de business rentable. Proposer une combinaison gagnante adaptée (ex: POS + WhatsApp Shop + E-mailing Pro). Closing vers l'activation.`,
-      reply: `Pour bâtir un business hautement lucratif sur Nanasore, la clé réside dans la synergie de nos 29 modules. Par exemple, la combinaison **Caisse POS + E-Shop WhatsApp + Studio E-mailing Pro** vous permet d'encaisser au comptoir, de vendre en ligne 24/7 et de relancer automatiquement vos clients pour générer 35% de ventes récurrentes sans dépense publicitaire.\n\nQuel domaine vous passionne le plus pour démarrer : le commerce de produits physiques ou la vente de formations et services digitaux ?`
+      thought: `Combinaisons de business rentables diversifiées (Commerce, Formation, Vente digitale).`,
+      reply: `Pour bâtir un business très lucratif sur Nanasore, la clé réside dans la synergie de nos modules : par exemple, le pack **Vitrine E-Shop + WhatsApp + Tunnels Ultimate Funnel** pour les produits physiques, ou **Cours Forge LMS + Salles VIP Webinaires** pour les formations et e-books (avec 90%+ de marge nette).\n\nQuel domaine vous intéresse le plus : la vente de produits physiques ou la vente de savoir et produits digitaux ?`
     };
   }
 
-  // Scénario H : Les 29 modules et leur importance
-  if (q.includes('29') || q.includes('modules') || q.includes('catalogue') || q.includes('services') || q.includes('application')) {
-    return {
-      thought: `Présentation synthétique des 29 modules organisés par valeur business. Closing vers l'exploration dans l'Omnibar.`,
-      reply: `Nanasore intègre **29 modules d'élite** couvrant l'intégralité de votre chaîne de valeur : Caisse tactile POS, Vitrine E-Shop, Stocks en temps réel, Studio E-mailing Pro, Tunnels de vente Ultimate Funnel, Académie LMS, Salles VIP Webinaires et Passerelle Souveraine Sebpay.\n\nChaque module est accessible instantanément via l'**Omnibar** en haut de votre écran. Souhaitez-vous que je vous détaille le module qui correspond précisément à votre activité actuelle ?`
-    };
-  }
-
-  // Scénario I : Choix du plan & Modèle économique (Abonnement vs Commission)
+  // Cas 14 : Choix du plan général
   if (q.includes('plan') || q.includes('abonnement') || q.includes('tarif') || q.includes('commission') || q.includes('prix')) {
     return {
       thought: `Arbitrage économique et closing de plan.`,
-      reply: `Regardons les chiffres en toute transparence, ${firstName || 'cher entrepreneur'} : si vous lancez votre activité, le modèle de **Paiement à la Commission** à 0 FCFA de frais fixe est mathématiquement le plus sûr. Dès que votre volume de vente devient régulier, l'**Abonnement Fixe Pro** vous permet de conserver 100% de votre marge nette.\n\nPréférez-vous débuter en toute sécurité à la commission, ou souhaitez-vous que nous calibrions votre formule selon votre chiffre d'affaires prévisionnel ?`
+      reply: `Regardons les chiffres en commerçant de terrain, ${firstName || 'cher entrepreneur'} : si vous lancez votre activité, le modèle de **Paiement à la Commission** à 0 FCFA de frais fixes est le plus sécurisant. Dès que vos ventes deviennent régulières, l'**Abonnement Fixe Pro** vous permet de conserver 100% de votre marge nette.\n\nAvez-vous déjà un volume de ventes prévisible, ou préférez-vous débuter à la commission sans aucun risque ?`
     };
   }
 
-  // Accueil par défaut si premier contact
+  // Accueil si premier contact
   if (isNew) {
     return {
-      thought: `Nouveau marchand. Accueil chaleureux par le prénom, mention de Nanasore et proposition d'orientation.`,
-      reply: `${greeting} ! C'est un réel honneur de vous accueillir au sein de Nanasore.\n\nJe suis à vos côtés pour vous guider vers la formule la plus rentable et activer les 29 modules qui propulseront ${storeName}. Puis-je vous aider à choisir votre modèle économique, ou préférez-vous que je vous montre comment activer vos premiers outils via l'Omnibar ?`
+      thought: `Accueil d'un nouveau marchand par son prénom.`,
+      reply: `${greeting} ! C'est un réel honneur de vous accueillir au sein de Nanasore.\n\nEn tant que directeur commercial, je suis là pour vous aider à lancer votre business et à activer les 29 modules qui feront décoller ${storeName}. Puis-je vous aider à choisir la formule idéale pour démarrer, ou souhaitez-vous me décrire ce que vous souhaitez vendre ?`
     };
   }
 
-  // Par défaut : boucle Ping-Pong constructive
+  // Par défaut
   return {
-    thought: `Requête générale. Reformulation empathique, mention de Nanasore et clôture par choix alternatif.`,
-    reply: `C'est une excellente réflexion pour le développement de ${storeName}. Sur Nanasore, notre priorité est de transformer chaque visiteur en client fidèle tout en protégeant vos marges nettes.\n\nPréférez-vous que nous examinions l'activation de nouveaux canaux de vente via l'Omnibar, ou souhaitons-nous auditer votre rentabilité actuelle ?`
+    thought: `Requête générale avec rebond commercial actif.`,
+    reply: `C'est une excellente réflexion pour ${storeName}. Sur Nanasore, notre priorité de commerçant est de transformer chaque visiteur en client payant tout en protégeant vos marges.\n\nQuel produit ou service souhaitez-vous mettre en avant en priorité aujourd'hui ?`
   };
 }
 
@@ -251,9 +302,8 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
     const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
 
-    // Si tentative suspecte ou pas de clé API valide
     if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '' || isLeakAttempt) {
-      const fallbackResult = generateComprehensiveStrategicFallback(currentQuery, merchantContext, isLeakAttempt);
+      const fallbackResult = generateComprehensiveStrategicFallback(currentQuery, merchantContext, isLeakAttempt, messages);
       return NextResponse.json({
         reply: sanitizeSensitiveContent(fallbackResult.reply),
         internalThought: fallbackResult.thought,
@@ -299,11 +349,13 @@ DERNIÈRE DEMANDE DU MARCHAND :
 "${sanitizeSensitiveContent(currentQuery)}"
 
 CONSIGNES STRICTES DE RÉDACTION :
-1. Rédige d'abord ton bloc <analyse_interne>...</analyse_interne> pour décider de ta stratégie.
+1. Rédige d'abord ton bloc <analyse_interne>...</analyse_interne> pour décider de ta stratégie de commerçant pratiquant.
 2. Rédige ta réponse commerciale d'élite :
-   - Réponds directement et précisément à la question posée (ex: si on demande comment activer les modules, mentionne obligatoirement l'Omnibar et la finalisation du KYC).
+   - Si la question porte sur un produit spécifique (ex: livre, formation, cosmétique), donne le plan approprié (Pay-as-you-go ou Commission) et demande immédiatement s'il a ouvert son compte pour l'amener à l'ouvrir !
+   - Si la question nécessite une action préalable (activer pay-as-you-go, encaisser), applique la QUESTION RETOUR : demande s'il a déjà rempli son KYC (oui ou non) !
+   - Ne parle PAS que d'e-mailing, varie avec les 29 modules pertinents !
    - Style concis et humain (2 à 4 phrases max).
-   - Termine impérativement par UNE SEULE question de relance stratégique (closing ou choix alternatif).`;
+   - Termine impérativement par UNE SEULE question de relance stratégique orientée closing.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -325,7 +377,7 @@ CONSIGNES STRICTES DE RÉDACTION :
       }
 
       if (!cleanReply) {
-        const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false);
+        const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false, messages);
         cleanReply = fallback.reply;
         internalThought = fallback.thought;
       }
@@ -341,7 +393,7 @@ CONSIGNES STRICTES DE RÉDACTION :
 
     } catch (genAiError: any) {
       console.warn('[AGENT_NSORE_API] Repli heuristique après latence API:', genAiError?.message);
-      const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false);
+      const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false, messages);
       return NextResponse.json({
         reply: sanitizeSensitiveContent(fallback.reply),
         internalThought: fallback.thought,

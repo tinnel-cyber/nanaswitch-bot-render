@@ -111,16 +111,16 @@ export function GrowthDirectorAssistant({
   const quickPrompts = useMemo(() => {
     if (isNewUser) {
       return [
+        "Quel plan pour vendre mon livre ?",
         "Comment activer les 29 modules via l'Omnibar ?",
         "M'accompagner à remplir mon KYC",
-        "Quel pack lucratif pour lancer ma boutique ?",
         "Paiement à la commission vs Abonnement fixe"
       ];
     }
     return [
       "Comment activer un nouveau module via l'Omnibar ?",
       "Comment augmenter ma marge nette ce mois-ci ?",
-      "Optimiser mes campagnes e-mail avec Nanasore",
+      "Lancer une offre flash ou un tunnel de vente",
       "Dois-je basculer sur l'abonnement fixe ?"
     ];
   }, [isNewUser]);
@@ -207,22 +207,38 @@ export function GrowthDirectorAssistant({
           }
         ]);
       } else {
-        // Fallback local instantané avec psychologie humaine complète
+        // Fallback local instantané avec psychologie commerciale humaine complète
         const q = cleanQuery.toLowerCase();
-        let fallbackText = `C'est une excellente question pour ${storeName}. L'important est de maximiser chaque vente tout en protégeant votre temps et votre trésorerie.\n\nSur quel levier souhaitez-vous que nous mettions l'accent en priorité : l'acquisition de nouveaux clients ou l'augmentation de votre panier moyen ?`;
+        const prevAiMsg = [...messages].reverse().find(m => m.sender === 'ai')?.text?.toLowerCase() || '';
+        let fallbackText = `C'est une excellente question pour ${storeName}. En tant que commerçant, notre priorité est de transformer chaque visiteur en client payant tout en protégeant vos marges.\n\nQuel produit ou service souhaitez-vous commercialiser en priorité aujourd'hui ?`;
         
-        if (q.includes('activer') || q.includes('activation') || q.includes('comment activer')) {
-          fallbackText = `Les 29 modules de Nanasore sont déjà hébergés dans notre Cloud ! Il vous suffit de saisir le nom d'un service dans l'**Omnibar** en haut de l'écran pour l'ouvrir ou le tester en démo.\n\nPour débloquer les encaissements réels et les modules commerciaux avancés, vous devez finaliser votre **Chaîne d'Identification KYC** (Partie 1 Gérant + Partie 2 Entreprise). Puis-je vous accompagner pas à pas pour la remplir en 3 minutes ?`;
-        } else if (q.includes('kyc') || q.includes('identité') || q.includes('ouvrir compte')) {
-          fallbackText = `La validation KYC sur Nanasore est très simple et sécurise vos encaissements : Partie 1 (votre pièce d'identité officielle et selfie) et Partie 2 (coordonnées de votre entreprise).\n\nAvez-vous votre pièce d'identité sous la main pour que nous validions la Partie 1 ensemble en 2 minutes ?`;
+        // Réponses contextuelles "oui" / "non" selon la question précédente
+        if ((q === 'non' || q.includes('pas encore') || q.includes('pas de compte') || q.includes('pas créé')) && (prevAiMsg.includes('ouvert votre compte') || prevAiMsg.includes('boutique sur nanasore'))) {
+          fallbackText = `C'est tout à fait normal ! Pour activer votre formule et commencer à encaisser vos clients en toute conformité, la première étape indispensable est d'ouvrir votre compte boutique. La bonne nouvelle, c'est que cela ne prend que 2 minutes et je peux vous accompagner dès maintenant. Souhaitez-vous que nous procédions à l'ouverture ensemble tout de suite ?`;
+        } else if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait') || q.includes('j\'ai un compte')) && (prevAiMsg.includes('ouvert votre compte') || prevAiMsg.includes('boutique sur nanasore'))) {
+          fallbackText = `Parfait, vous avez une longueur d'avance ! Il vous suffit désormais de taper **Ultimate Funnel** (si c'est un livre ou produit vedette) ou **Vitrine E-Shop** dans l'Omnibar en haut de votre écran pour créer votre page et fixer votre prix. Avez-vous déjà déterminé le prix de vente de votre produit ?`;
+        } else if ((q === 'non' || q.includes('pas encore') || q.includes('c\'est quoi kyc')) && (prevAiMsg.includes('rempli votre kyc') || prevAiMsg.includes('votre kyc'))) {
+          fallbackText = `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant. Avez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`;
+        } else if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait')) && (prevAiMsg.includes('rempli votre kyc') || prevAiMsg.includes('votre kyc'))) {
+          fallbackText = `Félicitations, vos voyants sont au vert ! Pour activer n'importe quel module, tapez simplement son nom dans l'**Omnibar** en haut de votre écran, cliquez sur 'Activer' ou 'Tester en démo', et il est immédiatement prêt à l'emploi. Quel module souhaitez-vous lancer en premier ?`;
+        } else if (q.includes('livre') || q.includes('ebook') || q.includes('e-book') || q.includes('roman') || q.includes('manuel')) {
+          // Schéma 1 : Vente de Livre -> Recommandation Plan + Question fermeture compte
+          fallbackText = `Pour vendre votre livre en toute rentabilité, le plan **Pay-as-you-go** ou la formule à la **Commission (0 FCFA de frais fixes)** est la solution idéale : vous déployez votre page de vente sans risque et ne payez qu'une commission modérée par exemplaire vendu.\n\nAvez-vous déjà ouvert votre compte boutique sur Nanasore ?`;
+        } else if (q.includes('comment activer') || (q.includes('activer') && (q.includes('pay as you go') || q.includes('pay-as-you-go') || q.includes('module')))) {
+          // Schéma 2 : Question Retour Prérequis KYC
+          fallbackText = `Avant de vous guider dans l'activation, permettez-moi de vous poser une question essentielle : avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?`;
+        } else if (q.includes('kyc') || q.includes('identité') || q.includes('verification') || q.includes('vérification')) {
+          fallbackText = `Le KYC (Know Your Customer) est la vérification officielle obligatoire qui sécurise vos encaissements Mobile Money et Cartes Bancaires : Partie 1 (votre pièce d'identité et selfie) et Partie 2 (les coordonnées de votre entreprise).\n\nPuis-je vous accompagner pour remplir la Partie 1 dès maintenant en 2 minutes ?`;
+        } else if (q.includes('omnibar') || q.includes('barre de recherche')) {
+          fallbackText = `L'**Omnibar** est votre commande centrale Nanasore, située tout en haut de votre écran. Il vous suffit d'y taper le nom de n'importe lequel de nos 29 modules pour l'ouvrir, visionner une démo ou l'activer en un clic.\n\nQuel outil souhaitez-vous chercher dans l'Omnibar à cet instant ?`;
         } else if (q.includes('enerve') || q.includes('énerv') || q.includes('agace') || q.includes('reponds pas')) {
           fallbackText = `Je vous présente mes excuses les plus sincères, ${firstName || 'cher partenaire'}. Mon intention n'était absolument pas de vous heurter, mais uniquement de vous propulser vers la rentabilité.\n\nReprenons calmement : quelle est votre question prioritaire à cet instant précis ?`;
         } else if (q.includes('business') || q.includes('argent') || q.includes('combinaison') || q.includes('pack')) {
-          fallbackText = `Pour lancer un business très lucratif sur Nanasore, la combinaison **Caisse POS + Vitrine WhatsApp E-Shop + Studio E-mailing Pro** est redoutable : elle vous permet d'encaisser au comptoir, de vendre en ligne 24/7 et de générer des ventes récurrentes sans frais publicitaires.\n\nQuel domaine souhaitez-vous lancer : le commerce de produits physiques ou des services/formations ?`;
+          fallbackText = `Pour générer des revenus solides sur Nanasore, vous avez l'embarras du choix parmi nos 29 modules : la combinaison **Caisse POS + Vitrine WhatsApp** pour le commerce physique, ou **Ultimate Funnel + NaNa Cours Forge** pour vendre des livres et formations numériques.\n\nQuel domaine vous correspond le mieux : les produits physiques ou les produits numériques ?`;
         } else if (q.includes('commission') || q.includes('risque')) {
           fallbackText = `Entre nous, le **Paiement à la Commission** est l'option idéale pour débuter : vous activez nos 29 modules sans débourser un centime de frais fixe, et Nanasore ne prélève une commission que lorsque vous encaissez réellement.\n\nPréférez-vous démarrer avec cette formule sans engagement, ou souhaitez-vous comparer avec l'abonnement fixe ?`;
         } else if (q.includes('plan') || q.includes('abonnement')) {
-          fallbackText = `Regardons les chiffres concrètement, ${firstName || 'cher entrepreneur'} : si vos ventes démarrent, la commission à 0 FCFA est la plus sécurisante. Dès que vos ventes deviennent régulières, l'abonnement fixe protège 100% de vos marges nettes.\n\nAvez-vous déjà un volume de ventes prévisible, ou préférez-vous débuter en douceur à la commission ?`;
+          fallbackText = `Regardons les chiffres concrètement, ${firstName || 'cher entrepreneur'} : si vous lancez votre activité, la formule à la commission (0 FCFA de coût fixe) est la plus sûre. Dès que vos ventes dépassent un certain seuil mensuel, l'abonnement fixe protège 100% de vos marges nettes.\n\nAvez-vous déjà un volume de ventes mensuel estimé, ou préférez-vous débuter en douceur à la commission ?`;
         }
 
         setMessages(prev => [
@@ -242,7 +258,7 @@ export function GrowthDirectorAssistant({
         {
           id: `ai-${Date.now()}`,
           sender: 'ai',
-          text: `Je reste à vos côtés, ${firstName || 'cher partenaire'}. Sur Nanasore, vos 29 modules sont tous accessibles via l'Omnibar pour dynamiser vos ventes au comptoir et en ligne.\n\nSouhaitez-vous que nous finalisions votre KYC ou préféreriez-vous tester une campagne sur le Studio E-mailing Pro ?`,
+          text: `Je reste à vos côtés, ${firstName || 'cher partenaire'}. Sur Nanasore, vos 29 modules sont tous accessibles via l'Omnibar pour dynamiser vos ventes au comptoir et en ligne.\n\nSouhaitez-vous que nous vérifiions ensemble votre KYC ou que nous préparions votre première page de vente ?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
