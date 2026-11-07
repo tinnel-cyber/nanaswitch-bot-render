@@ -64,6 +64,8 @@ import {
   attachVideoProcessingRoutes,
   compressVideoTo480p
 } from './src/server/videoProcessingService';
+import { attachGrowthAdvisorRoutes } from './src/server/growthAdvisorController';
+import { attachCampaignsRoutes } from './src/server/campaignsController';
 
 export { compressVideoTo480p };
 
@@ -950,6 +952,12 @@ async function startServer() {
   // Pipeline de Traitement Vidéo & Compression 480p FastStart (Reels)
   attachVideoProcessingRoutes(app);
 
+  // Moteur de Croissance Commerciale & Conseiller d'Élite Agent Nsore (29 Modules & Closing)
+  attachGrowthAdvisorRoutes(app);
+
+  // Moteur d'E-mailing Pro Marchand & Relais Brevo API v3 (Campagnes Ciblées & Quotas)
+  attachCampaignsRoutes(app);
+
   // Proxy endpoint pour Nana-générateur vers backend AWS Lambda officiel (Replicate & HLS centralisé côté AWS Lambda)
   const forwardToAwsLambda = async (req: express.Request, res: express.Response) => {
     try {
@@ -1485,6 +1493,28 @@ Règles de communication :
 - **Constat** : Vos ventes de pain progressent de +20% le vendredi matin.
 - **Action concrète** : Commandez du beurre en portion ou en plaquette dès le jeudi après-midi.
 - **Argument de vente** : En proposant le beurre ou du lait concentré au moment où le client demande sa baguette, 4 clients sur 10 prennent l'accompagnement, ce qui fait passer un panier de 150 F CFA à 550 F CFA (+266% de chiffre d'affaires sur ce ticket !).`;
+      } else if (q.includes('livre') || q.includes('ebook') || q.includes('e-book')) {
+        reply = `**📚 Plan Recommandé pour vendre votre livre / e-book :**
+
+Pour commercialiser votre livre en toute sérénité, la formule **Pay-as-you-go / Commission (0 FCFA de frais fixes)** est la solution idéale : vous déployez votre page de vente sans frais d'entrée et ne payez qu'une commission minime sur chaque exemplaire vendu.
+
+Avez-vous déjà ouvert votre compte boutique sur Nanasore pour configurer votre première page ?`;
+      } else if (q.includes('comment activer') || (q.includes('activer') && (q.includes('module') || q.includes('pay as you go') || q.includes('14') || q.includes('29')))) {
+        reply = `**⚡ Activation des 29 modules Nanasore :**
+
+Avant de vous détailler la procédure d'activation dans le Cloud, permettez-moi de vous poser une question essentielle : **avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?**`;
+      } else if (q.includes('omnibar')) {
+        reply = `**🔍 L'Omnibar Nanasore :**
+
+L'Omnibar est la barre de recherche universelle située au centre tout en haut de votre écran. Il vous suffit d'y saisir le nom d'un des 29 modules pour le prévisualiser en mode démo ou l'activer en un clic.`;
+      } else if (q.includes('kyc') || q.includes('identité')) {
+        reply = `**🛡️ Chaîne d'Identification KYC Souveraine :**
+
+La validation KYC est indispensable pour débloquer les encaissements réels (Mobile Money Orange, Moov, Wave et Cartes Bancaires). Elle se compose de :
+1. **Partie 1 (Gérant)** : Votre pièce d'identité officielle et selfie de vérification.
+2. **Partie 2 (Entreprise)** : Coordonnées de votre commerce.
+
+Avez-vous votre pièce d'identité sous la main pour finaliser la Partie 1 en 2 minutes ?`;
       } else if (q.includes('grossiste') || q.includes('fournisseur') || q.includes('achat') || q.includes('commander')) {
         reply = `**📦 Conseil d'achat et négociation grossistes :**
 
