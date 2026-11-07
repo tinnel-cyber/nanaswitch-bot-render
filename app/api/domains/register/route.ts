@@ -84,19 +84,28 @@ export async function POST(request: Request) {
 
     let cfHostnameId: string | null = null;
     let cfStatus = 'pending';
+    let ownershipVerification: any = null;
     let sslVerificationData: any = null;
 
     if (cfApiToken && cfZoneId) {
       const cfUrl = `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/custom_hostnames`;
 
+      // Payload Cloudflare Custom Hostname conforme Cloudflare for SaaS
+      // avec gestion de la règle > 64 caractères (cloudflare_branding: true)
       const cfPayload = {
         hostname: cleanDomain,
         ssl: {
-          method: 'http',
+          method: 'txt',
           type: 'dv',
           settings: {
             min_tls_version: '1.2',
+            http2: 'on',
           },
+          cloudflare_branding: true,
+        },
+        custom_metadata: {
+          tenant_id: tenantId,
+          app: 'nanasore',
         },
       };
 
@@ -124,12 +133,56 @@ export async function POST(request: Request) {
 
       cfHostnameId = cfData.result?.id || null;
       cfStatus = cfData.result?.status || 'pending';
+      ownershipVerification = cfData.result?.ownership_verification || null;
       sslVerificationData = cfData.result?.ssl || null;
+
+      // Temporisation de 1500ms puis requête GET pour extraction des jetons DCV et records SSL
+      if (cfHostnameId) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+
+          const cfGetUrl = `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/custom_hostnames/${cfHostnameId}`;
+          const cfGetRes = await fetch(cfGetUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${cfApiToken}`,
+            },
+          });
+
+          if (cfGetRes.ok) {
+            const cfGetData = await cfGetRes.json().catch(() => ({}));
+            if (cfGetData.result) {
+              cfStatus = cfGetData.result.status || cfStatus;
+              ownershipVerification = cfGetData.result.ownership_verification || ownershipVerification;
+              sslVerificationData = cfGetData.result.ssl || sslVerificationData;
+            }
+          }
+        } catch (getErr) {
+          console.warn('[Cloudflare DCV GET Warning]', getErr);
+        }
+      }
     } else {
-      // Mode simulation sécurisé si les clés Cloudflare ne sont pas encore définies dans l'environnement de dev
+      // Mode simulation sécurisé si les clés Cloudflare ne sont pas encore définies
       console.warn('⚠️ Variables CLOUDFLARE_API_TOKEN ou CLOUDFLARE_ZONE_ID manquantes. Mode simulation activé pour le dev.');
       cfHostnameId = `mock_cf_${Date.now()}`;
       cfStatus = 'pending';
+      ownershipVerification = {
+        type: 'txt',
+        name: `_cf-custom-hostname.${cleanDomain}`,
+        value: `mock_verification_token_${Date.now()}`,
+      };
+      sslVerificationData = {
+        status: 'pending_validation',
+        method: 'txt',
+        type: 'dv',
+        validation_records: [
+          {
+            txt_name: `_ca3-${cleanDomain.slice(0, 10)}.${cleanDomain}`,
+            txt_value: `dcv_mock_token_${Date.now()}`,
+          },
+        ],
+      };
     }
 
     // 4. Mise à jour du tenant dans Supabase avec le nouveau domaine et statut
@@ -145,13 +198,37 @@ export async function POST(request: Request) {
       .eq('id', tenantId);
 
     if (updateError) {
+      console.warn('[Supabase update error]', updateError.message);
+      // Si la table tenants n'est pas encore appliquée sur le serveur Supabase distant
+      if (updateError.message.includes('tenants')) {
+        return NextResponse.json({
+          success: true,
+          notice: 'Domaine enregistré sur Cloudflare. Veuillez exécuter le schéma database/schema_multitenant.sql sur Supabase pour finaliser la persistance.',
+          tenant_id: tenantId,
+          custom_domain: cleanDomain,
+          routing_type: 'custom',
+          domain_status: cfStatus,
+          cloudflare_hostname_id: cfHostnameId,
+          dns_instructions: {
+            cname: {
+              record_type: 'CNAME',
+              host: cleanDomain,
+              target: cfFallbackOrigin,
+              description: `Pointez le domaine ou sous-domaine vers '${cfFallbackOrigin}'`,
+            },
+            ownership_verification: ownershipVerification,
+            ssl_dcv: sslVerificationData?.validation_records || sslVerificationData,
+          },
+        });
+      }
+
       return NextResponse.json(
         { error: 'Domaine enregistré sur Cloudflare mais échec de la mise à jour Supabase.', details: updateError.message },
         { status: 500 }
       );
     }
 
-    // 5. Retourne les instructions DNS à afficher au marchand
+    // 5. Retourne les instructions DNS structurées à afficher au marchand
     return NextResponse.json({
       success: true,
       message: `Domaine '${cleanDomain}' enregistré avec succès en attente de validation DNS.`,
@@ -161,11 +238,14 @@ export async function POST(request: Request) {
       domain_status: cfStatus,
       cloudflare_hostname_id: cfHostnameId,
       dns_instructions: {
-        record_type: 'CNAME',
-        host: cleanDomain,
-        target: cfFallbackOrigin,
-        description: `Créez un enregistrement DNS de type CNAME pointant vers '${cfFallbackOrigin}'.`,
-        ssl_verification: sslVerificationData,
+        cname: {
+          record_type: 'CNAME',
+          host: cleanDomain,
+          target: cfFallbackOrigin,
+          description: `Créez un enregistrement DNS de type CNAME pointant '${cleanDomain}' vers '${cfFallbackOrigin}'.`,
+        },
+        ownership_verification: ownershipVerification,
+        ssl_dcv: sslVerificationData?.validation_records || sslVerificationData,
       },
     });
   } catch (err: any) {

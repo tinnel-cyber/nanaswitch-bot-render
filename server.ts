@@ -46,6 +46,7 @@ import {
   unregisterSocketFromCagnotteGroup
 } from './src/server/cagnotteController';
 import { attachDiscoverySearchRoutes } from './src/server/discoverySearchController';
+import { attachCustomDomainsRoutes } from './src/server/customDomainsController';
 import { attachVipSubscriptionRoutes } from './src/server/vipSubscriptionController';
 import {
   attachWameetSyncRoutes,
@@ -924,6 +925,9 @@ async function startServer() {
 
   // Moteur de Recherche "Discovery" & Historique Utilisateur Wameet (Prompt 25)
   attachDiscoverySearchRoutes(app);
+
+  // Moteur Cloudflare Custom Hostnames & Domaines Personnalisés (Marque Blanche)
+  attachCustomDomainsRoutes(app);
 
   // Moteur de Souscription VIP & Péage Wameet (Prompt 27)
   attachVipSubscriptionRoutes(app);
