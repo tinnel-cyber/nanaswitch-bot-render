@@ -135,6 +135,7 @@ const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneA
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
+const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
 import { getMarketplaceCourseById } from './services/marketplaceService';
 import { AuthProvider } from './context/AuthContext';
 import { useTenant } from './context/TenantContext';
@@ -247,7 +248,9 @@ import {
 
 const SUPERADMIN_EMAILS = KNOWN_SUPERADMIN_EMAILS;
 
-export type AppView = 
+export type AppView =
+  | 'EMAILING'
+  | 'emailing' 
   | 'HOME'
   | 'home'
   | 'LANDING'
@@ -364,6 +367,10 @@ export default function App() {
   }>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      const urlParams = new URLSearchParams(window.location.search);
+      if (pathname === '/dashboard/marketing/emailing' || pathname.startsWith('/dashboard/marketing/emailing') || pathname === '/marketing/emailing' || pathname === '/emailing' || urlParams.get('view') === 'emailing' || urlParams.get('page') === 'emailing') {
+        return 'EMAILING';
+      }
       if (
         pathname === '/test-supabase' ||
         pathname.startsWith('/test-supabase') ||
@@ -6501,6 +6508,16 @@ export default function App() {
                       playValidationBeep();
                     }}
                   />
+                </div>
+              </React.Suspense>
+            </ModuleErrorBoundary>
+          )}
+
+          {(currentView === 'EMAILING' || currentView === 'emailing') && (
+            <ModuleErrorBoundary moduleName="Studio Emailing">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Studio E-mailing..." />}>
+                <div className="fixed inset-0 z-50 bg-[#FBF9F5] overflow-y-auto">
+                  <TenantEmailingDashboardPage />
                 </div>
               </React.Suspense>
             </ModuleErrorBoundary>
