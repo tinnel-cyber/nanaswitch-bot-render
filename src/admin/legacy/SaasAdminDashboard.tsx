@@ -823,8 +823,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       const updatedCentral: CentralPaymentConfig = {
         ...centralPaymentConfig,
         deliveryZones: parsedDeliveryZones.length > 0 ? parsedDeliveryZones : DEFAULT_CENTRAL_PAYMENT_CONFIG.deliveryZones,
-        scrollingMarquee: platformConfig.paymentSettings.scrollingMarquee,
-        supportWhatsApp: platformConfig.paymentSettings.supportWhatsApp,
+        scrollingMarquee: (platformConfig.paymentSettings?.scrollingMarquee || ''),
+        supportWhatsApp: (platformConfig.paymentSettings?.supportWhatsApp || ''),
         updatedAt: Date.now(),
         updatedBy: currentUser?.email || 'Super-Admin',
       };
@@ -898,8 +898,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       const updatedCentral: CentralPaymentConfig = {
         ...centralPaymentConfig,
         deliveryZones: parsedDeliveryZones.length > 0 ? parsedDeliveryZones : DEFAULT_CENTRAL_PAYMENT_CONFIG.deliveryZones,
-        scrollingMarquee: platformConfig.paymentSettings.scrollingMarquee,
-        supportWhatsApp: platformConfig.paymentSettings.supportWhatsApp,
+        scrollingMarquee: (platformConfig.paymentSettings?.scrollingMarquee || ''),
+        supportWhatsApp: (platformConfig.paymentSettings?.supportWhatsApp || ''),
         updatedAt: Date.now(),
         updatedBy: currentUser?.email || 'Super-Admin',
       };
@@ -1115,7 +1115,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       ...prev,
       paymentSettings: {
         ...prev.paymentSettings,
-        operators: prev.paymentSettings.operators.map(op => op.id === opId ? { ...op, ...updates } : op),
+        operators: (prev.paymentSettings?.operators || []).map(op => op.id === opId ? { ...op, ...updates } : op),
       },
     }));
   };
@@ -4356,14 +4356,14 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-indigo-400" />
-                1. Formules Commerciales & Limites PLG ({platformConfig.plans.length} Offres)
+                1. Formules Commerciales & Limites PLG ({(platformConfig.plans || []).length} Offres)
               </h3>
               <span className="text-[10px] text-slate-400 font-medium">Sélectionnez une offre à configurer :</span>
             </div>
 
             {/* Sélecteur d'Onglets des 4 Formules (Freemium, Starter, Pro, Elite) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {platformConfig.plans.map((plan, idx) => {
+              {(platformConfig.plans || []).map((plan, idx) => {
                 const isSelected = selectedEditPlanIdx === idx;
                 return (
                   <button
@@ -4646,7 +4646,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 </label>
                 <textarea
                   rows={2}
-                  value={platformConfig.paymentSettings.scrollingMarquee}
+                  value={(platformConfig.paymentSettings?.scrollingMarquee || '')}
                   onChange={(e) =>
                     setPlatformConfig((prev) => ({
                       ...prev,
@@ -4660,7 +4660,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 {/* Prévisualisation dynamique du bandeau */}
                 <div className="py-1 px-2.5 bg-orange-600 overflow-hidden whitespace-nowrap text-white text-[10px] font-black rounded-xl shadow-inner">
                   <div className="inline-block animate-marquee uppercase tracking-wider">
-                    {platformConfig.paymentSettings.scrollingMarquee} &nbsp;&nbsp;•&nbsp;&nbsp; {platformConfig.paymentSettings.scrollingMarquee}
+                    {(platformConfig.paymentSettings?.scrollingMarquee || '')} &nbsp;&nbsp;•&nbsp;&nbsp; {(platformConfig.paymentSettings?.scrollingMarquee || '')}
                   </div>
                 </div>
               </div>
@@ -4672,7 +4672,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={platformConfig.paymentSettings.supportWhatsApp}
+                  value={(platformConfig.paymentSettings?.supportWhatsApp || '')}
                   onChange={(e) =>
                     setPlatformConfig((prev) => ({
                       ...prev,
@@ -4713,7 +4713,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 <div>
                   <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                     <Globe2 className="w-3.5 h-3.5 text-amber-400" />
-                    Opérateurs, Codes Marchands & Syntaxes USSD ({platformConfig.paymentSettings.operators.length})
+                    Opérateurs, Codes Marchands & Syntaxes USSD ({(platformConfig.paymentSettings?.operators || []).length})
                   </h4>
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     Configurez les numéros, codes marchands (ex: Orange BF 65565805) et les modèles de syntaxe USSD.
@@ -4723,7 +4723,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
               {/* Liste des opérateurs existants */}
               <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                {platformConfig.paymentSettings.operators.map((op) => {
+                {(platformConfig.paymentSettings?.operators || []).map((op) => {
                   const isBfOrange = op.country.toLowerCase().includes('burkina') && op.operator.toLowerCase().includes('orange');
                   return (
                     <div

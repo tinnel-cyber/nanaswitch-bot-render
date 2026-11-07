@@ -34,6 +34,29 @@ export interface AppRegistryItem {
 }
 
 export const APPS_REGISTRY: AppRegistryItem[] = [
+  // Module Studio E-mailing & Campagnes Brevo
+  {
+    id: "emailing",
+    appName: "Studio E-mailing & Campagnes",
+    appLogo: "/assets/icons/apps/mail.svg",
+    shortDescription: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Brevo.",
+    category: "Marketing & Communication",
+    keywords: ["email", "emailing", "campagne", "brevo", "newsletter", "mail", "marketing", "diffusion", "mailing", "clients", "quotas"],
+    route: "/dashboard/marketing/emailing",
+    installationType: "instant",
+    trialType: "freemium",
+    priceMonthly: 0,
+    palmares: "🚀 Délivrabilité 99.8% Brevo",
+    badgePalmares: "✉️ Éditeur Visuel Sans Code",
+    trialLabel: "500 crédits offerts",
+    isPopular: true,
+    isNew: true,
+    targetView: "EMAILING",
+    badge: "Brevo V3",
+    rating: 5.0,
+    iconName: "Mail"
+  },
+
   // Module Espace Upload Académique (Professeurs & Étudiants)
   {
     id: "vendor-upload",

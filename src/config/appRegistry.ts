@@ -45,6 +45,22 @@ export type AppModule = CanonicalModule;
 // ============================================================================
 export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   {
+    id: 'emailing',
+    slug: 'emailing',
+    name: 'Studio E-mailing & Campagnes Brevo',
+    route: '/dashboard/marketing/emailing',
+    category: 'Marketing & Vente',
+    description: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Brevo.",
+    type: 'APPLICATION',
+    taxonomy: 'APPLICATION',
+    defaultActive: true,
+    view: 'EMAILING',
+    icon: 'Mail',
+    keywords: ['email', 'emailing', 'campagne', 'brevo', 'marketing', 'newsletter', 'quotas', 'mailing', 'contacts', 'diffusion', 'crm'],
+    aliases: ['app-emailing', 'campaigns', 'marketing-emailing', 'email-studio', 'campagne-emailing']
+  },
+
+  {
     id: 'pos',
     slug: 'pos',
     name: 'Caisse Tactile Magasin (POS)',

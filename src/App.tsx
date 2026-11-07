@@ -6569,6 +6569,14 @@ export default function App() {
                       return;
                     }
 
+                    if (v === 'EMAILING' || v === 'emailing' || v === 'app-emailing' || v === 'email' || v === '/dashboard/marketing/emailing' || v === '/emailing') {
+                      setCurrentView('EMAILING');
+                      if (typeof window !== 'undefined') {
+                        window.history.pushState({}, '', '/dashboard/marketing/emailing');
+                      }
+                      return;
+                    }
+
                     // Groupe 3 - Déclencheurs de Modales & Outils Intégrés (Ouverture directe 1-clic)
                     if (v === 'APPS_NANAGENERATOR' || v === 'NANAGENERATOR' || v === 'nanagenerator' || v === 'app-nanagenerator' || v === '/dashboard/apps/nanagenerator') {
                       handleOpenMarketingAi();

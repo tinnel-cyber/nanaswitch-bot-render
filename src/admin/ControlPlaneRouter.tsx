@@ -18,6 +18,7 @@ import { TenantsManagementView } from './tenants/TenantsManagementView';
 import { PricingConfigView } from './pricing/PricingConfigView';
 import { SystemHealthView } from './system-health/SystemHealthView';
 import { NanasoreLogo } from '../components/common/NanasoreLogo';
+import { ModuleErrorBoundary } from '../components/ModuleErrorBoundary';
 
 // Import dynamique du Hub Builder pour ne charger les éditeurs lourds que si nécessaire
 const HubBuilderPage = React.lazy(() => import('../pages/admin/HubBuilder'));
@@ -237,11 +238,13 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
             </React.Suspense>
           )}
           {currentTab === 'saas-admin' && (
-            <React.Suspense fallback={<div className="p-12 text-center text-slate-400 animate-pulse">Chargement du Grand Tableau de Bord Fondateur (12 Modules)...</div>}>
-              <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-2xl">
-                <SaasAdminDashboard onBackToPOS={() => navigateToTab('dashboard')} />
-              </div>
-            </React.Suspense>
+            <ModuleErrorBoundary moduleName="Grand Dashboard Super Admin">
+              <React.Suspense fallback={<div className="p-12 text-center text-slate-400 animate-pulse">Chargement du Grand Tableau de Bord Fondateur (12 Modules)...</div>}>
+                <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-2xl">
+                  <SaasAdminDashboard onBackToPOS={() => navigateToTab('dashboard')} />
+                </div>
+              </React.Suspense>
+            </ModuleErrorBoundary>
           )}
         </main>
       </div>
