@@ -56,7 +56,7 @@ export interface EmailBlock {
   id: string;
   type: 'logo' | 'banner' | 'heading' | 'text' | 'button' | 'image' | 'footer' | 'divider' | 'badge' | 'testimonial';
   content: string;
-  url?: string;
+  url?: string; // Lien global du bloc (redirection complète)
   headingLevel?: 'h1' | 'h2' | 'h3';
   logoWidth?: number;
   bannerConfig?: {
@@ -153,6 +153,68 @@ export const BANNER_PRESETS: Record<string, {
   }
 };
 
+// =============================================================================
+// FONCTIONS UTILITAIRES : LIENS HYPERTEXTES INLINE DANS UN MORCEAU DE TEXTE
+// =============================================================================
+
+/**
+ * Convertit un texte brut contenant des liens markdown [texte](url) ou des balises <a>
+ * en balises HTML <a> stylisées pour tous les clients mails (Brevo, Gmail, Outlook, Apple Mail).
+ */
+export const formatInlineLinks = (rawText: string, linkColor: string = '#2563EB'): string => {
+  if (!rawText) return '';
+  
+  // 1. Remplacement des liens markdown [morceau](url)
+  let formatted = rawText.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s\)]+|mailto:[^\s\)]+|tel:[^\s\)]+|wa\.me[^\s\)]+)\)/gi,
+    (match, label, url) => {
+      const cleanUrl = url.startsWith('http') || url.startsWith('mailto:') || url.startsWith('tel:') 
+        ? url 
+        : `https://${url}`;
+      return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: ${linkColor}; font-weight: 600; text-decoration: underline; text-underline-offset: 2px;">${label}</a>`;
+    }
+  );
+
+  // 2. Harmonisation des balises HTML <a> déjà présentes
+  formatted = formatted.replace(
+    /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1([^>]*)>(.*?)<\/a>/gi,
+    (match, quote, url, rest, label) => {
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: ${linkColor}; font-weight: 600; text-decoration: underline; text-underline-offset: 2px;">${label}</a>`;
+    }
+  );
+
+  // 3. Support du gras markdown **texte**
+  formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // 4. Support de l'italique markdown *texte*
+  formatted = formatted.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+
+  return formatted;
+};
+
+/**
+ * Extrait la liste de tous les liens inline présents dans un texte pour le panneau de gestion.
+ */
+export const extractInlineLinks = (rawText: string): Array<{ label: string; url: string; fullMatch: string }> => {
+  if (!rawText) return [];
+  const links: Array<{ label: string; url: string; fullMatch: string }> = [];
+
+  // Liens markdown [texte](url)
+  const mdRegex = /\[([^\]]+)\]\((https?:\/\/[^\s\)]+|mailto:[^\s\)]+|tel:[^\s\)]+|wa\.me[^\s\)]+)\)/gi;
+  let match;
+  while ((match = mdRegex.exec(rawText)) !== null) {
+    links.push({ label: match[1], url: match[2], fullMatch: match[0] });
+  }
+
+  // Liens HTML <a href="...">texte</a>
+  const htmlRegex = /<a\s+(?:[^>]*?\s+)?href=(["'])(.*?)\1[^>]*>(.*?)<\/a>/gi;
+  while ((match = htmlRegex.exec(rawText)) !== null) {
+    links.push({ label: match[3], url: match[2], fullMatch: match[0] });
+  }
+
+  return links;
+};
+
 export function EmailBuilderStudio({
   onTemplateSave,
   initialSubject = '🔥 Offre exclusive de la semaine !',
@@ -163,13 +225,31 @@ export function EmailBuilderStudio({
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>('banner-hero');
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>('4');
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
 
   // Couleurs d'arrière-plan configurables
   const [emailBgColor, setEmailBgColor] = useState<string>('#FBF9F5');
   const [cardBgColor, setCardBgColor] = useState<string>('#FFFFFF');
+
+  // État de sélection d'un morceau de texte pour transformation en lien
+  const [textSelection, setTextSelection] = useState<{
+    blockId: string;
+    start: number;
+    end: number;
+    selectedText: string;
+  } | null>(null);
+
+  // Modale d'insertion de lien dans un morceau de texte
+  const [inlineLinkModal, setInlineLinkModal] = useState<{
+    isOpen: boolean;
+    blockId: string;
+    selectedText: string;
+    url: string;
+    start?: number;
+    end?: number;
+  } | null>(null);
 
   // Palette de couleurs de texte pour entreprise
   const colorPresets = [
@@ -182,7 +262,7 @@ export function EmailBuilderStudio({
     { label: 'Rouge Flash', value: '#EF4444' }
   ];
 
-  // Blocs dynamiques enrichis avec Logo, Bannière Stylisée 0 Ko, H1/H2/H3, Liens
+  // Blocs dynamiques enrichis avec Logo, Bannière Stylisée 0 Ko, H1/H2/H3, Liens Inline
   const [blocks, setBlocks] = useState<EmailBlock[]>([
     {
       id: '1',
@@ -223,7 +303,7 @@ export function EmailBuilderStudio({
     { 
       id: '4', 
       type: 'text', 
-      content: 'Bonjour {{FIRSTNAME}}, nous sommes ravis de vous compter parmi les clients privilégiés de {{SHOP_NAME}}. Pour célébrer notre nouvelle collection, profitez dès maintenant de nos tarifs exclusifs avec le code promo {{PROMO_CODE}}.', 
+      content: 'Bonjour {{FIRSTNAME}}, nous sommes ravis de vous compter parmi les clients privilégiés de {{SHOP_NAME}}. Pour célébrer notre nouvelle collection, profitez dès maintenant de nos [tarifs exclusifs](https://nanasore.com/collection) avec le code promo {{PROMO_CODE}}.', 
       styles: { align: 'left', textColor: '#334155', fontSize: 'md' } 
     },
     { 
@@ -243,7 +323,7 @@ export function EmailBuilderStudio({
     { 
       id: '7', 
       type: 'footer', 
-      content: 'Vous recevez cet e-mail suite à votre inscription sur {{SHOP_NAME}}. Conformité RGPD & directives anti-spam. Cliquez ici pour vous désabonner.' 
+      content: 'Vous recevez cet e-mail suite à votre inscription sur {{SHOP_NAME}}. Conformité RGPD & directives anti-spam. [Cliquez ici pour vous désabonner](https://nanasore.com/unsubscribe).' 
     }
   ]);
 
@@ -289,7 +369,7 @@ export function EmailBuilderStudio({
       defaultContent = '« Une expérience client exceptionnelle avec un suivi WhatsApp irréprochable ! »';
       defaultStyles = { align: 'center', textColor: '#475569', backgroundColor: '#F8FAFC' };
     } else if (type === 'footer') {
-      defaultContent = '© 2026 {{SHOP_NAME}}. Tous droits réservés. Se désabonner.';
+      defaultContent = '© 2026 {{SHOP_NAME}}. Tous droits réservés. [Se désabonner](https://nanasore.com/unsubscribe).';
       defaultStyles = { align: 'center', textColor: '#64748b', fontSize: 'sm' };
     }
 
@@ -386,6 +466,94 @@ export function EmailBuilderStudio({
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, logoWidth: width } : b));
   };
 
+  // ===========================================================================
+  // GESTION DE LA SÉLECTION DE TEXTE & INSERTION DE LIEN DANS UN MORCEAU
+  // ===========================================================================
+
+  const handleTextSelect = (blockId: string, e: React.SyntheticEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    const target = e.currentTarget;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? 0;
+    if (start !== end) {
+      const selectedText = target.value.substring(start, end);
+      setTextSelection({ blockId, start, end, selectedText });
+    }
+  };
+
+  const openInlineLinkModal = (blockId: string) => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    if (textSelection && textSelection.blockId === blockId && textSelection.selectedText.trim()) {
+      setInlineLinkModal({
+        isOpen: true,
+        blockId,
+        selectedText: textSelection.selectedText.trim(),
+        url: '',
+        start: textSelection.start,
+        end: textSelection.end
+      });
+    } else {
+      setInlineLinkModal({
+        isOpen: true,
+        blockId,
+        selectedText: '',
+        url: '',
+      });
+    }
+  };
+
+  const applyInlineLink = (blockId: string, textToLink: string, url: string, start?: number, end?: number) => {
+    if (!textToLink.trim() || !url.trim()) return;
+    const cleanUrl = url.trim().startsWith('http') || url.trim().startsWith('mailto:') || url.trim().startsWith('tel:') 
+      ? url.trim() 
+      : `https://${url.trim()}`;
+
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== blockId) return b;
+      
+      // Si une sélection de position est disponible
+      if (typeof start === 'number' && typeof end === 'number' && start !== end) {
+        const before = b.content.substring(0, start);
+        const after = b.content.substring(end);
+        const newContent = `${before}[${textToLink.trim()}](${cleanUrl})${after}`;
+        return { ...b, content: newContent };
+      }
+
+      // Si le texte est présent dans le bloc
+      if (b.content.includes(textToLink.trim())) {
+        const newContent = b.content.replace(textToLink.trim(), `[${textToLink.trim()}](${cleanUrl})`);
+        return { ...b, content: newContent };
+      }
+
+      // Sinon, on l'ajoute au contenu
+      return { ...b, content: `${b.content} [${textToLink.trim()}](${cleanUrl})` };
+    }));
+
+    setInlineLinkModal(null);
+    setTextSelection(null);
+  };
+
+  const removeInlineLink = (blockId: string, fullMatch: string, label: string) => {
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== blockId) return b;
+      return { ...b, content: b.content.replace(fullMatch, label) };
+    }));
+  };
+
+  const wrapSelectionWith = (blockId: string, wrapper: '**' | '*') => {
+    if (!textSelection || textSelection.blockId !== blockId) return;
+    const { start, end, selectedText } = textSelection;
+    if (!selectedText) return;
+
+    setBlocks(prev => prev.map(b => {
+      if (b.id !== blockId) return b;
+      const before = b.content.substring(0, start);
+      const after = b.content.substring(end);
+      return { ...b, content: `${before}${wrapper}${selectedText}${wrapper}${after}` };
+    }));
+  };
+
   const insertVariable = (variable: string) => {
     navigator.clipboard.writeText(variable);
     setCopiedVar(variable);
@@ -393,7 +561,7 @@ export function EmailBuilderStudio({
 
     if (selectedBlockId) {
       const activeBlock = blocks.find(b => b.id === selectedBlockId);
-      if (activeBlock && (activeBlock.type === 'text' || activeBlock.type === 'heading' || activeBlock.type === 'button' || activeBlock.type === 'banner')) {
+      if (activeBlock && (activeBlock.type === 'text' || activeBlock.type === 'heading' || activeBlock.type === 'button' || activeBlock.type === 'banner' || activeBlock.type === 'footer')) {
         updateBlockContent(selectedBlockId, activeBlock.content + ' ' + variable);
       }
     }
@@ -449,6 +617,8 @@ export function EmailBuilderStudio({
                     ? `background: linear-gradient(rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.72)), url('${b.bannerConfig.imageUrl}'); background-size: cover; background-position: center;`
                     : `background: ${preset.gradient};`;
 
+                  const parsedTitle = formatInlineLinks(b.content, textColor);
+
                   const contentHtml = `
                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px; border-radius: ${bRadius}; overflow: hidden; ${bgStyle} box-shadow: 0 4px 14px rgba(0,0,0,0.12);">
                       <tr>
@@ -460,11 +630,11 @@ export function EmailBuilderStudio({
                               </span>
                             </div>` : ''}
                           <h2 style="margin: 0; color: ${textColor}; font-size: ${titleSize}; font-weight: 800; line-height: 1.3; letter-spacing: -0.3px;">
-                            ${b.content}
+                            ${parsedTitle}
                           </h2>
                           ${b.bannerConfig?.subtitle ? `
                             <p style="margin: 8px 0 0 0; color: ${subColor}; font-size: 13px; font-weight: 500; opacity: 0.95; line-height: 1.4;">
-                              ${b.bannerConfig.subtitle}
+                              ${formatInlineLinks(b.bannerConfig.subtitle, subColor)}
                             </p>` : ''}
                         </td>
                       </tr>
@@ -495,13 +665,14 @@ export function EmailBuilderStudio({
                     </div>`;
                 }
 
-                // BLOC : TITRES H1 / H2 / H3
+                // BLOC : TITRES H1 / H2 / H3 (Avec support liens inline et lien global)
                 if (b.type === 'heading') {
                   const level = b.headingLevel || 'h2';
                   const fontSize = b.styles?.fontSize === '2xl' ? '28px' : b.styles?.fontSize === 'xl' ? '22px' : b.styles?.fontSize === 'lg' ? '19px' : '17px';
+                  const formattedContent = formatInlineLinks(b.content, color);
                   const inner = b.url 
-                    ? `<a href="${b.url}" target="_blank" style="color: ${color}; text-decoration: none;">${b.content}</a>`
-                    : b.content;
+                    ? `<a href="${b.url}" target="_blank" style="color: ${color}; text-decoration: none;">${formattedContent}</a>`
+                    : formattedContent;
 
                   return `
                     <${level} style="color: ${color}; text-align: ${align}; font-size: ${fontSize}; font-weight: 800; line-height: 1.3; margin: 0 0 18px 0; letter-spacing: -0.4px;">
@@ -509,12 +680,13 @@ export function EmailBuilderStudio({
                     </${level}>`;
                 }
 
-                // BLOC : TEXTE / PARAGRAPHE
+                // BLOC : TEXTE / PARAGRAPHE (Avec support liens inline dans morceau et lien global)
                 if (b.type === 'text') {
                   const fontSize = b.styles?.fontSize === 'lg' ? '17px' : b.styles?.fontSize === 'sm' ? '13px' : '15px';
+                  const formattedContent = formatInlineLinks(b.content, '#2563EB');
                   const inner = b.url 
-                    ? `<a href="${b.url}" target="_blank" style="color: #2563EB; font-weight: 600; text-decoration: underline;">${b.content}</a>`
-                    : b.content;
+                    ? `<a href="${b.url}" target="_blank" style="color: inherit; text-decoration: none;">${formattedContent}</a>`
+                    : formattedContent;
 
                   return `
                     <p style="font-size: ${fontSize}; line-height: 1.65; text-align: ${align}; color: ${color}; margin: 0 0 18px 0;">
@@ -545,11 +717,11 @@ export function EmailBuilderStudio({
                     </table>`;
                 }
 
-                // BLOC : FOOTER LÉGAL
+                // BLOC : FOOTER LÉGAL (Avec support liens inline)
                 if (b.type === 'footer') {
                   return `
                     <div style="border-top: 1px solid #f1f5f9; margin-top: 32px; padding-top: 20px; font-size: 11px; line-height: 1.6; color: #94a3b8; text-align: ${align};">
-                      ${b.content}
+                      ${formatInlineLinks(b.content, '#2563EB')}
                     </div>`;
                 }
 
@@ -584,29 +756,29 @@ export function EmailBuilderStudio({
   const selectedBlock = blocks.find(b => b.id === selectedBlockId);
 
   // Extrait pour l'inbox
-  const preheaderText = blocks.find(b => b.type === 'text')?.content.slice(0, 75) || 'Découvrez nos promotions et nouveautés en exclusivité...';
+  const preheaderText = blocks.find(b => b.type === 'text')?.content.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1').slice(0, 75) || 'Découvrez nos promotions et nouveautés en exclusivité...';
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[860px]">
       
       {/* =========================================================================
-          PANNEAU GAUCHE : OUTILS, COULEUR DE FOND, BANNIÈRES, H1/H2/H3, BLOCS
+          PANNEAU GAUCHE : OUTILS, COULEUR DE FOND, BANNIÈRES, LIENS INLINE, BLOCS
          ========================================================================= */}
-      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[920px]">
+      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[940px]">
         
         {/* Titre & Sous-titre */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full">
-              Studio Pro 4.2
+              Studio Pro 4.3 • Rich Links
             </span>
           </div>
           <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
             <Layout className="w-5 h-5 text-blue-600" /> Studio Éditeur & Blocs
           </h2>
           <p className="text-xs text-slate-500">
-            Personnalisez vos fonds de mail, bannières stylisées 0 Ko, logo et titres cliquables.
+            Personnalisez vos fonds de mail, bannières 0 Ko, logo et insérez des liens dans n'importe quel morceau de texte.
           </p>
         </div>
 
@@ -644,9 +816,7 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* =====================================================================
-            NOUVEAU : PERSONNALISATION DE LA COULEUR D'ARRIÈRE-PLAN DU MAIL
-           ===================================================================== */}
+        {/* Personnalisation de la Couleur d'Arrière-Plan du Mail */}
         <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -657,7 +827,7 @@ export function EmailBuilderStudio({
             </span>
           </div>
 
-          {/* 1. Fond Externe (Canvas global) */}
+          {/* 1. Fond Externe */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-700">Fond Externe du Mail</label>
@@ -696,7 +866,7 @@ export function EmailBuilderStudio({
             </div>
           </div>
 
-          {/* 2. Fond Carte Centrale (Contenu) */}
+          {/* 2. Fond Carte Centrale */}
           <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-700">Fond Carte Contenu</label>
@@ -737,7 +907,7 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* Bibliothèque de Blocs Modulaires Étendue */}
+        {/* Bibliothèque de Blocs Modulaires */}
         <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
@@ -747,7 +917,7 @@ export function EmailBuilderStudio({
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            {/* 1. NOUVEAU : Bloc Bannière Stylisée (0 Ko / Ultra-Légère) */}
+            {/* Bloc Bannière Stylisée */}
             <button 
               type="button"
               onClick={() => addBlock('banner')} 
@@ -757,7 +927,7 @@ export function EmailBuilderStudio({
               <span>Bannière Stylisée (0 Ko / Compressée)</span>
             </button>
 
-            {/* 2. Bloc Logo Header */}
+            {/* Bloc Logo Header */}
             <button 
               type="button"
               onClick={() => addBlock('logo')} 
@@ -766,7 +936,7 @@ export function EmailBuilderStudio({
               <ImageIcon className="w-4 h-4 text-blue-600" /> Logo Header
             </button>
 
-            {/* 3. Bloc Titre */}
+            {/* Bloc Titre */}
             <button 
               type="button"
               onClick={() => addBlock('heading')} 
@@ -775,7 +945,7 @@ export function EmailBuilderStudio({
               <Type className="w-4 h-4 text-blue-600" /> Titre (H1/H2/H3)
             </button>
 
-            {/* 4. Bloc Texte */}
+            {/* Bloc Texte */}
             <button 
               type="button"
               onClick={() => addBlock('text')} 
@@ -784,7 +954,7 @@ export function EmailBuilderStudio({
               <FileText className="w-4 h-4 text-blue-600" /> Paragraphe
             </button>
 
-            {/* 5. Bloc Bouton CTA */}
+            {/* Bloc Bouton CTA */}
             <button 
               type="button"
               onClick={() => addBlock('button')} 
@@ -793,7 +963,7 @@ export function EmailBuilderStudio({
               <Zap className="w-4 h-4 text-blue-600" /> Bouton CTA
             </button>
 
-            {/* 6. Bloc Image */}
+            {/* Bloc Image */}
             <button 
               type="button"
               onClick={() => addBlock('image')} 
@@ -802,7 +972,7 @@ export function EmailBuilderStudio({
               <ImageIcon className="w-4 h-4 text-blue-600" /> Image URL
             </button>
 
-            {/* 7. Bloc Badge */}
+            {/* Bloc Badge */}
             <button 
               type="button"
               onClick={() => addBlock('badge')} 
@@ -811,7 +981,7 @@ export function EmailBuilderStudio({
               <Tag className="w-4 h-4 text-blue-600" /> Badge Promo
             </button>
 
-            {/* 8. Bloc Footer Légal */}
+            {/* Bloc Footer Légal */}
             <button 
               type="button"
               onClick={() => addBlock('footer')} 
@@ -836,12 +1006,9 @@ export function EmailBuilderStudio({
               </span>
             </div>
 
-            {/* =================================================================
-                CONFIGURATION SPÉCIFIQUE : BANNIÈRE STYLISÉE (0 KO / COMPRESSÉE)
-               ================================================================= */}
+            {/* Configuration spécifique Bannière */}
             {selectedBlock.type === 'banner' && (
               <div className="space-y-3 pt-1">
-                {/* Positionnement Rapide au Header ou sous le logo */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1.5 flex items-center gap-1">
                     <Layers className="w-3.5 h-3.5 text-blue-600" /> Positionnement dans le Header
@@ -864,7 +1031,6 @@ export function EmailBuilderStudio({
                   </div>
                 </div>
 
-                {/* Choix du style de bannière stylisée */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1.5 flex items-center justify-between">
                     <span>Style Graphique de la Bannière</span>
@@ -896,7 +1062,6 @@ export function EmailBuilderStudio({
                   </div>
                 </div>
 
-                {/* Si Image Haute Compression sélectionnée */}
                 {selectedBlock.bannerConfig?.gradientPreset === 'image' && (
                   <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 space-y-2">
                     <label className="block text-[10px] font-bold text-blue-900">
@@ -909,14 +1074,9 @@ export function EmailBuilderStudio({
                       placeholder="https://images.unsplash.com/...&auto=format&fit=crop&q=70&w=600"
                       className="w-full px-2.5 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono"
                     />
-                    <div className="flex items-center gap-1.5 text-[9px] text-blue-700 font-semibold">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      Optimisation automatique WebP active (&lt; 30 Ko)
-                    </div>
                   </div>
                 )}
 
-                {/* Hauteur de la Bannière */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">
                     Format & Hauteur de Bannière
@@ -942,24 +1102,10 @@ export function EmailBuilderStudio({
                     ))}
                   </div>
                 </div>
-
-                {/* Badge d'Accroche de Bannière */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    Badge d'Accroche (Optionnel)
-                  </label>
-                  <input 
-                    type="text"
-                    value={selectedBlock.bannerConfig?.badgeText || ''}
-                    onChange={(e) => updateBannerConfig(selectedBlock.id, { badgeText: e.target.value })}
-                    placeholder="Ex: ⚡ VENTE FLASH, EXCLUSIVITÉ, NOUVEAUTÉ..."
-                    className="w-full px-3 py-1.5 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                  />
-                </div>
               </div>
             )}
 
-            {/* Sélecteur Spécifique H1 / H2 / H3 pour les titres */}
+            {/* Sélecteur H1 / H2 / H3 pour les titres */}
             {selectedBlock.type === 'heading' && (
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
@@ -987,7 +1133,7 @@ export function EmailBuilderStudio({
               </div>
             )}
 
-            {/* Réglage Taille de Logo (pour bloc Logo) */}
+            {/* Taille de Logo */}
             {selectedBlock.type === 'logo' && (
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
@@ -1012,23 +1158,105 @@ export function EmailBuilderStudio({
               </div>
             )}
 
-            {/* CHAMP LIEN CLIQUABLE (Hypertexte pour Bannière, Texte, Titre, Image ou Logo) */}
-            {(selectedBlock.type === 'banner' || selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'image' || selectedBlock.type === 'logo') && (
-              <div className="pt-1">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <Link className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Rendre ce bloc cliquable (Lien de redirection)</span>
-                </label>
-                <input 
-                  type="url"
-                  value={selectedBlock.url || ''}
-                  onChange={(e) => updateBlockUrl(selectedBlock.id, e.target.value)}
-                  placeholder="https://maboutique.com/promo ou https://wa.me/..."
-                  className="w-full px-3 py-2 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  {selectedBlock.url ? '✓ Lien actif : le destinataire sera redirigé au clic.' : 'Optionnel : laissez vide pour un affichage statique.'}
-                </span>
+            {/* =================================================================
+                SECTION ULTRA-COMPLÈTE : LIENS HYPERTEXTES (INLINE + BLOC ENTIER)
+               ================================================================= */}
+            {(selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'footer' || selectedBlock.type === 'testimonial' || selectedBlock.type === 'banner' || selectedBlock.type === 'image' || selectedBlock.type === 'logo') && (
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                
+                {/* 1. LIEN SUR UN MORCEAU DE TEXTE SPÉCIFIQUE (Pour texte, titre, footer) */}
+                {(selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'footer' || selectedBlock.type === 'testimonial') && (
+                  <div className="bg-blue-50/60 p-3 rounded-2xl border border-blue-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                        <Link className="w-3.5 h-3.5 text-blue-600" /> Lien dans un morceau de texte
+                      </label>
+                      <span className="text-[9px] font-extrabold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                        Nouveau
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 leading-snug">
+                      Surlignez un mot ou une phrase dans l'éditeur, puis cliquez ci-dessous pour le transformer en lien cliquable.
+                    </p>
+
+                    {textSelection && textSelection.blockId === selectedBlock.id && textSelection.selectedText.trim() ? (
+                      <div className="space-y-2 bg-white p-2.5 rounded-xl border border-blue-300 shadow-2xs animate-in fade-in">
+                        <div className="text-[11px] text-slate-700">
+                          Texte sélectionné : <strong className="text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded font-bold">« {textSelection.selectedText} »</strong>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openInlineLinkModal(selectedBlock.id)}
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                        >
+                          <Link className="w-3.5 h-3.5" />
+                          <span>Transformer « {textSelection.selectedText.slice(0, 18)}... » en lien</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openInlineLinkModal(selectedBlock.id)}
+                        className="w-full py-2 bg-white hover:bg-blue-100/60 text-blue-700 border border-blue-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Insérer un lien sur un mot ou phrase</span>
+                      </button>
+                    )}
+
+                    {/* Liste des liens inline détectés dans ce texte */}
+                    {extractInlineLinks(selectedBlock.content).length > 0 && (
+                      <div className="space-y-1.5 pt-1 border-t border-blue-200/60">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                          Liens actifs dans ce texte ({extractInlineLinks(selectedBlock.content).length}) :
+                        </span>
+                        <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                          {extractInlineLinks(selectedBlock.content).map((lnk, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs shadow-2xs">
+                              <div className="truncate mr-2 min-w-0">
+                                <span className="text-blue-700 font-bold underline mr-1.5">{lnk.label}</span>
+                                <span className="text-[10px] text-slate-400 font-mono truncate">➔ {lnk.url}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeInlineLink(selectedBlock.id, lnk.fullMatch, lnk.label)}
+                                className="text-rose-500 hover:text-rose-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded hover:bg-rose-50 cursor-pointer shrink-0 transition"
+                                title="Supprimer ce lien hypertexte"
+                              >
+                                Délier
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. RENDRE TOUT LE BLOC CLIQUABLE (Lien global conservé) */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Rendre tout le bloc cliquable (Lien global)</span>
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-medium">Optionnel</span>
+                  </label>
+                  <input 
+                    type="url"
+                    value={selectedBlock.url || ''}
+                    onChange={(e) => updateBlockUrl(selectedBlock.id, e.target.value)}
+                    placeholder="https://maboutique.com/page-complete ou https://wa.me/..."
+                    className="w-full px-3 py-2 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {selectedBlock.url 
+                      ? '✓ Redirection globale active au clic sur le bloc entier.' 
+                      : 'Laissez vide si vous souhaitez uniquement des liens sur des mots spécifiques.'}
+                  </span>
+                </div>
+
               </div>
             )}
 
@@ -1310,12 +1538,17 @@ export function EmailBuilderStudio({
                         <span>Bloc • {block.type === 'banner' ? 'Bannière Stylisée 0 Ko' : block.type}</span>
                         {block.url && (
                           <span className="text-blue-600 font-bold lowercase flex items-center gap-0.5">
-                            <Link className="w-2.5 h-2.5" /> cliquable
+                            <ExternalLink className="w-2.5 h-2.5" /> bloc entier cliquable
+                          </span>
+                        )}
+                        {extractInlineLinks(block.content).length > 0 && (
+                          <span className="text-emerald-600 font-bold lowercase flex items-center gap-0.5">
+                            <Link className="w-2.5 h-2.5" /> {extractInlineLinks(block.content).length} lien(s) de texte
                           </span>
                         )}
                       </div>
 
-                      {/* NOUVEAU : BLOC BANNIÈRE STYLISÉE */}
+                      {/* BLOC BANNIÈRE STYLISÉE */}
                       {block.type === 'banner' && (
                         <div className="space-y-2">
                           <div 
@@ -1412,10 +1645,28 @@ export function EmailBuilderStudio({
 
                       {/* BLOC : TITRES H1 / H2 / H3 */}
                       {block.type === 'heading' && (
-                        <div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => openInlineLinkModal(block.id)}
+                              className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="Sélectionnez un mot dans le titre et cliquez ici"
+                            >
+                              <Link className="w-2.5 h-2.5" /> Lier un mot
+                            </button>
+                            {extractInlineLinks(block.content).length > 0 && (
+                              <span className="text-[10px] text-blue-600 font-bold">
+                                {extractInlineLinks(block.content).length} lien(s) de texte
+                              </span>
+                            )}
+                          </div>
                           <input 
                             type="text" 
                             value={block.content} 
+                            onSelect={(e) => handleTextSelect(block.id, e)}
+                            onKeyUp={(e) => handleTextSelect(block.id, e)}
+                            onMouseUp={(e) => handleTextSelect(block.id, e)}
                             onChange={(e) => updateBlockContent(block.id, e.target.value)}
                             style={{
                               textAlign: block.styles?.align || 'center',
@@ -1424,32 +1675,87 @@ export function EmailBuilderStudio({
                             }}
                             className="w-full font-black bg-transparent border-b border-dashed border-slate-300 focus:outline-none focus:border-blue-600"
                           />
-                          {block.url && (
-                            <span className="text-[10px] text-blue-600 truncate block mt-1">
-                              🔗 Lien : {block.url}
-                            </span>
-                          )}
+                          {/* Rendu dynamique du titre avec ses liens hypertextes */}
+                          <div 
+                            style={{ textAlign: block.styles?.align || 'center' }}
+                            className="text-xs text-slate-500 pt-0.5"
+                            dangerouslySetInnerHTML={{ __html: formatInlineLinks(block.content, block.styles?.textColor || '#2563EB') }}
+                          />
                         </div>
                       )}
 
-                      {/* BLOC : TEXTE / PARAGRAPHE */}
+                      {/* BLOC : TEXTE / PARAGRAPHE AVEC BARRE D'OUTIL LIEN INLINE */}
                       {block.type === 'text' && (
-                        <div>
+                        <div className="space-y-2">
+                          
+                          {/* Mini Barre d'outil de mise en forme & lien sur morceau de texte */}
+                          <div className="flex items-center justify-between bg-slate-50/80 px-2.5 py-1.5 rounded-xl border border-slate-200">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openInlineLinkModal(block.id)}
+                                className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs hover:border-blue-300"
+                                title="Surlignez un morceau de texte et cliquez pour le transformer en lien"
+                              >
+                                <Link className="w-3 h-3 text-blue-600" />
+                                <span>Transformer sélection en lien</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => wrapSelectionWith(block.id, '**')}
+                                className="w-7 h-7 hover:bg-white text-slate-700 rounded-lg text-xs font-black flex items-center justify-center transition cursor-pointer border border-transparent hover:border-slate-200"
+                                title="Mettre en gras (**texte**)"
+                              >
+                                <Bold className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => wrapSelectionWith(block.id, '*')}
+                                className="w-7 h-7 hover:bg-white text-slate-700 rounded-lg text-xs font-italic flex items-center justify-center transition cursor-pointer border border-transparent hover:border-slate-200"
+                                title="Mettre en italique (*texte*)"
+                              >
+                                <Italic className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {extractInlineLinks(block.content).length > 0 && (
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <ExternalLink className="w-2.5 h-2.5" />
+                                {extractInlineLinks(block.content).length} lien(s) actif(s)
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Zone de saisie avec écoute de la sélection du texte */}
                           <textarea 
                             rows={3} 
                             value={block.content} 
+                            onSelect={(e) => handleTextSelect(block.id, e)}
+                            onKeyUp={(e) => handleTextSelect(block.id, e)}
+                            onMouseUp={(e) => handleTextSelect(block.id, e)}
                             onChange={(e) => updateBlockContent(block.id, e.target.value)}
                             style={{
                               textAlign: block.styles?.align || 'left',
                               color: block.styles?.textColor || '#334155'
                             }}
+                            placeholder="Écrivez votre paragraphe... Vous pouvez surligner n'importe quel morceau pour le rendre cliquable."
                             className="w-full text-xs bg-[#FBF9F5]/50 border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans leading-relaxed"
                           />
-                          {block.url && (
-                            <span className="text-[10px] text-blue-600 truncate block mt-1">
-                              🔗 Texte relié à : {block.url}
-                            </span>
-                          )}
+
+                          {/* Aperçu en direct du texte avec les liens cliquables réels */}
+                          <div className="bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
+                            <div className="flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                              <span>Rendu en direct</span>
+                              <span className="text-blue-600 font-bold normal-case">Liens cliquables actifs</span>
+                            </div>
+                            <div 
+                              className="text-xs text-slate-700 leading-relaxed font-sans"
+                              dangerouslySetInnerHTML={{ __html: formatInlineLinks(block.content, '#2563EB') }}
+                            />
+                          </div>
+
                         </div>
                       )}
 
@@ -1511,12 +1817,35 @@ export function EmailBuilderStudio({
 
                       {/* BLOC : FOOTER LÉGAL */}
                       {block.type === 'footer' && (
-                        <textarea 
-                          rows={2} 
-                          value={block.content} 
-                          onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                          className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none leading-relaxed"
-                        />
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => openInlineLinkModal(block.id)}
+                              className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Link className="w-2.5 h-2.5" /> Lier un morceau (ex: Se désabonner)
+                            </button>
+                            {extractInlineLinks(block.content).length > 0 && (
+                              <span className="text-[10px] text-blue-600 font-bold">
+                                {extractInlineLinks(block.content).length} lien(s)
+                              </span>
+                            )}
+                          </div>
+                          <textarea 
+                            rows={2} 
+                            value={block.content} 
+                            onSelect={(e) => handleTextSelect(block.id, e)}
+                            onKeyUp={(e) => handleTextSelect(block.id, e)}
+                            onMouseUp={(e) => handleTextSelect(block.id, e)}
+                            onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                            className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none leading-relaxed"
+                          />
+                          <div 
+                            className="text-[10px] text-slate-400"
+                            dangerouslySetInnerHTML={{ __html: formatInlineLinks(block.content, '#2563EB') }}
+                          />
+                        </div>
                       )}
 
                     </div>
@@ -1548,7 +1877,119 @@ export function EmailBuilderStudio({
       </div>
 
       {/* =========================================================================
-          MODALE : SIMULATEUR DE BOÎTE MAIL RÉELLE (INBOX PREVIEW)
+          MODALE 1 : TRANSFORMER UN MORCEAU DE TEXTE EN LIEN HYPERTEXTE
+         ========================================================================= */}
+      {inlineLinkModal && inlineLinkModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center">
+                  <Link className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black">Insérer un lien dans le texte</h3>
+                  <p className="text-[11px] text-slate-400">Rendre un mot ou une phrase cliquable</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInlineLinkModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 cursor-pointer transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                applyInlineLink(
+                  inlineLinkModal.blockId,
+                  inlineLinkModal.selectedText,
+                  inlineLinkModal.url,
+                  inlineLinkModal.start,
+                  inlineLinkModal.end
+                );
+              }}
+              className="p-6 space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Morceau de texte à rendre cliquable
+                </label>
+                <input 
+                  type="text"
+                  required
+                  value={inlineLinkModal.selectedText}
+                  onChange={(e) => setInlineLinkModal({ ...inlineLinkModal, selectedText: e.target.value })}
+                  placeholder="Ex: tarifs exclusifs, découvrez notre offre..."
+                  className="w-full px-3.5 py-2.5 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Ce texte apparaîtra souligné en bleu et redirigera l'utilisateur au clic.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  URL de redirection (Destination)
+                </label>
+                <input 
+                  type="text"
+                  required
+                  value={inlineLinkModal.url}
+                  onChange={(e) => setInlineLinkModal({ ...inlineLinkModal, url: e.target.value })}
+                  placeholder="https://maboutique.com/produit ou https://wa.me/22501..."
+                  className="w-full px-3.5 py-2.5 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                />
+              </div>
+
+              {/* Raccourcis d'adresses utiles */}
+              <div className="space-y-1 pt-1">
+                <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
+                  Suggestions rapides :
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    { label: 'Boutique', url: 'https://nanasore.com' },
+                    { label: 'WhatsApp', url: 'https://wa.me/22507000000' },
+                    { label: 'Désabonnement', url: 'https://nanasore.com/unsubscribe' }
+                  ].map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      onClick={() => setInlineLinkModal({ ...inlineLinkModal, url: s.url })}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-md text-[10px] font-bold transition cursor-pointer"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setInlineLinkModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition cursor-pointer"
+                >
+                  Appliquer le lien
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODALE 2 : SIMULATEUR DE BOÎTE MAIL RÉELLE (INBOX PREVIEW)
          ========================================================================= */}
       {isInboxModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1624,11 +2065,10 @@ export function EmailBuilderStudio({
               {/* 2. VUE MESSAGE OUVERT DANS LE CLIENT MAIL */}
               <div className="space-y-2">
                 <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                  2. Rendu de l'e-mail ouvert
+                  2. Rendu de l'e-mail ouvert avec morceaux de texte cliquables
                 </span>
 
                 <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
-                  {/* Barre d'outils du message */}
                   <div className="bg-[#FBF9F5] border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs">
                     <div>
                       <h4 className="font-black text-slate-900 text-sm">{subject || '(Sans objet)'}</h4>
@@ -1644,7 +2084,6 @@ export function EmailBuilderStudio({
                     </div>
                   </div>
 
-                  {/* Corps de l'email rendu avec les vraies couleurs de fond */}
                   <div 
                     className="p-6 max-h-[380px] overflow-y-auto transition-colors"
                     style={{ backgroundColor: emailBgColor }}
@@ -1687,14 +2126,17 @@ export function EmailBuilderStudio({
                             </span>
                           )}
                           {b.type === 'heading' && (
-                            <h2 style={{ color: b.styles?.textColor || '#2563EB' }} className="font-black text-base">
-                              {b.url ? <a href={b.url} target="_blank" className="underline">{b.content}</a> : b.content}
-                            </h2>
+                            <h2 
+                              style={{ color: b.styles?.textColor || '#2563EB' }} 
+                              className="font-black text-base"
+                              dangerouslySetInnerHTML={{ __html: formatInlineLinks(b.content, b.styles?.textColor || '#2563EB') }}
+                            />
                           )}
                           {b.type === 'text' && (
-                            <p className="text-xs text-slate-700 leading-relaxed">
-                              {b.url ? <a href={b.url} target="_blank" className="text-blue-600 underline font-semibold">{b.content}</a> : b.content}
-                            </p>
+                            <p 
+                              className="text-xs text-slate-700 leading-relaxed font-sans"
+                              dangerouslySetInnerHTML={{ __html: formatInlineLinks(b.content, '#2563EB') }}
+                            />
                           )}
                           {b.type === 'image' && (
                             <img src={b.content} alt="Visuel" className="rounded-xl max-h-36 mx-auto object-cover" />
@@ -1707,9 +2149,10 @@ export function EmailBuilderStudio({
                             </div>
                           )}
                           {b.type === 'footer' && (
-                            <p className="text-[10px] text-slate-400 pt-3 border-t border-slate-100">
-                              {b.content}
-                            </p>
+                            <p 
+                              className="text-[10px] text-slate-400 pt-3 border-t border-slate-100"
+                              dangerouslySetInnerHTML={{ __html: formatInlineLinks(b.content, '#2563EB') }}
+                            />
                           )}
                         </div>
                       ))}
