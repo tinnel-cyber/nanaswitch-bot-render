@@ -88,11 +88,12 @@ import {
   submitKycRequest, 
   getStoreKycRequest, 
   compressImageToBase64,
-  DEFAULT_KONKOBO_CHAIN,
+  DEFAULT_NANASORE_CHAIN,
   saveIdentificationChain,
   getIdentificationChain,
   submitKycSubmission
 } from '../../utils/kycService';
+import { MerchantIdentificationChainView } from '../../components/kyc/MerchantIdentificationChainView';
 import { checkAndBlockDemoAction } from '../../utils/demoSecurityGuard';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 import { DashboardQuotaMonitorSwitch } from '../../components/quotas';
@@ -169,10 +170,10 @@ export interface GeneralSettingsData {
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsData = {
   companyName: "NANASORE",
   storeName: "NANASORE BOUTIQUE",
-  managerFullName: "Ibrahim Pousbila Konkobo",
-  email: "pousbila36@gmail.com",
+  managerFullName: "Gérant Boutique",
+  email: "contact@nanasore.com",
   whatsappPhone: "+226 70 00 00 00",
-  address: "Avenue Kwamé N'Krumah, Immeuble Télécom, Ouagadougou, Burkina Faso",
+  address: "Avenue Kwamé N'Krumah, Ouagadougou, Burkina Faso",
   ifuNumber: "00123456B",
   rccmNumber: "BF-OUA-01-2024-B12-0042",
   countryCode: "BF",
@@ -301,7 +302,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
   // 1. Paramètres Généraux & Persistance Locale
   const [settings, setSettings] = useState<GeneralSettingsData>(() => {
     try {
-      const saved = localStorage.getItem('nana_konkobo_general_settings');
+      const saved = localStorage.getItem('nana_merchant_general_settings') || localStorage.getItem('nana_konkobo_general_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
@@ -310,7 +311,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
           managerFullName: parsed.managerFullName || currentUser?.name || DEFAULT_GENERAL_SETTINGS.managerFullName,
           email: parsed.email || currentUser?.email || DEFAULT_GENERAL_SETTINGS.email,
           whatsappPhone: parsed.whatsappPhone || currentUser?.phone || DEFAULT_GENERAL_SETTINGS.whatsappPhone,
-          companyName: (parsed.companyName === "ENTREPRISE KONKOBO POUSBILA TELECOM" || parsed.companyName === "ENTREPRISE KONKOBO POUSBILA" ? "NANASORE" : parsed.companyName) || DEFAULT_GENERAL_SETTINGS.companyName,
+          companyName: (!parsed.companyName || parsed.companyName.includes("KONKOBO") ? "NANASORE" : parsed.companyName) || DEFAULT_GENERAL_SETTINGS.companyName,
           storeName: parsed.storeName || currentUser?.storeName || DEFAULT_GENERAL_SETTINGS.storeName,
           logoUrl: parsed.logoUrl || currentUser?.avatarUrl || DEFAULT_GENERAL_SETTINGS.logoUrl,
           bannerUrl: parsed.bannerUrl || DEFAULT_GENERAL_SETTINGS.bannerUrl,
@@ -433,8 +434,9 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
   };
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [settingsModalTab, setSettingsModalTab] = useState<'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' | 'ID_CHAIN'>('PROFILE');
-  const [settingsModalChainStep, setSettingsModalChainStep] = useState<1 | 2>(1);
+  const [settingsModalTab, setSettingsModalTab] = useState<'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING'>('PROFILE');
+  const [isKycChainWizardOpen, setIsKycChainWizardOpen] = useState(false);
+  const [kycWizardInitialType, setKycWizardInitialType] = useState<'particulier' | 'entreprise'>('particulier');
   const [isProModalOpen, setIsProModalOpen] = useState(false);
   const [proModalTab, setProModalTab] = useState<ProFeatureTab>('CUSTOM_DOMAIN');
   const [showStoreClosedPrompt, setShowStoreClosedPrompt] = useState(false);
@@ -451,17 +453,17 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
 
   // Chaîne d'identification séquentielle (Partie 1 Individuel + Partie 2 Entreprise)
   const [idChain, setIdChain] = useState<IdentificationChain>(() => {
-    const sId = currentUser?.storeId || 'store-konkobo-telecom';
+    const sId = currentUser?.storeId || 'store-nanasore-main';
     try {
       const local = localStorage.getItem(`nana_id_chain_${sId}`);
       if (local) return JSON.parse(local);
     } catch (e) {}
-    return { ...DEFAULT_KONKOBO_CHAIN, storeId: sId };
+    return { ...DEFAULT_NANASORE_CHAIN, storeId: sId };
   });
 
   // Synchronisation dynamique avec Firestore et les événements locaux
   useEffect(() => {
-    const sId = currentUser?.storeId || 'store-konkobo-telecom';
+    const sId = currentUser?.storeId || 'store-nanasore-main';
     getIdentificationChain(sId).then(chain => {
       if (chain) setIdChain(chain);
     });
@@ -477,8 +479,9 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     };
     window.addEventListener('nana_id_chain_updated', handleChainUpdated);
     const handleOpenKycModal = (e: any) => {
-      const step = e.detail?.step === 2 ? 2 : 1;
-      openSettingsWithTab('ID_CHAIN', step);
+      const type = e.detail?.step === 2 || e.detail?.type === 'entreprise' ? 'entreprise' : 'particulier';
+      setKycWizardInitialType(type);
+      setIsKycChainWizardOpen(true);
     };
     window.addEventListener('nanasore_open_kyc', handleOpenKycModal);
     return () => {
@@ -487,10 +490,9 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     };
   }, [currentUser?.storeId]);
 
-  const openSettingsWithTab = (tab: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' | 'ID_CHAIN' = 'PROFILE', step: 1 | 2 = 1) => {
+  const openSettingsWithTab = (tab: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' = 'PROFILE') => {
     playTapBeep();
     setSettingsModalTab(tab);
-    setSettingsModalChainStep(step);
     setIsSettingsModalOpen(true);
   };
 
@@ -678,7 +680,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     playValidationBeep();
     setSettings(newSettings);
     try {
-      localStorage.setItem('nana_konkobo_general_settings', JSON.stringify(newSettings));
+      localStorage.setItem('nana_merchant_general_settings', JSON.stringify(newSettings));
     } catch (e) {}
     setIsSettingsModalOpen(false);
   };
@@ -690,7 +692,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     const updated = { ...settings, isStoreOpen: newStatus };
     setSettings(updated);
     try {
-      localStorage.setItem('nana_konkobo_general_settings', JSON.stringify(updated));
+      localStorage.setItem('nana_merchant_general_settings', JSON.stringify(updated));
     } catch (e) {}
     window.dispatchEvent(new CustomEvent('nana_store_status_changed', { detail: { isStoreOpen: newStatus } }));
   };
@@ -1262,21 +1264,20 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     {
       id: 'mod-kyc-chain',
       category: 'TECH',
-      title: 'Chaîne d’Identification KYC (Partie 1 & 2)',
-      badge: idChain.overallStatus === 'FULLY_VERIFIED' ? 'Certifié UEMOA 100%' : 'Partie 1 & 2',
+      title: 'Chaîne d’Identification KYC Marchand',
+      badge: idChain.overallStatus === 'FULLY_VERIFIED' ? 'Certifié 100%' : 'Partie 1 & 2',
       badgeColor: idChain.overallStatus === 'FULLY_VERIFIED' 
         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
         : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-      description: 'Conformité en 2 étapes : Partie 1 Individuel (CNIB / Passeport) + Partie 2 Entreprise (RCCM & IFU). Plafonds illimités.',
+      description: 'Processus souverain en 2 étapes : Partie 1 Individuel (CNI / Passeport) + Partie 2 Entreprise (RCCM & IFU). Plafonds illimités.',
       icon: Award,
       iconColor: 'text-emerald-400',
       iconBg: 'bg-emerald-500/10 border-emerald-500/30',
       actionText: 'Gérer l’Identification',
       action: () => {
-        const step = idChain.part1Individual.status === 'VALIDATED' ? 2 : 1;
-        const subKyc = step === 2 ? 'entreprise' : 'individuel';
-        handleModuleClick('SETTINGS', `/dashboard/kyc/${subKyc}`);
-        openSettingsWithTab('ID_CHAIN', step);
+        handleModuleClick('SETTINGS', '/dashboard/kyc');
+        setKycWizardInitialType(idChain.part1Individual.status === 'VALIDATED' ? 'entreprise' : 'particulier');
+        setIsKycChainWizardOpen(true);
       }
     },
 
@@ -1528,7 +1529,11 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                 {/* Badge Partie 1 : Individuel Validé */}
                 <button
                   type="button"
-                  onClick={() => openSettingsWithTab('ID_CHAIN', 1)}
+                  onClick={() => {
+                    playTapBeep();
+                    setKycWizardInitialType('particulier');
+                    setIsKycChainWizardOpen(true);
+                  }}
                   className={`text-[8.5px] sm:text-[9px] font-black px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border cursor-pointer transition hover:scale-105 active:scale-95 shadow-xs whitespace-nowrap ${
                     idChain.part1Individual.status === 'VALIDATED'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
@@ -1548,7 +1553,11 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                 {/* Badge Partie 2 : Entreprise Validée */}
                 <button
                   type="button"
-                  onClick={() => openSettingsWithTab('ID_CHAIN', 2)}
+                  onClick={() => {
+                    playTapBeep();
+                    setKycWizardInitialType('entreprise');
+                    setIsKycChainWizardOpen(true);
+                  }}
                   className={`text-[8.5px] sm:text-[9px] font-black px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border cursor-pointer transition hover:scale-105 active:scale-95 shadow-xs whitespace-nowrap ${
                     idChain.part2Business.status === 'VALIDATED'
                       ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
@@ -2364,13 +2373,28 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
         <GeneralSettingsModal
           initialSettings={settings}
           currentUser={currentUser}
-          storeId={currentUser?.storeId || 'store-konkobo-telecom'}
+          storeId={currentUser?.storeId || 'store-nanasore-main'}
           initialTab={settingsModalTab}
-          initialChainStep={settingsModalChainStep}
           onSave={handleSaveSettings}
           onClose={() => setIsSettingsModalOpen(false)}
+          onOpenKycChain={() => setIsKycChainWizardOpen(true)}
         />
       )}
+
+      {/* =========================================================================
+          NOUVELLE PAGE / VUE DÉDIÉE : CHAÎNE D'IDENTIFICATION KYC MARCHAND
+         ========================================================================= */}
+      <MerchantIdentificationChainView
+        isOpen={isKycChainWizardOpen}
+        onClose={() => setIsKycChainWizardOpen(false)}
+        storeId={currentUser?.storeId || 'store-nanasore-main'}
+        initialType={kycWizardInitialType}
+        onSuccess={() => {
+          getIdentificationChain(currentUser?.storeId || 'store-nanasore-main').then(chain => {
+            if (chain) setIdChain(chain);
+          });
+        }}
+      />
 
       {/* Modale des Fonctionnalités PRO & Exclusives */}
       {isProModalOpen && (
@@ -2972,24 +2996,25 @@ interface GeneralSettingsModalProps {
   initialSettings: GeneralSettingsData;
   currentUser?: StoreUser | null;
   storeId?: string;
-  initialTab?: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' | 'ID_CHAIN';
-  initialChainStep?: 1 | 2;
+  initialTab?: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING';
   onSave: (settings: GeneralSettingsData) => void;
   onClose: () => void;
+  onOpenKycChain?: () => void;
 }
 
 const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
   initialSettings,
   currentUser,
-  storeId = 'store-konkobo-telecom',
+  storeId = 'store-nanasore-main',
   initialTab = 'PROFILE',
-  initialChainStep = 1,
   onSave,
-  onClose
+  onClose,
+  onOpenKycChain
 }) => {
   const [formData, setFormData] = useState<GeneralSettingsData>(initialSettings);
-  const [activeTab, setActiveTab] = useState<'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' | 'ID_CHAIN'>(initialTab);
-  const [selectedChainStep, setSelectedChainStep] = useState<1 | 2>(initialChainStep);
+  const [activeTab, setActiveTab] = useState<'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING'>(
+    initialTab === ('ID_CHAIN' as any) ? 'PROFILE' : initialTab
+  );
 
   // Chaîne d'identification séquentielle (Partie 1 Individuel + Partie 2 Entreprise)
   const [idChain, setIdChain] = useState<IdentificationChain>(() => {
@@ -2998,42 +3023,14 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
       const local = localStorage.getItem(`nana_id_chain_${resolvedStoreId}`);
       if (local) return JSON.parse(local);
     } catch (e) {}
-    return { ...DEFAULT_KONKOBO_CHAIN, storeId: resolvedStoreId };
+    return { ...DEFAULT_NANASORE_CHAIN, storeId: resolvedStoreId };
   });
-
-  const [chainFeedback, setChainFeedback] = useState<string | null>(null);
-  const [isProcessingChain, setIsProcessingChain] = useState(false);
 
   // Synchronisation dynamique si modifiée ailleurs
   useEffect(() => {
     const resolvedStoreId = currentUser?.storeId || storeId;
     getIdentificationChain(resolvedStoreId).then(chain => {
       if (chain) setIdChain(chain);
-    });
-  }, [currentUser?.storeId, storeId]);
-
-  // États Section KYC
-  const [kycStatus, setKycStatus] = useState<KycStatus>(() => {
-    return currentUser?.kycStatus || 'pending_approval';
-  });
-  const [kycSubmission, setKycSubmission] = useState<KycSubmission | null>(currentUser?.kycData || null);
-  const [kycDocType, setKycDocType] = useState<KycDocumentType>('CNIB');
-  const [kycDocNumber, setKycDocNumber] = useState<string>('B12984532');
-  const [kycDocPhoto, setKycDocPhoto] = useState<string>('');
-  const [isSubmittingKyc, setIsSubmittingKyc] = useState(false);
-  const [kycFeedback, setKycFeedback] = useState<string | null>(null);
-
-  // Charger le dossier KYC existant depuis Firestore / localStorage au montage
-  useEffect(() => {
-    const resolvedStoreId = currentUser?.storeId || storeId;
-    getStoreKycRequest(resolvedStoreId).then(existing => {
-      if (existing) {
-        setKycSubmission(existing);
-        setKycStatus(existing.status);
-        if (existing.documentType) setKycDocType(existing.documentType);
-        if (existing.documentPhotoUrl) setKycDocPhoto(existing.documentPhotoUrl);
-        if (existing.documentNumber) setKycDocNumber(existing.documentNumber);
-      }
     });
   }, [currentUser?.storeId, storeId]);
 
@@ -3085,227 +3082,6 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
       playValidationBeep();
     } catch (err) {
       console.error("Erreur bannière", err);
-    }
-  };
-
-  // Upload Document KYC
-  const handleKycDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 960, 0.78);
-      setKycDocPhoto(compressed);
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur pièce KYC", err);
-    }
-  };
-
-  // Action de Validation - Partie 1 (Individuel / Gérant)
-  const handleValidatePart1 = async () => {
-    if (checkAndBlockDemoAction(currentUser)) return;
-    playTapBeep();
-    setIsProcessingChain(true);
-    setChainFeedback(null);
-    try {
-      const updated: IdentificationChain = {
-        ...idChain,
-        currentStep: 2,
-        part1Individual: {
-          ...idChain.part1Individual,
-          status: 'VALIDATED',
-          validatedAt: new Date().toISOString(),
-          validatedBy: "Commission Nationale d'Identification UEMOA",
-          rejectionReason: undefined
-        },
-        overallStatus: idChain.part2Business.status === 'VALIDATED' ? 'FULLY_VERIFIED' : 'PARTIAL_INDIVIDUAL',
-        updatedAt: new Date().toISOString()
-      };
-      setIdChain(updated);
-      await saveIdentificationChain(updated);
-      playValidationBeep();
-      setChainFeedback("✓ Partie 1 (Identification Individuelle) Validée avec succès ! Palier 1 actif (Plafond 1 000 000 FCFA/j). Vous pouvez maintenant compléter l'Étape 2.");
-      setSelectedChainStep(2);
-    } catch (err) {
-      console.error(err);
-      setChainFeedback("Erreur lors de la validation de la Partie 1.");
-    } finally {
-      setIsProcessingChain(false);
-    }
-  };
-
-  // Action de Validation - Partie 2 (Entreprise / Société)
-  const handleValidatePart2 = async () => {
-    if (checkAndBlockDemoAction(currentUser)) return;
-    playTapBeep();
-    setIsProcessingChain(true);
-    setChainFeedback(null);
-    try {
-      const updated: IdentificationChain = {
-        ...idChain,
-        currentStep: 2,
-        part2Business: {
-          ...idChain.part2Business,
-          status: 'VALIDATED',
-          validatedAt: new Date().toISOString(),
-          validatedBy: "Greffe du Tribunal de Commerce Ouagadougou",
-          rejectionReason: undefined
-        },
-        overallStatus: 'FULLY_VERIFIED',
-        updatedAt: new Date().toISOString()
-      };
-      setIdChain(updated);
-      await saveIdentificationChain(updated);
-      playCashChime();
-      setChainFeedback("🎉 Félicitations ! Partie 2 (Identification Entreprise) Validée avec succès ! Agrément Marchand UEMOA 100% Actif & Plafonds illimités.");
-    } catch (err) {
-      console.error(err);
-      setChainFeedback("Erreur lors de la validation de la Partie 2.");
-    } finally {
-      setIsProcessingChain(false);
-    }
-  };
-
-  // Upload Photo Recto Pièce d'Identité
-  const handleUploadPart1IdCard = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 960, 0.78);
-      setIdChain(prev => ({
-        ...prev,
-        part1Individual: { ...prev.part1Individual, idCardPhotoUrl: compressed }
-      }));
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur upload pièce", err);
-    }
-  };
-
-  // Upload Selfie Gérant
-  const handleUploadPart1Selfie = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 800, 0.78);
-      setIdChain(prev => ({
-        ...prev,
-        part1Individual: { ...prev.part1Individual, selfiePhotoUrl: compressed }
-      }));
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur upload selfie", err);
-    }
-  };
-
-  // Upload Scan RCCM
-  const handleUploadPart2Rccm = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 960, 0.78);
-      setIdChain(prev => ({
-        ...prev,
-        part2Business: { ...prev.part2Business, rccmDocPhotoUrl: compressed }
-      }));
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur upload RCCM", err);
-    }
-  };
-
-  // Upload Attestation IFU
-  const handleUploadPart2Ifu = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 960, 0.78);
-      setIdChain(prev => ({
-        ...prev,
-        part2Business: { ...prev.part2Business, ifuDocPhotoUrl: compressed }
-      }));
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur upload IFU", err);
-    }
-  };
-
-  // Upload Justificatif Siège / Domiciliation / RIB
-  const handleUploadPart2Domiciliation = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const compressed = await compressImageToBase64(file, 960, 0.78);
-      setIdChain(prev => ({
-        ...prev,
-        part2Business: { ...prev.part2Business, domiciliationProofUrl: compressed }
-      }));
-      playValidationBeep();
-    } catch (err) {
-      console.error("Erreur upload justificatif siège", err);
-    }
-  };
-
-  // Mise à jour réactive des champs Partie 1 & Partie 2
-  const setPart1Field = <K extends keyof IndividualKycData>(field: K, value: IndividualKycData[K]) => {
-    setIdChain(prev => ({
-      ...prev,
-      part1Individual: { ...prev.part1Individual, [field]: value }
-    }));
-  };
-
-  const setPart2Field = <K extends keyof BusinessKycData>(field: K, value: BusinessKycData[K]) => {
-    setIdChain(prev => ({
-      ...prev,
-      part2Business: { ...prev.part2Business, [field]: value }
-    }));
-  };
-
-  // Envoi sécurisé du dossier KYC à Firestore
-  const handleSubmitKyc = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (checkAndBlockDemoAction(currentUser)) return;
-    if (!kycDocPhoto) {
-      alert("Veuillez sélectionner ou prendre en photo votre pièce d'identité officielle.");
-      return;
-    }
-    playTapBeep();
-    setIsSubmittingKyc(true);
-    setKycFeedback(null);
-
-    const resolvedStoreId = currentUser?.storeId || storeId;
-    const resolvedUserId = currentUser?.id || currentUser?.uid || resolvedStoreId;
-    const submission: KycSubmission = {
-      id: `kyc-${resolvedStoreId}-${Date.now()}`,
-      userId: resolvedUserId,
-      storeId: resolvedStoreId,
-      storeName: formData.companyName || "NANASORE",
-      managerFullName: formData.managerFullName || "Ibrahim Pousbila Konkobo",
-      managerPhotoUrl: formData.logoUrl || "",
-      whatsappPhone: formData.whatsappPhone || "+226 70 00 00 00",
-      documentType: kycDocType,
-      documentNumber: kycDocNumber || 'B12984532',
-      documentPhotoUrl: kycDocPhoto,
-      status: 'pending',
-      submittedAt: new Date().toISOString()
-    };
-
-    try {
-      await submitKycRequest(submission);
-      try {
-        await submitKycSubmission({ ...submission, userId: resolvedUserId });
-      } catch (subErr) {
-        console.info('kyc_submissions sync notice:', subErr);
-      }
-      setKycSubmission(submission);
-      setKycStatus('pending');
-      setKycFeedback("🎉 Dossier KYC transmis avec succès au Super Admin pour conformité bancaire UEMOA !");
-      playValidationBeep();
-    } catch (err) {
-      console.error(err);
-      setKycFeedback("✅ Dossier KYC sauvegardé localement avec synchronisation en arrière-plan.");
-    } finally {
-      setIsSubmittingKyc(false);
     }
   };
 
@@ -3403,25 +3179,16 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => { playTapBeep(); setActiveTab('ID_CHAIN'); }}
-            className={`px-3 py-2 text-xs font-bold border-b-2 transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'ID_CHAIN' 
-                ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10 rounded-t-xl font-black' 
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+            onClick={() => {
+              playTapBeep();
+              onClose();
+              if (onOpenKycChain) onOpenKycChain();
+            }}
+            className="ml-auto px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-950/40 active:scale-95 shrink-0"
+            title="Ouvrir la Chaîne d'Identification KYC"
           >
-            <Award className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Chaîne d'Identification (2 Étapes)</span>
-            <span className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
-              <Check className="w-2.5 h-2.5" />
-              <span>
-                {idChain.overallStatus === 'FULLY_VERIFIED' 
-                  ? '2/2 Validé' 
-                  : idChain.part1Individual.status === 'VALIDATED' 
-                    ? '1/2 Validé' 
-                    : '0/2'}
-              </span>
-            </span>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-200" />
+            <span>Chaîne d'Identification KYC →</span>
           </button>
         </div>
 
@@ -3433,6 +3200,39 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
              ========================================================================= */}
           {activeTab === 'PROFILE' && (
             <div className="space-y-5 animate-in fade-in duration-150">
+              
+              {/* Bannière d'accès vers la Chaîne d'Identification KYC */}
+              <div className="bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border border-blue-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black text-white">Chaîne d'Identification KYC Marchand</h4>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {idChain.overallStatus === 'FULLY_VERIFIED' ? '2/2 Validé ✓' : 'Partie 1 & 2'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Processus d'identification souverain en chaîne pour sécuriser vos encaissements réels et débloquer les plafonds.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    onClose();
+                    if (onOpenKycChain) onOpenKycChain();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{idChain.overallStatus === 'FULLY_VERIFIED' ? 'Gérer mon Identification' : 'Commencer l\'Identification →'}</span>
+                </button>
+              </div>
+
               {/* Carte Branding : Bannière & Logo */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 sm:p-5 relative overflow-hidden shadow-inner">
                 <div className="flex items-center justify-between mb-3">
@@ -3501,7 +3301,7 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
                         {formData.storeName || "NANASORE BOUTIQUE"}
                       </div>
                       <div className="text-[10px] text-blue-300 font-bold drop-shadow-md">
-                        Dirigeant : {formData.managerFullName || "Ibrahim Pousbila Konkobo"}
+                        Dirigeant : {formData.managerFullName || "Gérant Boutique"}
                       </div>
                     </div>
                   </div>
@@ -3798,1017 +3598,8 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none"
                 >
                   <option value={0}>0% (Franchise en base / Régime Micro-Entreprise)</option>
-                  <option value={18}>18% (TVA Standard UEMOA / CEDEAO)</option>
+                  <option value={18}>18% (TVA Standard 18%)</option>
                 </select>
-              </div>
-            </div>
-          )}
-
-          {/* =========================================================================
-              TAB 5 : CHAÎNE D'IDENTIFICATION EN 2 ÉTAPES (INDIVIDUEL -> ENTREPRISE)
-             ========================================================================= */}
-          {activeTab === 'ID_CHAIN' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* En-tête de la Chaîne d'Identification */}
-              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/70 border border-slate-800 rounded-3xl p-5 shadow-xl relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-                
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0 shadow-inner">
-                      <Award className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-base font-black text-white tracking-tight">
-                          Chaîne d'Identification Réglementaire (UEMOA)
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black uppercase">
-                          Séquence 2 Paliers
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Partie 1 : Gérant Individuel (Palier 1) ➔ Partie 2 : Entreprise & Agrément Total (Palier 2)
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Badge Global de la Chaîne */}
-                  <div className="shrink-0">
-                    {idChain.overallStatus === 'FULLY_VERIFIED' ? (
-                      <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-emerald-950/50">
-                        <CheckCheck className="w-4 h-4 text-emerald-400" />
-                        <span>AGRÉMENT 100% VALIDÉ ✓</span>
-                      </div>
-                    ) : idChain.part1Individual.status === 'VALIDATED' ? (
-                      <div className="px-3.5 py-1.5 rounded-xl bg-blue-950/80 border border-blue-500/60 text-blue-300 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-blue-950/50">
-                        <UserCheck className="w-4 h-4 text-blue-400" />
-                        <span>PALIER 1 ACTIF (1/2 VALIDÉ)</span>
-                      </div>
-                    ) : (
-                      <div className="px-3.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5">
-                        <ShieldAlert className="w-4 h-4 text-amber-400" />
-                        <span>NON SOUMIS (0/2)</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Feedback d'Action */}
-                {chainFeedback && (
-                  <div className="mt-4 p-3 rounded-2xl bg-emerald-950/60 border border-emerald-500/50 text-xs text-emerald-200 flex items-center gap-2 animate-in fade-in duration-150">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="font-semibold">{chainFeedback}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* =========================================================================
-                  LE STEPPER VISUEL INTERACTIF (PARTIE 1 -> CONNECTEUR -> PARTIE 2)
-                 ========================================================================= */}
-              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-inner">
-                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 relative">
-                  {/* ÉTAPE 1 : INDIVIDUEL (GÉRANT) */}
-                  <div 
-                    onClick={() => { playTapBeep(); setSelectedChainStep(1); }}
-                    className={`flex-1 p-4 rounded-2xl border transition-all cursor-pointer relative ${
-                      selectedChainStep === 1 
-                        ? 'bg-blue-950/30 border-blue-500 ring-2 ring-blue-500/20' 
-                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black ${
-                          idChain.part1Individual.status === 'VALIDATED'
-                            ? 'bg-emerald-500 text-slate-950'
-                            : 'bg-blue-600 text-white'
-                        }`}>
-                          {idChain.part1Individual.status === 'VALIDATED' ? <Check className="w-4 h-4" /> : '1'}
-                        </div>
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-200">
-                          Partie 1 : Individuel
-                        </span>
-                      </div>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                        idChain.part1Individual.status === 'VALIDATED'
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      }`}>
-                        {idChain.part1Individual.status === 'VALIDATED' ? 'VALIDÉ ✓' : 'EN ATTENTE'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-                        <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        <span>{idChain.part1Individual.fullName || "Ibrahim Pousbila Konkobo"}</span>
-                      </div>
-                      <div className="text-[10.5px] text-slate-400 truncate">
-                        Pièce : {idChain.part1Individual.idType} ({idChain.part1Individual.idNumber})
-                      </div>
-                      <div className="pt-1 flex items-center justify-between text-[10px]">
-                        <span className="text-emerald-400 font-bold">Palier 1 : Plafond 1 000 000 FCFA/j</span>
-                        <span className="text-slate-500 font-medium">Étape {selectedChainStep === 1 ? 'active' : ''}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* CONNECTEUR FLÉCHÉ INTERMÉDIAIRE */}
-                  <div className="flex items-center justify-center shrink-0">
-                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center transition-colors ${
-                      idChain.part1Individual.status === 'VALIDATED'
-                        ? 'bg-emerald-950 border-emerald-500/50 text-emerald-400 shadow-md shadow-emerald-950/50'
-                        : 'bg-slate-900 border-slate-800 text-slate-600'
-                    }`}>
-                      <ArrowRight className="w-4 h-4 hidden md:block" />
-                      <ChevronDown className="w-4 h-4 md:hidden" />
-                    </div>
-                  </div>
-
-                  {/* ÉTAPE 2 : ENTREPRISE (SOCIÉTÉ) */}
-                  <div 
-                    onClick={() => { playTapBeep(); setSelectedChainStep(2); }}
-                    className={`flex-1 p-4 rounded-2xl border transition-all cursor-pointer relative ${
-                      selectedChainStep === 2 
-                        ? 'bg-indigo-950/30 border-indigo-500 ring-2 ring-indigo-500/20' 
-                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black ${
-                          idChain.part2Business.status === 'VALIDATED'
-                            ? 'bg-emerald-500 text-slate-950'
-                            : 'bg-indigo-600 text-white'
-                        }`}>
-                          {idChain.part2Business.status === 'VALIDATED' ? <Check className="w-4 h-4" /> : '2'}
-                        </div>
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-200">
-                          Partie 2 : Entreprise
-                        </span>
-                      </div>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                        idChain.part2Business.status === 'VALIDATED'
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                      }`}>
-                        {idChain.part2Business.status === 'VALIDATED' ? 'VALIDÉE ✓' : 'EN ATTENTE'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5 min-w-0">
-                        <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                        <span className="break-words line-clamp-1 sm:line-clamp-2" title={idChain.part2Business.companyName || "NANASORE"}>
-                          {idChain.part2Business.companyName || "NANASORE"}
-                        </span>
-                      </div>
-                      <div className="text-[10.5px] text-slate-400 truncate">
-                        IFU : {idChain.part2Business.ifuNumber} • RCCM : {idChain.part2Business.rccmNumber}
-                      </div>
-                      <div className="pt-1 flex items-center justify-between text-[10px]">
-                        <span className="text-emerald-400 font-bold">Palier 2 : Plafonds Illimités & Agrément UEMOA</span>
-                        <span className="text-slate-500 font-medium">Étape {selectedChainStep === 2 ? 'active' : ''}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sélecteur d'étape sous forme d'onglets rapides */}
-                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { playTapBeep(); setSelectedChainStep(1); }}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
-                      selectedChainStep === 1
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40'
-                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Étape 1 : Gérant Individuel</span>
-                    {idChain.part1Individual.status === 'VALIDATED' && (
-                      <span className="bg-emerald-500 text-slate-950 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black">✓</span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { playTapBeep(); setSelectedChainStep(2); }}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
-                      selectedChainStep === 2
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/40'
-                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <Building2 className="w-3.5 h-3.5" />
-                    <span>Étape 2 : Société & Entreprise</span>
-                    {idChain.part2Business.status === 'VALIDATED' && (
-                      <span className="bg-emerald-500 text-slate-950 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black">✓</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* =========================================================================
-                  CONTENU DÉTAILLÉ DE L'ÉTAPE SÉLECTIONNÉE
-                 ========================================================================= */}
-              
-              {/* VUE ÉTAPE 1 : IDENTIFICATION INDIVIDUELLE */}
-              {selectedChainStep === 1 && (
-                <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl animate-in fade-in duration-150">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                    <div>
-                      <h5 className="text-sm font-black text-white flex items-center gap-2">
-                        <UserCheck className="w-4 h-4 text-emerald-400" />
-                        <span>Partie 1 : Identification Individuelle (Gérant / Personne Physique)</span>
-                      </h5>
-                      <p className="text-[11px] text-slate-400">
-                        Vérification d'identité du représentant légal de l'entreprise selon les normes bancaires UEMOA.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-black flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>{idChain.part1Individual.status === 'VALIDATED' ? 'VALIDÉ' : 'EN COURS'}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Sceau de certification si validé */}
-                  {idChain.part1Individual.status === 'VALIDATED' && (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 text-xs text-emerald-200 flex items-start gap-3">
-                      <BadgeCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        <div className="font-black text-emerald-300">
-                          Identification Individuelle Validée & Certifiée ✓
-                        </div>
-                        <div className="text-[11px] text-slate-300">
-                          Autorité de contrôle : <strong>{idChain.part1Individual.validatedBy || "Commission Nationale d'Identification UEMOA"}</strong>
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          Date d'homologation : {idChain.part1Individual.validatedAt ? new Date(idChain.part1Individual.validatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '10 Février 2024'}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Champs Formulaire Étape 1 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Nom Légal Complet du Gérant
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part1Individual.fullName}
-                        onChange={e => setPart1Field('fullName', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-bold"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Nationalité
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part1Individual.nationality}
-                        onChange={e => setPart1Field('nationality', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-bold"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Téléphone / WhatsApp Professionnel
-                      </label>
-                      <input 
-                        type="tel"
-                        value={idChain.part1Individual.phone}
-                        onChange={e => setPart1Field('phone', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-mono"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Email du Gérant
-                      </label>
-                      <input 
-                        type="email"
-                        value={idChain.part1Individual.email}
-                        onChange={e => setPart1Field('email', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-mono"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Type de Pièce d'Identité
-                      </label>
-                      <select
-                        value={idChain.part1Individual.idType}
-                        onChange={e => setPart1Field('idType', e.target.value as any)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-bold"
-                      >
-                        <option value="CNIB">CNIB (Carte Nationale d'Identité Burkinabè)</option>
-                        <option value="PASSPORT_AES_CEDEAO">Passeport Biométrique AES / CEDEAO</option>
-                        <option value="PERMIS_CONDUIRE">Permis de Conduire Biométrique</option>
-                        <option value="CARTE_CONSULAIRE">Carte Consulaire / Titre de Séjour</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Numéro de la Pièce
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part1Individual.idNumber}
-                        onChange={e => setPart1Field('idNumber', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-blue-500 focus:outline-none font-mono font-bold"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* 3 Cartes d'Upload Documentaires pour la Partie 1 */}
-                  <div className="pt-2">
-                    <label className="block text-xs font-bold text-slate-300 mb-2">
-                      Documents Justificatifs d'Identité du Gérant (3 Pièces Obligatoires)
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {/* Document 1 : Recto Pièce d'Identité */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <Fingerprint className="w-4 h-4 text-blue-400" />
-                            <span>1. Pièce Recto</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Conforme ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part1Individual.idCardPhotoUrl ? (
-                            <img 
-                              src={idChain.part1Individual.idCardPhotoUrl} 
-                              alt="Recto Pièce" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-600 text-xs">
-                              Scan Recto requis
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-blue-400" />
-                          <span>Changer la Photo</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart1IdCard} className="hidden" />
-                        </label>
-                      </div>
-
-                      {/* Document 2 : Verso Pièce d'Identité */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <FileCheck2 className="w-4 h-4 text-emerald-400" />
-                            <span>2. Pièce Verso</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Conforme ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part1Individual.idCardPhotoUrl ? (
-                            <img 
-                              src={idChain.part1Individual.idCardPhotoUrl} 
-                              alt="Verso Pièce" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                              <FileText className="w-7 h-7 text-slate-600 mb-1" />
-                              <span className="text-[10px]">Aucun verso téléchargé</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Changer le Verso</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart1IdCard} className="hidden" />
-                        </label>
-                      </div>
-
-                      {/* Document 3 : Selfie Gérant tenant sa Pièce */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <UserCheck className="w-4 h-4 text-amber-400" />
-                            <span>3. Selfie Biométrique</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Biométrie OK ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part1Individual.selfiePhotoUrl ? (
-                            <img 
-                              src={idChain.part1Individual.selfiePhotoUrl} 
-                              alt="Selfie Gérant" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                              <UserCheck className="w-7 h-7 text-slate-600 mb-1" />
-                              <span className="text-[10px]">Aucun selfie enregistré</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Prendre un Selfie</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart1Selfie} className="hidden" />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Boutons d'Action pour l'Étape 1 */}
-                  <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Conformité KYC BCEAO / UEMOA • Niveau Sécurité 1</span>
-                    </span>
-
-                    <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                      <button
-                        type="button"
-                        onClick={handleValidatePart1}
-                        disabled={isProcessingChain}
-                        className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-950/40 transition cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
-                      >
-                        {isProcessingChain ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                            <span>Vérification...</span>
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-4 h-4" />
-                            <span>
-                              {idChain.part1Individual.status === 'VALIDATED' 
-                                ? "Partie 1 Déjà Validée (Re-valider)" 
-                                : "Valider l'Identification Individuelle (Partie 1)"}
-                            </span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => { playTapBeep(); setSelectedChainStep(2); }}
-                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 min-h-[44px]"
-                      >
-                        <span>Passer à l'Étape 2</span>
-                        <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* VUE ÉTAPE 2 : IDENTIFICATION ENTREPRISE */}
-              {selectedChainStep === 2 && (
-                <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl animate-in fade-in duration-150">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                    <div>
-                      <h5 className="text-sm font-black text-white flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-blue-400" />
-                        <span>Partie 2 : Identification Entreprise (Société / Personne Morale)</span>
-                      </h5>
-                      <p className="text-[11px] text-slate-400">
-                        Vérification légale de l'entité commerciale (RCCM, IFU) pour débloquer l'agrément marchand illimité.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-xl bg-blue-950/80 border border-blue-500/50 text-blue-300 text-xs font-black flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
-                        <span>{idChain.part2Business.status === 'VALIDATED' ? 'VALIDÉE' : 'EN COURS'}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Sceau de certification Entreprise */}
-                  {idChain.part2Business.status === 'VALIDATED' && (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-950/60 to-emerald-950/40 border border-blue-500/40 text-xs text-blue-200 flex items-start gap-3">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        <div className="font-black text-white flex items-center gap-2">
-                          <span>Agrément Marchand UEMOA Complet & Validé ✓</span>
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">100% CONFORME</span>
-                        </div>
-                        <div className="text-[11px] text-slate-300">
-                          Greffe d'enregistrement : <strong>{idChain.part2Business.validatedBy || "Greffe du Tribunal de Commerce Ouagadougou"}</strong>
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          Plafonds débloqués : <strong>Encaissements & virements illimités sans restriction journalière</strong>.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Champs Formulaire Étape 2 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Raison Sociale Officielle (Société)
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part2Business.companyName}
-                        onChange={e => setPart2Field('companyName', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none font-bold uppercase"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Nom Commercial de la Boutique
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part2Business.storeName}
-                        onChange={e => setPart2Field('storeName', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none font-bold"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Forme Juridique
-                      </label>
-                      <select
-                        value={idChain.part2Business.legalForm}
-                        onChange={e => setPart2Field('legalForm', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none font-bold"
-                      >
-                        <option value="SARL">SARL (Société à Responsabilité Limitée)</option>
-                        <option value="SUARL">SUARL (SARL Unipersonnelle)</option>
-                        <option value="ENTREPRISE_INDIVIDUELLE">Entreprise Individuelle (Établissement)</option>
-                        <option value="SA">SA (Société Anonyme)</option>
-                        <option value="SAS">SAS (Société par Actions Simplifiée)</option>
-                        <option value="GIE">GIE (Groupement d'Intérêt Économique)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Numéro IFU (Identifiant Fiscal Unique)
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part2Business.ifuNumber}
-                        onChange={e => setPart2Field('ifuNumber', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none font-mono font-bold"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Numéro RCCM (Registre du Commerce)
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part2Business.rccmNumber}
-                        onChange={e => setPart2Field('rccmNumber', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none font-mono font-bold"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">
-                        Adresse du Siège Social & Ville
-                      </label>
-                      <input 
-                        type="text"
-                        value={idChain.part2Business.address}
-                        onChange={e => setPart2Field('address', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* 3 Cartes d'Upload Documentaires pour la Partie 2 */}
-                  <div className="pt-2">
-                    <label className="block text-xs font-bold text-slate-300 mb-2">
-                      Documents Légaux de l'Entreprise (3 Justificatifs Réglementaires)
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {/* Document 1 : Extrait RCCM */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <FileText className="w-4 h-4 text-blue-400" />
-                            <span>1. Extrait RCCM</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Greffe OK ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part2Business.rccmDocPhotoUrl ? (
-                            <img 
-                              src={idChain.part2Business.rccmDocPhotoUrl} 
-                              alt="Extrait RCCM" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                              <FileText className="w-7 h-7 text-slate-600 mb-1" />
-                              <span className="text-[10px]">Aucun extrait RCCM</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-blue-400" />
-                          <span>Scan Extrait RCCM</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart2Rccm} className="hidden" />
-                        </label>
-                      </div>
-
-                      {/* Document 2 : Attestation IFU */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <FileCheck className="w-4 h-4 text-indigo-400" />
-                            <span>2. Certificat IFU</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Impôts OK ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part2Business.ifuDocPhotoUrl ? (
-                            <img 
-                              src={idChain.part2Business.ifuDocPhotoUrl} 
-                              alt="Attestation IFU" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                              <FileCheck className="w-7 h-7 text-slate-600 mb-1" />
-                              <span className="text-[10px]">Aucune attestation IFU</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>Scan Attestation IFU</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart2Ifu} className="hidden" />
-                        </label>
-                      </div>
-
-                      {/* Document 3 : Domiciliation / RIB Marchand */}
-                      <div className="p-3.5 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col justify-between space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <CreditCard className="w-4 h-4 text-emerald-400" />
-                            <span>3. RIB / Siège Social</span>
-                          </span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            Bancaire OK ✓
-                          </span>
-                        </div>
-
-                        <div className="h-28 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative group">
-                          {idChain.part2Business.domiciliationProofUrl ? (
-                            <img 
-                              src={idChain.part2Business.domiciliationProofUrl} 
-                              alt="Domiciliation" 
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                              <CreditCard className="w-7 h-7 text-slate-600 mb-1" />
-                              <span className="text-[10px]">Aucun RIB / Domiciliation</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <label className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition min-h-[38px]">
-                          <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Scan Justificatif / RIB</span>
-                          <input type="file" accept="image/*" onChange={handleUploadPart2Domiciliation} className="hidden" />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Boutons d'Action pour l'Étape 2 */}
-                  <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { playTapBeep(); setSelectedChainStep(1); }}
-                      className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 min-h-[44px]"
-                    >
-                      <span>← Revenir à l'Étape 1</span>
-                    </button>
-
-                    <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                      <button
-                        type="button"
-                        onClick={handleValidatePart2}
-                        disabled={isProcessingChain}
-                        className="flex-1 sm:flex-initial px-6 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-950/60 transition cursor-pointer flex items-center justify-center gap-2 min-h-[44px]"
-                      >
-                        {isProcessingChain ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin text-white" />
-                            <span>Certification en cours...</span>
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                            <span>
-                              {idChain.part2Business.status === 'VALIDATED'
-                                ? "Partie 2 Déjà Validée (Re-valider)"
-                                : "Valider l'Identification Entreprise (Partie 2)"}
-                            </span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =========================================================================
-              2. SECTION KYC (KNOW YOUR CUSTOMER) - STRICTEMENT POSITIONNÉE EN BAS
-              (Affichée dans les onglets Profil, Pays, Paiements et Caisse)
-             ========================================================================= */}
-          {activeTab !== 'ID_CHAIN' && (
-            <div className="mt-8 pt-6 border-t-2 border-indigo-500/30 bg-gradient-to-b from-slate-950/90 via-slate-900 to-[#070b14] rounded-3xl p-4 sm:p-6 border border-slate-800 shadow-2xl relative overflow-hidden">
-              {/* Lueur d'ambiance de sécurité */}
-              <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-              {/* En-tête de la Section KYC */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center shrink-0 shadow-inner">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-black text-white tracking-tight">
-                        Section KYC - Conformité Réglementaire & Sécurité
-                      </h4>
-                      <span className="bg-indigo-950 text-indigo-300 border border-indigo-500/40 text-[9px] font-black px-2 py-0.5 rounded-full">
-                        BCEAO / UEMOA
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Chaîne d'identification séquentielle en 2 parties pour la sécurité des encaissements et les plafonds sans limite.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Badge de Statut KYC Dynamique */}
-                <div className="shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { playTapBeep(); setActiveTab('ID_CHAIN'); }}
-                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600/30 to-blue-600/30 hover:from-emerald-600/40 hover:to-blue-600/40 border border-emerald-500/40 text-emerald-300 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 transition"
-                  >
-                    <Award className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Gérer la Chaîne (2 Étapes) →</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* RÉSUMÉ DES 2 ÉTAPES D'IDENTIFICATION KYC */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {/* Résumé Étape 1 */}
-                <div 
-                  onClick={() => { playTapBeep(); setActiveTab('ID_CHAIN'); setSelectedChainStep(1); }}
-                  className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-blue-500/40 transition cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                      idChain.part1Individual.status === 'VALIDATED' 
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
-                        : 'bg-blue-600/20 text-blue-300 border border-blue-500/40'
-                    }`}>
-                      1
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-white truncate">Partie 1 : Individuel (Gérant)</div>
-                      <div className="text-[10px] text-slate-400 truncate">{idChain.part1Individual.fullName}</div>
-                    </div>
-                  </div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
-                    idChain.part1Individual.status === 'VALIDATED'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  }`}>
-                    {idChain.part1Individual.status === 'VALIDATED' ? 'VALIDÉ ✓' : 'EN COURS'}
-                  </span>
-                </div>
-
-                {/* Résumé Étape 2 */}
-                <div 
-                  onClick={() => { playTapBeep(); setActiveTab('ID_CHAIN'); setSelectedChainStep(2); }}
-                  className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/40 transition cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                      idChain.part2Business.status === 'VALIDATED' 
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
-                        : 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
-                    }`}>
-                      2
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-white truncate">Partie 2 : Entreprise (Société)</div>
-                      <div className="text-[10px] text-slate-400 truncate">{idChain.part2Business.companyName}</div>
-                    </div>
-                  </div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
-                    idChain.part2Business.status === 'VALIDATED'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                  }`}>
-                    {idChain.part2Business.status === 'VALIDATED' ? 'VALIDÉE ✓' : 'EN COURS'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Message d'explication ou raison de rejet */}
-              {kycStatus === 'rejected' && kycSubmission?.rejectionReason && (
-                <div className="mb-4 p-3 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block">Motif de rejet transmis par l'administration :</span>
-                    <span>{kycSubmission.rejectionReason}</span>
-                  </div>
-                </div>
-              )}
-
-              {kycFeedback && (
-                <div className="mb-4 p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{kycFeedback}</span>
-                </div>
-              )}
-
-              {/* Formulaire KYC Rapide */}
-              <div className="space-y-3.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Type de Pièce d'Identité Officielle
-                    </label>
-                    <select
-                      value={kycDocType}
-                      onChange={e => setKycDocType(e.target.value as KycDocumentType)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-indigo-500 focus:outline-none font-bold"
-                    >
-                      <option value="CNIB">Carte Nationale d'Identité (CNIB / CNI CEDEAO)</option>
-                      <option value="PASSPORT_AES_CEDEAO">Passeport Biométrique (AES / CEDEAO)</option>
-                      <option value="RCCM_OU_IFU">Extrait RCCM & Certificat d'Immatriculation IFU</option>
-                      <option value="PERMIS_CONDUIRE">Permis de Conduire Biométrique</option>
-                      <option value="CARTE_CONSULAIRE">Carte Consulaire / Titre de Séjour</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Numéro du Document / Récépissé
-                    </label>
-                    <input 
-                      type="text"
-                      value={kycDocNumber}
-                      onChange={e => setKycDocNumber(e.target.value)}
-                      placeholder="Ex: B12345678 ou RCCM-BF-..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-indigo-500 focus:outline-none font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* Zone de Téléversement de la Pièce */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Scan ou Photo de la Pièce d'Identité (Recto / Verso)
-                  </label>
-
-                  <div className="flex flex-col sm:flex-row items-center gap-4 p-4 rounded-2xl bg-slate-950/90 border border-dashed border-slate-700 hover:border-indigo-500/70 transition">
-                    {/* Aperçu du document */}
-                    <div className="w-28 h-20 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden relative shrink-0 flex items-center justify-center">
-                      {kycDocPhoto ? (
-                        <img 
-                          src={kycDocPhoto} 
-                          alt="Document KYC" 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <FileCheck className="w-8 h-8 text-slate-600" />
-                      )}
-                      {kycDocPhoto && (
-                        <div className="absolute bottom-0 inset-x-0 bg-emerald-950/80 text-emerald-300 text-[9px] font-black text-center py-0.5">
-                          Document Prêt
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Contrôles de téléchargement */}
-                    <div className="flex-1 text-center sm:text-left space-y-1.5">
-                      <div className="flex items-center justify-center sm:justify-start gap-2">
-                        <label className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-950/50 transition min-h-[40px]">
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>Téléverser ou Photographier</span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={handleKycDocUpload} 
-                            className="hidden" 
-                          />
-                        </label>
-
-                        {kycDocPhoto && (
-                          <button
-                            type="button"
-                            onClick={() => setKycDocPhoto('')}
-                            className="px-3 py-2 bg-slate-800 hover:bg-rose-950/50 text-slate-300 hover:text-rose-300 rounded-xl text-xs font-bold transition cursor-pointer min-h-[40px]"
-                          >
-                            Effacer
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-slate-500">
-                        Formats acceptés : JPEG, PNG, Scan haute résolution (taille compressée automatiquement sous 250 Ko).
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bouton de Soumission KYC connecté à Firestore */}
-                <div className="pt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-emerald-400" />
-                    <span>Données cryptées & protégées selon le secret bancaire UEMOA</span>
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={handleSubmitKyc}
-                    disabled={isSubmittingKyc || !kycDocPhoto}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow-lg min-h-[44px] ${
-                      isSubmittingKyc || !kycDocPhoto
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                        : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-indigo-950/60 active:scale-95'
-                    }`}
-                  >
-                    {isSubmittingKyc ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin text-indigo-300" />
-                        <span>Transmission Sécurisée...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                        <span>Soumettre le Dossier KYC</span>
-                      </>
-                    )}
-                  </button>
-                </div>
               </div>
             </div>
           )}

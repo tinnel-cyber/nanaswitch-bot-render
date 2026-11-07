@@ -293,19 +293,19 @@ export async function updateKycRequestStatus(
 }
 
 /**
- * Chaîne d'identification séquentielle en 2 parties pour ENTREPRISE KONKOBO POUSBILA
- * Partie 1 : Individuel (Gérant) Validé
- * Partie 2 : Entreprise (Société) Validé
+ * Chaîne d'identification séquentielle en 2 parties pour NANASORE
+ * Partie 1 : Individuel (Gérant)
+ * Partie 2 : Entreprise (Société)
  */
-export const DEFAULT_KONKOBO_CHAIN: IdentificationChain = {
-  storeId: 'store-konkobo-telecom',
+export const DEFAULT_NANASORE_CHAIN: IdentificationChain = {
+  storeId: 'store-nanasore-main',
   currentStep: 2,
   part1Individual: {
-    fullName: 'Ibrahim Pousbila Konkobo',
-    birthDate: '1988-06-15',
+    fullName: 'Gérant Partenaire Nanasore',
+    birthDate: '1990-01-01',
     nationality: 'Burkinabè',
     phone: '+226 70 00 00 00',
-    email: 'pousbila36@gmail.com',
+    email: 'contact@nanasore.com',
     idType: 'CNIB',
     idNumber: 'B12984532',
     idCardPhotoUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=80',
@@ -313,7 +313,7 @@ export const DEFAULT_KONKOBO_CHAIN: IdentificationChain = {
     status: 'VALIDATED',
     submittedAt: '2024-02-10T14:30:00Z',
     validatedAt: '2024-02-10T15:00:00Z',
-    validatedBy: 'Commission Nationale d\'Identification UEMOA'
+    validatedBy: 'Direction de la Conformité Nanasore'
   },
   part2Business: {
     companyName: 'NANASORE',
@@ -321,7 +321,7 @@ export const DEFAULT_KONKOBO_CHAIN: IdentificationChain = {
     legalForm: 'SARL',
     ifuNumber: '00123456B',
     rccmNumber: 'BF-OUA-01-2024-B12-0042',
-    address: 'Avenue Kwamé N\'Krumah, Immeuble Télécom',
+    address: 'Avenue Kwamé N\'Krumah, Immeuble Nanasore',
     city: 'Ouagadougou',
     country: 'Burkina Faso',
     rccmDocPhotoUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
@@ -329,11 +329,13 @@ export const DEFAULT_KONKOBO_CHAIN: IdentificationChain = {
     status: 'VALIDATED',
     submittedAt: '2024-02-12T09:15:00Z',
     validatedAt: '2024-02-12T10:00:00Z',
-    validatedBy: 'Greffe du Tribunal de Commerce Ouagadougou'
+    validatedBy: 'Direction de la Conformité Nanasore'
   },
   overallStatus: 'FULLY_VERIFIED',
   updatedAt: new Date().toISOString()
 };
+
+export const DEFAULT_KONKOBO_CHAIN = DEFAULT_NANASORE_CHAIN;
 
 /**
  * Sauvegarde la chaîne d'identification (Partie 1 & Partie 2) dans localStorage et Firestore
