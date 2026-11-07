@@ -13,12 +13,14 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  Briefcase
 } from 'lucide-react';
 import {
   saveIdentificationChain,
   IdentificationChain,
-  DEFAULT_NANASORE_CHAIN
+  DEFAULT_NANASORE_CHAIN,
+  submitKycRequest
 } from '../../utils/kycService';
 import { playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 
@@ -42,10 +44,13 @@ export function MerchantIdentificationChainView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Form State cloné et adapté de NanaSwitch
+  // Form State cloné et adapté de NanaSwitch avec Domaine d'activité et Brève description
   const [kycForm, setKycForm] = useState({
     // Type
     type: initialType,
+    // Activité & Description
+    activityDomain: 'Commerce Général & Boutique en Ligne',
+    briefDescription: '',
     // Particulier
     fullName: '',
     sector: 'E-commerce & Vente en ligne',
@@ -142,20 +147,23 @@ export function MerchantIdentificationChainView({
       const updatedChain: IdentificationChain = {
         storeId,
         currentStep: 2,
+        activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
+        briefDescription: kycForm.briefDescription || '',
+        activityDescription: kycForm.briefDescription || '',
         part1Individual: {
           fullName: accountType === 'particulier' ? (kycForm.fullName || 'Gérant Partenaire') : (kycForm.managerName || 'Gérant'),
           birthDate: '1990-01-01',
           nationality: 'Burkinabè',
           phone: kycForm.phone || '+226 70 00 00 00',
           email: accountType === 'particulier' ? 'contact@nanasore.com' : (kycForm.companyEmail || 'contact@nanasore.com'),
+          activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
+          briefDescription: kycForm.briefDescription || '',
           idType: 'CNIB',
           idNumber: accountType === 'particulier' ? kycForm.cnibNumber : kycForm.managerCnibNumber,
           idCardPhotoUrl: kycForm.cnibRectoUrl || kycForm.managerCnibRectoUrl || '',
           selfiePhotoUrl: kycForm.faceSelfieUrl || kycForm.managerSelfieUrl || '',
-          status: 'VALIDATED',
-          submittedAt: new Date().toISOString(),
-          validatedAt: new Date().toISOString(),
-          validatedBy: 'Direction de la Conformité Nanasore'
+          status: 'PENDING',
+          submittedAt: new Date().toISOString()
         },
         part2Business: {
           companyName: accountType === 'entreprise' ? (kycForm.companyName || 'Boutique Pro') : (kycForm.fullName ? `${kycForm.fullName} E-Shop` : 'Boutique Particulier'),
@@ -166,19 +174,77 @@ export function MerchantIdentificationChainView({
           address: 'Avenue Kwamé N\'Krumah',
           city: 'Ouagadougou',
           country: 'Burkina Faso',
+          activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
+          briefDescription: kycForm.briefDescription || '',
           rccmDocPhotoUrl: kycForm.rccmFileUrl || '',
           ifuDocPhotoUrl: kycForm.ifuFileUrl || '',
-          status: 'VALIDATED',
-          submittedAt: new Date().toISOString(),
-          validatedAt: new Date().toISOString(),
-          validatedBy: 'Direction de la Conformité Nanasore'
+          status: 'PENDING',
+          submittedAt: new Date().toISOString()
         },
-        overallStatus: 'FULLY_VERIFIED',
+        overallStatus: 'PARTIAL_INDIVIDUAL',
         updatedAt: new Date().toISOString()
       };
 
       await saveIdentificationChain(updatedChain);
+
+      // 3. Envoi direct vers la liste Super Admin (kycService & Firestore)
+      await submitKycRequest({
+        id: `kyc-${storeId}`,
+        storeId,
+        storeName: accountType === 'entreprise' ? (kycForm.companyName || 'Boutique Pro') : (kycForm.fullName || 'Boutique Particulier'),
+        managerFullName: accountType === 'entreprise' ? (kycForm.managerName || 'Gérant') : (kycForm.fullName || 'Gérant Partenaire'),
+        whatsappPhone: kycForm.phone || '+226 70 00 00 00',
+        userEmail: accountType === 'entreprise' ? kycForm.companyEmail : 'contact@nanasore.com',
+        activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
+        briefDescription: kycForm.briefDescription || '',
+        activityDescription: kycForm.briefDescription || '',
+        documentType: 'CNIB',
+        documentPhotoUrl: kycForm.cnibRectoUrl || kycForm.managerCnibRectoUrl || '',
+        managerPhotoUrl: kycForm.faceSelfieUrl || kycForm.managerSelfieUrl || '',
+        rccmDocPhotoUrl: kycForm.rccmFileUrl || '',
+        ifuDocPhotoUrl: kycForm.ifuFileUrl || '',
+        rccmNumber: kycForm.rccm || '',
+        ifuNumber: kycForm.ifuCompany || '',
+        type: accountType === 'entreprise' ? 'business' : 'individual',
+        status: 'pending_approval',
+        submittedAt: new Date().toISOString()
+      });
+
+      // 4. Transmission à l'API Supabase pour mise à jour immédiate de account_activations & profiles
+      try {
+        await fetch('/api/kyc/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeId,
+            accountType,
+            fullName: accountType === 'entreprise' ? kycForm.managerName : kycForm.fullName,
+            phone: kycForm.phone,
+            email: kycForm.companyEmail || 'contact@nanasore.com',
+            activityDomain: kycForm.activityDomain,
+            briefDescription: kycForm.briefDescription,
+            companyName: kycForm.companyName,
+            managerName: kycForm.managerName,
+            rccm: kycForm.rccm,
+            ifu: kycForm.ifuCompany,
+            cnibNumber: kycForm.cnibNumber || kycForm.managerCnibNumber,
+            cnibRectoUrl: kycForm.cnibRectoUrl || kycForm.managerCnibRectoUrl,
+            cnibVersoUrl: kycForm.cnibVersoUrl || kycForm.managerCnibVersoUrl,
+            faceSelfieUrl: kycForm.faceSelfieUrl || kycForm.managerSelfieUrl,
+            rccmFileUrl: kycForm.rccmFileUrl,
+            ifuFileUrl: kycForm.ifuFileUrl
+          })
+        });
+      } catch (apiErr) {
+        console.warn('API /api/kyc/submit notice:', apiErr);
+      }
+
+      // 5. Déclenchement des événements globaux pour rafraîchissement temps réel
       window.dispatchEvent(new CustomEvent('nana_id_chain_updated', { detail: updatedChain }));
+      window.dispatchEvent(new CustomEvent('nana_kyc_status_changed', { 
+        detail: { storeId, status: 'pending_approval', data: updatedChain } 
+      }));
+      window.dispatchEvent(new CustomEvent('superAdminUpdated', {}));
 
       playCashChime();
       setIsSuccess(true);
@@ -270,25 +336,25 @@ export function MerchantIdentificationChainView({
               </div>
               <div>
                 <h3 className="text-xl font-black text-slate-900">
-                  🎉 Identification Validée avec Succès !
+                  🎉 Dossier d'Identification Transmis avec Succès !
                 </h3>
                 <p className="text-xs text-slate-600 max-w-md mx-auto mt-1">
-                  Votre dossier d'identification est désormais conforme aux exigences réglementaires. Vos plafonds d'encaissement illimités et votre passerelle Mobile Money / Carte sont activés.
+                  Votre dossier KYC a été transmis directement au <strong>Control Plane Super Admin (Direction de la Conformité)</strong> pour validation. Vos documents sont enregistrés et synchronisés dans votre espace marchand.
                 </p>
               </div>
 
               <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl max-w-md mx-auto text-left text-xs space-y-2 text-emerald-900 font-medium">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span><strong>Partie 1 (Individuel)</strong> : Gérant vérifié ✓</span>
+                  <span><strong>Domaine d'activité</strong> : {kycForm.activityDomain} ✓</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span><strong>Partie 2 (Entreprise)</strong> : Activité reconnue ✓</span>
+                  <span><strong>Transmission Super Admin</strong> : Enregistré dans le Control Plane ✓</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span><strong>Plafond Mensuel</strong> : {accountType === 'entreprise' ? '5 000 000 FCFA' : '1 000 000 FCFA'} ✓</span>
+                  <span><strong>Plafond Estimé</strong> : {accountType === 'entreprise' ? '5 000 000 FCFA / mois' : '1 000 000 FCFA / mois'} ✓</span>
                 </div>
               </div>
 
@@ -428,6 +494,47 @@ export function MerchantIdentificationChainView({
                     </div>
                   </div>
 
+                  {/* Domaine d'activité & Brève Description */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Domaine d'activité <span className="text-rose-500">*</span></span>
+                      </label>
+                      <select
+                        required
+                        value={kycForm.activityDomain}
+                        onChange={e => setKycForm({ ...kycForm, activityDomain: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 text-xs focus:outline-none focus:border-blue-600 bg-white"
+                      >
+                        <option value="Commerce Général & Boutique en Ligne">Commerce Général & Boutique en Ligne</option>
+                        <option value="Mode, Prêt-à-porter & Maroquinerie">Mode, Prêt-à-porter & Maroquinerie</option>
+                        <option value="Cosmétique, Beauté & Soins">Cosmétique, Beauté & Soins</option>
+                        <option value="Électronique, Téléphonie & Informatique">Électronique, Téléphonie & Informatique</option>
+                        <option value="Restauration, Agroalimentaire & Produits Frais">Restauration, Agroalimentaire & Produits Frais</option>
+                        <option value="Formations, E-books & Produits Digitaux">Formations, E-books & Produits Digitaux</option>
+                        <option value="Artisanat, Décoration & Mobilier">Artisanat, Décoration & Mobilier</option>
+                        <option value="Prestations de Services & Artisanat">Prestations de Services & Artisanat</option>
+                        <option value="Autre secteur d'activité">Autre secteur d'activité</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Brève description de l'activité <span className="text-rose-500">*</span></span>
+                      </label>
+                      <textarea
+                        required
+                        rows={2}
+                        placeholder="Ex: Vente de vêtements et accessoires tendance, livraison à domicile..."
+                        value={kycForm.briefDescription}
+                        onChange={e => setKycForm({ ...kycForm, briefDescription: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-medium text-slate-900 text-xs focus:outline-none focus:border-blue-600 resize-none"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Numéro de la pièce (CNIB / CNI / Passeport) <span className="text-rose-500">*</span>
@@ -541,6 +648,46 @@ export function MerchantIdentificationChainView({
                         value={kycForm.managerName}
                         onChange={e => setKycForm({ ...kycForm, managerName: e.target.value })}
                         className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 text-xs focus:outline-none focus:border-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Domaine d'activité & Brève Description Société */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Domaine d'activité de la société <span className="text-rose-500">*</span></span>
+                      </label>
+                      <select
+                        required
+                        value={kycForm.activityDomain}
+                        onChange={e => setKycForm({ ...kycForm, activityDomain: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 text-xs focus:outline-none focus:border-blue-600 bg-white"
+                      >
+                        <option value="Commerce Général & Distribution">Commerce Général & Distribution</option>
+                        <option value="Import / Export & Négoce">Import / Export & Négoce</option>
+                        <option value="Mode, Textile & Confection">Mode, Textile & Confection</option>
+                        <option value="Agro-business & Transformation alimentaire">Agro-business & Transformation alimentaire</option>
+                        <option value="High-Tech, Télécoms & Digital">High-Tech, Télécoms & Digital</option>
+                        <option value="BTP, Quincaillerie & Matériaux">BTP, Quincaillerie & Matériaux</option>
+                        <option value="Prestations de Services & Conseil B2B">Prestations de Services & Conseil B2B</option>
+                        <option value="Autre domaine d'activité">Autre domaine d'activité</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Brève description de la société <span className="text-rose-500">*</span></span>
+                      </label>
+                      <textarea
+                        required
+                        rows={2}
+                        placeholder="Ex: Société de distribution en gros et détail de produits de grande consommation..."
+                        value={kycForm.briefDescription}
+                        onChange={e => setKycForm({ ...kycForm, briefDescription: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-medium text-slate-900 text-xs focus:outline-none focus:border-blue-600 resize-none"
                       />
                     </div>
                   </div>

@@ -298,6 +298,9 @@ export interface KycSubmission {
   city?: string;
   country?: string;
   userEmail?: string;
+  activityDomain?: string;
+  briefDescription?: string;
+  activityDescription?: string;
   submittedAt: string;
   reviewedAt?: string;
   reviewedBy?: string;
@@ -312,6 +315,9 @@ export interface IndividualKycData {
   nationality: string;
   phone: string;
   email: string;
+  activityDomain?: string;
+  briefDescription?: string;
+  activityDescription?: string;
   idType: 'CNIB' | 'PASSPORT_AES_CEDEAO' | 'PERMIS_CONDUIRE' | 'CARTE_CONSULAIRE';
   idNumber: string;
   idCardPhotoUrl: string;
@@ -332,6 +338,9 @@ export interface BusinessKycData {
   address: string;
   city: string;
   country: string;
+  activityDomain?: string;
+  briefDescription?: string;
+  activityDescription?: string;
   rccmDocPhotoUrl: string;
   ifuDocPhotoUrl: string;
   domiciliationProofUrl?: string;
@@ -345,6 +354,9 @@ export interface BusinessKycData {
 export interface IdentificationChain {
   storeId: string;
   currentStep: 1 | 2;
+  activityDomain?: string;
+  briefDescription?: string;
+  activityDescription?: string;
   part1Individual: IndividualKycData;
   part2Business: BusinessKycData;
   overallStatus: 'UNVERIFIED' | 'PARTIAL_INDIVIDUAL' | 'FULLY_VERIFIED';

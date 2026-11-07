@@ -17,6 +17,7 @@ import { AdminDashboardView } from './dashboard/AdminDashboardView';
 import { TenantsManagementView } from './tenants/TenantsManagementView';
 import { PricingConfigView } from './pricing/PricingConfigView';
 import { SystemHealthView } from './system-health/SystemHealthView';
+import { KycValidationControlPlaneView } from './kyc/KycValidationControlPlaneView';
 import { NanasoreLogo } from '../components/common/NanasoreLogo';
 import { ModuleErrorBoundary } from '../components/ModuleErrorBoundary';
 
@@ -26,7 +27,7 @@ const HubBuilderPage = React.lazy(() => import('../pages/admin/HubBuilder'));
 // Import dynamique du Grand Tableau de Bord Super Admin (12 modules complets)
 const SaasAdminDashboard = React.lazy(() => import('./legacy/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
 
-export type ControlPlaneTab = 'dashboard' | 'tenants' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin';
+export type ControlPlaneTab = 'dashboard' | 'tenants' | 'kyc' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin';
 
 export interface ControlPlaneRouterProps {
   initialTab?: ControlPlaneTab;
@@ -50,7 +51,9 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
   useEffect(() => {
     const handleUrlSync = () => {
       const path = window.location.pathname.toLowerCase();
-      if (path.includes('/admin/tenants')) {
+      if (path.includes('/admin/kyc') || path.includes('/admin/conformite') || path.includes('/admin/identification')) {
+        setCurrentTab('kyc');
+      } else if (path.includes('/admin/tenants')) {
         setCurrentTab('tenants');
       } else if (path.includes('/admin/pricing') || path.includes('/admin/tarifs')) {
         setCurrentTab('pricing');
@@ -121,6 +124,17 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
                 }`}
               >
                 Marchands & Boutiques
+              </button>
+              <button
+                onClick={() => navigateToTab('kyc')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  currentTab === 'kyc'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                    : 'text-slate-400 hover:text-emerald-300'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Validations KYC</span>
               </button>
               <button
                 onClick={() => navigateToTab('pricing')}
@@ -201,6 +215,13 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
             Marchands
           </button>
           <button
+            onClick={() => navigateToTab('kyc')}
+            className={`px-3 py-1 rounded-lg shrink-0 flex items-center gap-1 ${currentTab === 'kyc' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+          >
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span>Validations KYC</span>
+          </button>
+          <button
             onClick={() => navigateToTab('pricing')}
             className={`px-3 py-1 rounded-lg shrink-0 ${currentTab === 'pricing' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
           >
@@ -230,6 +251,7 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
         <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
           {currentTab === 'dashboard' && <AdminDashboardView onNavigateTab={navigateToTab} />}
           {currentTab === 'tenants' && <TenantsManagementView />}
+          {currentTab === 'kyc' && <KycValidationControlPlaneView />}
           {currentTab === 'pricing' && <PricingConfigView />}
           {currentTab === 'system-health' && <SystemHealthView />}
           {currentTab === 'hub-builder' && (
