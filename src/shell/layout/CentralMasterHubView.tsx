@@ -167,8 +167,8 @@ export interface GeneralSettingsData {
 }
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsData = {
-  companyName: "ENTREPRISE KONKOBO POUSBILA",
-  storeName: "KONKOBO POUSBILA TELECOM",
+  companyName: "NANASORE",
+  storeName: "NANASORE BOUTIQUE",
   managerFullName: "Ibrahim Pousbila Konkobo",
   email: "pousbila36@gmail.com",
   whatsappPhone: "+226 70 00 00 00",
@@ -310,7 +310,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
           managerFullName: parsed.managerFullName || currentUser?.name || DEFAULT_GENERAL_SETTINGS.managerFullName,
           email: parsed.email || currentUser?.email || DEFAULT_GENERAL_SETTINGS.email,
           whatsappPhone: parsed.whatsappPhone || currentUser?.phone || DEFAULT_GENERAL_SETTINGS.whatsappPhone,
-          companyName: (parsed.companyName === "ENTREPRISE KONKOBO POUSBILA TELECOM" ? "ENTREPRISE KONKOBO POUSBILA" : parsed.companyName) || DEFAULT_GENERAL_SETTINGS.companyName,
+          companyName: (parsed.companyName === "ENTREPRISE KONKOBO POUSBILA TELECOM" || parsed.companyName === "ENTREPRISE KONKOBO POUSBILA" ? "NANASORE" : parsed.companyName) || DEFAULT_GENERAL_SETTINGS.companyName,
           storeName: parsed.storeName || currentUser?.storeName || DEFAULT_GENERAL_SETTINGS.storeName,
           logoUrl: parsed.logoUrl || currentUser?.avatarUrl || DEFAULT_GENERAL_SETTINGS.logoUrl,
           bannerUrl: parsed.bannerUrl || DEFAULT_GENERAL_SETTINGS.bannerUrl,
@@ -3271,7 +3271,7 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
       id: `kyc-${resolvedStoreId}-${Date.now()}`,
       userId: resolvedUserId,
       storeId: resolvedStoreId,
-      storeName: formData.companyName || "ENTREPRISE KONKOBO POUSBILA",
+      storeName: formData.companyName || "NANASORE",
       managerFullName: formData.managerFullName || "Ibrahim Pousbila Konkobo",
       managerPhotoUrl: formData.logoUrl || "",
       whatsappPhone: formData.whatsappPhone || "+226 70 00 00 00",
@@ -3325,7 +3325,7 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
                   Paramètres Généraux & KYC
                 </h3>
                 <span className="bg-blue-600/30 text-blue-300 border border-blue-500/40 text-[9px] font-black px-2 py-0.5 rounded-full">
-                  ENTREPRISE KONKOBO
+                  NANASORE
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
@@ -3490,7 +3490,7 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
 
                     <div className="mb-1">
                       <div className="text-xs font-black text-white drop-shadow-md">
-                        {formData.storeName || "KONKOBO POUSBILA TELECOM"}
+                        {formData.storeName || "NANASORE BOUTIQUE"}
                       </div>
                       <div className="text-[10px] text-blue-300 font-bold drop-shadow-md">
                         Dirigeant : {formData.managerFullName || "Ibrahim Pousbila Konkobo"}
@@ -3952,8 +3952,8 @@ const GeneralSettingsModal: React.FC<GeneralSettingsModalProps> = ({
                     <div className="space-y-1">
                       <div className="text-xs font-bold text-white flex items-center gap-1.5 min-w-0">
                         <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                        <span className="break-words line-clamp-1 sm:line-clamp-2" title={idChain.part2Business.companyName || "ENTREPRISE KONKOBO POUSBILA"}>
-                          {idChain.part2Business.companyName || "ENTREPRISE KONKOBO POUSBILA"}
+                        <span className="break-words line-clamp-1 sm:line-clamp-2" title={idChain.part2Business.companyName || "NANASORE"}>
+                          {idChain.part2Business.companyName || "NANASORE"}
                         </span>
                       </div>
                       <div className="text-[10.5px] text-slate-400 truncate">

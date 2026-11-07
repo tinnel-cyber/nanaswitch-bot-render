@@ -120,7 +120,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     id: "ai-gemini",
     appName: "Directeur de Croissance • Agent Nsore",
     appLogo: "/assets/icons/apps/ia.svg",
-    shortDescription: "Directeur de la stratégie commerciale, orientation des 14 modules et optimisation du modèle économique (Abonnement, Commission, Pay-as-you-go).",
+    shortDescription: "Directeur de la stratégie commerciale Nanasore, orientation des 29 modules, arbitrage de rentabilité et accompagnement KYC.",
     category: "Marketing & Studio",
     keywords: ["nsore", "agent-nsore", "directeur", "croissance", "strategie", "gemini", "agent", "ia", "conseil", "decision", "assistant", "chat", "monetisation", "commission"],
     route: "/dashboard/ai-advisor",

@@ -66,7 +66,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     name: 'Directeur de Croissance • Agent Nsore',
     route: '/dashboard/ai-advisor',
     category: 'Marketing & Vente',
-    description: "Directeur de la stratégie commerciale, orientation des 14 modules et optimisation du modèle économique.",
+    description: "Directeur de la stratégie commerciale Nanasore, orientation des 29 modules, arbitrage de rentabilité et accompagnement KYC.",
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: true,

@@ -111,17 +111,17 @@ export function GrowthDirectorAssistant({
   const quickPrompts = useMemo(() => {
     if (isNewUser) {
       return [
-        "Quelle formule choisir pour démarrer sans risque ?",
-        "Comment fonctionne le modèle à la commission ?",
-        "Présentez-moi les modules adaptés à ma boutique",
-        "Puis-je tester l'e-mailing gratuitement ?"
+        "Comment activer les 29 modules via l'Omnibar ?",
+        "M'accompagner à remplir mon KYC",
+        "Quel pack lucratif pour lancer ma boutique ?",
+        "Paiement à la commission vs Abonnement fixe"
       ];
     }
     return [
+      "Comment activer un nouveau module via l'Omnibar ?",
       "Comment augmenter ma marge nette ce mois-ci ?",
       "Optimiser mes campagnes e-mail avec Nanasore",
-      "Dois-je basculer sur l'abonnement fixe ?",
-      "Comment relancer mes clients inactifs ?"
+      "Dois-je basculer sur l'abonnement fixe ?"
     ];
   }, [isNewUser]);
 
@@ -207,13 +207,22 @@ export function GrowthDirectorAssistant({
           }
         ]);
       } else {
-        // Fallback local instantané avec psychologie humaine
+        // Fallback local instantané avec psychologie humaine complète
+        const q = cleanQuery.toLowerCase();
         let fallbackText = `C'est une excellente question pour ${storeName}. L'important est de maximiser chaque vente tout en protégeant votre temps et votre trésorerie.\n\nSur quel levier souhaitez-vous que nous mettions l'accent en priorité : l'acquisition de nouveaux clients ou l'augmentation de votre panier moyen ?`;
         
-        if (cleanQuery.toLowerCase().includes('commission') || cleanQuery.toLowerCase().includes('risque')) {
-          fallbackText = `Entre nous, le **Paiement à la Commission** est l'option idéale pour débuter : vous activez nos 14 modules sans débourser un centime de frais fixe, et Nanasore ne prélève une commission que lorsque vous encaissez.\n\nPréférez-vous démarrer avec cette formule sans engagement, ou souhaitez-vous comparer avec l'abonnement fixe ?`;
-        } else if (cleanQuery.toLowerCase().includes('plan') || cleanQuery.toLowerCase().includes('abonnement')) {
-          fallbackText = `Regardons les chiffres concrètement, ${firstName || 'cher entrepreneur'} : si vos ventes démarrent, la commission à 0 FCFA est la plus sécurisante. Dès que vos ventes deviennent régulières, l'abonnement fixe protège 100% de vos marges.\n\nAvez-vous déjà un volume de ventes prévisible, ou préférez-vous débuter en douceur à la commission ?`;
+        if (q.includes('activer') || q.includes('activation') || q.includes('comment activer')) {
+          fallbackText = `Les 29 modules de Nanasore sont déjà hébergés dans notre Cloud ! Il vous suffit de saisir le nom d'un service dans l'**Omnibar** en haut de l'écran pour l'ouvrir ou le tester en démo.\n\nPour débloquer les encaissements réels et les modules commerciaux avancés, vous devez finaliser votre **Chaîne d'Identification KYC** (Partie 1 Gérant + Partie 2 Entreprise). Puis-je vous accompagner pas à pas pour la remplir en 3 minutes ?`;
+        } else if (q.includes('kyc') || q.includes('identité') || q.includes('ouvrir compte')) {
+          fallbackText = `La validation KYC sur Nanasore est très simple et sécurise vos encaissements : Partie 1 (votre pièce d'identité officielle et selfie) et Partie 2 (coordonnées de votre entreprise).\n\nAvez-vous votre pièce d'identité sous la main pour que nous validions la Partie 1 ensemble en 2 minutes ?`;
+        } else if (q.includes('enerve') || q.includes('énerv') || q.includes('agace') || q.includes('reponds pas')) {
+          fallbackText = `Je vous présente mes excuses les plus sincères, ${firstName || 'cher partenaire'}. Mon intention n'était absolument pas de vous heurter, mais uniquement de vous propulser vers la rentabilité.\n\nReprenons calmement : quelle est votre question prioritaire à cet instant précis ?`;
+        } else if (q.includes('business') || q.includes('argent') || q.includes('combinaison') || q.includes('pack')) {
+          fallbackText = `Pour lancer un business très lucratif sur Nanasore, la combinaison **Caisse POS + Vitrine WhatsApp E-Shop + Studio E-mailing Pro** est redoutable : elle vous permet d'encaisser au comptoir, de vendre en ligne 24/7 et de générer des ventes récurrentes sans frais publicitaires.\n\nQuel domaine souhaitez-vous lancer : le commerce de produits physiques ou des services/formations ?`;
+        } else if (q.includes('commission') || q.includes('risque')) {
+          fallbackText = `Entre nous, le **Paiement à la Commission** est l'option idéale pour débuter : vous activez nos 29 modules sans débourser un centime de frais fixe, et Nanasore ne prélève une commission que lorsque vous encaissez réellement.\n\nPréférez-vous démarrer avec cette formule sans engagement, ou souhaitez-vous comparer avec l'abonnement fixe ?`;
+        } else if (q.includes('plan') || q.includes('abonnement')) {
+          fallbackText = `Regardons les chiffres concrètement, ${firstName || 'cher entrepreneur'} : si vos ventes démarrent, la commission à 0 FCFA est la plus sécurisante. Dès que vos ventes deviennent régulières, l'abonnement fixe protège 100% de vos marges nettes.\n\nAvez-vous déjà un volume de ventes prévisible, ou préférez-vous débuter en douceur à la commission ?`;
         }
 
         setMessages(prev => [
@@ -233,7 +242,7 @@ export function GrowthDirectorAssistant({
         {
           id: `ai-${Date.now()}`,
           sender: 'ai',
-          text: `Je reste à vos côtés, ${firstName || 'cher partenaire'}. Sur Nanasore, votre priorité immédiate reste de fidéliser vos clients via le Studio E-mailing Pro et de sécuriser vos encaissements comptoir.\n\nSouhaitez-vous que nous examinions vos outils de vente ou vos options de monétisation ?`,
+          text: `Je reste à vos côtés, ${firstName || 'cher partenaire'}. Sur Nanasore, vos 29 modules sont tous accessibles via l'Omnibar pour dynamiser vos ventes au comptoir et en ligne.\n\nSouhaitez-vous que nous finalisions votre KYC ou préféreriez-vous tester une campagne sur le Studio E-mailing Pro ?`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);

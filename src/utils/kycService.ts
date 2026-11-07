@@ -316,8 +316,8 @@ export const DEFAULT_KONKOBO_CHAIN: IdentificationChain = {
     validatedBy: 'Commission Nationale d\'Identification UEMOA'
   },
   part2Business: {
-    companyName: 'ENTREPRISE KONKOBO POUSBILA',
-    storeName: 'KONKOBO POUSBILA TELECOM',
+    companyName: 'NANASORE',
+    storeName: 'NANASORE BOUTIQUE',
     legalForm: 'SARL',
     ifuNumber: '00123456B',
     rccmNumber: 'BF-OUA-01-2024-B12-0042',
@@ -392,8 +392,8 @@ export async function getIdentificationChain(storeId: string): Promise<Identific
     const local = localStorage.getItem(`nana_id_chain_${storeId}`);
     if (local) {
       const parsed = JSON.parse(local);
-      if (parsed?.part2Business?.companyName === 'ENTREPRISE KONKOBO POUSBILA TELECOM') {
-        parsed.part2Business.companyName = 'ENTREPRISE KONKOBO POUSBILA';
+      if (parsed?.part2Business?.companyName === 'ENTREPRISE KONKOBO POUSBILA TELECOM' || parsed?.part2Business?.companyName === 'ENTREPRISE KONKOBO POUSBILA') {
+        parsed.part2Business.companyName = 'NANASORE';
       }
       return parsed;
     }
