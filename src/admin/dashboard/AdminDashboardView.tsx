@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
+  Mail,
   Activity, 
   Store, 
   TrendingUp, 
@@ -92,6 +93,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
               <Crown className="w-4 h-4 text-slate-950" />
               <span>Grand Dashboard (12 Modules)</span>
             </button>
+            <a
+              href="/dashboard/marketing/emailing"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 active:scale-95 border border-blue-400/40"
+              title="Accéder au Studio Visuel et Moteur de Campagnes E-mailing"
+            >
+              <Mail className="w-4 h-4 text-white" />
+              <span>Moteur Campagne E-mailing</span>
+            </a>
             <button
               onClick={() => onNavigateTab?.('tenants')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30 active:scale-95"
@@ -173,7 +182,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
       </div>
 
       {/* Quick Navigation Panels */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1: Tenants Management */}
         <div 
           onClick={() => onNavigateTab?.('tenants')}
@@ -224,6 +233,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
             Contrôlez les passerelles Mobile Money (Orange, Wave, Moov), les webhooks de paiement SebPay et les journaux système en temps réel.
           </p>
         </div>
+
+        {/* Card 4: Emailing Campaign Engine */}
+        <a 
+          href="/dashboard/marketing/emailing"
+          className="group cursor-pointer bg-slate-900/40 border border-slate-800 hover:border-blue-500/50 rounded-2xl p-6 transition-all hover:bg-slate-900/70 block"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+              <Mail className="w-6 h-6" />
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400 transition-colors" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">Moteur E-mailing Brevo</h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Studio visuel d'e-mailing, diffusion ciblée par segments et boutique de recharge de quotas pour les marchands.
+          </p>
+        </a>
       </div>
     </div>
   );

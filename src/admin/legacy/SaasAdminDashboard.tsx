@@ -1803,6 +1803,23 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               <span>📊 Ouvrir le CRM & Intégrations</span>
             </button>
 
+            {/* Bouton Moteur Campagne E-mailing Brevo */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/dashboard/marketing/emailing');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }
+              }}
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-md font-black transition-all text-xs cursor-pointer shadow-lg active:scale-95 border border-cyan-400/30 ring-1 ring-cyan-400/20"
+              title="Ouvrir le Moteur de Campagnes E-mailing Brevo (/dashboard/marketing/emailing)"
+            >
+              <Mail size={18} className="text-cyan-300" />
+              <span>✉️ Campagnes E-mailing</span>
+            </button>
+
             {/* Bouton Wameet Supra-App (Configuration & Réglages Super Admin) */}
             <button
               type="button"
