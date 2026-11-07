@@ -164,7 +164,22 @@ function generateComprehensiveStrategicFallback(
   // Analyse du contexte du dernier message de l'IA pour traiter les réponses "oui" / "non"
   const previousAiMsg = [...lastMessages].reverse().find(m => m.sender === 'ai' || m.role === 'model')?.text?.toLowerCase() || '';
 
-  // Cas 1 : Réponse "non" à la question sur l'ouverture de compte
+  // Cas 1 : Où se trouve le module d'identification / Où avez-vous mis le KYC ?
+  if (
+    q.includes('ou avez vous mis') || q.includes('où avez vous mis') ||
+    q.includes('ou se trouve') || q.includes('où se trouve') ||
+    q.includes('ou trouver') || q.includes('où trouver') ||
+    q.includes('ou cliquer') || q.includes('où cliquer') ||
+    q.includes('module d\'identification') || q.includes('bouton pour s\'identifier') ||
+    q.includes('bouton kyc') || q.includes('ou est le kyc') || q.includes('où est le kyc')
+  ) {
+    return {
+      thought: `Demande d'emplacement exact du module d'identification. Indication précise des 4 accès sur l'interface.`,
+      reply: `Le module d'identification KYC de Nanasore est accessible à 4 endroits stratégiques de votre tableau de bord :\n\n1. **Tout en haut sous le nom de votre boutique (Le plus rapide)** : Vous y trouvez directement les 2 badges cliquables **[P1 : INDIVIDUEL]** et **[P2 : ENTREPRISE]**. Un simple clic ouvre instantanément l'étape souhaitée.\n2. **Dans le Hub des Modules** : La carte de module intitulée **« Chaîne d’Identification KYC (Partie 1 & 2) »** avec son bouton vert **« Gérer l’Identification »** dans la section Technologies.\n3. **Dans les Paramètres Généraux** : Cliquez sur l'icône **Engrenage / Sliders** tout en haut à droite, puis sélectionnez l'onglet vert **« Chaîne d'Identification (2 Étapes) »**.\n4. **Dans l'Omnibar au centre en haut** : Tapez simplement **« KYC »** ou **« Identification »** pour l'ouvrir en 1 seconde.\n\nAvez-vous votre pièce d'identité sous la main pour que nous validions la Partie 1 ensemble dès maintenant ?`
+    };
+  }
+
+  // Cas 2 : Réponse "non" à la question sur l'ouverture de compte
   if ((q === 'non' || q.includes('pas encore') || q.includes('pas de compte') || q.includes('pas créé')) && (previousAiMsg.includes('ouvert votre compte') || previousAiMsg.includes('boutique sur nanasore'))) {
     return {
       thought: `Le client n'a pas encore ouvert son compte. Accompagnement immédiat à la création de compte pour débloquer la vente de son produit.`,
@@ -172,7 +187,7 @@ function generateComprehensiveStrategicFallback(
     };
   }
 
-  // Cas 2 : Réponse "oui" à la question sur l'ouverture de compte
+  // Cas 3 : Réponse "oui" à la question sur l'ouverture de compte
   if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait') || q.includes('j\'ai un compte')) && (previousAiMsg.includes('ouvert votre compte') || previousAiMsg.includes('boutique sur nanasore'))) {
     return {
       thought: `Le compte est déjà ouvert. Orientation directe vers l'Omnibar pour activer le module de vente et fixer le prix.`,
@@ -180,16 +195,34 @@ function generateComprehensiveStrategicFallback(
     };
   }
 
-  // Cas 3 : Réponse "non" à la Question Retour KYC
-  if ((q === 'non' || q.includes('pas encore') || q.includes('c\'est quoi kyc')) && (previousAiMsg.includes('rempli votre kyc') || previousAiMsg.includes('votre kyc'))) {
+  // Cas 4 : L'utilisateur accepte d'être accompagné pour son KYC ("Oui", "Oui accompagne-moi", "D'accord", "Ok", "Montre-moi", "Comment faire")
+  const isAcceptingKycHelp = (
+    q === 'oui' || q.includes('accompagne') || q.includes('d\'accord') ||
+    q.includes('daccord') || q.includes('ok') || q.includes('montre') ||
+    q.includes('je veux bien') || q.includes('vas-y') || q.includes('vas y') ||
+    q.includes('comment faire') || q.includes('allons-y') || q.includes('c\'est parti')
+  ) && (
+    previousAiMsg.includes('partie 1') || previousAiMsg.includes('accompagner') ||
+    previousAiMsg.includes('pièce d\'identité') || previousAiMsg.includes('remplir votre kyc')
+  ) && !q.includes('deja') && !q.includes('déjà');
+
+  if (isAcceptingKycHelp) {
     return {
-      thought: `Le client n'a pas encore fait son KYC. Explication bienveillante de la nécessité légale et proposition d'accompagnement immédiat en 3 minutes.`,
-      reply: `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant. Avez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`
+      thought: `Accompagnement opérationnel KYC pas à pas. Déroulé complet du chemin commençant par le bouton à ouvrir.`,
+      reply: `C'est parti, je vous accompagne pas à pas ! Voici le chemin exact pour ouvrir le module et vous identifier en toute simplicité :\n\n📍 **1. Où se trouve le bouton pour ouvrir le formulaire :**\nSur votre écran, vous avez le choix :\n- **Le plus direct** : Cliquez tout en haut sur le badge **« P1 : INDIVIDUEL »** situé juste sous le nom de votre boutique dans le bandeau supérieur.\n- *(Ou cliquez sur l'icône **Paramètres / Sliders** en haut à droite, puis sur l'onglet vert **« Chaîne d'Identification (2 Étapes) »**)*.\n- *(Ou tapez simplement **« KYC »** dans l'Omnibar en haut au centre)*.\n\n📄 **2. Remplir la Partie 1 (Gérant - 2 minutes) :**\n1. Téléversez la photo recto/verso de votre pièce d'identité officielle (CNIB, Passeport ou Permis).\n2. Prenez votre selfie de conformité avec la caméra.\n3. Cliquez sur **« Valider la Partie 1 »**.\n\n🏢 **3. Enchaîner sur la Partie 2 (Entreprise - 1 minute) :**\n1. Renseignez le nom de votre entreprise, votre NIF/RCCM (ou attestation d'activité) et l'adresse.\n2. Cliquez sur **« Soumettre le dossier KYC »**.\n\nVos encaissements réels Mobile Money et Cartes Bancaires seront immédiatement débloqués sans limite de volume.\n\nVoyez-vous le badge **« P1 : INDIVIDUEL »** tout en haut de votre écran pour démarrer ?`
     };
   }
 
-  // Cas 4 : Réponse "oui" à la Question Retour KYC
-  if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait')) && (previousAiMsg.includes('rempli votre kyc') || previousAiMsg.includes('votre kyc'))) {
+  // Cas 5 : Réponse "non" à la Question Retour KYC (n'a pas encore fait son KYC)
+  if ((q === 'non' || q.includes('pas encore') || q.includes('c\'est quoi kyc')) && (previousAiMsg.includes('rempli votre kyc') || previousAiMsg.includes('votre kyc'))) {
+    return {
+      thought: `Le client n'a pas encore fait son KYC. Explication bienveillante de la nécessité légale et proposition d'accompagnement immédiat en 3 minutes.`,
+      reply: `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant.\n\nAvez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`
+    };
+  }
+
+  // Cas 6 : Le client a DÉJÀ fait son KYC ("déjà fait", "déjà validé")
+  if ((q.includes('deja fait') || q.includes('déjà fait') || q.includes('deja rempli') || q.includes('déjà rempli') || q.includes('deja valide') || q.includes('déjà validé')) || (q === 'oui' && previousAiMsg.includes('avez-vous déjà rempli votre kyc ? oui ou non'))) {
     return {
       thought: `KYC validé. Explication directe de l'activation des modules via l'Omnibar.`,
       reply: `Félicitations, vos voyants sont au vert ! Pour activer n'importe quel module, tapez simplement son nom dans l'**Omnibar** en haut de votre écran, cliquez sur 'Activer' ou 'Tester en démo', et il est immédiatement prêt à l'emploi. Quel module souhaitez-vous lancer en premier ?`

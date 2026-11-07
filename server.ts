@@ -1503,6 +1503,23 @@ Avez-vous déjà ouvert votre compte boutique sur Nanasore pour configurer votre
         reply = `**⚡ Activation des 29 modules Nanasore :**
 
 Avant de vous détailler la procédure d'activation dans le Cloud, permettez-moi de vous poser une question essentielle : **avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?**`;
+      } else if (
+        q.includes('ou avez vous mis') || q.includes('où avez vous mis') ||
+        q.includes('ou se trouve') || q.includes('où se trouve') ||
+        q.includes('ou trouver') || q.includes('où trouver') ||
+        q.includes('ou cliquer') || q.includes('où cliquer') ||
+        q.includes('module d\'identification') || q.includes('bouton pour s\'identifier') ||
+        q.includes('bouton kyc') || q.includes('ou est le kyc') || q.includes('où est le kyc')
+      ) {
+        reply = `**📍 Où se trouve le module d'identification KYC sur Nanasore :**
+
+Le module KYC est accessible à 4 endroits stratégiques :
+1. **Tout en haut sous le nom de votre boutique (Le plus direct)** : Cliquez sur le badge cliquable **[P1 : INDIVIDUEL]** pour ouvrir immédiatement la Partie 1.
+2. **Dans le Hub des Modules** : Carte de module **« Chaîne d’Identification KYC (Partie 1 & 2) »** avec son bouton vert **« Gérer l’Identification »**.
+3. **Dans les Paramètres Généraux (Icône Sliders en haut à droite)** : Onglet vert **« Chaîne d'Identification (2 Étapes) »**.
+4. **Dans l'Omnibar au centre en haut** : Tapez simplement **« KYC »** ou **« Identification »**.
+
+Avez-vous votre pièce d'identité sous la main pour démarrer la Partie 1 ensemble en 2 minutes ?`;
       } else if (q.includes('omnibar')) {
         reply = `**🔍 L'Omnibar Nanasore :**
 

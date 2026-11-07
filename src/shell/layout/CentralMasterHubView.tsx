@@ -476,7 +476,15 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       }
     };
     window.addEventListener('nana_id_chain_updated', handleChainUpdated);
-    return () => window.removeEventListener('nana_id_chain_updated', handleChainUpdated);
+    const handleOpenKycModal = (e: any) => {
+      const step = e.detail?.step === 2 ? 2 : 1;
+      openSettingsWithTab('ID_CHAIN', step);
+    };
+    window.addEventListener('nanasore_open_kyc', handleOpenKycModal);
+    return () => {
+      window.removeEventListener('nana_id_chain_updated', handleChainUpdated);
+      window.removeEventListener('nanasore_open_kyc', handleOpenKycModal);
+    };
   }, [currentUser?.storeId]);
 
   const openSettingsWithTab = (tab: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' | 'ID_CHAIN' = 'PROFILE', step: 1 | 2 = 1) => {

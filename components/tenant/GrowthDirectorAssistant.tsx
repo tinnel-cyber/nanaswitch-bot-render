@@ -213,13 +213,34 @@ export function GrowthDirectorAssistant({
         let fallbackText = `C'est une excellente question pour ${storeName}. En tant que commerçant, notre priorité est de transformer chaque visiteur en client payant tout en protégeant vos marges.\n\nQuel produit ou service souhaitez-vous commercialiser en priorité aujourd'hui ?`;
         
         // Réponses contextuelles "oui" / "non" selon la question précédente
-        if ((q === 'non' || q.includes('pas encore') || q.includes('pas de compte') || q.includes('pas créé')) && (prevAiMsg.includes('ouvert votre compte') || prevAiMsg.includes('boutique sur nanasore'))) {
+        const isAcceptingKycHelp = (
+          q === 'oui' || q.includes('accompagne') || q.includes('d\'accord') ||
+          q.includes('daccord') || q.includes('ok') || q.includes('montre') ||
+          q.includes('je veux bien') || q.includes('vas-y') || q.includes('vas y') ||
+          q.includes('comment faire') || q.includes('allons-y') || q.includes('c\'est parti')
+        ) && (
+          prevAiMsg.includes('partie 1') || prevAiMsg.includes('accompagner') ||
+          prevAiMsg.includes('pièce d\'identité') || prevAiMsg.includes('remplir votre kyc')
+        ) && !q.includes('deja') && !q.includes('déjà');
+
+        if (
+          q.includes('ou avez vous mis') || q.includes('où avez vous mis') ||
+          q.includes('ou se trouve') || q.includes('où se trouve') ||
+          q.includes('ou trouver') || q.includes('où trouver') ||
+          q.includes('ou cliquer') || q.includes('où cliquer') ||
+          q.includes('module d\'identification') || q.includes('bouton pour s\'identifier') ||
+          q.includes('bouton kyc') || q.includes('ou est le kyc') || q.includes('où est le kyc')
+        ) {
+          fallbackText = `Le module d'identification KYC de Nanasore est accessible à 4 endroits stratégiques de votre tableau de bord :\n\n1. **Tout en haut sous le nom de votre boutique (Le plus rapide)** : Vous y trouvez directement les 2 badges cliquables **[P1 : INDIVIDUEL]** et **[P2 : ENTREPRISE]**. Un simple clic ouvre instantanément l'étape souhaitée.\n2. **Dans le Hub des Modules** : La carte de module intitulée **« Chaîne d’Identification KYC (Partie 1 & 2) »** avec son bouton vert **« Gérer l’Identification »** dans la section Technologies.\n3. **Dans les Paramètres Généraux** : Cliquez sur l'icône **Engrenage / Sliders** tout en haut à droite, puis sélectionnez l'onglet vert **« Chaîne d'Identification (2 Étapes) »**.\n4. **Dans l'Omnibar au centre en haut** : Tapez simplement **« KYC »** ou **« Identification »** pour l'ouvrir en 1 seconde.\n\nAvez-vous votre pièce d'identité sous la main pour que nous validions la Partie 1 ensemble dès maintenant ?`;
+        } else if (isAcceptingKycHelp) {
+          fallbackText = `C'est parti, je vous accompagne pas à pas ! Voici le chemin exact pour ouvrir le module et vous identifier en toute simplicité :\n\n📍 **1. Où se trouve le bouton pour ouvrir le formulaire :**\nSur votre écran, vous avez le choix :\n- **Le plus direct** : Cliquez tout en haut sur le badge **« P1 : INDIVIDUEL »** situé juste sous le nom de votre boutique dans le bandeau supérieur.\n- *(Ou cliquez sur l'icône **Paramètres / Sliders** en haut à droite, puis sur l'onglet vert **« Chaîne d'Identification (2 Étapes) »**)*.\n- *(Ou tapez simplement **« KYC »** dans l'Omnibar en haut au centre)*.\n\n📄 **2. Remplir la Partie 1 (Gérant - 2 minutes) :**\n1. Téléversez la photo recto/verso de votre pièce d'identité officielle (CNIB, Passeport ou Permis).\n2. Prenez votre selfie de conformité avec la caméra.\n3. Cliquez sur **« Valider la Partie 1 »**.\n\n🏢 **3. Enchaîner sur la Partie 2 (Entreprise - 1 minute) :**\n1. Renseignez le nom de votre entreprise, votre NIF/RCCM (ou attestation d'activité) et l'adresse.\n2. Cliquez sur **« Soumettre le dossier KYC »**.\n\nVos encaissements réels Mobile Money et Cartes Bancaires seront immédiatement débloqués sans limite de volume.\n\nVoyez-vous le badge **« P1 : INDIVIDUEL »** tout en haut de votre écran pour démarrer ?`;
+        } else if ((q === 'non' || q.includes('pas encore') || q.includes('pas de compte') || q.includes('pas créé')) && (prevAiMsg.includes('ouvert votre compte') || prevAiMsg.includes('boutique sur nanasore'))) {
           fallbackText = `C'est tout à fait normal ! Pour activer votre formule et commencer à encaisser vos clients en toute conformité, la première étape indispensable est d'ouvrir votre compte boutique. La bonne nouvelle, c'est que cela ne prend que 2 minutes et je peux vous accompagner dès maintenant. Souhaitez-vous que nous procédions à l'ouverture ensemble tout de suite ?`;
         } else if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait') || q.includes('j\'ai un compte')) && (prevAiMsg.includes('ouvert votre compte') || prevAiMsg.includes('boutique sur nanasore'))) {
           fallbackText = `Parfait, vous avez une longueur d'avance ! Il vous suffit désormais de taper **Ultimate Funnel** (si c'est un livre ou produit vedette) ou **Vitrine E-Shop** dans l'Omnibar en haut de votre écran pour créer votre page et fixer votre prix. Avez-vous déjà déterminé le prix de vente de votre produit ?`;
         } else if ((q === 'non' || q.includes('pas encore') || q.includes('c\'est quoi kyc')) && (prevAiMsg.includes('rempli votre kyc') || prevAiMsg.includes('votre kyc'))) {
-          fallbackText = `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant. Avez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`;
-        } else if ((q === 'oui' || q.includes('deja fait') || q.includes('déjà fait')) && (prevAiMsg.includes('rempli votre kyc') || prevAiMsg.includes('votre kyc'))) {
+          fallbackText = `Vous devez impérativement le faire pour débloquer les encaissements réels et activer vos modules commerciaux. Mais la très bonne nouvelle, c'est que c'est simple, rapide et que je suis là pour vous accompagner pas à pas dès maintenant.\n\nAvez-vous votre pièce d'identité officielle sous la main pour valider la Partie 1 en 2 minutes ?`;
+        } else if ((q.includes('deja fait') || q.includes('déjà fait') || q.includes('deja rempli') || q.includes('déjà rempli') || q.includes('deja valide') || q.includes('déjà validé')) || (q === 'oui' && prevAiMsg.includes('avez-vous déjà rempli votre kyc ? oui ou non'))) {
           fallbackText = `Félicitations, vos voyants sont au vert ! Pour activer n'importe quel module, tapez simplement son nom dans l'**Omnibar** en haut de votre écran, cliquez sur 'Activer' ou 'Tester en démo', et il est immédiatement prêt à l'emploi. Quel module souhaitez-vous lancer en premier ?`;
         } else if (q.includes('livre') || q.includes('ebook') || q.includes('e-book') || q.includes('roman') || q.includes('manuel')) {
           // Schéma 1 : Vente de Livre -> Recommandation Plan + Question fermeture compte
@@ -403,6 +424,38 @@ export function GrowthDirectorAssistant({
                       <div className="whitespace-pre-line">
                         {msg.text}
                       </div>
+
+                      {/* Boutons d'Action Directe (Accompagnement opérationnel 1-clic) */}
+                      {!isUser && (msg.text.includes('KYC') || msg.text.includes('P1 : INDIVIDUEL') || msg.text.includes("module d'identification")) && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.dispatchEvent(new CustomEvent('nanasore_open_kyc', { detail: { step: 1 } }));
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Ouvrir la Chaîne d'Identification KYC (Partie 1) →</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {!isUser && msg.text.includes('ouvrir votre compte') && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onNavigateToPlan) onNavigateToPlan();
+                              else window.dispatchEvent(new CustomEvent('nanasore_open_register'));
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer"
+                          >
+                            <User className="w-3.5 h-3.5" />
+                            <span>Ouvrir mon compte boutique en 2 min →</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {msg.timestamp && (
                       <p className={`text-[9.5px] text-slate-400 px-1 ${isUser ? 'text-right' : 'text-left'}`}>
