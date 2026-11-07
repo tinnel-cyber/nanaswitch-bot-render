@@ -33,21 +33,35 @@ import {
   Send,
   Zap,
   ExternalLink,
-  Info
+  Info,
+  Heading1,
+  Heading2,
+  Heading3,
+  Inbox,
+  X,
+  Mail,
+  Archive,
+  Star as StarIcon,
+  Reply,
+  MoreVertical,
+  Maximize2
 } from 'lucide-react';
 
 export interface EmailBlock {
   id: string;
-  type: 'heading' | 'text' | 'button' | 'image' | 'footer' | 'divider' | 'badge' | 'testimonial';
+  type: 'logo' | 'heading' | 'text' | 'button' | 'image' | 'footer' | 'divider' | 'badge' | 'testimonial';
   content: string;
   url?: string;
+  headingLevel?: 'h1' | 'h2' | 'h3';
+  logoWidth?: number;
   styles?: {
     align?: 'left' | 'center' | 'right';
     textColor?: string;
     backgroundColor?: string;
-    fontSize?: 'sm' | 'md' | 'lg' | 'xl';
+    fontSize?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
     isBold?: boolean;
     isItalic?: boolean;
+    isUnderline?: boolean;
   };
 }
 
@@ -69,77 +83,96 @@ export function EmailBuilderStudio({
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>('1');
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
+  const [inboxClient, setInboxClient] = useState<'gmail' | 'apple'>('gmail');
 
   // Palette de couleurs pour entreprise
   const colorPresets = [
     { label: 'Bleu Royal Nanasore', value: '#2563EB' },
-    { label: 'Bleu Foncé', value: '#1D4ED8' },
-    { label: 'Ardoise Sombre', value: '#1E293B' },
+    { label: 'Bleu Sombre', value: '#1D4ED8' },
+    { label: 'Noir & Ardoise', value: '#0F172A' },
+    { label: 'Gris Neutre', value: '#475569' },
     { label: 'Émeraude Succès', value: '#10B981' },
     { label: 'Ambre Promotion', value: '#F59E0B' },
-    { label: 'Corail / Rouge Urgent', value: '#EF4444' }
+    { label: 'Rouge Flash', value: '#EF4444' }
   ];
 
-  // Blocs dynamiques enrichis (Titre, Texte, Image, Bouton, Badge, Footer...)
+  // Blocs dynamiques enrichis avec Logo, H1/H2/H3, liens cliquables
   const [blocks, setBlocks] = useState<EmailBlock[]>([
+    {
+      id: '1',
+      type: 'logo',
+      content: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=300&auto=format&fit=crop',
+      url: 'https://nanasore.com',
+      logoWidth: 150,
+      styles: { align: 'center' }
+    },
     { 
-      id: '1', 
+      id: '2', 
       type: 'badge', 
       content: '⚡ OFFRE FLASH LIMITÉE • -30% CE WEEK-END', 
       styles: { align: 'center', textColor: '#2563EB', backgroundColor: '#EFF6FF' } 
     },
     { 
-      id: '2', 
+      id: '3', 
       type: 'heading', 
+      headingLevel: 'h1',
       content: '🔥 Offre exclusive réservée à nos meilleurs clients !', 
-      styles: { align: 'center', textColor: '#2563EB', fontSize: 'xl', isBold: true } 
+      url: 'https://nanasore.com',
+      styles: { align: 'center', textColor: '#2563EB', fontSize: '2xl', isBold: true } 
     },
     { 
-      id: '3', 
+      id: '4', 
       type: 'text', 
       content: 'Bonjour {{FIRSTNAME}}, nous sommes ravis de vous compter parmi les clients privilégiés de {{SHOP_NAME}}. Pour célébrer notre nouvelle collection, profitez dès maintenant de nos tarifs exclusifs avec le code promo {{PROMO_CODE}}.', 
       styles: { align: 'left', textColor: '#334155', fontSize: 'md' } 
     },
     { 
-      id: '4', 
+      id: '5', 
       type: 'image', 
       content: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?q=80&w=800&auto=format&fit=crop', 
+      url: 'https://nanasore.com',
       styles: { align: 'center' } 
     },
     { 
-      id: '5', 
+      id: '6', 
       type: 'button', 
       content: 'Découvrir la Collection en 1-Clic', 
       url: 'https://nanasore.com', 
       styles: { align: 'center', backgroundColor: '#2563EB', textColor: '#ffffff' } 
     },
     { 
-      id: '6', 
-      type: 'testimonial', 
-      content: '« Service ultra rapide et produits conformes. Je recommande vivement pour tous mes achats en Afrique de l\'Ouest ! » — Aïcha K., cliente vérifiée', 
-      styles: { align: 'center', textColor: '#475569', backgroundColor: '#F8FAFC' } 
-    },
-    { 
       id: '7', 
       type: 'footer', 
-      content: 'Vous recevez cet e-mail suite à votre inscription sur {{SHOP_NAME}}. Conformité RGPD & directives anti-spam internationales. Pour ne plus recevoir nos offres, cliquez sur Se désabonner.' 
+      content: 'Vous recevez cet e-mail suite à votre inscription sur {{SHOP_NAME}}. Conformité RGPD & directives anti-spam. Cliquez ici pour vous désabonner.' 
     }
   ]);
 
   const addBlock = (type: EmailBlock['type']) => {
     let defaultContent = 'Nouveau texte informatif...';
     let defaultStyles: EmailBlock['styles'] = { align: 'center', textColor: '#1e293b' };
+    let defaultUrl: string | undefined = undefined;
+    let headingLevel: EmailBlock['headingLevel'] = undefined;
+    let logoWidth: number | undefined = undefined;
 
-    if (type === 'heading') {
-      defaultContent = 'Nouveau titre accrocheur 🚀';
+    if (type === 'logo') {
+      defaultContent = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=300&auto=format&fit=crop';
+      defaultUrl = 'https://nanasore.com';
+      logoWidth = 140;
+      defaultStyles = { align: 'center' };
+    } else if (type === 'heading') {
+      defaultContent = 'Nouveau grand titre accrocheur 🚀';
+      headingLevel = 'h2';
       defaultStyles = { align: 'center', textColor: '#2563EB', fontSize: 'xl', isBold: true };
     } else if (type === 'badge') {
       defaultContent = '🔥 NOUVELLE COLLECTION DISPONIBLE';
       defaultStyles = { align: 'center', textColor: '#2563EB', backgroundColor: '#EFF6FF' };
     } else if (type === 'image') {
       defaultContent = 'https://images.unsplash.com/photo-1557804506-669a67965ba0?q=80&w=800&auto=format&fit=crop';
+      defaultUrl = 'https://nanasore.com';
     } else if (type === 'button') {
       defaultContent = 'Profiter de l\'offre maintenant';
+      defaultUrl = 'https://nanasore.com';
       defaultStyles = { align: 'center', backgroundColor: '#2563EB', textColor: '#ffffff' };
     } else if (type === 'testimonial') {
       defaultContent = '« Une expérience client exceptionnelle avec un suivi WhatsApp irréprochable ! »';
@@ -155,7 +188,9 @@ export function EmailBuilderStudio({
       type,
       content: defaultContent,
       styles: defaultStyles,
-      url: type === 'button' ? 'https://nanasore.com' : undefined
+      url: defaultUrl,
+      headingLevel,
+      logoWidth
     };
 
     setBlocks(prev => [...prev, newBlock]);
@@ -196,12 +231,24 @@ export function EmailBuilderStudio({
     } : b));
   };
 
+  const updateHeadingLevel = (id: string, level: 'h1' | 'h2' | 'h3') => {
+    const fontSize = level === 'h1' ? '2xl' : level === 'h2' ? 'xl' : 'lg';
+    setBlocks(prev => prev.map(b => b.id === id ? {
+      ...b,
+      headingLevel: level,
+      styles: { ...b.styles, fontSize }
+    } : b));
+  };
+
+  const updateLogoWidth = (id: string, width: number) => {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, logoWidth: width } : b));
+  };
+
   const insertVariable = (variable: string) => {
     navigator.clipboard.writeText(variable);
     setCopiedVar(variable);
     setTimeout(() => setCopiedVar(null), 2000);
 
-    // Si un bloc est sélectionné, on l'injecte directement
     if (selectedBlockId) {
       const activeBlock = blocks.find(b => b.id === selectedBlockId);
       if (activeBlock && (activeBlock.type === 'text' || activeBlock.type === 'heading' || activeBlock.type === 'button')) {
@@ -220,43 +267,22 @@ export function EmailBuilderStudio({
     }
   };
 
-  // Génération du code HTML brut professionnel, responsive et compatible Brevo / Gmail / Outlook
+  // Génération du code HTML brut compatible Brevo, Gmail, Apple Mail et Outlook
   const generateHtmlOutput = () => {
     return `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject || 'Campagne E-mailing'}</title>
-  <!--[if mso]>
-  <style type="text/css">
-    body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
-  </style>
-  <![endif]-->
+  <title>${subject || 'Campagne E-mailing Nanasore'}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FBF9F5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
   <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FBF9F5; padding: 30px 10px;">
     <tr>
       <td align="center">
-        <!-- Conteneur Principal Carte Blanche -->
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <!-- Conteneur Carte Blanche -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.03);">
           
-          <!-- En-tête Branded -->
-          <tr>
-            <td style="padding: 24px 32px; border-bottom: 1px solid #f1f5f9; background: #ffffff;">
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td align="left">
-                    <span style="font-size: 14px; font-weight: 800; color: #2563EB; letter-spacing: -0.2px;">${senderName || 'Ma Boutique'}</span>
-                  </td>
-                  <td align="right">
-                    <span style="font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Édition Spéciale</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
           <!-- Corps de l'E-mail -->
           <tr>
             <td style="padding: 32px 32px 24px 32px;">
@@ -264,6 +290,17 @@ export function EmailBuilderStudio({
                 const align = b.styles?.align || 'left';
                 const color = b.styles?.textColor || '#1e293b';
 
+                // BLOC : LOGO HEADER
+                if (b.type === 'logo') {
+                  const width = b.logoWidth || 140;
+                  const imgTag = `<img src="${b.content}" alt="Logo Boutique" style="max-width: ${width}px; height: auto; display: inline-block;" />`;
+                  return `
+                    <div style="text-align: ${align}; margin-bottom: 24px; padding-bottom: 12px;">
+                      ${b.url ? `<a href="${b.url}" target="_blank" style="text-decoration: none;">${imgTag}</a>` : imgTag}
+                    </div>`;
+                }
+
+                // BLOC : BADGE
                 if (b.type === 'badge') {
                   return `
                     <div style="text-align: ${align}; margin-bottom: 18px;">
@@ -273,28 +310,43 @@ export function EmailBuilderStudio({
                     </div>`;
                 }
 
+                // BLOC : TITRES H1 / H2 / H3
                 if (b.type === 'heading') {
-                  const fontSize = b.styles?.fontSize === 'xl' ? '24px' : b.styles?.fontSize === 'lg' ? '20px' : '18px';
+                  const level = b.headingLevel || 'h2';
+                  const fontSize = b.styles?.fontSize === '2xl' ? '28px' : b.styles?.fontSize === 'xl' ? '22px' : b.styles?.fontSize === 'lg' ? '19px' : '17px';
+                  const inner = b.url 
+                    ? `<a href="${b.url}" target="_blank" style="color: ${color}; text-decoration: none;">${b.content}</a>`
+                    : b.content;
+
                   return `
-                    <h2 style="color: ${color}; text-align: ${align}; font-size: ${fontSize}; font-weight: 800; line-height: 1.3; margin: 0 0 18px 0; letter-spacing: -0.4px;">
-                      ${b.content}
-                    </h2>`;
+                    <${level} style="color: ${color}; text-align: ${align}; font-size: ${fontSize}; font-weight: 800; line-height: 1.3; margin: 0 0 18px 0; letter-spacing: -0.4px;">
+                      ${inner}
+                    </${level}>`;
                 }
 
+                // BLOC : TEXTE / PARAGRAPHE
                 if (b.type === 'text') {
+                  const fontSize = b.styles?.fontSize === 'lg' ? '17px' : b.styles?.fontSize === 'sm' ? '13px' : '15px';
+                  const inner = b.url 
+                    ? `<a href="${b.url}" target="_blank" style="color: #2563EB; font-weight: 600; text-decoration: underline;">${b.content}</a>`
+                    : b.content;
+
                   return `
-                    <p style="font-size: 15px; line-height: 1.65; text-align: ${align}; color: ${color}; margin: 0 0 18px 0;">
-                      ${b.content}
+                    <p style="font-size: ${fontSize}; line-height: 1.65; text-align: ${align}; color: ${color}; margin: 0 0 18px 0;">
+                      ${inner}
                     </p>`;
                 }
 
+                // BLOC : IMAGE
                 if (b.type === 'image') {
+                  const imgTag = `<img src="${b.content}" alt="Visuel Campagne" style="max-width: 100%; height: auto; border-radius: 12px; display: block; margin: 0 auto; border: 1px solid #e2e8f0;" />`;
                   return `
                     <div style="text-align: ${align}; margin: 24px 0;">
-                      <img src="${b.content}" alt="Visuel Campagne" style="max-width: 100%; height: auto; border-radius: 12px; display: block; margin: 0 auto; border: 1px solid #e2e8f0;" />
+                      ${b.url ? `<a href="${b.url}" target="_blank" style="text-decoration: none;">${imgTag}</a>` : imgTag}
                     </div>`;
                 }
 
+                // BLOC : BOUTON CTA
                 if (b.type === 'button') {
                   return `
                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 28px 0;">
@@ -308,19 +360,7 @@ export function EmailBuilderStudio({
                     </table>`;
                 }
 
-                if (b.type === 'testimonial') {
-                  return `
-                    <div style="background-color: ${b.styles?.backgroundColor || '#F8FAFC'}; border-left: 4px solid #2563EB; padding: 16px 20px; border-radius: 0 12px 12px 0; margin: 24px 0; text-align: ${align};">
-                      <p style="font-size: 13px; font-style: italic; color: ${color}; line-height: 1.6; margin: 0;">
-                        ${b.content}
-                      </p>
-                    </div>`;
-                }
-
-                if (b.type === 'divider') {
-                  return `<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0;" />`;
-                }
-
+                // BLOC : FOOTER LÉGAL
                 if (b.type === 'footer') {
                   return `
                     <div style="border-top: 1px solid #f1f5f9; margin-top: 32px; padding-top: 20px; font-size: 11px; line-height: 1.6; color: #94a3b8; text-align: ${align};">
@@ -333,11 +373,11 @@ export function EmailBuilderStudio({
             </td>
           </tr>
 
-          <!-- Footer Entreprise Nanasore -->
+          <!-- Pied de page officiel Nanasore -->
           <tr>
             <td style="padding: 16px 32px 24px 32px; background-color: #fafaf9; border-top: 1px solid #f1f5f9; text-align: center;">
               <p style="margin: 0; font-size: 10px; color: #a8a29e; font-weight: 600;">
-                Propulsé par Nanasore Email Engine • Conforme RGPD & Directives Anti-Spam Brevo
+                Expédié avec la suite Nanasore E-mailing • Conforme RGPD & CAN-SPAM
               </p>
             </td>
           </tr>
@@ -358,36 +398,41 @@ export function EmailBuilderStudio({
 
   const selectedBlock = blocks.find(b => b.id === selectedBlockId);
 
+  // Extrait pour l'inbox
+  const preheaderText = blocks.find(b => b.type === 'text')?.content.slice(0, 75) || 'Découvrez nos promotions et nouveautés en exclusivité...';
+
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[780px]">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[820px]">
       
-      {/* PANNEAU GAUCHE : OUTILS, RICH TEXT, EMOJIS & BLOCS (5 COLS) */}
-      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[850px]">
+      {/* =========================================================================
+          PANNEAU GAUCHE : OUTILS, H1/H2/H3, LIENS, COULEURS & BLOCS (5 COLS)
+         ========================================================================= */}
+      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[880px]">
         
         {/* Titre & Sous-titre */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full">
-              Éditeur Pro v3.0
+              Studio Pro 4.0
             </span>
           </div>
           <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Layout className="w-5 h-5 text-blue-600" /> Studio Éditeur Pro & Blocs
+            <Layout className="w-5 h-5 text-blue-600" /> Studio Éditeur & Blocs
           </h2>
           <p className="text-xs text-slate-500">
-            Personnalisez vos visuels, variables dynamiques et structure d'e-mail responsive.
+            Personnalisez vos titres H1/H2/H3, textes cliquables, logo et métadonnées.
           </p>
         </div>
 
-        {/* Paramètres de l'e-mail (Expéditeur & Objet) */}
+        {/* Paramètres d'Expéditeur & Objet */}
         <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
               Paramètres de l'e-mail
             </h3>
             <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" /> DKIM Vérifié
+              <ShieldCheck className="w-3.5 h-3.5" /> DKIM Certifié
             </span>
           </div>
 
@@ -414,19 +459,35 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* Bibliothèque de Blocs Modulaires */}
+        {/* Bibliothèque de Blocs Modulaires Étendue (avec Logo Header) */}
         <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-            Ajouter un bloc modulaire
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+              Ajouter un bloc modulaire
+            </h3>
+            <span className="text-[10px] text-blue-600 font-bold">8 types</span>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
+            {/* 1. Bloc Logo Header */}
+            <button 
+              type="button"
+              onClick={() => addBlock('logo')} 
+              className="p-2.5 bg-blue-50/50 hover:bg-blue-100/60 border border-blue-200 rounded-xl text-xs font-black text-blue-800 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ImageIcon className="w-4 h-4 text-blue-600" /> Logo Header
+            </button>
+
+            {/* 2. Bloc Titre */}
             <button 
               type="button"
               onClick={() => addBlock('heading')} 
               className="p-2.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer hover:border-blue-300"
             >
-              <Type className="w-4 h-4 text-blue-600" /> Titre H2
+              <Type className="w-4 h-4 text-blue-600" /> Titre (H1/H2/H3)
             </button>
+
+            {/* 3. Bloc Texte */}
             <button 
               type="button"
               onClick={() => addBlock('text')} 
@@ -434,13 +495,8 @@ export function EmailBuilderStudio({
             >
               <FileText className="w-4 h-4 text-blue-600" /> Paragraphe
             </button>
-            <button 
-              type="button"
-              onClick={() => addBlock('image')} 
-              className="p-2.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer hover:border-blue-300"
-            >
-              <ImageIcon className="w-4 h-4 text-blue-600" /> Image URL
-            </button>
+
+            {/* 4. Bloc Bouton CTA */}
             <button 
               type="button"
               onClick={() => addBlock('button')} 
@@ -448,6 +504,17 @@ export function EmailBuilderStudio({
             >
               <Sparkles className="w-4 h-4 text-blue-600" /> Bouton CTA
             </button>
+
+            {/* 5. Bloc Image */}
+            <button 
+              type="button"
+              onClick={() => addBlock('image')} 
+              className="p-2.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer hover:border-blue-300"
+            >
+              <ImageIcon className="w-4 h-4 text-blue-600" /> Image URL
+            </button>
+
+            {/* 6. Bloc Badge */}
             <button 
               type="button"
               onClick={() => addBlock('badge')} 
@@ -455,13 +522,8 @@ export function EmailBuilderStudio({
             >
               <Tag className="w-4 h-4 text-blue-600" /> Badge Promo
             </button>
-            <button 
-              type="button"
-              onClick={() => addBlock('testimonial')} 
-              className="p-2.5 bg-[#FBF9F5] hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer hover:border-blue-300"
-            >
-              <Star className="w-4 h-4 text-blue-600" /> Avis Client
-            </button>
+
+            {/* 7. Bloc Footer Légal */}
             <button 
               type="button"
               onClick={() => addBlock('footer')} 
@@ -472,15 +534,115 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* Barre de Personnalisation / Rich Text & Palette pour le bloc actif */}
+        {/* =====================================================================
+            BARRE D'ÉDITION RICHE DU BLOC ACTIF (H1/H2/H3, LIEN CLIQUABLE, COULEURS)
+           ===================================================================== */}
         {selectedBlock && (
           <div className="space-y-3 bg-white p-4 rounded-2xl border-2 border-blue-600/30 shadow-xs animate-in fade-in">
             <div className="flex items-center justify-between">
               <h3 className="text-[11px] font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
-                <Palette className="w-3.5 h-3.5" /> Personnaliser le bloc ({selectedBlock.type})
+                <Sliders className="w-3.5 h-3.5" /> Personnalisation avancée ({selectedBlock.type})
               </h3>
-              <span className="text-[10px] text-slate-400 font-bold">Actif</span>
+              <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full">
+                Bloc Sélectionné
+              </span>
             </div>
+
+            {/* Sélecteur Spécifique H1 / H2 / H3 pour les titres */}
+            {selectedBlock.type === 'heading' && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                  Niveau & Taille du Titre
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 bg-[#FBF9F5] p-1 rounded-xl border border-slate-200">
+                  {(['h1', 'h2', 'h3'] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => updateHeadingLevel(selectedBlock.id, lvl)}
+                      className={`py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        (selectedBlock.headingLevel || 'h2') === lvl
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {lvl === 'h1' && <Heading1 className="w-3.5 h-3.5" />}
+                      {lvl === 'h2' && <Heading2 className="w-3.5 h-3.5" />}
+                      {lvl === 'h3' && <Heading3 className="w-3.5 h-3.5" />}
+                      <span>{lvl.toUpperCase()}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Réglage Taille de Logo (pour bloc Logo) */}
+            {selectedBlock.type === 'logo' && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                  Largeur du Logo (pixels)
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 bg-[#FBF9F5] p-1 rounded-xl border border-slate-200">
+                  {[120, 160, 200].map((w) => (
+                    <button
+                      key={w}
+                      type="button"
+                      onClick={() => updateLogoWidth(selectedBlock.id, w)}
+                      className={`py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        (selectedBlock.logoWidth || 150) === w
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {w} px
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* CHAMP LIEN CLIQUABLE (Hypertexte pour Texte, Titre, Image ou Logo) */}
+            {(selectedBlock.type === 'text' || selectedBlock.type === 'heading' || selectedBlock.type === 'image' || selectedBlock.type === 'logo') && (
+              <div className="pt-1">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Link className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Rendre ce bloc cliquable (Lien de redirection)</span>
+                </label>
+                <input 
+                  type="url"
+                  value={selectedBlock.url || ''}
+                  onChange={(e) => updateBlockUrl(selectedBlock.id, e.target.value)}
+                  placeholder="https://maboutique.com/produit ou https://wa.me/..."
+                  className="w-full px-3 py-2 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  {selectedBlock.url ? '✓ Lien actif : le destinataire sera redirigé au clic.' : 'Optionnel : laissez vide pour un affichage statique.'}
+                </span>
+              </div>
+            )}
+
+            {/* Sélecteur de Taille de Police */}
+            {selectedBlock.type === 'text' && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Taille de Police</label>
+                <div className="grid grid-cols-3 gap-1.5 bg-[#FBF9F5] p-1 rounded-xl border border-slate-200">
+                  {(['sm', 'md', 'lg'] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => updateBlockStyles(selectedBlock.id, { fontSize: sz })}
+                      className={`py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        (selectedBlock.styles?.fontSize || 'md') === sz
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {sz === 'sm' ? 'Petite (13px)' : sz === 'md' ? 'Normale (15px)' : 'Grande (17px)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Alignements */}
             <div className="flex items-center gap-1 bg-[#FBF9F5] p-1 rounded-xl border border-slate-200">
@@ -516,9 +678,9 @@ export function EmailBuilderStudio({
               </button>
             </div>
 
-            {/* Sélecteur de Couleurs Préétablies */}
+            {/* Palette de Couleurs */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Couleur Principale</label>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1.5">Couleur du texte</label>
               <div className="flex items-center gap-2">
                 {colorPresets.map((c) => (
                   <button
@@ -589,14 +751,28 @@ export function EmailBuilderStudio({
         </button>
       </div>
 
-      {/* PANNEAU DROITE : PREVIEW EN HAUT & BLOCS ÉDITABLES (7 COLS) */}
+      {/* =========================================================================
+          PANNEAU DROITE : PREVIEW EN HAUT & BOÎTE MAIL SIMULÉE (7 COLS)
+         ========================================================================= */}
       <div className="w-full lg:w-7/12 bg-slate-100 p-6 flex flex-col justify-between">
         
-        {/* BARRE DE PRÉVISUALISATION SUPÉRIEURE INTERACTIVE */}
+        {/* BARRE DE PRÉVISUALISATION SUPÉRIEURE AVEC BOUTON "VOIR DANS LA BOÎTE MAIL" */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-slate-200 mb-4 shadow-xs">
+          
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-bold text-slate-800">Aperçu & Rendu en Temps Réel</span>
+            <span className="text-xs font-bold text-slate-800">Aperçu en Temps Réel</span>
+            
+            {/* BOUTON CLÉ : SIMULATEUR DE BOÎTE MAIL RÉELLE */}
+            <button
+              type="button"
+              onClick={() => setIsInboxModalOpen(true)}
+              className="ml-2 px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              title="Tester l'apparence dans la boîte de réception de vos clients"
+            >
+              <Inbox className="w-3.5 h-3.5" />
+              <span>Voir dans la Boîte Mail (Inbox)</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -608,7 +784,7 @@ export function EmailBuilderStudio({
               }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Édition Visuelle</span>
+              <span>Visuel</span>
             </button>
             <button 
               type="button"
@@ -618,7 +794,7 @@ export function EmailBuilderStudio({
               }`}
             >
               <Code className="w-3.5 h-3.5" />
-              <span>Code HTML Brut</span>
+              <span>HTML Brut</span>
             </button>
             
             <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
@@ -651,10 +827,10 @@ export function EmailBuilderStudio({
         {/* CONTAINER DE L'ÉDITEUR / PRÉVISUALISEUR */}
         <div className="flex-1 flex items-center justify-center overflow-auto py-2">
           <div className={`bg-[#FBF9F5] border border-slate-300 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 flex flex-col ${
-            previewMode === 'mobile' ? 'w-[375px] min-h-[620px]' : 'w-full max-w-xl min-h-[620px]'
+            previewMode === 'mobile' ? 'w-[375px] min-h-[640px]' : 'w-full max-w-xl min-h-[640px]'
           }`}>
             
-            {/* Header de simulateur de boîte mail */}
+            {/* Header du simulateur */}
             <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-500">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black">
@@ -683,7 +859,7 @@ export function EmailBuilderStudio({
                           : 'border-slate-200/80 hover:border-slate-300 shadow-xs'
                       }`}
                     >
-                      {/* Actions rapides sur le bloc (Monter, Descendre, Supprimer) */}
+                      {/* Actions rapides sur le bloc */}
                       <div className="absolute right-3 top-3 flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                         <button 
                           type="button"
@@ -711,9 +887,36 @@ export function EmailBuilderStudio({
                         </button>
                       </div>
 
-                      <div className="text-[10px] uppercase font-black text-slate-400 tracking-wider">
-                        Bloc • {block.type}
+                      <div className="flex items-center gap-2 text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                        <span>Bloc • {block.type}</span>
+                        {block.url && (
+                          <span className="text-blue-600 font-bold lowercase flex items-center gap-0.5">
+                            <Link className="w-2.5 h-2.5" /> cliquable
+                          </span>
+                        )}
                       </div>
+
+                      {/* BLOC : LOGO HEADER */}
+                      {block.type === 'logo' && (
+                        <div className="space-y-2">
+                          <input 
+                            type="text" 
+                            value={block.content} 
+                            onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                            placeholder="URL du Logo de la Boutique (https://...)"
+                            className="w-full text-xs font-mono text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none"
+                          />
+                          <div style={{ textAlign: block.styles?.align || 'center' }} className="py-2">
+                            <img 
+                              src={block.content} 
+                              alt="Logo" 
+                              style={{ maxWidth: `${block.logoWidth || 150}px` }} 
+                              className="inline-block object-contain" 
+                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {/* BLOC : BADGE */}
                       {block.type === 'badge' && (
@@ -727,32 +930,47 @@ export function EmailBuilderStudio({
                         </div>
                       )}
 
-                      {/* BLOC : TITRE H2 */}
+                      {/* BLOC : TITRES H1 / H2 / H3 */}
                       {block.type === 'heading' && (
-                        <input 
-                          type="text" 
-                          value={block.content} 
-                          onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                          style={{
-                            textAlign: block.styles?.align || 'center',
-                            color: block.styles?.textColor || '#2563EB'
-                          }}
-                          className="w-full font-black text-base bg-transparent border-b border-dashed border-slate-300 focus:outline-none focus:border-blue-600"
-                        />
+                        <div>
+                          <input 
+                            type="text" 
+                            value={block.content} 
+                            onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                            style={{
+                              textAlign: block.styles?.align || 'center',
+                              color: block.styles?.textColor || '#2563EB',
+                              fontSize: block.headingLevel === 'h1' ? '1.25rem' : block.headingLevel === 'h3' ? '0.95rem' : '1.1rem'
+                            }}
+                            className="w-full font-black bg-transparent border-b border-dashed border-slate-300 focus:outline-none focus:border-blue-600"
+                          />
+                          {block.url && (
+                            <span className="text-[10px] text-blue-600 truncate block mt-1">
+                              🔗 Lien : {block.url}
+                            </span>
+                          )}
+                        </div>
                       )}
 
                       {/* BLOC : TEXTE / PARAGRAPHE */}
                       {block.type === 'text' && (
-                        <textarea 
-                          rows={3} 
-                          value={block.content} 
-                          onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                          style={{
-                            textAlign: block.styles?.align || 'left',
-                            color: block.styles?.textColor || '#334155'
-                          }}
-                          className="w-full text-xs bg-[#FBF9F5]/50 border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans leading-relaxed"
-                        />
+                        <div>
+                          <textarea 
+                            rows={3} 
+                            value={block.content} 
+                            onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                            style={{
+                              textAlign: block.styles?.align || 'left',
+                              color: block.styles?.textColor || '#334155'
+                            }}
+                            className="w-full text-xs bg-[#FBF9F5]/50 border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans leading-relaxed"
+                          />
+                          {block.url && (
+                            <span className="text-[10px] text-blue-600 truncate block mt-1">
+                              🔗 Texte relié à : {block.url}
+                            </span>
+                          )}
+                        </div>
                       )}
 
                       {/* BLOC : IMAGE */}
@@ -811,16 +1029,6 @@ export function EmailBuilderStudio({
                         </div>
                       )}
 
-                      {/* BLOC : TÉMOIGNAGE / AVIS */}
-                      {block.type === 'testimonial' && (
-                        <textarea 
-                          rows={2} 
-                          value={block.content} 
-                          onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                          className="w-full text-xs italic text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:outline-none"
-                        />
-                      )}
-
                       {/* BLOC : FOOTER LÉGAL */}
                       {block.type === 'footer' && (
                         <textarea 
@@ -830,9 +1038,6 @@ export function EmailBuilderStudio({
                           className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-2 focus:outline-none leading-relaxed"
                         />
                       )}
-
-                      {/* BLOC : SÉPARATEUR */}
-                      {block.type === 'divider' && <hr className="border-slate-200 my-2" />}
 
                     </div>
                   );
@@ -854,7 +1059,6 @@ export function EmailBuilderStudio({
               )}
             </div>
 
-            {/* Pied de page du simulateur */}
             <div className="bg-slate-900 text-slate-400 text-[10px] p-3 text-center font-medium">
               Propulsé par Nanasore Email Engine • Conforme RGPD & CAN-SPAM
             </div>
@@ -862,6 +1066,170 @@ export function EmailBuilderStudio({
         </div>
 
       </div>
+
+      {/* =========================================================================
+          MODALE : SIMULATEUR DE BOÎTE MAIL RÉELLE (INBOX PREVIEW)
+         ========================================================================= */}
+      {isInboxModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+            
+            {/* Header de la Boîte Mail */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-red-500 text-white flex items-center justify-center font-black text-sm">
+                  M
+                </div>
+                <div>
+                  <h3 className="text-sm font-black flex items-center gap-2">
+                    Simulateur de Boîte Mail Réelle
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                      Gmail / Outlook Client
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Voici exactement ce que vos clients voient avant et après avoir cliqué sur votre e-mail.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsInboxModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Corps de la Simulation */}
+            <div className="p-6 space-y-6 overflow-y-auto">
+              
+              {/* 1. VUE LISTE DE BOÎTE DE RÉCEPTION (INBOX LINE) */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  1. Rendu dans la liste des e-mails (Boîte de réception)
+                </span>
+                
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-xs hover:bg-white transition cursor-default">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <input type="checkbox" className="rounded border-slate-300 text-blue-600 pointer-events-none" />
+                    <StarIcon className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />
+                    
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-xs truncate max-w-[140px]">
+                          {senderName}
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
+                          Nouveau
+                        </span>
+                      </div>
+                      
+                      <div className="text-xs truncate text-slate-700 mt-0.5">
+                        <strong className="text-slate-900">{subject || '(Sans objet)'}</strong>
+                        <span className="text-slate-400 font-normal ml-2">
+                          — {preheaderText}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-slate-400 shrink-0">
+                    10:42
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. VUE MESSAGE OUVERT DANS LE CLIENT MAIL */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  2. Rendu de l'e-mail ouvert
+                </span>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
+                  {/* Barre d'outils du message */}
+                  <div className="bg-[#FBF9F5] border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs">
+                    <div>
+                      <h4 className="font-black text-slate-900 text-sm">{subject || '(Sans objet)'}</h4>
+                      <div className="flex items-center gap-2 text-slate-500 text-[11px] mt-0.5">
+                        <span>De : <strong>{senderName}</strong> &lt;notifications@nanasore.com&gt;</span>
+                        <span>•</span>
+                        <span>À : client@domaine.com</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Reply className="w-4 h-4" />
+                      <MoreVertical className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  {/* Corps de l'email rendu */}
+                  <div className="p-6 bg-[#FBF9F5]/40 max-h-[380px] overflow-y-auto">
+                    <div className="max-w-md mx-auto bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                      {blocks.map((b) => (
+                        <div key={b.id} style={{ textAlign: b.styles?.align || 'left' }}>
+                          {b.type === 'logo' && (
+                            <img src={b.content} alt="Logo" style={{ maxWidth: `${b.logoWidth || 140}px` }} className="inline-block" />
+                          )}
+                          {b.type === 'badge' && (
+                            <span className="inline-block text-[10px] font-extrabold px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
+                              {b.content}
+                            </span>
+                          )}
+                          {b.type === 'heading' && (
+                            <h2 style={{ color: b.styles?.textColor || '#2563EB' }} className="font-black text-base">
+                              {b.url ? <a href={b.url} target="_blank" className="underline">{b.content}</a> : b.content}
+                            </h2>
+                          )}
+                          {b.type === 'text' && (
+                            <p className="text-xs text-slate-700 leading-relaxed">
+                              {b.url ? <a href={b.url} target="_blank" className="text-blue-600 underline font-semibold">{b.content}</a> : b.content}
+                            </p>
+                          )}
+                          {b.type === 'image' && (
+                            <img src={b.content} alt="Visuel" className="rounded-xl max-h-36 mx-auto object-cover" />
+                          )}
+                          {b.type === 'button' && (
+                            <div className="py-2">
+                              <span style={{ backgroundColor: b.styles?.backgroundColor || '#2563EB' }} className="inline-block px-5 py-2 text-white font-bold text-xs rounded-xl shadow">
+                                {b.content}
+                              </span>
+                            </div>
+                          )}
+                          {b.type === 'footer' && (
+                            <p className="text-[10px] text-slate-400 pt-3 border-t border-slate-100">
+                              {b.content}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer Modal */}
+            <div className="bg-[#FBF9F5] border-t border-slate-200 px-6 py-3 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Score anti-spam : <strong>10/10 Excellent</strong> (Hébergé sur Brevo SMTP Pro)
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setIsInboxModalOpen(false)}
+                className="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-black shadow-xs hover:bg-blue-700 cursor-pointer"
+              >
+                Fermer l'aperçu
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
