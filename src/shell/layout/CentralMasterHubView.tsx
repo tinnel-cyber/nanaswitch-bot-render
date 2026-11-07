@@ -129,6 +129,7 @@ import {
   DEFAULT_PINNED_APPS 
 } from '../../services/appActivationService';
 import { BrevoEmailComposerModal } from '../../components/email/BrevoEmailComposerModal';
+import { GrowthDirectorAssistant } from '../../components/tenant/GrowthDirectorAssistant';
 
 export type MasterHubCategory = 
   | 'ALL'
@@ -1665,6 +1666,24 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
               </button>
             )}
 
+            {/* Bouton Directeur de Croissance IA (Professeur Konkobo) */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                const el = document.getElementById('growth-director-section');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-700/80 to-indigo-700/80 hover:from-blue-600 hover:to-indigo-600 text-white border border-blue-400/50 active:scale-95 text-[11px] sm:text-xs font-black transition shadow-sm cursor-pointer min-h-[36px] sm:min-h-[40px] shrink-0"
+              title="Consulter le Professeur Konkobo (Directeur de la Croissance • IA)"
+            >
+              <Bot className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+              <span className="hidden xs:inline">Directeur Croissance</span>
+              <span className="xs:hidden">IA</span>
+            </button>
+
             {/* Bouton Tester Certificat */}
             <button
               type="button"
@@ -2036,6 +2055,17 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
           inventory={inventory}
           onNavigate={onNavigate}
         />
+
+        {/* =======================================================================
+            DIRECTEUR DE LA CROISSANCE & STRATÉGIE COMMERCIALE (PROFESSEUR KONKOBO)
+           ======================================================================= */}
+        <div id="growth-director-section">
+          <GrowthDirectorAssistant
+            storeName={settings?.companyName || 'Mon Entreprise Nanasore'}
+            currency={settings?.currencySymbol || 'FCFA'}
+            sellerMode={sellerMode}
+          />
+        </div>
 
         {/* =======================================================================
             2. SECTION ANALYTIQUE EN TEMPS RÉEL & COURBE DES GAINS

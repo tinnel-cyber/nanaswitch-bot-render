@@ -61,6 +61,22 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   },
 
   {
+    id: 'ai-advisor',
+    slug: 'ai-advisor',
+    name: 'Directeur de Croissance • Prof. Konkobo',
+    route: '/dashboard/ai-advisor',
+    category: 'Marketing & Vente',
+    description: "Directeur de la stratégie commerciale, orientation des 14 modules et optimisation du modèle économique.",
+    type: 'APPLICATION',
+    taxonomy: 'APPLICATION',
+    defaultActive: true,
+    view: 'AI_ADVISOR',
+    icon: 'Award',
+    keywords: ['konkobo', 'directeur', 'croissance', 'strategie', 'ia', 'conseil', 'monetisation', 'commission', 'abonnement', 'roi'],
+    aliases: ['app-ai-advisor', 'growth-director', 'directeur-croissance', 'professeur-konkobo', 'conseiller-ia']
+  },
+
+  {
     id: 'pos',
     slug: 'pos',
     name: 'Caisse Tactile Magasin (POS)',

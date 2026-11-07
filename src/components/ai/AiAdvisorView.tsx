@@ -34,6 +34,7 @@ import {
   WifiOff
 } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { GrowthDirectorAssistant } from '../tenant/GrowthDirectorAssistant';
 
 interface AiAdvisorViewProps {
   inventory: InventoryProduct[];
@@ -64,7 +65,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
   onQuickRestock,
 }) => {
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'ALERTS' | 'PROFITABILITY' | 'ANALYSIS' | 'FINANCE_CHAT'>('ALERTS');
+  const [activeTab, setActiveTab] = useState<'ALERTS' | 'PROFITABILITY' | 'ANALYSIS' | 'FINANCE_CHAT' | 'GROWTH_DIRECTOR'>('GROWTH_DIRECTOR');
   const { isOnline } = useNetworkStatus();
 
   // AI Global Analysis state
@@ -292,6 +293,23 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
       {/* Secondary Horizontal Sub-Nav */}
       <div className="shrink-0 bg-slate-900/90 border-b border-slate-800 flex items-center px-2 py-1 gap-1 overflow-x-auto scrollbar-none">
         <button
+          id="tab-sub-growth-director"
+          type="button"
+          onClick={() => {
+            playTapBeep();
+            setActiveTab('GROWTH_DIRECTOR');
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'GROWTH_DIRECTOR'
+              ? 'bg-[#2563EB] text-white border border-blue-400 shadow-md'
+              : 'text-slate-400 hover:text-slate-200 bg-slate-800/40'
+          }`}
+        >
+          <Award className="w-3.5 h-3.5 text-amber-300" />
+          <span>Directeur de Croissance • IA</span>
+        </button>
+
+        <button
           id="tab-sub-alerts"
           type="button"
           onClick={() => {
@@ -368,6 +386,19 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
           <div className="px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
             <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
             <span>Agent IA Gemini Cloud : <strong>Connexion requise</strong> pour les requêtes en temps réel. Vos données locales restent consultables.</span>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* VIEW 0: DIRECTEUR DE CROISSANCE (PROFESSEUR KONKOBO)      */}
+        {/* ======================================================== */}
+        {activeTab === 'GROWTH_DIRECTOR' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <GrowthDirectorAssistant
+              storeName="Mon Entreprise Nanasore"
+              currency="FCFA"
+              sellerMode="ecommerce"
+            />
           </div>
         )}
 
