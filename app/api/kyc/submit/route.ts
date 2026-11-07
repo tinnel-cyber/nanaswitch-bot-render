@@ -21,6 +21,8 @@ export async function POST(request: Request) {
       email = '',
       activityDomain = 'Commerce Général & E-commerce',
       briefDescription = '',
+      monetizationModel = 'commission',
+      pricingModel,
       companyName = '',
       managerName = '',
       rccm = '',
@@ -36,6 +38,8 @@ export async function POST(request: Request) {
     const supabase = getSupabaseClient(true);
     const now = new Date().toISOString();
 
+    const resolvedModel = pricingModel || monetizationModel || 'commission';
+
     const kycPayload = {
       fullName: accountType === 'entreprise' ? (managerName || fullName) : fullName,
       companyName: accountType === 'entreprise' ? companyName : (fullName ? `${fullName} Shop` : 'Boutique'),
@@ -44,6 +48,8 @@ export async function POST(request: Request) {
       activityDomain: activityDomain || 'Commerce Général & E-commerce',
       activityDescription: briefDescription || '',
       briefDescription: briefDescription || '',
+      monetizationModel: resolvedModel,
+      pricingModel: resolvedModel,
       accountType,
       idCardUrl: cnibRectoUrl,
       idCardVersoUrl: cnibVersoUrl,
@@ -63,7 +69,7 @@ export async function POST(request: Request) {
       .upsert({
         user_id: userId,
         organization_id: storeId,
-        pricing_model: accountType === 'entreprise' ? 'subscription' : 'commission',
+        pricing_model: resolvedModel,
         kyc_status: 'light',
         status: 'pending',
         wallet_balance: 0,
@@ -89,6 +95,7 @@ export async function POST(request: Request) {
           full_name: accountType === 'entreprise' ? (managerName || fullName) : fullName,
           whatsapp_number: phone,
           kyc_status: 'light',
+          pricing_model: resolvedModel,
           updated_at: now
         })
         .or(`id.eq.${userId},organization_id.eq.${storeId}`);

@@ -79,9 +79,14 @@ export function MerchantIdentificationChainView({
     managerCnibVersoUrl: '',
     managerSelfieName: '',
     managerSelfieUrl: '',
+    // Modèle économique de Monétisation
+    monetizationModel: 'commission' as 'commission' | 'subscription',
     // Contrat
     contractSigned: false
   });
+
+  // Modale pour Afficher la Politique de Confidentialité ou les Conditions d'Utilisation
+  const [legalDocModal, setLegalDocModal] = useState<'privacy' | 'terms' | null>(null);
 
   // Charger les données sauvegardées s'il en existe
   useEffect(() => {
@@ -150,6 +155,8 @@ export function MerchantIdentificationChainView({
         activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
         briefDescription: kycForm.briefDescription || '',
         activityDescription: kycForm.briefDescription || '',
+        monetizationModel: kycForm.monetizationModel,
+        pricingModel: kycForm.monetizationModel,
         part1Individual: {
           fullName: accountType === 'particulier' ? (kycForm.fullName || 'Gérant Partenaire') : (kycForm.managerName || 'Gérant'),
           birthDate: '1990-01-01',
@@ -186,6 +193,12 @@ export function MerchantIdentificationChainView({
       };
 
       await saveIdentificationChain(updatedChain);
+      localStorage.setItem('nana_merchant_pricing_model', kycForm.monetizationModel);
+      if (kycForm.monetizationModel === 'subscription') {
+        localStorage.setItem('nana_subscription_plans_pending', 'true');
+      } else {
+        localStorage.removeItem('nana_subscription_plans_pending');
+      }
 
       // 3. Envoi direct vers la liste Super Admin (kycService & Firestore)
       await submitKycRequest({
@@ -198,6 +211,8 @@ export function MerchantIdentificationChainView({
         activityDomain: kycForm.activityDomain || 'Commerce Général & Boutique en Ligne',
         briefDescription: kycForm.briefDescription || '',
         activityDescription: kycForm.briefDescription || '',
+        monetizationModel: kycForm.monetizationModel,
+        pricingModel: kycForm.monetizationModel,
         documentType: 'CNIB',
         documentPhotoUrl: kycForm.cnibRectoUrl || kycForm.managerCnibRectoUrl || '',
         managerPhotoUrl: kycForm.faceSelfieUrl || kycForm.managerSelfieUrl || '',
@@ -223,6 +238,8 @@ export function MerchantIdentificationChainView({
             email: kycForm.companyEmail || 'contact@nanasore.com',
             activityDomain: kycForm.activityDomain,
             briefDescription: kycForm.briefDescription,
+            monetizationModel: kycForm.monetizationModel,
+            pricingModel: kycForm.monetizationModel,
             companyName: kycForm.companyName,
             managerName: kycForm.managerName,
             rccm: kycForm.rccm,
@@ -343,7 +360,11 @@ export function MerchantIdentificationChainView({
                 </p>
               </div>
 
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl max-w-md mx-auto text-left text-xs space-y-2 text-emerald-900 font-medium">
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl max-w-md mx-auto text-left text-xs space-y-2 text-indigo-950 font-medium">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span><strong>Modèle économique</strong> : {kycForm.monetizationModel === 'subscription' ? 'Abonnement (Forfait Requis pour déblocage)' : 'Commission (Accès direct après KYC)'}</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span><strong>Domaine d'activité</strong> : {kycForm.activityDomain} ✓</span>
@@ -358,15 +379,39 @@ export function MerchantIdentificationChainView({
                 </div>
               </div>
 
-              <div className="pt-4">
-                <button
-                  type="button"
-                  onClick={() => { playTapBeep(); onClose(); }}
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-2xl shadow-lg shadow-blue-600/30 active:scale-95 transition cursor-pointer text-xs"
-                >
-                  Retourner au Tableau de Bord
-                </button>
-              </div>
+              {kycForm.monetizationModel === 'subscription' ? (
+                <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      onClose();
+                      window.dispatchEvent(new CustomEvent('nanasore_open_subscription_plans'));
+                    }}
+                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black rounded-2xl shadow-lg shadow-indigo-600/30 active:scale-95 transition cursor-pointer text-xs flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>Choisir mon Abonnement pour débloquer les modules →</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { playTapBeep(); onClose(); }}
+                    className="w-full sm:w-auto px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition cursor-pointer text-xs"
+                  >
+                    Tableau de Bord
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-3">
+                  <button
+                    type="button"
+                    onClick={() => { playTapBeep(); onClose(); }}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-lg shadow-emerald-600/30 active:scale-95 transition cursor-pointer text-xs"
+                  >
+                    Retourner au Tableau de Bord
+                  </button>
+                </div>
+              )}
             </div>
           ) : currentStep === 1 ? (
             /* ============================================================== */
@@ -847,7 +892,71 @@ export function MerchantIdentificationChainView({
                 </div>
               </div>
 
-              {/* Case d'engagement sans mentions obsolètes */}
+              {/* Choix du Modèle Économique : Commission vs Abonnement */}
+              <div className="space-y-2">
+                <label className="block text-xs font-black text-slate-800">
+                  Choisissez votre Modèle d'Accès Nanasore <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Modèle Commission */}
+                  <div 
+                    onClick={() => setKycForm({ ...kycForm, monetizationModel: 'commission' })}
+                    className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 select-none ${
+                      kycForm.monetizationModel === 'commission'
+                        ? 'border-emerald-600 bg-emerald-50/70 ring-4 ring-emerald-500/10 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="monetizationModel"
+                      id="opt-commission"
+                      checked={kycForm.monetizationModel === 'commission'}
+                      onChange={() => setKycForm({ ...kycForm, monetizationModel: 'commission' })}
+                      className="mt-1 text-emerald-600 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-black text-xs text-slate-900 flex items-center gap-1.5">
+                        <span>Modèle Commission (0 FCFA fixe)</span>
+                        <span className="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold">Accès Direct</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        Sans abonnement mensuel. La validation de votre KYC vous donne <strong>accès direct aux modules</strong> pour encaisser vos ventes au pourcentage.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Modèle Abonnement */}
+                  <div 
+                    onClick={() => setKycForm({ ...kycForm, monetizationModel: 'subscription' })}
+                    className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 select-none ${
+                      kycForm.monetizationModel === 'subscription'
+                        ? 'border-indigo-600 bg-indigo-50/70 ring-4 ring-indigo-500/10 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="monetizationModel"
+                      id="opt-subscription"
+                      checked={kycForm.monetizationModel === 'subscription'}
+                      onChange={() => setKycForm({ ...kycForm, monetizationModel: 'subscription' })}
+                      className="mt-1 text-indigo-600 cursor-pointer"
+                    />
+                    <div>
+                      <div className="font-black text-xs text-slate-900 flex items-center gap-1.5">
+                        <span>Modèle Abonnement (Forfait Pro)</span>
+                        <span className="text-[9px] px-1.5 py-0.2 bg-indigo-100 text-indigo-800 rounded font-bold">Forfait Requis</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        Le KYC valide votre identité légale. Dès validation, vous devrez <strong>souscrire à un abonnement</strong> pour débloquer l'ensemble des modules et outils.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Case d'engagement légal avec liens cliquables obligatoires */}
               <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-start gap-3">
                 <input 
                   type="checkbox" 
@@ -855,10 +964,36 @@ export function MerchantIdentificationChainView({
                   id="kyc-contract-agreement"
                   checked={kycForm.contractSigned}
                   onChange={e => setKycForm({ ...kycForm, contractSigned: e.target.checked })}
-                  className="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  className="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer shrink-0"
                 />
-                <label htmlFor="kyc-contract-agreement" className="text-xs text-blue-950 font-medium leading-relaxed cursor-pointer">
-                  Je certifie sur l'honneur l'exactitude des pièces et informations renseignées pour mon compte <strong>{accountType === 'particulier' ? 'Particulier' : 'Entreprise'}</strong>. J'autorise Nanasore à vérifier ces éléments pour sécuriser mes encaissements Mobile Money et Cartes Bancaires.
+                <label htmlFor="kyc-contract-agreement" className="text-xs text-blue-950 font-medium leading-relaxed cursor-pointer select-none">
+                  En cochant cette case, vous reconnaissez avoir lu et accepté notre{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      playTapBeep();
+                      setLegalDocModal('privacy');
+                    }}
+                    className="text-blue-700 hover:text-blue-900 font-extrabold underline decoration-blue-500 underline-offset-2 cursor-pointer transition"
+                  >
+                    Politique de Confidentialité
+                  </button>
+                  {' '}et les{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      playTapBeep();
+                      setLegalDocModal('terms');
+                    }}
+                    className="text-blue-700 hover:text-blue-900 font-extrabold underline decoration-blue-500 underline-offset-2 cursor-pointer transition"
+                  >
+                    Conditions d'Utilisation
+                  </button>
+                  {' '}de Nanasore. Vous certifiez sur l'honneur l'exactitude des pièces et informations renseignées pour votre compte {accountType === 'particulier' ? 'Particulier' : 'Entreprise'}.
                 </label>
               </div>
 
@@ -892,6 +1027,150 @@ export function MerchantIdentificationChainView({
 
         </div>
       </div>
+
+      {/* =========================================================================
+          MODALE POLITIQUE DE CONFIDENTIALITÉ & CONDITIONS D'UTILISATION (CGU)
+         ========================================================================= */}
+      {legalDocModal && (
+        <div 
+          className="fixed inset-0 z-[10000] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150"
+          onClick={() => setLegalDocModal(null)}
+        >
+          <div 
+            className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] text-slate-800 animate-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header Modale Légale */}
+            <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white">Cadre Légal & Réglementaire Nanasore</h3>
+                  <p className="text-[11px] text-slate-400">Protection des données marchandes et conditions de service</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setLegalDocModal(null)}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Onglets de sélection */}
+            <div className="bg-slate-100 border-b border-slate-200 px-6 py-2 flex items-center gap-2 text-xs font-bold shrink-0">
+              <button
+                type="button"
+                onClick={() => { playTapBeep(); setLegalDocModal('privacy'); }}
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  legalDocModal === 'privacy'
+                    ? 'bg-white text-blue-700 shadow-xs border border-slate-200 font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🔒 Politique de Confidentialité
+              </button>
+              <button
+                type="button"
+                onClick={() => { playTapBeep(); setLegalDocModal('terms'); }}
+                className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  legalDocModal === 'terms'
+                    ? 'bg-white text-blue-700 shadow-xs border border-slate-200 font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📜 Conditions Générales d'Utilisation (CGU)
+              </button>
+            </div>
+
+            {/* Corps du document défilable */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-700">
+              {legalDocModal === 'privacy' ? (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">1. Collecte et Traitement des Données Personnelles</h4>
+                    <p>
+                      La plateforme SaaS Nanasore applique une politique stricte de souveraineté et de confidentialité. Les données collectées (nom, numéro de téléphone, pièce d'identité officielle, selfie, documents d'entreprise RCCM et IFU) sont strictement réservées à la vérification d'identité (KYC), à la prévention des fraudes et à l'ouverture de votre compte marchand.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">2. Sécurité et Cryptage des Pièces Téléversées</h4>
+                    <p>
+                      Toutes les pièces d'identité et documents officiels sont chiffrés et stockés dans un environnement sécurisé conforme aux standards bancaires et aux directives de l'autorité de régulation des télécoms et des transactions électroniques. Vos données ne sont en aucun cas vendues, cédées ou partagées à des fins publicitaires avec des tiers.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">3. Confidentialité des Transactions et Secret des Affaires</h4>
+                    <p>
+                      Les volumes de vente, numéros de paiement Mobile Money, historiques de caisse et fichiers clients de votre boutique constituent votre propriété exclusive. Nanasore s'interdit formellement toute divulgation de vos données financières ou stratégiques.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">4. Vos Droits</h4>
+                    <p>
+                      Vous disposez d'un droit permanent d'accès, de mise à jour et de rectification de vos données personnelles via votre tableau de bord marchand ou sur simple demande auprès de la Direction de la Conformité Nanasore (contact@nanasore.com).
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">1. Objet et Champ d'Application</h4>
+                    <p>
+                      Les présentes Conditions Générales d'Utilisation régissent l'accès et l'exploitation des 27 services, applications, modules et outils de commerce omnicanal proposés par la plateforme Nanasore.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">2. Distinction des Modèles Économiques (Règle d'Accès aux Modules)</h4>
+                    <p className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-950 font-medium">
+                      <strong>Règle essentielle d'activation :</strong> La validation du dossier d'identification KYC atteste de la conformité légale de votre boutique.
+                      <br /><br />
+                      • <strong>Pour les marchands au Modèle Commission :</strong> La validation du KYC confère un accès direct et opérationnel aux modules de vente sans abonnement fixe, moyennant un partage au pourcentage sur les transactions effectives.
+                      <br /><br />
+                      • <strong>Pour les marchands au Modèle Abonnement :</strong> La validation du KYC est un pré-requis d'identification légale. L'activation des modules et outils soumis à abonnement requiert formellement la souscription active à l'un de nos forfaits d'abonnement (Abonnement Mensuel ou Annuel).
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">3. Obligations et Engagements du Marchand</h4>
+                    <p>
+                      Le marchand s'engage à n'utiliser la plateforme que pour des activités commerciales licites et conformes aux lois en vigueur. Tout acte de contrefaçon, de blanchiment d'argent, de transaction frauduleuse ou de fausse déclaration entraîne la suspension immédiate du compte et le signalement aux autorités compétentes.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm mb-1">4. Disponibilité du Service et Règlements</h4>
+                    <p>
+                      Nanasore s'efforce d'assurer une disponibilité continue du système à 99,9%. Les reversements des fonds encaissés via Mobile Money ou Carte Bancaire s'effectuent conformément aux délais réglementaires sur le compte bancaire ou portefeuille vérifié du marchand titulaire.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Pied de Modale */}
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-500 font-medium">
+                Plateforme Nanasore • Document légal opposable
+              </span>
+              <button
+                type="button"
+                onClick={() => setLegalDocModal(null)}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-sm transition"
+              >
+                J'ai Compris et Je Ferme
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -301,6 +301,8 @@ export interface KycSubmission {
   activityDomain?: string;
   briefDescription?: string;
   activityDescription?: string;
+  monetizationModel?: 'commission' | 'subscription';
+  pricingModel?: 'commission' | 'subscription' | 'pay_per_use';
   submittedAt: string;
   reviewedAt?: string;
   reviewedBy?: string;
@@ -357,6 +359,8 @@ export interface IdentificationChain {
   activityDomain?: string;
   briefDescription?: string;
   activityDescription?: string;
+  monetizationModel?: 'commission' | 'subscription';
+  pricingModel?: 'commission' | 'subscription' | 'pay_per_use';
   part1Individual: IndividualKycData;
   part2Business: BusinessKycData;
   overallStatus: 'UNVERIFIED' | 'PARTIAL_INDIVIDUAL' | 'FULLY_VERIFIED';

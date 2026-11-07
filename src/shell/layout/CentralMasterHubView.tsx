@@ -484,11 +484,37 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       setIsKycChainWizardOpen(true);
     };
     window.addEventListener('nanasore_open_kyc', handleOpenKycModal);
+
+    const handleOpenSubPlans = () => {
+      if (onOpenUpgrade) onOpenUpgrade();
+      else setIsProModalOpen(true);
+    };
+    window.addEventListener('nanasore_open_subscription_plans', handleOpenSubPlans);
+
     return () => {
       window.removeEventListener('nana_id_chain_updated', handleChainUpdated);
       window.removeEventListener('nanasore_open_kyc', handleOpenKycModal);
+      window.removeEventListener('nanasore_open_subscription_plans', handleOpenSubPlans);
     };
-  }, [currentUser?.storeId]);
+  }, [currentUser?.storeId, onOpenUpgrade]);
+
+  // Détection du Modèle Abonnement vs Commission
+  const isSubscriptionModel = useMemo(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('nana_merchant_pricing_model') : null;
+    return (
+      stored === 'subscription' ||
+      currentUser?.pricing_model === 'subscription' ||
+      idChain?.monetizationModel === 'subscription' ||
+      idChain?.pricingModel === 'subscription'
+    );
+  }, [currentUser?.pricing_model, idChain]);
+
+  const isSubscriptionActive = useMemo(() => {
+    return subscription?.status === 'ACTIVE' || currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+  }, [subscription?.status, currentUser?.role]);
+
+  // Si le marchand a opté pour l'abonnement et n'a pas encore souscrit
+  const isSubscriptionPending = isSubscriptionModel && !isSubscriptionActive;
 
   const openSettingsWithTab = (tab: 'PROFILE' | 'CURRENCY' | 'PAYMENTS' | 'INVOICING' = 'PROFILE') => {
     playTapBeep();
@@ -1286,14 +1312,14 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-custom-domain',
       category: 'COMMERCE',
       title: 'Domaine Personnalisé',
-      badge: 'PRO',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Liez votre propre domaine .com ou .ci pour un branding 100% professionnel et indépendant.',
+      badge: isSubscriptionPending ? 'ABONNEMENT REQUIS' : 'PRO',
+      badgeColor: isSubscriptionPending ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-200 border-indigo-400/50' : 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      description: isSubscriptionPending ? 'Souscrire à un abonnement pour débloquer tous les services, applications, modules et outils concernés.' : 'Liez votre propre domaine .com ou .ci pour un branding 100% professionnel et indépendant.',
       icon: Globe,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/10 border-amber-500/30',
-      actionText: 'Connecter Domaine',
-      action: () => openProFeature('CUSTOM_DOMAIN'),
+      iconColor: isSubscriptionPending ? 'text-indigo-400' : 'text-amber-400',
+      iconBg: isSubscriptionPending ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-amber-500/10 border-amber-500/30',
+      actionText: isSubscriptionPending ? 'Souscrire à un abonnement' : 'Connecter Domaine',
+      action: () => isSubscriptionPending && onOpenUpgrade ? onOpenUpgrade() : openProFeature('CUSTOM_DOMAIN'),
       isPro: true,
       proKey: 'CUSTOM_DOMAIN' as ProFeatureKey
     },
@@ -1301,14 +1327,14 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-sovereign-gateway',
       category: 'FINANCE',
       title: 'Passerelle Souveraine / Connecter API',
-      badge: 'PRO',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Encaisser directement sur vos propres clés API FedaPay, LigdiCash ou Stripe avec 0% de commission.',
+      badge: isSubscriptionPending ? 'ABONNEMENT REQUIS' : 'PRO',
+      badgeColor: isSubscriptionPending ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-200 border-indigo-400/50' : 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      description: isSubscriptionPending ? 'Souscrire à un abonnement pour débloquer tous les services, applications, modules et outils concernés.' : 'Encaisser directement sur vos propres clés API FedaPay, LigdiCash ou Stripe avec 0% de commission.',
       icon: Zap,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/10 border-amber-500/30',
-      actionText: 'Connecter API',
-      action: () => openProFeature('SOVEREIGN_GATEWAY'),
+      iconColor: isSubscriptionPending ? 'text-indigo-400' : 'text-amber-400',
+      iconBg: isSubscriptionPending ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-amber-500/10 border-amber-500/30',
+      actionText: isSubscriptionPending ? 'Souscrire à un abonnement' : 'Connecter API',
+      action: () => isSubscriptionPending && onOpenUpgrade ? onOpenUpgrade() : openProFeature('SOVEREIGN_GATEWAY'),
       isPro: true,
       proKey: 'SOVEREIGN_GATEWAY' as ProFeatureKey
     },
@@ -1316,14 +1342,14 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-team-employees',
       category: 'COMMERCE',
       title: 'Gestion des Employés / Caissiers',
-      badge: isFree ? '1 inclus' : 'PRO',
-      badgeColor: isFree ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Attribuez des accès caissiers sécurisés par code PIN et suivez les encaissements de chaque membre.',
+      badge: isSubscriptionPending ? 'ABONNEMENT REQUIS' : (isFree ? '1 inclus' : 'PRO'),
+      badgeColor: isSubscriptionPending ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-200 border-indigo-400/50' : (isFree ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40'),
+      description: isSubscriptionPending ? 'Souscrire à un abonnement pour débloquer tous les services, applications, modules et outils concernés.' : 'Attribuez des accès caissiers sécurisés par code PIN et suivez les encaissements de chaque membre.',
       icon: Users,
-      iconColor: isFree ? 'text-emerald-400' : 'text-amber-400',
-      iconBg: isFree ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30',
-      actionText: 'Gérer l\'Équipe',
-      action: () => openProFeature('EMPLOYEE_MANAGEMENT'),
+      iconColor: isSubscriptionPending ? 'text-indigo-400' : (isFree ? 'text-emerald-400' : 'text-amber-400'),
+      iconBg: isSubscriptionPending ? 'bg-indigo-500/10 border-indigo-500/30' : (isFree ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'),
+      actionText: isSubscriptionPending ? 'Souscrire à un abonnement' : 'Gérer l\'Équipe',
+      action: () => isSubscriptionPending && onOpenUpgrade ? onOpenUpgrade() : openProFeature('EMPLOYEE_MANAGEMENT'),
       isPro: true,
       proKey: 'EMPLOYEE_MANAGEMENT' as ProFeatureKey
     },
@@ -1331,14 +1357,14 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-pixels-crm',
       category: 'MARKETING',
       title: 'Pixels de Tracking / CRM Avancé',
-      badge: 'PRO',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Pilotez vos campagnes Meta Ads & TikTok avec synchronisation temps réel des événements de conversion.',
+      badge: isSubscriptionPending ? 'ABONNEMENT REQUIS' : 'PRO',
+      badgeColor: isSubscriptionPending ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-200 border-indigo-400/50' : 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      description: isSubscriptionPending ? 'Souscrire à un abonnement pour débloquer tous les services, applications, modules et outils concernés.' : 'Pilotez vos campagnes Meta Ads & TikTok avec synchronisation temps réel des événements de conversion.',
       icon: BarChart3,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/10 border-amber-500/30',
-      actionText: 'Activer Tracking',
-      action: () => openProFeature('TRACKING_PIXELS_CRM'),
+      iconColor: isSubscriptionPending ? 'text-indigo-400' : 'text-amber-400',
+      iconBg: isSubscriptionPending ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-amber-500/10 border-amber-500/30',
+      actionText: isSubscriptionPending ? 'Souscrire à un abonnement' : 'Activer Tracking',
+      action: () => isSubscriptionPending && onOpenUpgrade ? onOpenUpgrade() : openProFeature('TRACKING_PIXELS_CRM'),
       isPro: true,
       proKey: 'TRACKING_PIXELS_CRM' as ProFeatureKey
     },
@@ -1346,14 +1372,14 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-white-label',
       category: 'TECH',
       title: 'Marque Blanche / Retirer le logo Nanasore',
-      badge: 'PRO',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Masquez tout branding NaNa sur vos vitrines, factures et campus pour mettre votre enseigne au premier plan.',
+      badge: isSubscriptionPending ? 'ABONNEMENT REQUIS' : 'PRO',
+      badgeColor: isSubscriptionPending ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-200 border-indigo-400/50' : 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      description: isSubscriptionPending ? 'Souscrire à un abonnement pour débloquer tous les services, applications, modules et outils concernés.' : 'Masquez tout branding NaNa sur vos vitrines, factures et campus pour mettre votre enseigne au premier plan.',
       icon: Palette,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/10 border-amber-500/30',
-      actionText: 'Marque Blanche',
-      action: () => openProFeature('WHITE_LABEL'),
+      iconColor: isSubscriptionPending ? 'text-indigo-400' : 'text-amber-400',
+      iconBg: isSubscriptionPending ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-amber-500/10 border-amber-500/30',
+      actionText: isSubscriptionPending ? 'Souscrire à un abonnement' : 'Marque Blanche',
+      action: () => isSubscriptionPending && onOpenUpgrade ? onOpenUpgrade() : openProFeature('WHITE_LABEL'),
       isPro: true,
       proKey: 'WHITE_LABEL' as ProFeatureKey
     },
@@ -1395,7 +1421,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       },
       isPro: false
     }
-  ], [metrics, idChain, isFree, vendorType, settings.isStoreOpen, onNavigate, onOpenExcelImporter, onOpenWebinarModal, onOpenMarketingAi, onOpenAffiliation, onOpenDocuSign, onOpenSaasAdmin, onOpenAdmin, onOpenAcademy]);
+  ], [metrics, idChain, isFree, vendorType, settings.isStoreOpen, isSubscriptionPending, isSubscriptionModel, onNavigate, onOpenExcelImporter, onOpenWebinarModal, onOpenMarketingAi, onOpenAffiliation, onOpenDocuSign, onOpenSaasAdmin, onOpenAdmin, onOpenAcademy]);
 
   // Filtrage dynamique selon la recherche, la catégorie active et le mode Caméléon
   const filteredModules = useMemo(() => {
@@ -1768,6 +1794,49 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
           CONTENU DU DASHBOARD CENTRAL MASTER HUB (TABLEAU DE BORD CAMÉLÉON)
          ========================================================================= */}
       <main className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 space-y-5">
+
+        {/* BANNIÈRE MODÈLE ABONNEMENT EN ATTENTE DE SOUSCRIPTION */}
+        {isSubscriptionPending && (
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-950 border-2 border-indigo-500/50 p-5 sm:p-6 text-white shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center shrink-0 shadow-inner">
+                  <Sparkles className="w-6 h-6 text-indigo-300 animate-pulse" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 text-[11px] font-black uppercase tracking-wider mb-1 border border-indigo-400/30">
+                    <span>👑 Modèle Abonnement Sélectionné</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
+                    Souscrivez à un abonnement pour débloquer tous les services, applications, modules et outils concernés
+                  </h3>
+                  <p className="text-xs sm:text-sm text-indigo-200/90 font-medium max-w-2xl mt-1">
+                    Votre identification KYC est enregistrée sous le modèle forfaitaire. Activez votre plan d’abonnement pour lever immédiatement les restrictions et profiter de l’écosystème à 0% de commission additionnelle.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    if (onOpenUpgrade) {
+                      onOpenUpgrade();
+                    } else {
+                      setIsProModalOpen(true);
+                    }
+                  }}
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-500/30 border border-purple-400/30 flex items-center justify-center gap-2 transition transform active:scale-95 cursor-pointer"
+                >
+                  <span>Souscrire à un abonnement</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* =======================================================================
             0. SÉLECTEUR DE MODE CAMÉLÉON 1-CLIC & QUARTIER GÉNÉRAL ADAPTATIF

@@ -17,7 +17,9 @@ export async function POST(request: Request) {
       userId = storeId,
       action = 'approve', // 'approve' | 'reject' | 'pending'
       rejectionReason = '',
-      adminEmail = 'Direction de la Conformité Nanasore'
+      adminEmail = 'Direction de la Conformité Nanasore',
+      pricingModel,
+      monetizationModel
     } = body;
 
     const supabase = getSupabaseClient(true);
@@ -43,13 +45,18 @@ export async function POST(request: Request) {
     }
 
     // 2. Mettre à jour Supabase table profiles (Chaque tenant merchant profile)
+    const profileUpdates: Record<string, any> = {
+      kyc_status: isApproved ? 'full' : isRejected ? 'none' : 'light',
+      role: isApproved ? 'vendor' : 'merchant',
+      updated_at: now
+    };
+    if (pricingModel || monetizationModel) {
+      profileUpdates.pricing_model = pricingModel || monetizationModel;
+    }
+
     const { error: profErr } = await supabase
       .from('profiles')
-      .update({
-        kyc_status: isApproved ? 'full' : isRejected ? 'none' : 'light',
-        role: isApproved ? 'vendor' : 'merchant',
-        updated_at: now
-      })
+      .update(profileUpdates)
       .or(`id.eq.${userId},organization_id.eq.${storeId}`);
 
     if (profErr) {

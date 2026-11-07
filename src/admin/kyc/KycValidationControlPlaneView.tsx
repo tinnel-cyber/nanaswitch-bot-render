@@ -21,7 +21,8 @@ import {
   ExternalLink,
   Sparkles,
   Camera,
-  X
+  X,
+  Zap
 } from 'lucide-react';
 import {
   getAllKycRequests,
@@ -46,6 +47,7 @@ export const KycValidationControlPlaneView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('ALL');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'INDIVIDUAL' | 'BUSINESS'>('ALL');
+  const [modelFilter, setModelFilter] = useState<'ALL' | 'COMMISSION' | 'SUBSCRIPTION'>('ALL');
 
   // Modale d'Aperçu Haute Définition du Document
   const [previewDoc, setPreviewDoc] = useState<{
@@ -92,6 +94,8 @@ export const KycValidationControlPlaneView: React.FC = () => {
               activityDomain: kd.activityDomain || kd.sector || 'Commerce Général',
               briefDescription: kd.activityDescription || kd.briefDescription || '',
               activityDescription: kd.activityDescription || kd.briefDescription || '',
+              monetizationModel: act.pricing_model || kd.monetizationModel || kd.pricingModel || 'commission',
+              pricingModel: act.pricing_model || kd.pricingModel || kd.monetizationModel || 'commission',
               documentType: (kd.documentType || 'CNIB') as any,
               documentPhotoUrl: kd.idCardUrl || '',
               managerPhotoUrl: kd.photoCaptureUrl || '',
@@ -161,6 +165,8 @@ export const KycValidationControlPlaneView: React.FC = () => {
                   activityDomain: chainData.activityDomain || 'Commerce Général & E-commerce',
                   briefDescription: chainData.briefDescription || '',
                   activityDescription: chainData.briefDescription || '',
+                  monetizationModel: chainData.monetizationModel || chainData.pricingModel || 'commission',
+                  pricingModel: chainData.pricingModel || chainData.monetizationModel || 'commission',
                   documentType: 'CNIB',
                   documentPhotoUrl: chainData.cnibRectoUrl || chainData.managerCnibRectoUrl || '',
                   managerPhotoUrl: chainData.faceSelfieUrl || chainData.managerSelfieUrl || '',
@@ -244,9 +250,15 @@ export const KycValidationControlPlaneView: React.FC = () => {
         (typeFilter === 'BUSINESS' && item.type === 'business') ||
         (typeFilter === 'INDIVIDUAL' && item.type !== 'business');
 
-      return matchesSearch && matchesStatus && matchesType;
+      const isSub = item.monetizationModel === 'subscription' || item.pricingModel === 'subscription';
+      const matchesModel =
+        modelFilter === 'ALL' ||
+        (modelFilter === 'SUBSCRIPTION' && isSub) ||
+        (modelFilter === 'COMMISSION' && !isSub);
+
+      return matchesSearch && matchesStatus && matchesType && matchesModel;
     });
-  }, [kycList, searchTerm, statusFilter, typeFilter]);
+  }, [kycList, searchTerm, statusFilter, typeFilter, modelFilter]);
 
   // =========================================================================
   // 3. ACTION SUPER ADMIN : APPROBATION & DÉBLOCAGE MARCHAND
@@ -269,7 +281,9 @@ export const KycValidationControlPlaneView: React.FC = () => {
             storeId,
             userId,
             action: 'approve',
-            adminEmail
+            adminEmail,
+            pricingModel: item.monetizationModel || item.pricingModel || 'commission',
+            monetizationModel: item.monetizationModel || item.pricingModel || 'commission'
           })
         });
       } catch (e) {
@@ -561,6 +575,34 @@ export const KycValidationControlPlaneView: React.FC = () => {
             Entreprises
           </button>
         </div>
+
+        {/* Filtre Modèle Économique */}
+        <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
+          <button
+            onClick={() => { playTapBeep(); setModelFilter('ALL'); }}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              modelFilter === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Tous modèles
+          </button>
+          <button
+            onClick={() => { playTapBeep(); setModelFilter('COMMISSION'); }}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              modelFilter === 'COMMISSION' ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Commission
+          </button>
+          <button
+            onClick={() => { playTapBeep(); setModelFilter('SUBSCRIPTION'); }}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              modelFilter === 'SUBSCRIPTION' ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Abonnement
+          </button>
+        </div>
       </div>
 
       {/* Liste / Tableau des Dossiers */}
@@ -606,6 +648,25 @@ export const KycValidationControlPlaneView: React.FC = () => {
                               : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
                           }`}>
                             {item.type === 'business' ? 'ENTREPRISE ENREGISTRÉE' : 'PARTICULIER / INDÉPENDANT'}
+                          </span>
+
+                          {/* Badge Modèle Économique Choisi */}
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
+                            item.monetizationModel === 'subscription' || item.pricingModel === 'subscription'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          }`}>
+                            {item.monetizationModel === 'subscription' || item.pricingModel === 'subscription' ? (
+                              <>
+                                <Sparkles className="w-3 h-3 text-amber-300" />
+                                <span>MODÈLE ABONNEMENT (FORFAIT REQUIS)</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-3 h-3 text-emerald-400" />
+                                <span>MODÈLE COMMISSION (ACCÈS DIRECT)</span>
+                              </>
+                            )}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">
                             ID: {item.storeId}
