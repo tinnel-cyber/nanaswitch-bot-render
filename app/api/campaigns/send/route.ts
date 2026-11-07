@@ -57,7 +57,11 @@ export async function POST(request: Request) {
         const brevoPayload = {
           sender: {
             name: senderName,
-            email: senderEmail.includes('@') ? senderEmail : 'notifications@nanasore.com'
+            email: process.env.BREVO_SENDER_EMAIL || 'notifications@nanasore.com'
+          },
+          replyTo: {
+            name: senderName,
+            email: senderEmail && senderEmail.includes('@') ? senderEmail : (process.env.BREVO_SENDER_EMAIL || 'notifications@nanasore.com')
           },
           to: recipients,
           subject: subject,

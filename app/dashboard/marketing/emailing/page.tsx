@@ -30,6 +30,7 @@ export default function TenantEmailingDashboardPage() {
   const [savedTemplateHtml, setSavedTemplateHtml] = useState<string>('');
   const [savedSubject, setSavedSubject] = useState<string>('Offre Spéciale Nanasore 🎁');
   const [savedSenderName, setSavedSenderName] = useState<string>('Ma Boutique Pro');
+  const [savedSenderEmail, setSavedSenderEmail] = useState<string>('contact@maboutique.com');
   const [flashBanner, setFlashBanner] = useState<string | null>(null);
 
   // Charger le solde depuis le localStorage si existant
@@ -53,10 +54,11 @@ export default function TenantEmailingDashboardPage() {
     }
   };
 
-  const handleTemplateSave = (html: string, subject: string, senderName: string) => {
+  const handleTemplateSave = (html: string, subject: string, senderName?: string, senderEmail?: string) => {
     setSavedTemplateHtml(html);
     setSavedSubject(subject);
-    setSavedSenderName(senderName);
+    if (senderName) setSavedSenderName(senderName);
+    if (senderEmail) setSavedSenderEmail(senderEmail);
     setFlashBanner(`✨ Modèle "${subject || 'Sans titre'}" enregistré avec succès ! Vous pouvez maintenant le diffuser.`);
     setTimeout(() => setFlashBanner(null), 5000);
   };
@@ -200,6 +202,7 @@ export default function TenantEmailingDashboardPage() {
                 onTemplateSave={handleTemplateSave}
                 initialSubject={savedSubject}
                 initialSenderName={savedSenderName}
+                initialSenderEmail={savedSenderEmail}
               />
             </div>
           )}
@@ -212,6 +215,7 @@ export default function TenantEmailingDashboardPage() {
                 savedTemplateHtml={savedTemplateHtml}
                 savedSubject={savedSubject}
                 savedSenderName={savedSenderName}
+                savedSenderEmail={savedSenderEmail}
                 onNavigateToStudio={() => setActiveTab('studio')}
                 onNavigateToStore={() => setActiveTab('store')}
               />

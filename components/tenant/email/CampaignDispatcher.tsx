@@ -48,6 +48,7 @@ export interface CampaignDispatcherProps {
   savedTemplateHtml?: string;
   savedSubject?: string;
   savedSenderName?: string;
+  savedSenderEmail?: string;
   onNavigateToStudio?: () => void;
   onNavigateToStore?: () => void;
 }
@@ -149,6 +150,7 @@ export function CampaignDispatcher({
   savedTemplateHtml,
   savedSubject,
   savedSenderName,
+  savedSenderEmail,
   onNavigateToStudio,
   onNavigateToStore
 }: CampaignDispatcherProps) {
@@ -333,6 +335,7 @@ export function CampaignDispatcher({
         body: JSON.stringify({
           subject: savedSubject || 'Campagne E-mailing Spéciale',
           senderName: savedSenderName || 'Ma Boutique Pro',
+          senderEmail: savedSenderEmail || 'contact@maboutique.com',
           htmlContent: savedTemplateHtml || '<p>Bonjour {{FIRSTNAME}}, profitez de nos offres !</p>',
           segment: filterType,
           recipientCount: requiredCredits,
@@ -643,7 +646,12 @@ export function CampaignDispatcher({
 
             {savedSubject && (
               <p className="text-xs text-slate-500 truncate max-w-md">
-                Modèle associé : <span className="font-bold text-slate-700">« {savedSubject} »</span>
+                Modèle : <span className="font-bold text-slate-700">« {savedSubject} »</span>
+                {savedSenderEmail && (
+                  <span className="ml-1 text-slate-400">
+                    • De : <strong className="text-slate-600">{savedSenderName || 'Ma Boutique'}</strong> &lt;{savedSenderEmail}&gt;
+                  </span>
+                )}
               </p>
             )}
           </div>

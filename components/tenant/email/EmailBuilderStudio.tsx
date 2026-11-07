@@ -79,9 +79,10 @@ export interface EmailBlock {
 }
 
 export interface EmailBuilderStudioProps {
-  onTemplateSave: (htmlContent: string, subject: string, senderName?: string) => void;
+  onTemplateSave: (htmlContent: string, subject: string, senderName?: string, senderEmail?: string) => void;
   initialSubject?: string;
   initialSenderName?: string;
+  initialSenderEmail?: string;
 }
 
 // Bannières vectorielles ultra-légères (0 Ko) & optimisées
@@ -218,10 +219,12 @@ export const extractInlineLinks = (rawText: string): Array<{ label: string; url:
 export function EmailBuilderStudio({
   onTemplateSave,
   initialSubject = '🔥 Offre exclusive de la semaine !',
-  initialSenderName = 'Ma Boutique Pro'
+  initialSenderName = 'Ma Boutique Pro',
+  initialSenderEmail = 'contact@maboutique.com'
 }: EmailBuilderStudioProps) {
   const [subject, setSubject] = useState<string>(initialSubject);
   const [senderName, setSenderName] = useState<string>(initialSenderName);
+  const [senderEmail, setSenderEmail] = useState<string>(initialSenderEmail);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
@@ -805,6 +808,25 @@ export function EmailBuilderStudio({
           </div>
 
           <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+              <span>E-mail d'Expéditeur & Réponse (Reply-To)</span>
+              <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
+                <ShieldCheck className="w-3 h-3" /> Recommandé
+              </span>
+            </label>
+            <input 
+              type="email" 
+              value={senderEmail} 
+              onChange={(e) => setSenderEmail(e.target.value)}
+              placeholder="contact@maboutique.com"
+              className="w-full px-3 py-2 bg-[#FBF9F5] border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:outline-none transition-all"
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              Les réponses de vos clients arriveront directement sur cette boîte mail.
+            </span>
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Objet principal (Subject)</label>
             <input 
               type="text" 
@@ -1384,7 +1406,7 @@ export function EmailBuilderStudio({
         {/* Bouton de sauvegarde */}
         <button
           type="button"
-          onClick={() => onTemplateSave(generateHtmlOutput(), subject, senderName)}
+          onClick={() => onTemplateSave(generateHtmlOutput(), subject, senderName, senderEmail)}
           className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
         >
           <Send className="w-4 h-4" />
@@ -1483,7 +1505,7 @@ export function EmailBuilderStudio({
                 <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black">
                   {senderName.charAt(0).toUpperCase()}
                 </div>
-                <span>De : <strong className="text-slate-900">{senderName}</strong></span>
+                <span>De : <strong className="text-slate-900">{senderName}</strong> <span className="text-[10px] text-slate-400 font-mono">&lt;{senderEmail}&gt;</span></span>
               </div>
               <span className="truncate max-w-[200px] text-slate-600 font-medium">
                 Objet : {subject || '(Sans objet)'}
@@ -2073,9 +2095,9 @@ export function EmailBuilderStudio({
                     <div>
                       <h4 className="font-black text-slate-900 text-sm">{subject || '(Sans objet)'}</h4>
                       <div className="flex items-center gap-2 text-slate-500 text-[11px] mt-0.5">
-                        <span>De : <strong>{senderName}</strong> &lt;notifications@nanasore.com&gt;</span>
+                        <span>De : <strong>{senderName}</strong> &lt;{senderEmail}&gt;</span>
                         <span>•</span>
-                        <span>À : client@domaine.com</span>
+                        <span>Répondre à : {senderEmail}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-slate-400">
