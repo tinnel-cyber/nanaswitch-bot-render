@@ -1666,7 +1666,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
               </button>
             )}
 
-            {/* Bouton Directeur de Croissance IA (Professeur Konkobo) */}
+            {/* Bouton Directeur de Croissance IA (Agent Nsore) */}
             <button
               type="button"
               onClick={() => {
@@ -1677,7 +1677,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
                 }
               }}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-700/80 to-indigo-700/80 hover:from-blue-600 hover:to-indigo-600 text-white border border-blue-400/50 active:scale-95 text-[11px] sm:text-xs font-black transition shadow-sm cursor-pointer min-h-[36px] sm:min-h-[40px] shrink-0"
-              title="Consulter le Professeur Konkobo (Directeur de la Croissance • IA)"
+              title="Consulter l'Agent Nsore (Directeur de la Croissance • IA)"
             >
               <Bot className="w-3.5 h-3.5 text-blue-200 shrink-0" />
               <span className="hidden xs:inline">Directeur Croissance</span>
@@ -2057,7 +2057,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
         />
 
         {/* =======================================================================
-            DIRECTEUR DE LA CROISSANCE & STRATÉGIE COMMERCIALE (PROFESSEUR KONKOBO)
+            DIRECTEUR DE LA CROISSANCE & STRATÉGIE COMMERCIALE (AGENT NSORE)
            ======================================================================= */}
         <div id="growth-director-section">
           <GrowthDirectorAssistant

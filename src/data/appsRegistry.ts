@@ -118,11 +118,11 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
   },
   {
     id: "ai-gemini",
-    appName: "Directeur de Croissance • Prof. Konkobo",
+    appName: "Directeur de Croissance • Agent Nsore",
     appLogo: "/assets/icons/apps/ia.svg",
     shortDescription: "Directeur de la stratégie commerciale, orientation des 14 modules et optimisation du modèle économique (Abonnement, Commission, Pay-as-you-go).",
     category: "Marketing & Studio",
-    keywords: ["konkobo", "directeur", "croissance", "strategie", "gemini", "agent", "ia", "conseil", "decision", "assistant", "chat", "monetisation", "commission"],
+    keywords: ["nsore", "agent-nsore", "directeur", "croissance", "strategie", "gemini", "agent", "ia", "conseil", "decision", "assistant", "chat", "monetisation", "commission"],
     route: "/dashboard/ai-advisor",
     installationType: "pwa_ready",
     trialType: "freemium",

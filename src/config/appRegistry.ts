@@ -63,7 +63,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   {
     id: 'ai-advisor',
     slug: 'ai-advisor',
-    name: 'Directeur de Croissance • Prof. Konkobo',
+    name: 'Directeur de Croissance • Agent Nsore',
     route: '/dashboard/ai-advisor',
     category: 'Marketing & Vente',
     description: "Directeur de la stratégie commerciale, orientation des 14 modules et optimisation du modèle économique.",
@@ -72,8 +72,8 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     defaultActive: true,
     view: 'AI_ADVISOR',
     icon: 'Award',
-    keywords: ['konkobo', 'directeur', 'croissance', 'strategie', 'ia', 'conseil', 'monetisation', 'commission', 'abonnement', 'roi'],
-    aliases: ['app-ai-advisor', 'growth-director', 'directeur-croissance', 'professeur-konkobo', 'conseiller-ia']
+    keywords: ['nsore', 'agent-nsore', 'directeur', 'croissance', 'strategie', 'ia', 'conseil', 'monetisation', 'commission', 'abonnement', 'roi'],
+    aliases: ['app-ai-advisor', 'growth-director', 'directeur-croissance', 'agent-nsore', 'conseiller-ia']
   },
 
   {

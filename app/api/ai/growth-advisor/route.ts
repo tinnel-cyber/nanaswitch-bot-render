@@ -3,8 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 
 export const runtime = 'nodejs';
 
-const SYSTEM_INSTRUCTION = `Tu es le Professeur Konkobo, Directeur de la Croissance et de la Stratégie Commerciale de la plateforme SaaS Nanasore.
-Ta mission est d'accompagner les entrepreneurs, marchands et e-commerçants avec l'élégance, la rigueur et la pédagogie d'un grand professeur de marketing et d'un directeur commercial chevronné.
+const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale de la plateforme SaaS Nanasore.
+Ta mission est d'accompagner les entrepreneurs, marchands et e-commerçants avec l'élégance, la rigueur et la pédagogie d'un grand directeur de la croissance et d'un directeur commercial chevronné.
 
 Règles d'or de communication :
 1. Sois toujours extrêmement poli, respectueux, hautement structuré et inspirant. Utilise un vocabulaire professionnel d'élite (ex: "taux de conversion", "Customer Lifetime Value (LTV)", "ROI", "tunnel d'acquisition", "rétention client", "chiffre d'affaires incrémental", "protection des marges").
@@ -31,8 +31,8 @@ Règles d'or de communication :
 5. Structure tes réponses avec clarté : introduction chaleureuse, analyse stratégique, recommandations chiffrées/actionnables, conclusion stimulante.`;
 
 /**
- * Moteur Heuristique & Algorithmique de secours du Professeur Konkobo
- * Garantit une réponse professorale brillante et immédiate même en cas de rupture de quota réseau.
+ * Moteur Heuristique & Algorithmique de secours de l'Agent Nsore
+ * Garantit une réponse stratégique brillante et immédiate même en cas de rupture de quota réseau.
  */
 function generateStrategicFallback(query: string, merchantContext?: any): string {
   const q = query.toLowerCase();
@@ -49,7 +49,7 @@ Le modèle de **Paiement à la Commission** est une merveille d'ingénierie fina
 2. **Accès Total aux 14 Modules :** Vous bénéficiez immédiatement de la Caisse POS, de l'inventaire en temps réel, des tunnels de conversion et de notre passerelle de paiement souveraine.
 3. **Alignement des Intérêts :** Notre succès financier dépend exclusivement du vôtre.
 
-> **Recommandation du Professeur :** Idéal si vous lancez votre activité ou testez de nouvelles gammes. Dès que votre volume de vente mensuel dépasse un seuil de rentabilité critique, nous opérerons une bascule mathématique vers l'**Abonnement Fixe** pour blinder vos marges !`;
+> **Recommandation de l'Agent Nsore :** Idéal si vous lancez votre activité ou testez de nouvelles gammes. Dès que votre volume de vente mensuel dépasse un seuil de rentabilité critique, nous opérerons une bascule mathématique vers l'**Abonnement Fixe** pour blinder vos marges !`;
   }
 
   if (q.includes('plan') || q.includes('abonnement') || q.includes('choisir') || q.includes('tarif')) {
@@ -120,7 +120,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         reply: fallbackResponse,
         provider: 'fallback_heuristic',
-        author: 'Professeur Konkobo'
+        author: 'Agent Nsore'
       });
     }
 
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       // Historique des messages récents pour conserver la cohérence conversationnelle
       const conversationHistory = messages.slice(-6).map((m: any) => {
         const isUser = m.sender === 'user' || m.role === 'user';
-        return `${isUser ? 'Marchand' : 'Professeur Konkobo'}: ${m.text || m.content}`;
+        return `${isUser ? 'Marchand' : 'Agent Nsore'}: ${m.text || m.content}`;
       }).join('\n\n');
 
       const fullPrompt = `${SYSTEM_INSTRUCTION}
@@ -162,7 +162,7 @@ Réponds avec ta voix d'élite, bienveillante, pédagogique et hautement straté
         return NextResponse.json({
           reply: replyText,
           provider: 'gemini',
-          author: 'Professeur Konkobo'
+          author: 'Agent Nsore'
         });
       }
 
@@ -171,7 +171,7 @@ Réponds avec ta voix d'élite, bienveillante, pédagogique et hautement straté
       return NextResponse.json({
         reply: fallback,
         provider: 'fallback_empty',
-        author: 'Professeur Konkobo'
+        author: 'Agent Nsore'
       });
 
     } catch (genAiError: any) {
@@ -180,7 +180,7 @@ Réponds avec ta voix d'élite, bienveillante, pédagogique et hautement straté
       return NextResponse.json({
         reply: fallback,
         provider: 'fallback_on_error',
-        author: 'Professeur Konkobo'
+        author: 'Agent Nsore'
       });
     }
 

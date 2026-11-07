@@ -45,7 +45,7 @@ export function GrowthDirectorAssistant({
     { 
       id: 'welcome-1',
       sender: 'ai', 
-      text: "Salutations distinguées. Je suis le Professeur Konkobo, Directeur de la Stratégie Commerciale de Nanasore. C'est un honneur de vous accompagner. Quel est l'objectif commercial de votre entreprise aujourd'hui, et comment puis-je vous guider vers le modèle de croissance le plus lucratif ?" 
+      text: "Salutations distinguées. Je suis l'Agent Nsore, Directeur de la Stratégie Commerciale de Nanasore. C'est un honneur de vous accompagner. Quel est l'objectif commercial de votre entreprise aujourd'hui, et comment puis-je vous guider vers le modèle de croissance le plus lucratif ?" 
     }
   ]);
   const [input, setInput] = useState('');
@@ -171,7 +171,7 @@ export function GrowthDirectorAssistant({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">Professeur Konkobo</h2>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">Agent Nsore</h2>
               <span className="px-2.5 py-0.5 bg-[#2563EB] text-white font-black text-[10px] rounded-full uppercase tracking-wider shadow-xs">
                 Directeur de la Croissance • IA
               </span>
@@ -263,7 +263,7 @@ export function GrowthDirectorAssistant({
                 <div className="w-7 h-7 rounded-lg bg-[#2563EB] text-white flex items-center justify-center shadow-xs">
                   <Bot className="w-4 h-4" />
                 </div>
-                <span>Le Professeur Konkobo analyse votre requête stratégique...</span>
+                <span>L'Agent Nsore analyse votre requête stratégique...</span>
               </div>
             )}
 

@@ -390,7 +390,7 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
         )}
 
         {/* ======================================================== */}
-        {/* VIEW 0: DIRECTEUR DE CROISSANCE (PROFESSEUR KONKOBO)      */}
+        {/* VIEW 0: DIRECTEUR DE CROISSANCE (AGENT NSORE)             */}
         {/* ======================================================== */}
         {activeTab === 'GROWTH_DIRECTOR' && (
           <div className="space-y-4 animate-in fade-in duration-200">
