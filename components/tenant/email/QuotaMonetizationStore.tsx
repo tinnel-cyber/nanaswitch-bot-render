@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CreditCard, Zap, CheckCircle2, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { CreditCard, Zap, CheckCircle2, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export interface QuotaMonetizationStoreProps {
   onRecharge: (amount: number, packName: string) => void;
@@ -26,7 +26,7 @@ export function QuotaMonetizationStore({ onRecharge, currentCredits }: QuotaMone
         <div className="flex items-center gap-3">
           {typeof currentCredits === 'number' && (
             <span className="text-xs font-bold px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <Zap className="w-3.5 h-3.5 text-blue-600" />
               Solde : {currentCredits.toLocaleString('fr-FR')} crédits
             </span>
           )}

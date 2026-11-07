@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Send, 
   Users, 
-  Sparkles, 
   CheckCircle2, 
   AlertCircle, 
   History, 
@@ -354,17 +353,17 @@ export function CampaignDispatcher({
         const sentCount = data.sentCount || requiredCredits;
         onCreditsDrained(sentCount);
         setSuccessMsg(
-          `🚀 Campagne diffusée avec succès à ${sentCount} contact(s) via l'API Brevo v3 ! ${
+          `🚀 Campagne diffusée avec succès à ${sentCount} contact(s) via le Moteur Pro ! ${
             data.remainingCredits !== undefined ? `(Crédits restants : ${data.remainingCredits})` : ''
           }`
         );
       } else {
-        const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne via Brevo.");
+        const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne via le Moteur Pro.");
         setErrorMsg(errorDetail);
       }
     } catch (networkErr: any) {
       console.error('[CAMPAIGN_DISPATCH] Erreur réseau:', networkErr);
-      setErrorMsg("Erreur réseau : impossible de joindre le serveur d'envoi Brevo.");
+      setErrorMsg("Erreur réseau : impossible de joindre le serveur d'envoi Pro.");
     } finally {
       setIsSending(false);
     }

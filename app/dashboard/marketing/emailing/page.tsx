@@ -7,7 +7,6 @@ import {
   Layout,
   Send,
   CreditCard,
-  Sparkles,
   Zap,
   ArrowLeft,
   ShieldCheck,
@@ -104,7 +103,7 @@ export default function TenantEmailingDashboardPage() {
                   </span>
                 </h1>
                 <p className="text-[11px] text-slate-500 hidden sm:block">
-                  Éditeur visuel sans code, segmentation avancée et revente de quotas Brevo.
+                  Éditeur visuel sans code, segmentation avancée et revente de quotas Pro.
                 </p>
               </div>
             </div>
@@ -114,7 +113,7 @@ export default function TenantEmailingDashboardPage() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 bg-[#FBF9F5] border border-blue-200/80 rounded-2xl px-3.5 py-2 shadow-xs">
               <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
-                <Sparkles className="w-3.5 h-3.5" />
+                <Zap className="w-3.5 h-3.5" />
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Crédits</p>
@@ -236,7 +235,7 @@ export default function TenantEmailingDashboardPage() {
         {/* Pied de page informatif Tenant */}
         <footer className="mt-12 pt-8 border-t border-slate-200 text-center text-xs text-slate-400 space-y-2">
           <p className="font-semibold text-slate-500">
-            Nanasore Suite E-mailing Marchand • Infrastructure Brevo SMTP Haute Délivrabilité
+            Nanasore Suite E-mailing Marchand • Infrastructure SMTP Pro Haute Délivrabilité
           </p>
           <p className="text-[11px] text-slate-400">
             Conforme aux normes RGPD et directives anti-spam internationales. Vos données clients restent isolées et protégées sous chiffrement AES-256.

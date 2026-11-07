@@ -34,25 +34,25 @@ export interface AppRegistryItem {
 }
 
 export const APPS_REGISTRY: AppRegistryItem[] = [
-  // Module Studio E-mailing & Campagnes Brevo
+  // Module Studio E-mailing & Campagnes Pro
   {
     id: "emailing",
-    appName: "Studio E-mailing & Campagnes",
+    appName: "Studio E-mailing & Campagnes Pro",
     appLogo: "/assets/icons/apps/mail.svg",
-    shortDescription: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Brevo.",
+    shortDescription: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Pro.",
     category: "Marketing & Communication",
-    keywords: ["email", "emailing", "campagne", "brevo", "newsletter", "mail", "marketing", "diffusion", "mailing", "clients", "quotas"],
+    keywords: ["email", "emailing", "campagne", "pro", "newsletter", "mail", "marketing", "diffusion", "mailing", "clients", "quotas"],
     route: "/dashboard/marketing/emailing",
     installationType: "instant",
     trialType: "freemium",
     priceMonthly: 0,
-    palmares: "🚀 Délivrabilité 99.8% Brevo",
+    palmares: "🚀 Délivrabilité 99.8% Pro",
     badgePalmares: "✉️ Éditeur Visuel Sans Code",
     trialLabel: "500 crédits offerts",
     isPopular: true,
     isNew: true,
     targetView: "EMAILING",
-    badge: "Brevo V3",
+    badge: "Pro V3",
     rating: 5.0,
     iconName: "Mail"
   },
@@ -844,7 +844,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     id: "crm-automation",
     appName: "CRM et Automation",
     appLogo: "/assets/icons/apps/pos.svg",
-    shortDescription: "Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Brevo et synchronisation caisse.",
+    shortDescription: "Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Pro et synchronisation caisse.",
     category: "Technologie & API",
     keywords: ["crm", "automation", "connecteurs", "extensions", "woocommerce", "sms", "brevo", "parametres", "passerelle", "api"],
     route: "/dashboard/connecteurs",

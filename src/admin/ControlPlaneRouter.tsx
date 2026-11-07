@@ -166,7 +166,7 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
               <a
                 href="/dashboard/marketing/emailing"
                 className="px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 bg-blue-600/20 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white"
-                title="Accéder au Moteur de Campagnes E-mailing & Quotas Brevo"
+                title="Accéder au Moteur de Campagnes E-mailing & Quotas Pro"
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>Campagnes E-mailing</span>

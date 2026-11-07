@@ -47,16 +47,16 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   {
     id: 'emailing',
     slug: 'emailing',
-    name: 'Studio E-mailing & Campagnes Brevo',
+    name: 'Studio E-mailing & Campagnes Pro',
     route: '/dashboard/marketing/emailing',
     category: 'Marketing & Vente',
-    description: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Brevo.",
+    description: "Éditeur visuel d'e-mails, segmentation d'audience et revente de quotas Pro.",
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: true,
     view: 'EMAILING',
     icon: 'Mail',
-    keywords: ['email', 'emailing', 'campagne', 'brevo', 'marketing', 'newsletter', 'quotas', 'mailing', 'contacts', 'diffusion', 'crm'],
+    keywords: ['email', 'emailing', 'campagne', 'pro', 'marketing', 'newsletter', 'quotas', 'mailing', 'contacts', 'diffusion', 'crm'],
     aliases: ['app-emailing', 'campaigns', 'marketing-emailing', 'email-studio', 'campagne-emailing']
   },
 
@@ -254,7 +254,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     name: 'CRM et Automation',
     route: '/dashboard/connecteurs',
     category: 'Intégrations & Extensions',
-    description: 'Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Brevo et connecteurs.',
+    description: 'Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Pro et connecteurs.',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
     defaultActive: true,

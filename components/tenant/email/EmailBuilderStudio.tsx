@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { 
   Type, 
   Image as ImageIcon, 
-  Sparkles, 
+  Flag, 
   Layout, 
   Smartphone, 
   Monitor, 
@@ -612,7 +612,7 @@ export function EmailBuilderStudio({
       if (res.ok && data.success) {
         setTestFeedback({
           type: 'success',
-          msg: `E-mail de test expédié avec succès à ${destination} via l'API Brevo v3 !`
+          msg: `E-mail de test expédié avec succès à ${destination} via le Moteur Pro !`
         });
       } else {
         setTestFeedback({
@@ -623,7 +623,7 @@ export function EmailBuilderStudio({
     } catch {
       setTestFeedback({
         type: 'error',
-        msg: "Erreur réseau lors de la communication avec l'API Brevo."
+        msg: "Erreur réseau lors de la communication avec le serveur Pro."
       });
     } finally {
       setIsSendingTest(false);
@@ -996,7 +996,7 @@ export function EmailBuilderStudio({
               onClick={() => addBlock('banner')} 
               className="col-span-2 p-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer hover:shadow-md active:scale-98"
             >
-              <Sparkles className="w-4 h-4 text-amber-300" />
+              <Flag className="w-4 h-4 text-amber-300" />
               <span>Bannière Stylisée (0 Ko / Compressée)</span>
             </button>
 
@@ -1491,7 +1491,7 @@ export function EmailBuilderStudio({
             {isSendingTest ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                <span>Envoi du test en cours via Brevo...</span>
+                <span>Envoi du test en cours via le Moteur Pro...</span>
               </>
             ) : (
               <>
@@ -2278,7 +2278,7 @@ export function EmailBuilderStudio({
             <div className="bg-[#FBF9F5] border-t border-slate-200 px-6 py-3 flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Score anti-spam : <strong>10/10 Excellent</strong> (Hébergé sur Brevo SMTP Pro)
+                Score anti-spam : <strong>10/10 Excellent</strong> (Hébergé sur SMTP Pro Haute Délivrabilité)
               </span>
 
               <button
