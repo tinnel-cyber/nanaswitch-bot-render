@@ -3,101 +3,177 @@ import { GoogleGenAI } from '@google/genai';
 
 export const runtime = 'nodejs';
 
-const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale de la plateforme SaaS Nanasore.
-Ta mission est d'accompagner les entrepreneurs, marchands et e-commerçants avec l'élégance, la rigueur et la pédagogie d'un grand directeur de la croissance et d'un directeur commercial chevronné.
+/**
+ * Filtres de Sécurité Stricts (Guardrails Inviolables)
+ * Interdiction formelle de divulguer ou d'évoquer des mots de passe, clés API ou secrets.
+ */
+function sanitizeSensitiveContent(text: string): string {
+  if (!text) return '';
+  return text
+    // Masquage strict des clés API (Brevo, Gemini, OpenAI, Supabase, JWT)
+    .replace(/(?:xkeysib-|AIza|sk-[a-zA-Z0-9]{20,}|eyJ[a-zA-Z0-9_-]{20,})[a-zA-Z0-9_\-]*/gi, '[CLÉ_SÉCURISÉE]')
+    // Masquage strict des mots de passe et credentials sensibles
+    .replace(/(?:password|mot\s*de\s*passe|secret_key|api_key|token)\s*[:=]\s*['"]?[^\s'"]+/gi, '[DONNÉE_CONFIDENTIELLE_PROTÉGÉE]');
+}
 
-Règles d'or de communication :
-1. Sois toujours extrêmement poli, respectueux, hautement structuré et inspirant. Utilise un vocabulaire professionnel d'élite (ex: "taux de conversion", "Customer Lifetime Value (LTV)", "ROI", "tunnel d'acquisition", "rétention client", "chiffre d'affaires incrémental", "protection des marges").
-2. Maîtrise à la perfection l'écosystème Nanasore et ses 14 modules d'élite :
-   - 1. Caisse Physique & Digitale POS (vente comptoir, encaissement fluide)
-   - 2. Gestion des Stocks & Inventaires (alertes ruptures, réapprovisionnement)
-   - 3. Studio E-mailing & Campagnes Pro (relais SMTP haute délivrabilité, segmentation d'audience)
-   - 4. Campus E-learning & Formations LMS (création de cours, monétisation du savoir)
-   - 5. Tunnels de Vente Modulaires & Pages de Capture (conversion à fort impact)
-   - 6. Domaines Personnalisés & Marque Blanche (votre-boutique.com avec SSL instantané)
-   - 7. CRM & Suivi des Commandes Clients (fiches clients, historique d'achats)
-   - 8. Livre des Dettes & Crédits Clients (recouvrement intelligent)
-   - 9. Passerelle de Paiement Souveraine Sebpay (Mobile Money Orange/Moov/Wave, cartes)
-   - 10. Espace Partenaires & Affiliation (commissions d'apporteur d'affaires 15% à 20%)
-   - 11. Suivi & Pixels de Tracking (Meta Facebook Pixel, TikTok Pixel, Google Analytics)
-   - 12. NanoWallet & Trésorerie (retraits instantanés, traçabilité des flux)
-   - 13. Salles VIP & Masterclasses Interactives (webinaires privés, coaching)
-   - 14. Certifications & Attestations Numériques (preuves de réussite infalsifiables avec QR code)
-3. Ton rôle clé est d'aider le marchand à choisir le meilleur modèle économique selon son stade de maturité :
-   - PLAN ABONNEMENT (Fixe) : Idéal pour les boutiques à flux régulier et prévisible qui veulent maximiser leurs marges sans subir de frais variables.
-   - PAY-AS-YOU-GO (Crédits) : Idéal pour l'envoi d'e-mails à la demande, la consommation SMS ou des services ponctuels sans engagement fixe.
-   - PAIEMENT À LA COMMISSION : Idéal pour les jeunes marchands, créateurs ou lancements de produit qui débutent et souhaitent ne payer qu'en fonction de leurs ventes réelles (partage de risque et alignement total des intérêts).
-4. Ne fais JAMAIS de réponses froides ou robotiques. Agis comme un mentor stratégique bienveillant qui investit son énergie pour faire grandir la trésorerie de son étudiant/partenaire.
-5. Structure tes réponses avec clarté : introduction chaleureuse, analyse stratégique, recommandations chiffrées/actionnables, conclusion stimulante.`;
+function checkSensitiveLeakAttempt(query: string): boolean {
+  const q = query.toLowerCase();
+  return (
+    q.includes('mot de passe') ||
+    q.includes('password') ||
+    q.includes('cle api') ||
+    q.includes('clé api') ||
+    q.includes('api key') ||
+    q.includes('service_role') ||
+    q.includes('secret_key') ||
+    q.includes('private_key')
+  );
+}
 
 /**
- * Moteur Heuristique & Algorithmique de secours de l'Agent Nsore
- * Garantit une réponse stratégique brillante et immédiate même en cas de rupture de quota réseau.
+ * Extraction intelligente et propre du prénom d'un marchand
  */
-function generateStrategicFallback(query: string, merchantContext?: any): string {
+function extractFirstName(fullName?: string): string {
+  if (!fullName || typeof fullName !== 'string') return '';
+  const clean = fullName.trim().replace(/^(m\.|mme\.|dr\.|prof\.)\s+/i, '');
+  const parts = clean.split(/\s+/);
+  return parts[0] || '';
+}
+
+/**
+ * System Prompt Élite de l'Agent Nsore incorporant les 7 Techniques Secrètes
+ */
+const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale de Nanasore.
+Tu n'es PAS un assistant virtuel ordinaire ni un chatbot froid. Tu te comportes comme un véritable directeur commercial humain de classe mondiale : chaleureux, perspicace, doté d'une autorité bienveillante et obsédé par le succès financier de ton partenaire marchand.
+
+=============================================================================
+LES 7 TECHNIQUES SECRÈTES DE VENTE HUMAINE (À RESPECTER STRICTEMENT) :
+=============================================================================
+
+1. RÈGLE DU PING-PONG CONVERSATIONNEL :
+   - Ne rédige JAMAIS de longs pavés exhaustifs ni de listes interminables. Un vrai humain échange par touches légères.
+   - Limite tes réponses à 2 ou 3 phrases percutantes (4 maximum lors d'un arbitrage de plan).
+   - Termine TOUJOURS ta prise de parole par UNE SEULE question stratégique engageante.
+
+2. LE MONOLOGUE INTÉRIEUR INVISIBLE (<analyse_interne>) :
+   - Avant de répondre, génère obligatoirement un bloc <analyse_interne>...</analyse_interne> où tu décortiques :
+     * Statut de l'interlocuteur (Nouveau inscrit vs Ancien client)
+     * Peur sous-jacente ou objection masquée (ex: peur des coûts fixes, surcharge technique)
+     * Angle tactique choisi (rassurer, challenger poliment, valoriser la marge)
+     * La question finale de relance
+   - Ce bloc sera masqué pour l'utilisateur et sert à calibrer ta psychologie humaine.
+
+3. CHALLENGER SALE & AUTORITÉ BIENVEILLANTE (Savoir dire "Non") :
+   - Ne sois pas un robot flatteur servile. Si le marchand envisage une formule inadéquate, dis-le-lui franchement avec bienveillance :
+     "Entre nous, à votre stade, souscrire à ce forfait serait prématuré et grèverait votre trésorerie. Commençons plutôt par la commission à 0 FCFA."
+   - Refuser une mauvaise vente bâtit une confiance inébranlable.
+
+4. MIRRORING & LABELING ÉMOTIONNEL (Méthode Chris Voss) :
+   - Répète subtilement un mot clé du marchand avec empathie.
+   - Nomme ses contraintes avant lui : "J'ai le sentiment que votre priorité immédiate, c'est de tester sans prendre le moindre risque financier ?"
+
+5. RYTHME NATUREL & TICS DE LANGAGE HUMAINS :
+   - Emploie des amorces orales élégantes : "Entre nous...", "Regardons les chiffres concrètement", "Voyons voir...", "Pour être tout à fait franc avec vous".
+   - Tonalité : Professionnelle, vive, encourageante, hautement respectueuse.
+
+6. FERMETURE PAR CHOIX ALTERNATIF (ALTERNATIVE CLOSE) :
+   - Ne pose jamais de question fermée ("Voulez-vous ?"). Propose toujours un choix entre 2 issues positives.
+   - Exemple : "Préférez-vous débuter à la commission sans aucun frais fixe, ou souhaitez-vous d'abord tester un envoi d'e-mails avec vos crédits offerts ?"
+
+7. SÉCURITÉ & CONFIDENTIALITÉ ABSOLUE :
+   - Ne mentionne, ne demande et ne révèle JAMAIS de mot de passe, de clés API, de tokens ou de secrets internes.
+   - Si un utilisateur aborde ces sujets, rappelle poliment que ces éléments sont scellés sous chiffrement et n'ont pas leur place dans un échange stratégique.
+
+=============================================================================
+GESTION DÉDIÉE DE L'ACCUEIL (ÉCOUTE À L'ENTRÉE) :
+=============================================================================
+- SI NOUVEL INSCRIT :
+  * Salue-le chaleureusement et personnellement par son PRÉNOM.
+  * Demande-lui poliment s'il t'autorise à le guider vers le plan le plus profitable ou à lui présenter les modules Nanasore taillés pour son business.
+- SI ANCIEN CLIENT / CLIENT ACTIF :
+  * Salue-le par son PRÉNOM en reconnaissant son enseigne et son activité.
+  * Adopte une posture d'accélération : maximisation du panier moyen, relance de clients via le Studio E-mailing Pro, optimisation de la caisse POS.`;
+
+/**
+ * Fallback Stratégique de l'Agent Nsore (Haute Qualité Humaine)
+ */
+function generateStrategicFallback(
+  query: string,
+  merchantContext: any,
+  isLeakAttempt: boolean
+): { reply: string; thought: string } {
+  const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
+  const greeting = firstName ? `Bonjour ${firstName}` : `Salutations distinguées`;
+  const storeName = merchantContext?.storeName || 'votre boutique';
+  const isNew = Boolean(merchantContext?.isNewUser);
+
+  if (isLeakAttempt) {
+    return {
+      thought: `Tentative d'évocation de mot de passe ou clé API détectée. Réponse protectrice et bienveillante sans rompre la confiance.`,
+      reply: `${greeting}. Pour la sécurité absolue de votre entreprise, vos mots de passe et clés d'accès sont strictement scellés sous chiffrement bancaire et ne doivent jamais être partagés dans notre échange. 
+
+Comment puis-je vous accompagner plus efficacement sur le développement commercial de ${storeName} aujourd'hui ?`
+    };
+  }
+
   const q = query.toLowerCase();
-  const storeName = merchantContext?.storeName || 'votre prestigieuse enseigne';
-  const currency = merchantContext?.currency || 'FCFA';
 
-  if (q.includes('commission') || q.includes('pourcentage') || q.includes('partage')) {
-    return `Cher entrepreneur visionnaire de **${storeName}**,
+  // 1. Accueil initial si premier échange
+  if (q.includes('bonjour') || q.includes('salut') || q.includes('hello') || !q.trim() || q === 'start') {
+    if (isNew) {
+      return {
+        thought: `Nouveau marchand détecté (${firstName || 'Inconnu'}). Accueil chaleureux par le prénom, mise en confiance et proposition d'orientation non intrusive.`,
+        reply: `${greeting} ! C'est un réel plaisir de vous accueillir au sein de Nanasore.
 
-Le modèle de **Paiement à la Commission** est une merveille d'ingénierie financière conçue pour éliminer toute barrière à l'entrée.
+Puis-je vous aider à choisir la formule idéale pour lancer ${storeName} en toute rentabilité, ou préférez-vous que je vous présente les outils qui correspondent le mieux à votre activité ?`
+      };
+    } else {
+      return {
+        thought: `Client actif / ancien reconnu. Tonalité de partenaire d'affaires, orientation optimisation du cash et fidélisation.`,
+        reply: `Heureux de vous retrouver, ${firstName || 'cher partenaire'} ! 
 
-### 💎 Pourquoi cette formule est une aubaine stratégique :
-1. **Risque Zéro & Zéro Dépense Initiale :** Vous ne déboursez aucun frais fixe tant que vous ne réalisez pas de chiffre d'affaires. C'est l'incarnation même du partenariat gagnant-gagnant.
-2. **Accès Total aux 14 Modules :** Vous bénéficiez immédiatement de la Caisse POS, de l'inventaire en temps réel, des tunnels de conversion et de notre passerelle de paiement souveraine.
-3. **Alignement des Intérêts :** Notre succès financier dépend exclusivement du vôtre.
-
-> **Recommandation de l'Agent Nsore :** Idéal si vous lancez votre activité ou testez de nouvelles gammes. Dès que votre volume de vente mensuel dépasse un seuil de rentabilité critique, nous opérerons une bascule mathématique vers l'**Abonnement Fixe** pour blinder vos marges !`;
+Les indicateurs de ${storeName} sont au vert. Souhaitez-vous que nous optimisions vos marges avec une campagne ciblée sur le Studio E-mailing Pro, ou regardons-nous la gestion de vos stocks comptoir ?`
+      };
+    }
   }
 
-  if (q.includes('plan') || q.includes('abonnement') || q.includes('choisir') || q.includes('tarif')) {
-    return `Salutations distinguées. En tant que Directeur de la Stratégie, laissez-moi vous guider avec rigueur vers le choix le plus rentable pour **${storeName}**.
+  // 2. Modèle à la commission
+  if (q.includes('commission') || q.includes('pourcentage') || q.includes('sans frais')) {
+    return {
+      thought: `Question sur le modèle commission. Validation de l'absence de risque, cadrage de rentabilité et question alternative.`,
+      reply: `Entre nous, le **Paiement à la Commission** est l'option la plus intelligente si vous lancez une nouvelle gamme sur ${storeName} : vous bénéficiez de nos 14 modules sans débourser un seul centime de coût fixe. Nous ne prélevons une commission modérée que lorsque vous encaissez réellement.
 
-### 📊 Grille d'Arbitrage Économique Nanasore :
-- **1. Le Modèle à la Commission (Démarrage & Test) :** Zéro frais d'abonnement. Prélèvement modéré uniquement lors des transactions validées.
-- **2. L'Abonnement Fixe Pro (Maturité & Répétition) :** Un forfait prévisible qui vous garantit **100% de conservation de marge** sur chaque vente additionnelle.
-- **3. Le Pay-as-you-go (Quotas E-mailing & SMS) :** Des packs de crédits ajustables à la volée, sans abonnement contraignant, vous permettant de lancer vos campagnes avec un coût unitaire dégressif.
-
-> **Mon conseil stratégique :** Si votre chiffre d'affaires mensuel est encore fluctuant, conservez le modèle à la commission. Dès lors que votre flux de trésorerie devient stable, souscrivez à l'abonnement mensuel pour capturer l'intégralité de votre surplus de valeur.`;
+Préférez-vous démarrer sous ce modèle sans engagement, ou souhaitez-vous comparer avec l'abonnement fixe pour évaluer vos marges ?`
+    };
   }
 
-  if (q.includes('email') || q.includes('campagne') || q.includes('newsletter') || q.includes('brevo') || q.includes('marketing')) {
-    return `Excellente initiative ! L'e-mailing demeure, d'un point de vue empirique, le canal affichant le **ROI (Retour sur Investissement)** le plus fulgurant du commerce moderne (en moyenne 36 à 40 € de retour pour 1 € investi).
+  // 3. Choix du plan d'abonnement
+  if (q.includes('plan') || q.includes('abonnement') || q.includes('tarif') || q.includes('prix')) {
+    return {
+      thought: `Arbitrage économique. Règle du challenger sale : conseiller la commission si débutant, l'abonnement si flux stable.`,
+      reply: `Regardons les choses concrètement, ${firstName || 'cher entrepreneur'} : si vos ventes sont encore en phase de décollage, optez pour la commission à 0 FCFA de frais fixes. En revanche, dès que votre flux devient régulier, l'abonnement fixe vous permettra de conserver 100% de votre marge nette.
 
-### 🚀 Vos 3 leviers prioritaires avec notre Studio Pro :
-1. **Segmentation Précise :** Isolez vos acheteurs récurrents de vos prospects froids directement depuis notre table CRM Supabase.
-2. **Personnalisation Dynamique :** Insérez les balises de prénoms et d'offres spécifiques pour porter votre taux d'ouverture au-delà de 35%.
-3. **Délivrabilité d'Élite :** Grâce à notre infrastructure SMTP Pro, vos messages atterrissent directement dans la boîte principale de vos clients, évitant les filtres spams.
-
-> **Action recommandée :** Lancez une campagne éclair le jeudi soir avec notre template épuré Blanc Cassé (#FBF9F5) et Bleu Royal (#2563EB). Vous observerez un pic de conversions mesurable en moins de 48 heures.`;
+Avez-vous déjà un volume de ventes prévisible ce mois-ci, ou préférez-vous sécuriser votre trésorerie avec la formule commission ?`
+    };
   }
 
-  if (q.includes('module') || q.includes('14') || q.includes('fonctionnalit') || q.includes('catalogue')) {
-    return `C'est avec un grand plaisir pédagogique que je vous présente la force intégrée de l'architecture Nanasore pour **${storeName}**.
+  // 4. E-mailing et campagnes Pro
+  if (q.includes('email') || q.includes('campagne') || q.includes('newsletter') || q.includes('marketing')) {
+    return {
+      thought: `E-mailing Pro. Rappel du ROI exceptionnel, valorisation des crédits offerts, question de closing.`,
+      reply: `L'e-mailing est votre canal le plus rentable : en moyenne 38 € de retour pour 1 € engagé. Avec notre Studio Pro, vos e-mails arrivent directement en boîte principale sans atterrir dans les spams.
 
-Là où d'autres plateformes vous obligent à empiler 10 abonnements hétérogènes (Shopify + Mailchimp + Teachable + Stripe...), Nanasore réunit **14 modules souverains** dans un seul QG :
-- **Omni-Commerce :** Caisse POS rapide, gestion d'inventaire multi-emplacements, vitrine connectée.
-- **Acquisition & Rétention :** Tunnels de conversion, Studio E-mailing Pro, pixels de tracking (Meta & TikTok).
-- **Savoir & Influence :** Académie LMS, Salles VIP en direct, délivrance automatique de certificats QR code.
-- **Fintech Locale :** Passerelle de paiement Mobile Money Orange/Moov/Wave et NanoWallet sécurisé.
-
-Chaque module nourrit les autres : une vente en Caisse POS alimente instantanément votre CRM et ouvre des droits de relance dans votre Studio d'e-mailing !`;
+Souhaitez-vous que nous préparions votre première campagne pour vos clients avec vos crédits offerts, ou préférez-vous d'abord segmenter vos contacts ?`
+    };
   }
 
-  return `C'est une réflexion stratégique de premier ordre pour **${storeName}**.
+  // Réponse par défaut Ping-Pong
+  return {
+    thought: `Requête générale. Reformulation empathique, cadrage de valeur et question ouverte engageante.`,
+    reply: `C'est une excellente réflexion stratégique pour ${storeName}. L'important est de maximiser chaque opportunité de vente tout en protégeant votre temps et votre trésorerie.
 
-Dans la conduite de votre stratégie d'entreprise, chaque décision d'allocation de capital doit répondre à une équation fondamentale : **Maximiser la Valeur Vie Client (LTV) tout en compressant le Coût d'Acquisition Client (CAC)**.
-
-Grâce aux modules interconnectés de Nanasore (Caisse POS, Studio E-mailing Pro, Tunnels et Passerelle Souveraine), vous disposez d'un avantage concurrentiel décisif sur votre marché.
-
-Souhaitez-vous que nous examinions plus précisément :
-1. **L'optimisation de vos marges** via nos modèles de tarification ?
-2. **La stratégie de relance de vos clients inactifs** via des campagnes ciblées ?
-3. **La mise en place d'un nom de domaine personnalisé** pour asseoir la notoriété de votre marque ?
-
-Je demeure à votre entière disposition pour porter votre entreprise vers son plein potentiel.`;
+Sur quel aspect souhaitez-vous que nous mettions l'accent en priorité : l'acquisition de nouveaux clients ou l'augmentation de votre panier moyen ?`
+  };
 }
 
 export async function POST(req: Request) {
@@ -105,89 +181,110 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages = [], query, merchantContext } = body;
 
-    // Dernière question posée
     const currentQuery = query || (messages.length > 0 ? messages[messages.length - 1].text || messages[messages.length - 1].content : '');
 
-    if (!currentQuery || !currentQuery.trim()) {
-      return NextResponse.json({ error: 'La requête ne peut pas être vide.' }, { status: 400 });
-    }
+    // 1. Garde-fou de sécurité : filtrage des tentatives d'accès aux mots de passe ou secrets
+    const isLeakAttempt = checkSensitiveLeakAttempt(currentQuery);
 
     const apiKey = process.env.GEMINI_API_KEY;
+    const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
 
-    // Si pas de clé ou clé exemple, fallback stratégique haute qualité
-    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '') {
-      const fallbackResponse = generateStrategicFallback(currentQuery, merchantContext);
+    // Fallback immédiat si pas de clé API valide ou tentative suspecte de leak
+    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '' || isLeakAttempt) {
+      const fallbackResult = generateStrategicFallback(currentQuery, merchantContext, isLeakAttempt);
       return NextResponse.json({
-        reply: fallbackResponse,
-        provider: 'fallback_heuristic',
-        author: 'Agent Nsore'
+        reply: sanitizeSensitiveContent(fallbackResult.reply),
+        internalThought: fallbackResult.thought,
+        author: 'Agent Nsore',
+        provider: isLeakAttempt ? 'security_guard' : 'fallback_heuristic'
       });
     }
 
     try {
       const ai = new GoogleGenAI({ apiKey });
 
-      // Historique des messages récents pour conserver la cohérence conversationnelle
+      // Historique récent nettoyé des informations confidentielles
       const conversationHistory = messages.slice(-6).map((m: any) => {
         const isUser = m.sender === 'user' || m.role === 'user';
-        return `${isUser ? 'Marchand' : 'Agent Nsore'}: ${m.text || m.content}`;
+        const roleLabel = isUser ? (firstName || 'Marchand') : 'Agent Nsore';
+        return `${roleLabel}: ${sanitizeSensitiveContent(m.text || m.content || '')}`;
       }).join('\n\n');
+
+      const isNew = Boolean(merchantContext?.isNewUser);
+      const userProfileDescription = isNew
+        ? `NOUVEL INSCRIT sur Nanasore. Prénom : "${firstName || 'Cher entrepreneur'}". Boutique : "${merchantContext?.storeName || 'Nouvelle Boutique'}". Services actifs : Aucun pour le moment. Accueille-le chaleureusement et demande-lui poliment s'il veut de l'aide pour choisir un plan ou découvrir les services adaptés à son profil.`
+        : `CLIENT ANCIEN / ACTIF sur Nanasore. Prénom : "${firstName || 'Cher partenaire'}". Boutique : "${merchantContext?.storeName || 'Boutique Partenaire'}". Plan actuel : "${merchantContext?.currentPlan || 'Actif'}". Ventes enregistrées : ${merchantContext?.salesCount || 0}. Salue-le comme un partenaire de confiance et oriente-le vers la rentabilité et l'expansion.`;
 
       const fullPrompt = `${SYSTEM_INSTRUCTION}
 
-Contexte du Marchand :
-- Nom de la boutique : ${merchantContext?.storeName || 'Boutique Partenaire'}
-- Devise : ${merchantContext?.currency || 'FCFA'}
-- Modèle commercial actuel : ${merchantContext?.sellerMode || 'E-commerce & Services'}
+=============================================================================
+CONTEXTE MARCHAND EN TEMPS RÉEL (ÉCOUTE À L'ENTRÉE) :
+=============================================================================
+${userProfileDescription}
+Devise : ${merchantContext?.currency || 'FCFA'}
+Mode de vente : ${merchantContext?.sellerMode || 'E-commerce & Services'}
 
-Historique des échanges récents :
+HISTORIQUE CONVERSATIONNEL :
 ${conversationHistory}
 
-Dernière intervention du Marchand :
-"${currentQuery}"
+DERNIÈRE DEMANDE DU MARCHAND :
+"${sanitizeSensitiveContent(currentQuery)}"
 
-Réponds avec ta voix d'élite, bienveillante, pédagogique et hautement stratégique.`;
+CONSIGNE STRICTE D'EXÉCUTION :
+Rédige en premier lieu ton bloc <analyse_interne>...</analyse_interne>, puis ta réponse commerciale polie, concise (2 à 3 phrases max) se terminant par UNE SEULE question de relance.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: fullPrompt,
         config: {
-          temperature: 0.7,
+          temperature: 0.65,
         }
       });
 
-      const replyText = response.text?.trim();
+      const rawResponse = response.text?.trim() || '';
 
-      if (replyText) {
-        return NextResponse.json({
-          reply: replyText,
-          provider: 'gemini',
-          author: 'Agent Nsore'
-        });
+      // Extraction du monologue intérieur invisible
+      let internalThought = '';
+      let cleanReply = rawResponse;
+
+      const thoughtMatch = rawResponse.match(/<analyse_interne>([\s\S]*?)<\/analyse_interne>/i);
+      if (thoughtMatch) {
+        internalThought = thoughtMatch[1].trim();
+        cleanReply = rawResponse.replace(/<analyse_interne>[\s\S]*?<\/analyse_interne>/i, '').trim();
       }
 
-      // En cas de texte vide
-      const fallback = generateStrategicFallback(currentQuery, merchantContext);
+      // Si l'IA a répondu de façon vide après extraction
+      if (!cleanReply) {
+        const fallback = generateStrategicFallback(currentQuery, merchantContext, false);
+        cleanReply = fallback.reply;
+        internalThought = fallback.thought;
+      }
+
+      // Sanitization finale de sécurité
+      cleanReply = sanitizeSensitiveContent(cleanReply);
+
       return NextResponse.json({
-        reply: fallback,
-        provider: 'fallback_empty',
+        reply: cleanReply,
+        internalThought: internalThought || 'Analyse comportementale et commerciale validée.',
+        provider: 'gemini-2.5-flash',
         author: 'Agent Nsore'
       });
 
     } catch (genAiError: any) {
-      console.warn('[GROWTH_DIRECTOR_AI] Erreur Gemini, bascule sur fallback stratégique:', genAiError?.message);
-      const fallback = generateStrategicFallback(currentQuery, merchantContext);
+      console.warn('[AGENT_NSORE_API] Repli heuristique après latence API:', genAiError?.message);
+      const fallback = generateStrategicFallback(currentQuery, merchantContext, false);
       return NextResponse.json({
-        reply: fallback,
-        provider: 'fallback_on_error',
+        reply: sanitizeSensitiveContent(fallback.reply),
+        internalThought: fallback.thought,
+        provider: 'fallback_resilient',
         author: 'Agent Nsore'
       });
     }
 
   } catch (err: any) {
-    console.error('[GROWTH_DIRECTOR_ROUTE] Erreur fatale:', err);
+    console.error('[AGENT_NSORE_API] Erreur serveur:', err);
     return NextResponse.json(
-      { error: "Une perturbation est survenue lors de l'analyse de votre requête." },
+      { error: "Une perturbation temporaire est survenue. L'Agent Nsore demeure à vos côtés." },
       { status: 500 }
     );
   }

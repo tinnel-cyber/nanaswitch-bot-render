@@ -398,6 +398,9 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
               storeName="Mon Entreprise Nanasore"
               currency="FCFA"
               sellerMode="ecommerce"
+              salesCount={sales?.length || 0}
+              productsCount={inventory?.length || 0}
+              isNewUser={!sales?.length && !inventory?.length}
             />
           </div>
         )}

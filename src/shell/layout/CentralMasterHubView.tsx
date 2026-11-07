@@ -2061,9 +2061,15 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
            ======================================================================= */}
         <div id="growth-director-section">
           <GrowthDirectorAssistant
-            storeName={settings?.companyName || 'Mon Entreprise Nanasore'}
+            userFullName={settings?.managerFullName || currentUser?.name}
+            userName={currentUser?.name}
+            storeName={settings?.companyName || currentUser?.storeName || 'Mon Entreprise Nanasore'}
             currency={settings?.currencySymbol || 'FCFA'}
             sellerMode={sellerMode}
+            isNewUser={!subscription || subscription?.plan === 'FREE' || (!sales?.length && !inventory?.length)}
+            salesCount={sales?.length || 0}
+            productsCount={inventory?.length || 0}
+            currentPlan={subscription?.plan || 'Gratuit'}
           />
         </div>
 
