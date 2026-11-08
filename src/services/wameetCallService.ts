@@ -19,14 +19,15 @@ import {
   deleteDoc,
   getDocs,
   getDoc,
-  onSnapshot,
   query,
   where,
-  serverTimestamp,
-  Unsubscribe
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { normalizeChatUserHandle } from './wameetChatService';
+
+export type Unsubscribe = () => void;
 
 export type WameetCallType = 'audio' | 'video';
 export type WameetCallStatus = 'ringing' | 'active' | 'ended' | 'rejected' | 'busy';
@@ -266,42 +267,35 @@ export async function startOutgoingCall(params: {
     }
   };
 
-  // 7. Écouter la réponse SDP de l'appelé dans le document parent
-  const unsubCallDoc = onSnapshot(callDocRef, async snapshot => {
-    const data = snapshot.data();
-    if (!data) return;
-
-    // Si l'appel est rejeté ou terminé par l'autre partie
-    if (data.status === 'rejected' || data.status === 'ended') {
-      onCallEnded();
-      return;
-    }
-
-    // Réception de l'Answer SDP
-    if (data.answer && !peerConnection.currentRemoteDescription) {
-      const rtcSessionDescription = new RTCSessionDescription(data.answer);
-      await peerConnection.setRemoteDescription(rtcSessionDescription);
-      onCallAnswered();
-    }
-  });
-  unsubscribes.push(unsubCallDoc);
-
-  // 8. Écouter les candidats ICE de l'appelé (calleeCandidates)
-  const calleeCandidatesCol = collection(db, 'calls', callId, 'calleeCandidates');
-  const unsubCalleeCandidates = onSnapshot(calleeCandidatesCol, snapshot => {
-    snapshot.docChanges().forEach(async change => {
-      if (change.type === 'added') {
-        const candidateData = change.doc.data();
+  // 7. Écouter la réponse SDP et candidats ICE via canal Supabase Realtime Signaling
+  const channelName = `call_signaling_${callId}_${Math.random().toString(36).substring(7)}`;
+  const signalingChannel = supabase
+    .channel(channelName)
+    .on('broadcast', { event: 'answer' }, async (payload) => {
+      if (payload.payload?.answer && !peerConnection.currentRemoteDescription) {
+        const rtcSessionDescription = new RTCSessionDescription(payload.payload.answer);
+        await peerConnection.setRemoteDescription(rtcSessionDescription);
+        onCallAnswered();
+      }
+    })
+    .on('broadcast', { event: 'callee-ice' }, async (payload) => {
+      if (payload.payload?.candidate) {
         try {
-          const candidate = new RTCIceCandidate(candidateData);
+          const candidate = new RTCIceCandidate(payload.payload.candidate);
           await peerConnection.addIceCandidate(candidate);
         } catch (iceErr) {
           console.warn('[WAMEET WEBRTC] Erreur ajout candidat ICE reçu :', iceErr);
         }
       }
-    });
+    })
+    .on('broadcast', { event: 'call-ended' }, () => {
+      onCallEnded();
+    })
+    .subscribe();
+
+  unsubscribes.push(() => {
+    supabase.removeChannel(signalingChannel);
   });
-  unsubscribes.push(unsubCalleeCandidates);
 
   const hangUp = async () => {
     unsubscribes.forEach(unsub => unsub());
@@ -393,31 +387,28 @@ export async function acceptIncomingCall(params: {
     }
   };
 
-  // 7. Écouter les candidats de l'appelant (callerCandidates)
-  const callerCandidatesCol = collection(db, 'calls', callId, 'callerCandidates');
-  const unsubCallerCandidates = onSnapshot(callerCandidatesCol, snapshot => {
-    snapshot.docChanges().forEach(async change => {
-      if (change.type === 'added') {
-        const candidateData = change.doc.data();
+  // 7. Écouter les candidats et statuts via canal Supabase Realtime Signaling
+  const calleeChannelName = `call_signaling_${callId}_${Math.random().toString(36).substring(7)}`;
+  const calleeSignalingChannel = supabase
+    .channel(calleeChannelName)
+    .on('broadcast', { event: 'caller-ice' }, async (payload) => {
+      if (payload.payload?.candidate) {
         try {
-          const candidate = new RTCIceCandidate(candidateData);
+          const candidate = new RTCIceCandidate(payload.payload.candidate);
           await peerConnection.addIceCandidate(candidate);
         } catch (iceErr) {
           console.warn('[WAMEET WEBRTC] Erreur ajout candidat ICE appelant :', iceErr);
         }
       }
-    });
-  });
-  unsubscribes.push(unsubCallerCandidates);
-
-  // 8. Écouter si l'appelant raccroche
-  const unsubCallDoc = onSnapshot(callDocRef, snapshot => {
-    const data = snapshot.data();
-    if (!data || data.status === 'ended') {
+    })
+    .on('broadcast', { event: 'call-ended' }, () => {
       onCallEnded();
-    }
+    })
+    .subscribe();
+
+  unsubscribes.push(() => {
+    supabase.removeChannel(calleeSignalingChannel);
   });
-  unsubscribes.push(unsubCallDoc);
 
   const hangUp = async () => {
     unsubscribes.forEach(unsub => unsub());
@@ -462,27 +453,21 @@ export function subscribeToIncomingCalls(
   if (!userHandle) return () => {};
   const normHandle = normalizeChatUserHandle(userHandle);
 
-  const callsCol = collection(db, 'calls');
-  const q = query(
-    callsCol,
-    where('calleeHandle', '==', normHandle),
-    where('status', '==', 'ringing')
-  );
-
-  return onSnapshot(
-    q,
-    snapshot => {
-      if (snapshot.empty) {
+  const channelName = `incoming_calls_${normHandle}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on('broadcast', { event: 'incoming-call' }, (payload) => {
+      if (payload.payload?.call) {
+        onIncomingCall(payload.payload.call as WameetCallDocument);
+      } else {
         onIncomingCall(null);
-        return;
       }
-      const docSnap = snapshot.docs[0];
-      onIncomingCall(docSnap.data() as WameetCallDocument);
-    },
-    err => {
-      console.warn('[WAMEET WEBRTC] Erreur écouteur appels entrants :', err);
-    }
-  );
+    })
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

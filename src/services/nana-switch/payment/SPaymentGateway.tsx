@@ -13,7 +13,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { db } from '../../../firebase';
 import { 
   initiateSPayment, 
@@ -135,61 +135,73 @@ export const SPaymentGateway: React.FC<SPaymentGatewayProps> = ({
     playTapBeep();
   };
 
-  // 6. Écouteur Firestore Temps Réel 100% Automatique via Webhook
+  // 6. Écouteur Supabase Realtime 100% Automatique via Webhook
   useEffect(() => {
     if (!orderId || status === 'SUCCESS') return;
 
-    let unsub: (() => void) | null = null;
+    let channel: any = null;
     try {
-      const intentDocRef = doc(db, 'payment_intents', orderId);
-      unsub = onSnapshot(intentDocRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          const isPaid = 
-            data?.isPaid === true || 
-            data?.paid === true || 
-            ['COMPLETED', 'PAID', 'SUCCESS'].includes(String(data?.status || '').toUpperCase()) ||
-            ['COMPLETED', 'PAID'].includes(String(data?.paymentStatus || '').toUpperCase());
+      const channelName = `spay_intent_${orderId}_${Math.random().toString(36).substring(7)}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sales',
+            filter: `id=eq.${orderId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const data = payload.new as any;
+              const isPaid = 
+                data?.isPaid === true || 
+                data?.paid === true || 
+                ['COMPLETED', 'PAID', 'SUCCESS'].includes(String(data?.status || '').toUpperCase()) ||
+                ['COMPLETED', 'PAID'].includes(String(data?.payment_status || '').toUpperCase());
 
-          if (isPaid && status !== 'SUCCESS') {
-            console.log('[S WEBHOOK DETECTED] Paiement validé par le Webhook !', data);
-            playCashChime();
-            setStatus('SUCCESS');
-            onSuccess({
-              transactionId: data?.transactionId || orderId,
-              amount,
-              currency,
-              country: selectedCountry,
-              operator: selectedOperator,
-              phoneNumber: phone,
-              timestamp: Date.now(),
-              status: 'COMPLETED',
-              paymentMethod: selectedOperator.name
-            });
-          } else {
-            const isFailedOrCancelled =
-              ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED'].includes(String(data?.status || '').toUpperCase()) ||
-              ['FAILED', 'CANCELLED', 'CANCELED'].includes(String(data?.paymentStatus || '').toUpperCase());
+              if (isPaid && status !== 'SUCCESS') {
+                console.log('[S WEBHOOK DETECTED] Paiement validé par le Webhook Supabase !', data);
+                playCashChime();
+                setStatus('SUCCESS');
+                onSuccess({
+                  transactionId: data?.transaction_id || data?.id || orderId,
+                  amount,
+                  currency,
+                  country: selectedCountry,
+                  operator: selectedOperator,
+                  phoneNumber: phone,
+                  timestamp: Date.now(),
+                  status: 'COMPLETED',
+                  paymentMethod: selectedOperator.name
+                });
+              } else {
+                const isFailedOrCancelled =
+                  ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED'].includes(String(data?.status || '').toUpperCase()) ||
+                  ['FAILED', 'CANCELLED', 'CANCELED'].includes(String(data?.payment_status || '').toUpperCase());
 
-            if (isFailedOrCancelled && status === 'AWAITING_WEBHOOK') {
-              const isCanc = String(data?.status || '').toUpperCase().includes('CANCEL');
-              setStatus('ERROR');
-              setErrorMessage(
-                isCanc
-                  ? 'Paiement annulé par l\'opérateur ou l\'utilisateur.'
-                  : (data?.error || 'Paiement non abouti. Veuillez vérifier votre solde Mobile Money.')
-              );
-              playCancelSound();
+                if (isFailedOrCancelled && status === 'AWAITING_WEBHOOK') {
+                  const isCanc = String(data?.status || '').toUpperCase().includes('CANCEL');
+                  setStatus('ERROR');
+                  setErrorMessage(
+                    isCanc
+                      ? 'Paiement annulé par l\'opérateur ou l\'utilisateur.'
+                      : (data?.error || 'Paiement non abouti. Veuillez vérifier votre solde Mobile Money.')
+                  );
+                  playCancelSound();
+                }
+              }
             }
           }
-        }
-      });
+        )
+        .subscribe();
     } catch (err: any) {
-      console.warn('[FIRESTORE LISTENER ERROR]', err.message);
+      console.warn('[REALTIME LISTENER ERROR]', err.message);
     }
 
     return () => {
-      if (unsub) unsub();
+      if (channel) supabase.removeChannel(channel);
     };
   }, [orderId, status, amount, currency, selectedCountry, selectedOperator, phone, onSuccess]);
 

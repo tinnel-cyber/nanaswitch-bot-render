@@ -3,7 +3,8 @@
 // ============================================================================
 
 import { db } from '../firebaseConfig';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
 export interface CourseProgressPayload {
   userId: string;
@@ -218,34 +219,55 @@ export async function fetchCourseProgress(
 }
 
 /**
- * Abonnement en temps réel aux progrès d'un étudiant via Firestore onSnapshot
+ * Abonnement en temps réel aux progrès d'un étudiant via Supabase Realtime
  */
 export function subscribeToCourseProgress(
   userId: string,
   channelId: string,
   onUpdate: (data: CourseProgressData) => void
 ): () => void {
-  if (!db || !userId || !channelId) {
+  if (!userId || !channelId) {
     return () => {};
   }
 
+  // 1. Lecture locale immédiate
+  const storageKey = `wameet_course_progress_${userId}_${channelId}`;
   try {
-    const progressRef = doc(db, 'wameet_course_progress', `${userId}_${channelId}`);
-    const unsubscribe = onSnapshot(
-      progressRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as CourseProgressData;
-          onUpdate(data);
-        }
+    const cached = localStorage.getItem(storageKey);
+    if (cached) onUpdate(JSON.parse(cached));
+  } catch {}
+
+  // 2. Écouteur Supabase Realtime
+  const channelName = `progress_${userId}_${channelId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'enrollments',
+        filter: `course_id=eq.${channelId}`,
       },
-      (err) => {
-        console.warn('[SUBSCRIBE COURSE PROGRESS WARNING]', err.message);
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          if (row.user_id === userId) {
+            onUpdate({
+              userId,
+              channelId,
+              completedLessonIds: row.completed_lesson_ids || [],
+              totalScore: row.total_score || 0,
+              completedCount: row.completed_count || 0,
+              lastCompletedLessonId: row.last_lesson_id || null,
+            });
+          }
+        }
       }
-    );
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[SUBSCRIBE COURSE PROGRESS INIT ERROR]', err);
-    return () => {};
-  }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

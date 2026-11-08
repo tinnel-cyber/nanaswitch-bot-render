@@ -4,7 +4,7 @@ import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import * as LucideIcons from 'lucide-react';
 import { db, auth } from '../../firebase';
 import { 
-  doc, getDoc, setDoc, collection, getDocs, onSnapshot, updateDoc, serverTimestamp 
+  doc, getDoc, setDoc, collection, getDocs, updateDoc, serverTimestamp 
 } from 'firebase/firestore';
 import { useTheme } from '../../context/ThemeContext';
 import { getSafeStoreSlug, ensureMandatoryStoreSlug } from '../../utils/slugEngine';
@@ -60,7 +60,7 @@ const ve = setDoc;
 const Kt = updateDoc;
 const ft = serverTimestamp;
 const wa = collection;
-const va = onSnapshot;
+const va = getDocs;
 const Qt = getDoc;
 
 // Utility and Service bindings from index

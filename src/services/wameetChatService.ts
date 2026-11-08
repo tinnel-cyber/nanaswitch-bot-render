@@ -6,7 +6,6 @@ import {
   deleteDoc,
   updateDoc,
   getDocs,
-  onSnapshot,
   query,
   where,
   orderBy,
@@ -14,6 +13,7 @@ import {
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -402,7 +402,7 @@ export async function sendWameetMessage(payload: SendMessagePayload): Promise<st
 }
 
 /**
- * Écouteur Firestore temps réel (onSnapshot) pour une conversation bilatérale
+ * Écouteur Supabase Realtime pour une conversation bilatérale (remplace Firestore onSnapshot)
  */
 export function subscribeToChatMessages(
   chatId: string,
@@ -410,90 +410,148 @@ export function subscribeToChatMessages(
   onUpdate: (messages: WameetChatMessage[]) => void,
   onError?: (err: Error) => void
 ): () => void {
+  const channelName = `chat_msgs_${chatId}_${Math.random().toString(36).substring(7)}`;
+
+  // 1. Initial fetch rapide depuis Firestore (one-off getDocs)
   const messagesColRef = collection(db, 'wameet_chats', chatId, 'messages');
-  // Requête légère et stable SANS condition temporelle (50 derniers messages) pour préserver le cache local Firestore
   const q = query(messagesColRef, orderBy('createdAt', 'asc'), limitToLast(50));
+  
+  getDocs(q).then((snapshot) => {
+    const now = Date.now();
+    const list: WameetChatMessage[] = [];
 
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot) => {
-      const now = Date.now();
-      const list: WameetChatMessage[] = [];
+    snapshot.forEach((docSnap) => {
+      const d = docSnap.data();
+      let expDate: Date | undefined;
+      if (d.expireAt && typeof d.expireAt.toDate === 'function') {
+        expDate = d.expireAt.toDate();
+      } else if (d.expireAt && d.expireAt.seconds) {
+        expDate = new Date(d.expireAt.seconds * 1000);
+      }
 
-      snapshot.forEach((docSnap) => {
-        const d = docSnap.data();
+      if (expDate && expDate.getTime() < now) return;
 
-        // Récupération de la date d'expiration pour la politique d'auto-suppression
-        let expDate: Date | undefined;
-        if (d.expireAt && typeof d.expireAt.toDate === 'function') {
-          expDate = d.expireAt.toDate();
-        } else if (d.expireAt && d.expireAt.seconds) {
-          expDate = new Date(d.expireAt.seconds * 1000);
-        }
+      let createdTimeLabel = "À l'instant";
+      let createdDate = new Date();
+      if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+        createdDate = d.createdAt.toDate();
+        createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      } else if (d.createdAt && d.createdAt.seconds) {
+        createdDate = new Date(d.createdAt.seconds * 1000);
+        createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      }
 
-        // Filtre PUREMENT FRONT-END : éliminer les messages expirés visuellement
-        // sans condition where('expireAt', ...) continue dans Firestore
-        if (expDate && expDate.getTime() < now) {
-          return;
-        }
+      const isMe =
+        d.senderHandle === currentHandle ||
+        normalizeChatUserHandle(d.senderHandle || '') === normalizeChatUserHandle(currentHandle);
 
-        // Formatage de la date de création
-        let createdTimeLabel = "À l'instant";
-        let createdDate = new Date();
-        if (d.createdAt && typeof d.createdAt.toDate === 'function') {
-          createdDate = d.createdAt.toDate();
-          createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-        } else if (d.createdAt && d.createdAt.seconds) {
-          createdDate = new Date(d.createdAt.seconds * 1000);
-          createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-        }
-
-        const isMe =
-          d.senderHandle === currentHandle ||
-          normalizeChatUserHandle(d.senderHandle || '') === normalizeChatUserHandle(currentHandle);
-
-        list.push({
-          id: d.id || docSnap.id,
-          chatId: d.chatId || chatId,
-          sender: isMe ? 'me' : 'them',
-          senderHandle: d.senderHandle,
-          senderName: d.senderName,
-          senderAvatar: d.senderAvatar,
-          recipientHandle: d.recipientHandle,
-          recipientName: d.recipientName,
-          createdAt: createdTimeLabel,
-          createdAtDate: createdDate,
-          expireAt: d.expireAt,
-          expireDate: expDate,
-          isEphemeral: d.isEphemeral !== false,
-          daysRemaining: expDate ? Math.max(0, Math.ceil((expDate.getTime() - now) / (1000 * 60 * 60 * 24))) : 7,
-          type: d.type || 'text',
-          text: d.text,
-          mediaUrl: d.mediaUrl,
-          audioUrl: d.audioUrl,
-          audioDurationSec: d.audioDurationSec,
-          waveformBars: d.waveformBars,
-          productCard: d.productCard,
-          read: d.read === true,
-          recipientPhone: d.recipientPhone
-        });
+      list.push({
+        id: d.id || docSnap.id,
+        chatId: d.chatId || chatId,
+        sender: isMe ? 'me' : 'them',
+        senderHandle: d.senderHandle,
+        senderName: d.senderName,
+        senderAvatar: d.senderAvatar,
+        recipientHandle: d.recipientHandle,
+        recipientName: d.recipientName,
+        createdAt: createdTimeLabel,
+        createdAtDate: createdDate,
+        expireAt: d.expireAt,
+        expireDate: expDate,
+        isEphemeral: d.isEphemeral !== false,
+        daysRemaining: expDate ? Math.max(0, Math.ceil((expDate.getTime() - now) / (1000 * 60 * 60 * 24))) : 7,
+        type: d.type || 'text',
+        text: d.text,
+        mediaUrl: d.mediaUrl,
+        audioUrl: d.audioUrl,
+        audioDurationSec: d.audioDurationSec,
+        waveformBars: d.waveformBars,
+        productCard: d.productCard,
+        read: d.read === true,
+        recipientPhone: d.recipientPhone
       });
+    });
 
-      onUpdate(list);
-    },
-    (err) => {
-      console.warn('[WAMEET CHAT] Erreur onSnapshot messages :', err);
-      if (onError) onError(err);
-    }
-  );
+    onUpdate(list);
+  }).catch((err) => {
+    if (onError) onError(err);
+  });
 
-  return unsubscribe;
+  // 2. Écouteur Supabase Realtime
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${chatId}`,
+      },
+      () => {
+        // Re-charger les messages récents à chaque changement
+        getDocs(q).then((snapshot) => {
+          const now = Date.now();
+          const list: WameetChatMessage[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            let expDate: Date | undefined;
+            if (d.expireAt && typeof d.expireAt.toDate === 'function') {
+              expDate = d.expireAt.toDate();
+            } else if (d.expireAt && d.expireAt.seconds) {
+              expDate = new Date(d.expireAt.seconds * 1000);
+            }
+            if (expDate && expDate.getTime() < now) return;
+
+            let createdTimeLabel = "À l'instant";
+            let createdDate = new Date();
+            if (d.createdAt && typeof d.createdAt.toDate === 'function') {
+              createdDate = d.createdAt.toDate();
+              createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            } else if (d.createdAt && d.createdAt.seconds) {
+              createdDate = new Date(d.createdAt.seconds * 1000);
+              createdTimeLabel = createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            const isMe =
+              d.senderHandle === currentHandle ||
+              normalizeChatUserHandle(d.senderHandle || '') === normalizeChatUserHandle(currentHandle);
+
+            list.push({
+              id: d.id || docSnap.id,
+              chatId: d.chatId || chatId,
+              sender: isMe ? 'me' : 'them',
+              senderHandle: d.senderHandle,
+              senderName: d.senderName,
+              senderAvatar: d.senderAvatar,
+              recipientHandle: d.recipientHandle,
+              recipientName: d.recipientName,
+              createdAt: createdTimeLabel,
+              createdAtDate: createdDate,
+              expireAt: d.expireAt,
+              expireDate: expDate,
+              isEphemeral: d.isEphemeral !== false,
+              daysRemaining: expDate ? Math.max(0, Math.ceil((expDate.getTime() - now) / (1000 * 60 * 60 * 24))) : 7,
+              type: d.type || 'text',
+              text: d.text,
+              mediaUrl: d.mediaUrl,
+              audioUrl: d.audioUrl,
+              audioDurationSec: d.audioDurationSec,
+              waveformBars: d.waveformBars,
+              productCard: d.productCard,
+              read: d.read === true,
+              recipientPhone: d.recipientPhone
+            });
+          });
+          onUpdate(list);
+        }).catch(() => {});
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -574,7 +632,7 @@ export async function triggerPendingSmsFallbacks(
 }
 
 /**
- * Écouteur Firestore temps réel (onSnapshot) pour la boîte de réception des discussions de l'utilisateur
+ * Écouteur Supabase Realtime pour la boîte de réception des discussions de l'utilisateur (remplace Firestore onSnapshot)
  */
 export function subscribeToUserChats(
   userHandle: string,
@@ -584,16 +642,14 @@ export function subscribeToUserChats(
   const chatsColRef = collection(db, 'wameet_chats');
   const q = query(chatsColRef, where('participants', 'array-contains', userHandle));
 
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot) => {
+  const fetchChats = () => {
+    getDocs(q).then((snapshot) => {
       const list: WameetChatThread[] = [];
 
       snapshot.forEach((docSnap) => {
         const d = docSnap.data();
         const details = d.participantDetails || {};
 
-        // Trouver l'autre interlocuteur
         let otherHandle = '';
         let otherDetails: any = null;
 
@@ -631,13 +687,32 @@ export function subscribeToUserChats(
       });
 
       onUpdate(list);
-    },
-    (err) => {
-      console.warn('[WAMEET CHAT] Erreur onSnapshot fils de discussion :', err);
-    }
-  );
+    }).catch((err) => {
+      console.warn('[WAMEET CHAT] Erreur lecture chats :', err);
+    });
+  };
 
-  return unsubscribe;
+  fetchChats();
+
+  const channelName = `user_chats_${normUser}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+      },
+      () => {
+        fetchChats();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export const subscribeUserThreads = subscribeToUserChats;

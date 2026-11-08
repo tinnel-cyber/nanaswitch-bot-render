@@ -6,8 +6,7 @@ import {
   SubscriptionFunnelStep,
   SubscriptionAddonOption,
 } from '../../types';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { supabase } from '../../lib/supabase';
 import { 
   updateStoreSubscription,
   subscribeToPlatformSubscriptions,
@@ -270,45 +269,63 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   const rawTotal = (isFreePlan ? 0 : modularCalculation.totalPrice) + addonsTotal - downsellDiscountAmount;
   const montantTotal = isFreePlan ? 0 : Math.max(1000, rawTotal);
 
-  // Écouteur temps réel Firestore sur `/stores/{storeId}`
+  // Écouteur temps réel Supabase Realtime sur les abonnements
   // Ne déclenche JAMAIS l'écran de succès par défaut sur un abonnement déjà actif
   useEffect(() => {
     if (!isOpen || !effectiveStoreId) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'stores', effectiveStoreId), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        const storeSub = data.subscription as StoreSubscription | undefined;
-        if (storeSub) {
-          // Synchronisation de l'abonnement en arrière-plan sans perturber le tunnel
-          if (onSubscriptionUpdated && storeSub.status === 'ACTIVE') {
-            onSubscriptionUpdated(storeSub);
-          }
+    const channelName = `paywall_sub_${effectiveStoreId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subscriptions',
+          filter: `tenant_id=eq.${effectiveStoreId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            const storeSub: StoreSubscription = {
+              status: row.status || 'ACTIVE',
+              plan: row.plan || 'free',
+              expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : Date.now() + 30 * 86400000,
+              startedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+              lastPaymentMethod: row.payment_method || 'Nanasore Pay',
+              lastAmountPaid: row.amount_paid || montantTotal,
+              transactionRef: row.id,
+            };
 
-          // L'écran 4. Validation (SUCCESS) ne doit s'afficher QUE si :
-          // 1. L'utilisateur était activement sur l'étape de règlement (PAYMENT)
-          // 2. Le paiement a été enregistré APRÈS l'ouverture de la modale dans cette session
-          if (
-            funnelStep === 'PAYMENT' &&
-            storeSub.status === 'ACTIVE' &&
-            storeSub.expiresAt > Date.now() &&
-            storeSub.startedAt &&
-            storeSub.startedAt >= modalOpenedTimestampRef.current
-          ) {
-            playCashChime();
-            setPaymentResult({
-              transactionId: storeSub.transactionRef || `TX-${Date.now().toString(36).toUpperCase()}`,
-              amount: storeSub.lastAmountPaid || montantTotal,
-              method: storeSub.lastPaymentMethod || 'Nanasore Pay',
-            });
-            setPaymentSuccess(true);
-            setFunnelStep('SUCCESS');
+            if (onSubscriptionUpdated && storeSub.status === 'ACTIVE') {
+              onSubscriptionUpdated(storeSub);
+            }
+
+            if (
+              funnelStep === 'PAYMENT' &&
+              storeSub.status === 'ACTIVE' &&
+              storeSub.expiresAt > Date.now() &&
+              storeSub.startedAt &&
+              storeSub.startedAt >= modalOpenedTimestampRef.current
+            ) {
+              playCashChime();
+              setPaymentResult({
+                transactionId: storeSub.transactionRef || `TX-${Date.now().toString(36).toUpperCase()}`,
+                amount: storeSub.lastAmountPaid || montantTotal,
+                method: storeSub.lastPaymentMethod || 'Nanasore Pay',
+              });
+              setPaymentSuccess(true);
+              setFunnelStep('SUCCESS');
+            }
           }
         }
-      }
-    });
+      )
+      .subscribe();
 
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isOpen, effectiveStoreId, funnelStep, montantTotal, onSubscriptionUpdated]);
 
   if (!isOpen) return null;

@@ -7,6 +7,41 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+const defaultUrl = 'https://wsxnznobeefrsoicjqte.supabase.co';
+const defaultAnonKey = 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+
+const supabaseUrl = 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_SUPABASE_URL || process.env?.SUPABASE_URL)) ||
+  defaultUrl;
+
+const supabaseAnonKey = 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY)) ||
+  defaultAnonKey;
+
+const isBrowser = typeof window !== 'undefined';
+
+/**
+ * Client Supabase standard réactif (Realtime & Auth)
+ */
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: isBrowser,
+    autoRefreshToken: isBrowser,
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+});
+
+export function getSupabaseClient() {
+  return supabase;
+}
+
+
 /**
  * Instancie un client Supabase adapté à l'environnement serverless de Cloudflare Workers.
  *

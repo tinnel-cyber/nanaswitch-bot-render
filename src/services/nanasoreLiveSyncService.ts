@@ -1,17 +1,18 @@
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   collection,
   addDoc,
-  onSnapshot,
   serverTimestamp,
   query,
   orderBy,
   limit
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { supabase } from '../lib/supabase';
 
 export interface LiveEventProduct {
   id: string;
@@ -101,13 +102,11 @@ export function subscribeToLiveEvent(
   onUpdate: (event: LiveEventDocument, activeProduct: LiveEventProduct | null) => void,
   onError?: (err: Error) => void
 ): () => void {
-  const eventDocRef = doc(db, 'live_events', liveId);
-
-  const unsubscribe = onSnapshot(
-    eventDocRef,
-    async (snapshot) => {
+  const fetchEvent = async () => {
+    try {
+      const eventDocRef = doc(db, 'live_events', liveId);
+      const snapshot = await getDoc(eventDocRef);
       if (!snapshot.exists()) {
-        // Document de secours virtuel pour permettre les tests instantanés
         const fallbackDoc: LiveEventDocument = {
           id: liveId,
           title: 'Vente Flash & Live Shopping Nanasore',
@@ -129,13 +128,11 @@ export function subscribeToLiveEvent(
         return;
       }
 
-      // Si le produit est déjà embarqué directement dans le document
       if (eventData.activeProduct && eventData.activeProduct.id === activeId) {
         onUpdate(eventData, eventData.activeProduct);
         return;
       }
 
-      // Résolution du produit depuis la sous-collection /live_events/{liveId}/products/{activeId}
       try {
         const prodDocRef = doc(db, 'live_events', liveId, 'products', activeId);
         const prodSnap = await getDoc(prodDocRef);
@@ -148,7 +145,6 @@ export function subscribeToLiveEvent(
         console.warn('[NANASORE LIVE SYNC] Erreur lecture sous-collection produit :', prodErr);
       }
 
-      // Fallback sur le catalogue prédéfini si disponible
       const preset = PRESET_LIVE_PRODUCTS[activeId] || {
         id: activeId,
         title: `Offre Live Spéciale #${activeId.substring(0, 6)}`,
@@ -161,14 +157,33 @@ export function subscribeToLiveEvent(
       };
 
       onUpdate(eventData, preset);
-    },
-    (err) => {
-      console.warn('[NANASORE LIVE SYNC] Erreur onSnapshot /live_events/ :', err);
+    } catch (err: any) {
       if (onError) onError(err);
     }
-  );
+  };
 
-  return unsubscribe;
+  fetchEvent();
+
+  const channelName = `live_event_${liveId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${liveId}`,
+      },
+      () => {
+        fetchEvent();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -297,32 +312,46 @@ export function subscribeToLiveChat(
   const initial = localLiveChatCache[liveId] || DEFAULT_DEMO_CHAT_MESSAGES.default;
   onMessages([...initial]);
 
-  try {
-    const colRef = collection(db, 'live_events', liveId, 'messages');
-    const q = query(colRef, orderBy('createdAt', 'asc'), limit(80));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const msgs: LiveEventChatMessage[] = [];
-          snapshot.forEach((d) => {
-            msgs.push({ id: d.id, ...(d.data() as any) });
-          });
-          localLiveChatCache[liveId] = msgs;
-          onMessages(msgs);
-        }
-      },
-      (err) => {
-        console.warn('[NANASORE LIVE CHAT] onSnapshot warning (mode local actif) :', err);
+  const fetchChat = async () => {
+    try {
+      const colRef = collection(db, 'live_events', liveId, 'messages');
+      const q = query(colRef, orderBy('createdAt', 'asc'), limit(80));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const msgs: LiveEventChatMessage[] = [];
+        snapshot.forEach((d) => {
+          msgs.push({ id: d.id, ...(d.data() as any) });
+        });
+        localLiveChatCache[liveId] = msgs;
+        onMessages(msgs);
       }
-    );
+    } catch (err) {
+      console.warn('[NANASORE LIVE CHAT] Lecture chat :', err);
+    }
+  };
 
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[NANASORE LIVE CHAT] Init error :', err);
-    return () => {};
-  }
+  fetchChat();
+
+  const channelName = `live_chat_sync_${liveId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${liveId}`,
+      },
+      () => {
+        fetchChat();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

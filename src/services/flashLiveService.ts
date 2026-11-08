@@ -1,4 +1,5 @@
 import { db } from '../firebaseConfig';
+import { supabase } from '../lib/supabase';
 import { FlashLiveRequest, FlashLiveStatus } from '../types/flashLive';
 
 // Dynamic on-demand Firestore loader to protect initial bundle size
@@ -110,29 +111,44 @@ export function subscribeToFlashLiveRequest(
   window.addEventListener('nana_flash_live_update', handleLocalUpdate);
   window.addEventListener('storage', handleStorageEvent);
 
-  // 3. Écouteur Firestore onSnapshot
-  let unsubFirestore: (() => void) | null = null;
-  loadFirestore().then(({ doc, onSnapshot }) => {
-    if (!isSubscribed) return;
-    const docRef = doc(db, 'flash_requests', requestId);
-    unsubFirestore = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as FlashLiveRequest;
-        saveLocalRequest(data);
-        onUpdate(data);
+  // 3. Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+  const channelName = `flash_req_${requestId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `id=eq.${requestId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          const updatedReq: FlashLiveRequest = {
+            id: requestId,
+            productId: row.product_id || '',
+            productName: row.product_name || 'Produit Flash',
+            merchantId: row.merchant_id || '',
+            buyerName: row.sender_name || 'Client',
+            buyerPhone: row.sender_phone || '',
+            status: (row.status || 'pending') as FlashLiveStatus,
+            dailyRoomUrl: row.media_url,
+            createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          };
+          saveLocalRequest(updatedReq);
+          onUpdate(updatedReq);
+        }
       }
-    }, (err) => {
-      console.warn('[FLASH_LIVE] Listener notice:', err);
-    });
-  }).catch(() => {});
+    )
+    .subscribe();
 
   return () => {
     isSubscribed = false;
     window.removeEventListener('nana_flash_live_update', handleLocalUpdate);
     window.removeEventListener('storage', handleStorageEvent);
-    if (unsubFirestore) {
-      unsubFirestore();
-    }
+    supabase.removeChannel(channel);
   };
 }
 
@@ -173,36 +189,28 @@ export function subscribeToMerchantFlashRequests(
   window.addEventListener('nana_flash_live_update', handleLocalUpdate);
   window.addEventListener('storage', handleStorageEvent);
 
-  // Écouteur Firestore en direct
-  let unsubFirestore: (() => void) | null = null;
-  loadFirestore().then(({ collection, query, where, onSnapshot }) => {
-    if (!isSubscribed) return;
-    const colRef = collection(db, 'flash_requests');
-    const q = query(colRef, where('status', '==', 'pending'));
-
-    unsubFirestore = onSnapshot(q, (snapshot) => {
-      const liveList: FlashLiveRequest[] = [];
-      snapshot.forEach(docSnap => {
-        const item = docSnap.data() as FlashLiveRequest;
-        if (!merchantId || item.merchantId === merchantId || merchantId === 'all') {
-          liveList.push(item);
-          saveLocalRequest(item);
-        }
-      });
-      onRequestsChange(liveList);
-    }, (err) => {
-      console.warn('[FLASH_LIVE] Merchant listener notice:', err);
-      emitFilteredLocal();
-    });
-  }).catch(() => {});
+  // Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+  const channelName = `merchant_flash_${merchantId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+      },
+      () => {
+        emitFilteredLocal();
+      }
+    )
+    .subscribe();
 
   return () => {
     isSubscribed = false;
     window.removeEventListener('nana_flash_live_update', handleLocalUpdate);
     window.removeEventListener('storage', handleStorageEvent);
-    if (unsubFirestore) {
-      unsubFirestore();
-    }
+    supabase.removeChannel(channel);
   };
 }
 

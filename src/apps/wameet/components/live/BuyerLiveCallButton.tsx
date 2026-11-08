@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { httpsCallable } from 'firebase/functions';
-import { collection, doc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { functions, db, auth, getAppFunctions } from '../../../../firebase';
 import { 
   Video, PhoneOff, Loader2, ShieldCheck, AlertCircle, 
@@ -219,26 +220,38 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
   };
 
   /**
-   * Écoute en temps réel de l'état de la demande dans Firestore
+   * Écoute en temps réel de l'état de la demande via Supabase Realtime
    */
   useEffect(() => {
     if (!activeRequestId || !isInCall) return;
 
-    const requestDocRef = doc(db, 'live_requests', activeRequestId);
-    const unsubscribe = onSnapshot(requestDocRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.status === 'connected') {
-          setCallStatus('connected');
-        } else if (data.status === 'rejected' || data.status === 'completed' || data.status === 'ended') {
-          handleHangUp();
+    const channelName = `call_req_${activeRequestId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `id=eq.${activeRequestId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const data = payload.new as any;
+            if (data.status === 'connected') {
+              setCallStatus('connected');
+            } else if (data.status === 'rejected' || data.status === 'completed' || data.status === 'ended') {
+              handleHangUp();
+            }
+          }
         }
-      }
-    }, (error) => {
-      console.warn('[LIVE REQUEST LISTENER ERROR]', error);
-    });
+      )
+      .subscribe();
 
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeRequestId, isInCall]);
 
   /**

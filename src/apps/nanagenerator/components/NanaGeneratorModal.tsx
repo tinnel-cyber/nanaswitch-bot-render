@@ -350,7 +350,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
     return DEFAULT_FREE_CREDITS;
   });
 
-  // Écouteur temps réel (onSnapshot) sur Firestore users/{uid}
+  // Écouteur temps réel via Supabase Realtime (remplace Firestore onSnapshot)
   useEffect(() => {
     if (!effectiveUid) return;
     const unsubscribe = subscribeToUserCredits(effectiveUid, (liveCredits) => {

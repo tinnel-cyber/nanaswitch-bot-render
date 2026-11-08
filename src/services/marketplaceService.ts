@@ -1,9 +1,9 @@
 import { db } from '../firebaseConfig';
+import { supabase } from '../lib/supabase';
 import {
   collection,
   query,
   where,
-  onSnapshot,
   setDoc,
   doc,
   getDocs,
@@ -157,10 +157,9 @@ export function subscribeToPublishedCourses(
 
   callback(localCache);
 
-  // Mise en place du listener temps réel Firestore
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot) => {
+  const fetchCourses = async () => {
+    try {
+      const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const firestoreCourses: MarketplaceCourse[] = [];
         snapshot.forEach((docSnap) => {
@@ -175,17 +174,35 @@ export function subscribeToPublishedCourses(
         localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
         callback(merged);
       } else {
-        // Si la collection Firestore est vide, nous conservons notre seed
         callback(localCache);
       }
-    },
-    (error) => {
-      console.warn('Firestore snapshot listener cours dégradé, mode autonome:', error);
+    } catch (error) {
+      console.warn('Mode autonome cours :', error);
       callback(localCache);
     }
-  );
+  };
 
-  return unsubscribe;
+  fetchCourses();
+
+  const channelName = `courses_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'enrollments',
+      },
+      () => {
+        fetchCourses();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

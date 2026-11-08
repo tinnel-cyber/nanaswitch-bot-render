@@ -2,7 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { 
   collection, 
   doc, 
-  onSnapshot, 
+  getDoc,
   query, 
   orderBy, 
   deleteDoc, 
@@ -11,6 +11,7 @@ import {
   getDocs,
   limit
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { db, functions, auth } from '../firebase';
 import { StoreSubscription } from '../types';
 import { normalizePlanId } from '../utils/planFeatures';
@@ -326,12 +327,11 @@ export function subscribeToUserGeneratedMedia(
   }
 
   try {
-    const collRef = collection(db, 'users', uid, 'generated_media');
-    const q = query(collRef, orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
+    const fetchMedia = async () => {
+      try {
+        const collRef = collection(db, 'users', uid, 'generated_media');
+        const q = query(collRef, orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
         const items: GeneratedAiMedia[] = [];
         snapshot.forEach((d) => {
           const data = d.data();
@@ -354,15 +354,35 @@ export function subscribeToUserGeneratedMedia(
         } else {
           onUpdate(items);
         }
-      },
-      (err) => {
-        console.warn('[AI STUDIO] Erreur souscription Firestore :', err);
+      } catch (err) {
+        console.warn('[AI STUDIO] Erreur lecture médias :', err);
       }
-    );
+    };
 
-    return unsubscribe;
+    fetchMedia();
+
+    const channelName = `ai_media_${uid}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'video_generations',
+          filter: `user_id=eq.${uid}`,
+        },
+        () => {
+          fetchMedia();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
-    console.warn('[AI STUDIO] Erreur initialisation snapshot :', err);
+    console.warn('[AI STUDIO] Erreur initialisation Realtime :', err);
     return () => {};
   }
 }
@@ -473,7 +493,7 @@ export async function startVidnozVideoGeneration(params: {
 }
 
 /**
- * Écoute en temps réel les changements d'un document /video_generations/{docId}
+ * Écoute en temps réel les changements d'un document video_generations via Supabase Realtime
  */
 export function subscribeToVideoGeneration(
   docId: string,
@@ -481,26 +501,67 @@ export function subscribeToVideoGeneration(
 ): () => void {
   if (!docId) return () => {};
 
-  const docRef = doc(db, 'video_generations', docId);
-  return onSnapshot(docRef, (snapshot) => {
-    if (snapshot.exists()) {
-      const data = snapshot.data();
-      onUpdate({
-        id: snapshot.id,
-        taskId: data.taskId || '',
-        status: data.status || 'processing',
-        userId: data.userId || '',
-        text: data.text || '',
-        avatarId: data.avatarId || '',
-        voiceId: data.voiceId || '',
-        videoUrl: data.videoUrl || null,
-        error: data.error || null,
-        createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
-        updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || Date.now()
-      });
+  const fetchDoc = async () => {
+    try {
+      const docRef = doc(db, 'video_generations', docId);
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        onUpdate({
+          id: snapshot.id,
+          taskId: data.taskId || '',
+          status: data.status || 'processing',
+          userId: data.userId || '',
+          text: data.text || '',
+          avatarId: data.avatarId || '',
+          voiceId: data.voiceId || '',
+          videoUrl: data.videoUrl || null,
+          error: data.error || null,
+          createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
+          updatedAt: data.updatedAt?.toMillis?.() || data.updatedAt || Date.now()
+        });
+      }
+    } catch (err) {
+      console.warn('[AI STUDIO] Erreur lecture document video_generations :', err);
     }
-  }, (err) => {
-    console.warn('[AI STUDIO] Erreur écoute document video_generations :', err);
-  });
+  };
+
+  fetchDoc();
+
+  const channelName = `video_gen_${docId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'video_generations',
+        filter: `id=eq.${docId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          onUpdate({
+            id: row.id || docId,
+            taskId: row.task_id || '',
+            status: row.status || 'processing',
+            userId: row.user_id || '',
+            text: row.prompt || '',
+            avatarId: row.avatar_id || '',
+            voiceId: row.voice_id || '',
+            videoUrl: row.video_url || null,
+            error: row.error || null,
+            createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 

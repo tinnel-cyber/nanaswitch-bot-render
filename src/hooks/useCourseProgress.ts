@@ -118,7 +118,7 @@ export function useCourseProgress({
     reloadProgress();
   }, [reloadProgress]);
 
-  // 2. Écoute temps réel réactive via Firestore onSnapshot
+  // 2. Écoute temps réel réactive via Supabase Realtime (remplace Firestore onSnapshot)
   useEffect(() => {
     if (!channelId || !effectiveUserId) return;
 

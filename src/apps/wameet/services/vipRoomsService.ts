@@ -11,11 +11,11 @@ import {
   getDocs,
   getDoc,
   setDoc,
-  onSnapshot,
   query,
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 export interface VipLesson {
   id: string;
@@ -238,51 +238,74 @@ export async function getVipRooms(): Promise<VipRoom[]> {
 }
 
 /**
- * Souscription en temps réel aux salles VIP dans Firestore
+ * Souscription en temps réel aux salles VIP via Supabase Realtime (remplace Firestore onSnapshot)
  */
 export function subscribeToVipRooms(callback: (rooms: VipRoom[]) => void): () => void {
   try {
-    const roomsCol = collection(db, 'rooms');
-    const unsubscribe = onSnapshot(roomsCol, (snapshot) => {
-      if (snapshot.empty) {
-        callback(DEFAULT_VIP_ROOMS);
-        return;
-      }
-      const rooms: VipRoom[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        rooms.push({
-          id: docSnap.id,
-          title: data.title || 'Salle VIP',
-          subtitle: data.subtitle || '',
-          description: data.description || '',
-          expertName: data.expertName || data.instructorName || 'Expert Formateur',
-          expertRole: data.expertRole || data.instructorRole || 'Coach & Expert Certifié',
-          expertAvatar: data.expertAvatar || data.instructorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-          category: data.category || 'E-learning VIP',
-          bannerUrl: data.bannerUrl || 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
-          badge: data.badge || 'Masterclass VIP',
-          accessType: data.accessType || 'VIP',
-          priceLabel: data.priceLabel || 'Inclus VIP',
-          rating: typeof data.rating === 'number' ? data.rating : 5.0,
-          studentsCount: typeof data.studentsCount === 'number' ? data.studentsCount : 50,
-          isLiveNow: Boolean(data.isLiveNow),
-          liveStreamUrl: data.liveStreamUrl || '',
-          lessons: Array.isArray(data.lessons) ? data.lessons : [],
-          tags: Array.isArray(data.tags) ? data.tags : ['E-learning', 'VIP'],
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt
+    const fetchRooms = async () => {
+      try {
+        const roomsCol = collection(db, 'rooms');
+        const snapshot = await getDocs(roomsCol);
+        if (snapshot.empty) {
+          callback(DEFAULT_VIP_ROOMS);
+          return;
+        }
+        const rooms: VipRoom[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          rooms.push({
+            id: docSnap.id,
+            title: data.title || 'Salle VIP',
+            subtitle: data.subtitle || '',
+            description: data.description || '',
+            expertName: data.expertName || data.instructorName || 'Expert Formateur',
+            expertRole: data.expertRole || data.instructorRole || 'Coach & Expert Certifié',
+            expertAvatar: data.expertAvatar || data.instructorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+            category: data.category || 'E-learning VIP',
+            bannerUrl: data.bannerUrl || 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
+            badge: data.badge || 'Masterclass VIP',
+            accessType: data.accessType || 'VIP',
+            priceLabel: data.priceLabel || 'Inclus VIP',
+            rating: typeof data.rating === 'number' ? data.rating : 5.0,
+            studentsCount: typeof data.studentsCount === 'number' ? data.studentsCount : 50,
+            isLiveNow: Boolean(data.isLiveNow),
+            liveStreamUrl: data.liveStreamUrl || '',
+            lessons: Array.isArray(data.lessons) ? data.lessons : [],
+            tags: Array.isArray(data.tags) ? data.tags : ['E-learning', 'VIP'],
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt
+          });
         });
-      });
-      callback(rooms);
-    }, (err) => {
-      console.warn('[VIP ROOMS SERVICE] Erreur onSnapshot, bascule sur les salles par défaut :', err);
-      callback(DEFAULT_VIP_ROOMS);
-    });
+        callback(rooms);
+      } catch (err) {
+        console.warn('[VIP ROOMS SERVICE] Erreur lecture salles, bascule sur défaut :', err);
+        callback(DEFAULT_VIP_ROOMS);
+      }
+    };
 
-    return unsubscribe;
+    fetchRooms();
+
+    const channelName = `vip_rooms_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+        },
+        () => {
+          fetchRooms();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
-    console.warn('[VIP ROOMS SERVICE] Exception onSnapshot :', err);
+    console.warn('[VIP ROOMS SERVICE] Exception init Realtime :', err);
     callback(DEFAULT_VIP_ROOMS);
     return () => {};
   }

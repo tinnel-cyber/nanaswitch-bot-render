@@ -1,4 +1,5 @@
-import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { db } from '../firebase';
 import { EscrowStatus } from '../components/wameet/EscrowMessageBubble';
 
@@ -113,40 +114,46 @@ export async function handlePaymentClick(
 // ============================================================================
 
 /**
- * Écoute en temps réel les changements de statut de la bulle Escrow dans Firestore.
- * Dès que le webhook Render valide le paiement bancaire, la bulle passe de 'pending' à 'locked' instantanément !
+ * Écoute en temps réel les changements de statut de la bulle Escrow via Supabase Realtime.
+ * Dès que le webhook valide le paiement bancaire, la bulle passe de 'pending' à 'locked' instantanément !
  */
 export function subscribeToEscrowMessage(
   chatId: string,
   messageId: string,
   onUpdate: (message: Partial<WameetEscrowMessage>) => void
 ): () => void {
-  // 1. Écoute du message dans le chat
-  const messageDocRef = doc(db, 'wameet_chats', chatId, 'messages', messageId);
-
-  const unsubscribe = onSnapshot(
-    messageDocRef,
-    docSnap => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        onUpdate({
-          id: docSnap.id,
-          chatId,
-          transactionId: data.transactionId,
-          escrowStatus: (data.escrowStatus || data.status || 'pending') as EscrowStatus,
-          amount: data.amount,
-          itemTitle: data.itemTitle,
-          lockedAt: data.lockedAt,
-          releasedAt: data.releasedAt
-        });
+  const channelName = `escrow_msg_${messageId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `id=eq.${messageId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const data = payload.new as any;
+          onUpdate({
+            id: data.id || messageId,
+            chatId,
+            transactionId: data.transaction_id,
+            escrowStatus: (data.escrow_status || data.status || 'pending') as EscrowStatus,
+            amount: data.amount,
+            itemTitle: data.item_title || data.text,
+            lockedAt: data.locked_at,
+            releasedAt: data.released_at
+          });
+        }
       }
-    },
-    err => {
-      console.warn('[SMART ESCROW LISTENER NOTICE] Erreur écoute message :', err.message);
-    }
-  );
+    )
+    .subscribe();
 
-  return unsubscribe;
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ============================================================================

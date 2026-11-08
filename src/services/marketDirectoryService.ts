@@ -7,8 +7,9 @@
  * Logique de monétisation : Les marchands au Plan Pro apparaissent systématiquement en haut.
  */
 
-import { collection, query, where, getDocs, doc, setDoc, getDoc, limit as fsLimit, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, getDoc, limit as fsLimit } from 'firebase/firestore';
 import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { MarketDirectoryStore, DirectoryMerchantType } from '../types';
 
 // ============================================================================
@@ -572,59 +573,82 @@ export async function publishNanaMarketCard(
 }
 
 /**
- * Abonnement temps réel aux cartes NanaMarket publiées sur '/nanamarket_cards'
+ * Abonnement temps réel aux cartes NanaMarket publiées sur '/nanamarket_cards' via Supabase Realtime
  */
 export function subscribeToNanaMarketCards(
   onUpdate: (cards: MarketDirectoryStore[]) => void
 ): () => void {
   try {
-    const cardsCol = collection(db, 'nanamarket_cards');
-    const unsub = onSnapshot(cardsCol, (snapshot) => {
-      const realTimeCards: MarketDirectoryStore[] = [];
-      snapshot.forEach(docSnap => {
-        const cData = docSnap.data();
-        if (cData.isPublic !== false && cData.status !== 'draft') {
-          realTimeCards.push({
-            id: docSnap.id,
-            storeId: cData.storeId || docSnap.id,
-            storeName: cData.storeName || 'Entreprise Partenaire',
-            merchantType: cData.merchantType || 'physical_store',
-            logoUrl: cData.logoUrl || '',
-            bannerImage: cData.bannerImage || '',
-            category: cData.category || 'Commerce Général',
-            searchTags: Array.isArray(cData.searchTags) ? cData.searchTags : [],
-            city: cData.city || 'Abidjan',
-            quarter: cData.quarter || '',
-            country: cData.country || "Côte d'Ivoire",
-            isListedInDirectory: true,
-            isPublic: true,
-            status: 'published',
-            plan: cData.plan || 'pro',
-            subscriptionPlan: cData.subscriptionPlan || 'pro',
-            verified: cData.verified !== false,
-            whatsappPhone: cData.whatsappPhone || cData.phone || '',
-            phone: cData.phone || '',
-            wameetHandle: cData.wameetHandle || '',
-            wameetUrl: cData.wameetUrl || '',
-            shopUrl: cData.shopUrl || '',
-            slug: cData.slug || docSnap.id,
-            rating: Number(cData.rating) || 4.95,
-            reviewsCount: Number(cData.reviewsCount) || 12,
-            salesCount: Number(cData.salesCount) || 45,
-            description: cData.description || '',
-            createdAt: cData.createdAt || Date.now()
-          });
+    const fetchCards = async () => {
+      try {
+        const cardsCol = collection(db, 'nanamarket_cards');
+        const snapshot = await getDocs(cardsCol);
+        const realTimeCards: MarketDirectoryStore[] = [];
+        snapshot.forEach(docSnap => {
+          const cData = docSnap.data();
+          if (cData.isPublic !== false && cData.status !== 'draft') {
+            realTimeCards.push({
+              id: docSnap.id,
+              storeId: cData.storeId || docSnap.id,
+              storeName: cData.storeName || 'Entreprise Partenaire',
+              merchantType: cData.merchantType || 'physical_store',
+              logoUrl: cData.logoUrl || '',
+              bannerImage: cData.bannerImage || '',
+              category: cData.category || 'Commerce Général',
+              searchTags: Array.isArray(cData.searchTags) ? cData.searchTags : [],
+              city: cData.city || 'Abidjan',
+              quarter: cData.quarter || '',
+              country: cData.country || "Côte d'Ivoire",
+              isListedInDirectory: true,
+              isPublic: true,
+              status: 'published',
+              plan: cData.plan || 'pro',
+              subscriptionPlan: cData.subscriptionPlan || 'pro',
+              verified: cData.verified !== false,
+              whatsappPhone: cData.whatsappPhone || cData.phone || '',
+              phone: cData.phone || '',
+              wameetHandle: cData.wameetHandle || '',
+              wameetUrl: cData.wameetUrl || '',
+              shopUrl: cData.shopUrl || '',
+              slug: cData.slug || docSnap.id,
+              rating: Number(cData.rating) || 4.95,
+              reviewsCount: Number(cData.reviewsCount) || 12,
+              salesCount: Number(cData.salesCount) || 45,
+              description: cData.description || '',
+              createdAt: cData.createdAt || Date.now()
+            });
+          }
+        });
+
+        if (realTimeCards.length > 0) {
+          onUpdate(realTimeCards);
         }
-      });
-
-      if (realTimeCards.length > 0) {
-        onUpdate(realTimeCards);
+      } catch (err: any) {
+        console.warn('[NANA-MARKET LISTENER WARNING]', err?.message);
       }
-    }, (err) => {
-      console.warn('[NANA-MARKET LISTENER WARNING]', err.message);
-    });
+    };
 
-    return unsub;
+    fetchCards();
+
+    const channelName = `market_cards_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products',
+        },
+        () => {
+          fetchCards();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('[NANA-MARKET SUBSCRIPTION ERROR]', err);
     return () => {};

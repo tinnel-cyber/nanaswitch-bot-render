@@ -3003,7 +3003,7 @@ export default function App() {
     }
   }, [subscription]);
 
-  // Synchronisation temps réel (onSnapshot) de l'abonnement et du profil utilisateur depuis Firestore
+  // Synchronisation temps réel (Supabase Realtime) de l'abonnement et du profil utilisateur
   useEffect(() => {
     const sId = currentUser?.storeId;
     const uId = currentUser?.id || auth.currentUser?.uid;

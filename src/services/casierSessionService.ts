@@ -6,10 +6,10 @@ import {
   getDocs, 
   query, 
   where, 
-  onSnapshot, 
-  updateDoc,
-  Unsubscribe 
+  updateDoc
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
+export type Unsubscribe = () => void;
 import { db } from '../utils/firebase';
 import { CasierSession, SellerUser, CompletedSale } from '../types';
 
@@ -249,18 +249,42 @@ export function subscribeToStoreCasierSessions(
     return () => {};
   }
 
-  const casiersCol = collection(db, 'stores', storeId, 'casierSessions');
-  const q = query(casiersCol, where('status', '==', 'ouvert'));
+  const fetchSessions = async () => {
+    try {
+      const casiersCol = collection(db, 'stores', storeId, 'casierSessions');
+      const q = query(casiersCol, where('status', '==', 'ouvert'));
+      const snapshot = await getDocs(q);
+      const sessions: CasierSession[] = [];
+      snapshot.forEach((docSnap) => {
+        sessions.push(docSnap.data() as CasierSession);
+      });
+      sessions.sort((a, b) => b.openedAt - a.openedAt);
+      onUpdate(sessions);
+    } catch (err) {
+      console.warn('Erreur lecture casiers actifs:', err);
+    }
+  };
 
-  return onSnapshot(q, (snapshot) => {
-    const sessions: CasierSession[] = [];
-    snapshot.forEach((docSnap) => {
-      sessions.push(docSnap.data() as CasierSession);
-    });
-    // Tri par date d'ouverture décroissante
-    sessions.sort((a, b) => b.openedAt - a.openedAt);
-    onUpdate(sessions);
-  }, (err) => {
-    console.warn('Erreur écoute des casiers actifs:', err);
-  });
+  fetchSessions();
+
+  const channelName = `casier_${storeId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `tenant_id=eq.${storeId}`,
+      },
+      () => {
+        fetchSessions();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

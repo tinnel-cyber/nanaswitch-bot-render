@@ -7,7 +7,7 @@ import { UltimateCheckout, CheckoutProductSummary } from '../../../components/pa
 import { ShoppingBag, CreditCard } from 'lucide-react';
 import { formatCFA, playTapBeep } from '../../../utils/audio';
 import { db } from '../../../firebase';
-import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
 import { ensureMandatoryProductSlug } from '../../../utils/slugEngine';
 import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/StoreLegalAndTrackingModals';
@@ -255,9 +255,10 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     if (!storeIdToUse) return;
     const storeRef = doc(db, 'stores', storeIdToUse);
     
-    // Écoute des données storeConfig
-    const unsubStore = onSnapshot(storeRef, (snap) => {
-      if (snap.exists()) {
+    // Chargement unique des données storeConfig sans connexion d'écouteur persistant Firebase
+    let isCancelled = false;
+    getDoc(storeRef).then((snap) => {
+      if (!isCancelled && snap.exists()) {
         const data = snap.data();
         setStoreConfig(prev => {
           const nextConfig = {
@@ -273,7 +274,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
           return nextConfig;
         });
       }
-    });
+    }).catch(() => {});
 
     // Écouteur Supabase Realtime sur app_registry (Synchronisation instantanée du thème)
     const themeChannelName = `public_theme_${storeIdToUse}_${Math.random().toString(36).substring(7)}`;
@@ -387,7 +388,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     });
 
     return () => {
-      unsubStore();
+      isCancelled = true;
       supabase.removeChannel(themeChannel);
     };
   }, [actualStoreId, targetStoreId, resolvedStoreSlug, urlPreviewTheme]);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../firebaseConfig';
-import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { auth } from '../firebase';
 import { MobileMoneyProvider } from '../components/lms/marketplace/types';
 
@@ -100,24 +101,43 @@ export function useCheckout(onPaymentCompleted?: (tx: CheckoutTransaction) => vo
         // Sauvegarde locale pour reprise après reconnexion
         localStorage.setItem(`nana_pending_tx_${txId}`, JSON.stringify(transactionPayload));
 
-        // Écouteur en temps réel pour détecter le passage à 'completed' par le Webhook sécurisé
+        // Écouteur Supabase Realtime pour détecter le passage à 'completed' par le Webhook sécurisé
         if (unsubscribeRef.current) {
           unsubscribeRef.current();
         }
 
-        unsubscribeRef.current = onSnapshot(txRef, (snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.data() as CheckoutTransaction;
-            setActiveTransaction(data);
+        const channelName = `checkout_tx_${txId}_${Math.random().toString(36).substring(7)}`;
+        const channel = supabase
+          .channel(channelName)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'sales',
+              filter: `id=eq.${txId}`,
+            },
+            (payload) => {
+              if (payload.new) {
+                const row = payload.new as any;
+                const status = row.status === 'completed' || row.payment_status === 'paid' ? 'completed' : (row.status || 'pending');
+                const updatedTx: CheckoutTransaction = {
+                  ...transactionPayload,
+                  status: status as any,
+                };
+                setActiveTransaction(updatedTx);
 
-            if (data.status === 'completed') {
-              // Notification au callback parent
-              if (onPaymentCompleted) {
-                onPaymentCompleted(data);
+                if (status === 'completed' && onPaymentCompleted) {
+                  onPaymentCompleted(updatedTx);
+                }
               }
             }
-          }
-        });
+          )
+          .subscribe();
+
+        unsubscribeRef.current = () => {
+          supabase.removeChannel(channel);
+        };
 
         setIsInitializing(false);
         return {

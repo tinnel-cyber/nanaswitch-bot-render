@@ -33,7 +33,8 @@ import {
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { useSwitchAccount } from './NaNaSwitchAuthGuard';
 import { db } from '../../../firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { isPinSessionUnlocked, lockPinSession, grantPinSession } from '../../../utils/nanaSwitchPinCrypto';
 import { NaNaSwitchPinModal } from './NaNaSwitchPinModal';
 import { NaNaSwitchLogo } from './NaNaSwitchLogo';
@@ -160,20 +161,36 @@ export const NaNaSwitchLayout: React.FC<NaNaSwitchLayoutProps> = ({
     return 100;
   });
 
-  // Synchronisation temps réel du portefeuille switch_wallets/{userId}
+  // Synchronisation temps réel du portefeuille via Supabase Realtime
   useEffect(() => {
     if (!switchAccount?.uid) return;
     try {
-      const unsub = onSnapshot(doc(db, 'switch_wallets', switchAccount.uid), (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (typeof data.credits === 'number') {
-            setCreditsBalance(data.credits);
-            localStorage.setItem('nanaswitch_cloud_credits', String(data.credits));
+      const channelName = `switch_wallet_${switchAccount.uid}_${Math.random().toString(36).substring(7)}`;
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${switchAccount.uid}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const data = payload.new as any;
+              if (typeof data.credits === 'number') {
+                setCreditsBalance(data.credits);
+                localStorage.setItem('nanaswitch_cloud_credits', String(data.credits));
+              }
+            }
           }
-        }
-      });
-      return () => unsub();
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } catch (e) {
       console.warn('[NANA_SWITCH_LAYOUT] Sync wallet error :', e);
     }

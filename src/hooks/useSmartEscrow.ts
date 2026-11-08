@@ -36,7 +36,7 @@ export function useSmartEscrow({
   );
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Écoute en temps réel via Firestore onSnapshot
+  // 1. Écoute en temps réel via Supabase Realtime (remplace Firestore onSnapshot)
   // Dès que le webhook sur Render valide le paiement Sebpay, le statut passe automatiquement à 'locked' !
   useEffect(() => {
     if (!chatId || !messageId) return;

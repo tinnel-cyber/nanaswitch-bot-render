@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { StoreSubscription } from '../types';
 
 export interface SubscriptionTimeLimitOptions {
@@ -49,41 +48,49 @@ export function useSubscriptionTimeLimit({
   const [warningDismissed, setWarningDismissed] = useState<boolean>(false);
   const [showUpgradePaywall, setShowUpgradePaywall] = useState<boolean>(false);
 
-  // 1. Vérification du statut d'abonnement dans Firestore
+  // 1. Vérification du statut d'abonnement via Supabase Realtime
   useEffect(() => {
     const resolvedStoreId = storeId || (merchantId ? `store-${merchantId}` : null);
     if (!resolvedStoreId) return;
 
-    const checkSubscription = async () => {
-      try {
-        // Lecture locale d'abord
-        const cachedSub = localStorage.getItem(`nana_tenant_${resolvedStoreId}_subscription`);
-        if (cachedSub) {
-          const sub: StoreSubscription = JSON.parse(cachedSub);
-          evaluatePlan(sub);
-        }
+    // Lecture locale d'abord
+    try {
+      const cachedSub = localStorage.getItem(`nana_tenant_${resolvedStoreId}_subscription`);
+      if (cachedSub) {
+        const sub: StoreSubscription = JSON.parse(cachedSub);
+        evaluatePlan(sub);
+      }
+    } catch {}
 
-        // Écoute temps réel Firestore
-        const storeRef = doc(db, 'stores', resolvedStoreId);
-        const unsubscribe = onSnapshot(storeRef, (snap) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            const sub: StoreSubscription = data.subscription || {
-              status: data.subscriptionStatus || 'TRIAL',
-              plan: data.subscriptionPlan || 'TRIAL_5_DAYS',
-              expiresAt: data.subscriptionExpiresAt || Date.now() + 86400000,
-              startedAt: Date.now()
+    // Écoute temps réel Supabase Realtime
+    const channelName = `time_limit_${resolvedStoreId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subscriptions',
+          filter: `tenant_id=eq.${resolvedStoreId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            const sub: StoreSubscription = {
+              status: row.status || 'TRIAL',
+              plan: row.plan || 'TRIAL_5_DAYS',
+              expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : Date.now() + 86400000,
+              startedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
             };
             evaluatePlan(sub);
           }
-        }, (err) => {
-          console.warn('[LIVE_LIMIT] Firestore subscription listener fallback:', err);
-        });
+        }
+      )
+      .subscribe();
 
-        return () => unsubscribe();
-      } catch (err) {
-        console.warn('[LIVE_LIMIT] Error checking subscription:', err);
-      }
+    return () => {
+      supabase.removeChannel(channel);
     };
 
     const evaluatePlan = (sub: StoreSubscription) => {

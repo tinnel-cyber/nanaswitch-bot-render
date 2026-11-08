@@ -19,7 +19,7 @@ export type {
 /**
  * ARCHITECTURE DU CHAT IN-APP WAMEET (100% FIREBASE SYNC + AUTO-SUPPRESSION)
  * -------------------------------------------------------------------------
- * 1. Synchronisation temps réel bilatérale 100% Firebase Firestore (onSnapshot)
+ * 1. Synchronisation temps réel bilatérale Supabase Realtime (WebSockets)
  * 2. Moteur d'auto-suppression éphémère par défaut (7 jours) :
  *    - Champ expireAt sur chaque document de message
  *    - Google Cloud Firestore TTL Policy

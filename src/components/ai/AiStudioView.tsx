@@ -173,11 +173,11 @@ export const AiStudioView: React.FC<AiStudioViewProps> = ({
     return () => unsub();
   }, [uid]);
 
-  // Écoute en temps réel (onSnapshot) du document de génération vidéo dans /video_generations
+  // Écoute en temps réel via Supabase Realtime du document de génération vidéo
   useEffect(() => {
     if (!activeVideoGenId) return;
 
-    console.log(`[AI STUDIO] Démarrage de l'écouteur onSnapshot pour /video_generations/${activeVideoGenId}`);
+    console.log(`[AI STUDIO] Démarrage de l'écouteur Supabase Realtime pour /video_generations/${activeVideoGenId}`);
     const unsub = subscribeToVideoGeneration(activeVideoGenId, (doc) => {
       console.log('[AI STUDIO] Mise à jour en temps réel reçue du document vidéo :', doc);
 

@@ -8,7 +8,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { StoreUser, StoreSubscription } from '../../../types';
 import { db, auth } from '../../../firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { playValidationBeep, playTapBeep } from '../../../utils/audio';
 import { LegalAiAdvisorWidget } from '../../../components/LegalAiAdvisorWidget';
 import { 
@@ -578,25 +578,43 @@ export default function DocuSignHub({
     const userId = currentUser?.storeId || currentUser?.id || auth.currentUser?.uid;
     if (!userId) return;
 
-    const unsubStore = onSnapshot(doc(db, 'stores', userId), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.subscription) {
-          setLiveSubscription(data.subscription as StoreSubscription);
-        }
+    // 1. Lecture locale immédiate
+    try {
+      const cached = localStorage.getItem(`nana_tenant_${userId}_subscription`);
+      if (cached) {
+        setLiveSubscription(JSON.parse(cached));
       }
-    });
+    } catch {}
 
-    const unsubMerchant = onSnapshot(doc(db, 'merchants', userId, 'subscription', 'current'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setLiveSubscription(data as StoreSubscription);
-      }
-    });
+    // 2. Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+    const channelName = `docusign_sub_${userId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subscriptions',
+          filter: `tenant_id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            const updatedSub: StoreSubscription = {
+              status: row.status || 'ACTIVE',
+              plan: row.plan || 'free',
+              expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : Date.now() + 30 * 86400000,
+              startedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            };
+            setLiveSubscription(updatedSub);
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsubStore();
-      unsubMerchant();
+      supabase.removeChannel(channel);
     };
   }, [subscription, currentUser]);
 

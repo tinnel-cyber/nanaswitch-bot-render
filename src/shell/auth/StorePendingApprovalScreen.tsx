@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StoreUser, StoreApprovalStatus } from '../../types';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+
 import { supabase } from '@/lib/supabase';
 import { updateStoreApprovalStatus } from '../../utils/firestoreService';
 import { 
@@ -124,21 +123,9 @@ export const StorePendingApprovalScreen: React.FC<StorePendingApprovalScreenProp
       )
       .subscribe();
 
-    // 3. Fallback Firestore
-    const unsubscribeFirestore = onSnapshot(doc(db, 'stores', safeStoreId), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        if (data.status === 'APPROVED' || data.approval?.status === 'APPROVED') {
-          playValidationBeep();
-          triggerApproved();
-        }
-      }
-    });
-
     return () => {
       isSubscribed = false;
       supabase.removeChannel(channel);
-      unsubscribeFirestore();
     };
   }, [safeStoreId, currentUser]);
 

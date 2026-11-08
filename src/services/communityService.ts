@@ -17,12 +17,12 @@ import {
   orderBy, 
   limit, 
   startAfter, 
-  onSnapshot, 
   increment,
   DocumentSnapshot,
   QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { 
   CommunityPost, 
   PostComment, 
@@ -399,22 +399,32 @@ export function subscribeToCourseFeed(
       );
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const docs = snapshot.docs;
-        const hasMore = docs.length > pageSize;
-        const actualDocs = hasMore ? docs.slice(0, pageSize) : docs;
-        const lastDoc = actualDocs[actualDocs.length - 1] || null;
+    const fetchPosts = async () => {
+      try {
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const docs = snapshot.docs;
+          const hasMore = docs.length > pageSize;
+          const actualDocs = hasMore ? docs.slice(0, pageSize) : docs;
+          const lastDoc = actualDocs[actualDocs.length - 1] || null;
 
-        const posts: CommunityPost[] = actualDocs.map(d => ({
-          id: d.id,
-          ...d.data()
-        } as CommunityPost));
+          const posts: CommunityPost[] = actualDocs.map(d => ({
+            id: d.id,
+            ...d.data()
+          } as CommunityPost));
 
-        saveLocalCommunityPosts(courseId, posts);
-        onUpdate({ posts, hasMore, lastDoc });
-      } else {
-        // Fallback immédiat si Firestore est vide ou hors-ligne
+          saveLocalCommunityPosts(courseId, posts);
+          onUpdate({ posts, hasMore, lastDoc });
+        } else {
+          const local = getLocalCommunityPosts(courseId);
+          onUpdate({
+            posts: local,
+            hasMore: false,
+            lastDoc: null
+          });
+        }
+      } catch (error) {
+        console.warn('[COMMUNITY] Erreur lecture posts :', error);
         const local = getLocalCommunityPosts(courseId);
         onUpdate({
           posts: local,
@@ -422,19 +432,32 @@ export function subscribeToCourseFeed(
           lastDoc: null
         });
       }
-    }, (error) => {
-      console.warn('[COMMUNITY] Erreur Firestore, utilisation des données locales :', error);
-      const local = getLocalCommunityPosts(courseId);
-      onUpdate({
-        posts: local,
-        hasMore: false,
-        lastDoc: null
-      });
-    });
+    };
 
-    return unsubscribe;
+    fetchPosts();
+
+    const channelName = `comm_posts_${courseId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${courseId}`,
+        },
+        () => {
+          fetchPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
-    console.warn('[COMMUNITY] Initialisation listener échouée :', err);
+    console.warn('[COMMUNITY] Initialisation Realtime échouée :', err);
     const local = getLocalCommunityPosts(courseId);
     onUpdate({
       posts: local,
@@ -609,22 +632,46 @@ export function subscribeToPostComments(
     const commentsRef = collection(db, 'course_communities', courseId, 'posts', postId, 'comments');
     const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const comments = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        } as PostComment));
-        onUpdate(comments);
-      } else {
+    const fetchComments = async () => {
+      try {
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const comments = snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          } as PostComment));
+          onUpdate(comments);
+        } else {
+          onUpdate(SEED_COMMENTS[postId] || []);
+        }
+      } catch (err) {
+        console.warn('[COMMUNITY] Erreur lecture commentaires, fallback seed :', err);
         onUpdate(SEED_COMMENTS[postId] || []);
       }
-    }, (err) => {
-      console.warn('[COMMUNITY] Erreur commentaires, fallback seed :', err);
-      onUpdate(SEED_COMMENTS[postId] || []);
-    });
+    };
 
-    return unsub;
+    fetchComments();
+
+    const channelName = `post_comments_${postId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${postId}`,
+        },
+        () => {
+          fetchComments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (e) {
     onUpdate(SEED_COMMENTS[postId] || []);
     return () => {};
@@ -853,23 +900,46 @@ export function subscribeToUserConversations(
     const convsRef = collection(db, 'direct_conversations');
     const q = query(convsRef, where('participants', 'array-contains', userId));
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const convs = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        } as DirectConversation));
-        onUpdate(convs);
-      } else {
-        const seedMatches = SEED_CONVERSATIONS.filter(c => c.participants.includes(userId));
-        onUpdate(seedMatches.length > 0 ? seedMatches : SEED_CONVERSATIONS);
+    const fetchConvs = async () => {
+      try {
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const convs = snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          } as DirectConversation));
+          onUpdate(convs);
+        } else {
+          const seedMatches = SEED_CONVERSATIONS.filter(c => c.participants.includes(userId));
+          onUpdate(seedMatches.length > 0 ? seedMatches : SEED_CONVERSATIONS);
+        }
+      } catch (err) {
+        console.warn('[DM] Erreur lecture conversations, seed fallback', err);
+        onUpdate(SEED_CONVERSATIONS);
       }
-    }, (err) => {
-      console.warn('[DM] Erreur conversations Firestore, seed fallback', err);
-      onUpdate(SEED_CONVERSATIONS);
-    });
+    };
 
-    return unsub;
+    fetchConvs();
+
+    const channelName = `dm_convs_${userId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+        },
+        () => {
+          fetchConvs();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (e) {
     onUpdate(SEED_CONVERSATIONS);
     return () => {};
@@ -887,22 +957,46 @@ export function subscribeToConversationMessages(
     const msgsRef = collection(db, 'direct_conversations', conversationId, 'messages');
     const q = query(msgsRef, orderBy('createdAt', 'asc'));
 
-    const unsub = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const msgs = snapshot.docs.map(d => ({
-          id: d.id,
-          ...d.data()
-        } as DirectMessage));
-        onUpdate(msgs);
-      } else {
+    const fetchMsgs = async () => {
+      try {
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const msgs = snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          } as DirectMessage));
+          onUpdate(msgs);
+        } else {
+          onUpdate(SEED_DIRECT_MESSAGES[conversationId] || []);
+        }
+      } catch (err) {
+        console.warn('[DM] Erreur messages lecture, seed fallback', err);
         onUpdate(SEED_DIRECT_MESSAGES[conversationId] || []);
       }
-    }, (err) => {
-      console.warn('[DM] Erreur messages Firestore, seed fallback', err);
-      onUpdate(SEED_DIRECT_MESSAGES[conversationId] || []);
-    });
+    };
 
-    return unsub;
+    fetchMsgs();
+
+    const channelName = `dm_msgs_${conversationId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${conversationId}`,
+        },
+        () => {
+          fetchMsgs();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (e) {
     onUpdate(SEED_DIRECT_MESSAGES[conversationId] || []);
     return () => {};

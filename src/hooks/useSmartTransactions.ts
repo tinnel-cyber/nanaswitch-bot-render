@@ -14,7 +14,8 @@ import {
   SmartTransactionData
 } from '../components/wameet/SmartTransactionBubble';
 import { playTapBeep, playValidationBeep } from '../utils/audio';
-import { doc, setDoc, onSnapshot, collection, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { db } from '../firebase';
 
 // ============================================================================
@@ -268,21 +269,29 @@ export function useSmartTransactions(
     });
 
     // ------------------------------------------------------------------------
-    // DUAL-SYNC : ÉCOUTEUR FIRESTORE (Secours résilient en cas de micro-coupure)
+    // DUAL-SYNC : ÉCOUTEUR SUPABASE REALTIME (Secours résilient en cas de micro-coupure)
     // ------------------------------------------------------------------------
-    let unsubFirestore: (() => void) | null = null;
+    let realtimeChannel: any = null;
     try {
-      const messagesColl = collection(db, 'wameet_chats', chatId, 'messages');
-      unsubFirestore = onSnapshot(messagesColl, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'modified') {
-            const data = change.doc.data();
-            if (data.type === 'escrow' || data.type === 'transaction' || data.transactionId) {
-              const updatedStatus = data.escrowStatus || data.status;
+      const channelName = `smart_tx_${chatId}_${Math.random().toString(36).substring(7)}`;
+      realtimeChannel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'wameet_messages',
+            filter: `chat_id=eq.${chatId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const data = payload.new as any;
+              const updatedStatus = data.escrow_status || data.status;
               if (updatedStatus) {
                 setMessages((prev) =>
                   prev.map((msg) => {
-                    if (msg.id === change.doc.id || (msg.transactionId && msg.transactionId === data.transactionId)) {
+                    if (msg.id === data.id || (msg.transactionId && msg.transactionId === data.transaction_id)) {
                       return {
                         ...msg,
                         status: updatedStatus,
@@ -299,17 +308,17 @@ export function useSmartTransactions(
               }
             }
           }
-        });
-      }, (err) => {
-        console.warn('[SMART HOOK] Notice Firestore sync :', err.message);
-      });
-    } catch {}
+        )
+        .subscribe();
+    } catch (err: any) {
+      console.warn('[SMART HOOK] Notice Realtime sync :', err.message);
+    }
 
     return () => {
       unsubStatus();
       unsubUpdate();
       unsubNewTx();
-      if (unsubFirestore) unsubFirestore();
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
       smartSocketClient.disconnect();
     };
   }, [chatId, userId, options]);

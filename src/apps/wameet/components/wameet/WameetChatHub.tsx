@@ -772,7 +772,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
   );
 
   // =========================================================================
-  // 1. ÉCOUTEUR FIRESTORE TEMPS RÉEL (onSnapshot) DE LA CONVERSATION ACTIVE
+  // 1. ÉCOUTEUR SUPABASE REALTIME DE LA CONVERSATION ACTIVE
   // =========================================================================
   useEffect(() => {
     if (!activeThread || !currentUserProfile.handle) return;
@@ -816,7 +816,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
   }, [activeThread?.id, activeThread?.memberHandle, currentUserProfile.handle]);
 
   // =========================================================================
-  // 2. ÉCOUTEUR FIRESTORE TEMPS RÉEL (onSnapshot) DES FILS DE L'UTILISATEUR
+  // 2. ÉCOUTEUR SUPABASE REALTIME DES FILS DE L'UTILISATEUR
   // =========================================================================
   useEffect(() => {
     if (!currentUserProfile.handle) return;
@@ -1373,7 +1373,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>100% Firebase Sync (onSnapshot)</span>
+              <span>100% Supabase Realtime Sync</span>
             </span>
           </div>
         </div>

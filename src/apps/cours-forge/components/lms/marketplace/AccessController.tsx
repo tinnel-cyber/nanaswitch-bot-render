@@ -10,8 +10,7 @@ import {
   ShieldCheck,
   Zap
 } from 'lucide-react';
-import { db } from '../../../../../firebaseConfig';
-import { doc, onSnapshot, collection, query, where } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { auth } from '../../../../../firebase';
 import { playCashChime, playValidationBeep } from '../../../../../utils/audio';
 
@@ -41,49 +40,34 @@ export const AccessController: React.FC<AccessControllerProps> = ({
   const [isUnlockingAnimationActive, setIsUnlockingAnimationActive] = useState(false);
   const previousEnrolledState = useRef(isEnrolled);
 
-  // Écouteur temps réel de l'enrollment dans Firestore (Zero-Trust Server-Authoritative Unlock)
+  // Écouteur temps réel de l'enrollment dans Supabase (Zero-Trust Server-Authoritative Unlock)
   useEffect(() => {
     const currentUid = auth.currentUser?.uid || localStorage.getItem('nana_store_auth_user_id') || 'student-demo';
-    const enrollmentDocId = `${currentUid}_${courseId}`;
 
-    // 1. Écoute directe du document individuel enrollments/{userId_courseId}
-    const enrollDocRef = doc(db, 'enrollments', enrollmentDocId);
-    const unsubscribeDoc = onSnapshot(
-      enrollDocRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data.status === 'ACTIVE') {
-            triggerUnlockAnimation();
+    // 1. Écouteur Supabase Realtime sur la table enrollments
+    const channelName = `enrollment_${currentUid}_${courseId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+          filter: `course_id=eq.${courseId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            if (row.user_id === currentUid && (row.status === 'ACTIVE' || row.status === 'completed')) {
+              triggerUnlockAnimation();
+            }
           }
         }
-      },
-      (err) => {
-        console.warn('Écouteur Firestore enrollment direct:', err);
-      }
-    );
+      )
+      .subscribe();
 
-    // 2. Écoute par requête de collection pour les cas d'identifiants générés
-    const q = query(
-      collection(db, 'enrollments'),
-      where('userId', '==', currentUid),
-      where('courseId', '==', courseId),
-      where('status', '==', 'ACTIVE')
-    );
-
-    const unsubscribeQuery = onSnapshot(
-      q,
-      (querySnapshot) => {
-        if (!querySnapshot.empty) {
-          triggerUnlockAnimation();
-        }
-      },
-      (err) => {
-        console.warn('Écouteur Firestore query enrollment:', err);
-      }
-    );
-
-    // 3. Écouteur d'événement local pour la synchronisation multi-onglets / fallback
+    // 2. Écouteur d'événement local pour la synchronisation multi-onglets / fallback
     const handleStorageChange = () => {
       if (localStorage.getItem(`nana_course_enrolled_${courseId}`) === 'true') {
         triggerUnlockAnimation();
@@ -92,8 +76,7 @@ export const AccessController: React.FC<AccessControllerProps> = ({
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
-      unsubscribeDoc();
-      unsubscribeQuery();
+      supabase.removeChannel(channel);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [courseId]);

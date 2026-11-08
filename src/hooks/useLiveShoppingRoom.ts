@@ -94,7 +94,7 @@ export function useLiveShoppingRoom({
     }
   }, [roomId, isSeller, roomConfig, initialProduct]);
 
-  // 2. Abonnement en temps réel (WebSocket / Firebase onSnapshot) sur l'ID du Live
+  // 2. Abonnement en temps réel (Supabase Realtime) sur l'ID du Live
   useEffect(() => {
     if (!roomId) return;
 

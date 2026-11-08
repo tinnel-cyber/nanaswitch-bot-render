@@ -1,12 +1,11 @@
 /**
- * HOOK DE SYNCHRONISATION TEMPS RÉEL FIREBASE RTDB
- * Écoute le nœud /tenants/{tenantId}/modules/ et fusionne dynamiquement
- * les 27 modules officiels du catalogue statique avec l'état d'activation Firebase.
+ * HOOK DE SYNCHRONISATION TEMPS RÉEL (SUPABASE REALTIME & CACHE LOCAL)
+ * Écoute les modifications de modules pour le tenant et fusionne dynamiquement
+ * les modules officiels du catalogue avec l'état d'activation.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { ref, onValue } from 'firebase/database';
-import { rtdb } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { OFFICIAL_MODULES, AppModule, getOfficialModuleById } from '../appRegistry';
 import { resolveCurrentTenantId } from '../services/appActivationService';
 import { 
@@ -98,69 +97,17 @@ export function useActiveOmnibarApps(tenantIdProp?: string): UseActiveOmnibarApp
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Synchronisation temps réel via Firebase Realtime Database
+  // Synchronisation temps réel via Supabase Realtime & Cache Local
   useEffect(() => {
     if (!currentTenantId) return;
 
-    const modulesRef = ref(rtdb, `tenants/${currentTenantId}/modules`);
-
-    // 1. Écoute continue onValue du nœud /tenants/{tenantId}/modules/
-    const unsubscribeRtdb = onValue(
-      modulesRef,
-      (snapshot) => {
-        setLoading(false);
-        setError(null);
-        if (snapshot.exists()) {
-          const val = snapshot.val() as Record<string, any>;
-          // Normaliser les données lues
-          const normalized: TenantModulesMap = {};
-          Object.entries(val || {}).forEach(([k, v]) => {
-            if (typeof v === 'boolean') {
-              normalized[k] = { enabled: v, updatedAt: Date.now() };
-            } else if (v && typeof v === 'object' && typeof v.enabled === 'boolean') {
-              normalized[k] = {
-                enabled: v.enabled,
-                updatedAt: typeof v.updatedAt === 'number' ? v.updatedAt : Date.now()
-              };
-            }
-          });
-          setModulesMap(normalized);
-          setLocalTenantModules(currentTenantId, normalized);
-        } else {
-          // Aucun enregistrement Firebase : conservation du dictionnaire vide (on utilisera defaultActive)
-          setModulesMap({});
-          setLocalTenantModules(currentTenantId, {});
-        }
-      },
-      (err) => {
-        console.warn(`[RTDB MODULES] Écoute interrompue pour le tenant ${currentTenantId}:`, err);
-        setError(err);
-        setLoading(false);
-      }
-    );
-
-    // 2. Écoute des événements d'activation émis localement (mise à jour optimiste synchrone)
-    const handleLocalToggled = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        tenantId: string;
-        moduleId: string;
-        payload: { enabled: boolean; updatedAt: number };
-      }>;
-      if (customEvent.detail && customEvent.detail.tenantId === currentTenantId) {
-        setModulesMap((prev) => ({
-          ...prev,
-          [customEvent.detail.moduleId]: customEvent.detail.payload
-        }));
-      }
-    };
-
-    window.addEventListener(MODULE_TOGGLED_EVENT, handleLocalToggled);
-
-    // 3. Synchronisation initiale avec Supabase PostgreSQL (public.organization_blocks)
+    // 1. Synchronisation initiale avec Supabase PostgreSQL (public.organization_blocks)
     if (typeof window !== 'undefined') {
       fetch(`/api/modules?organizationId=${encodeURIComponent(currentTenantId)}`)
         .then((r) => r.json())
         .then((data) => {
+          setLoading(false);
+          setError(null);
           if (data?.activeBlocks && Array.isArray(data.activeBlocks) && data.activeBlocks.length > 0) {
             setModulesMap((prev) => {
               const updated = { ...prev };
@@ -178,11 +125,64 @@ export function useActiveOmnibarApps(tenantIdProp?: string): UseActiveOmnibarApp
             });
           }
         })
-        .catch((e) => console.warn('[SUPABASE OMNIBAR SYNC] Lecture blocs différée :', e));
+        .catch((e) => {
+          console.warn('[SUPABASE OMNIBAR SYNC] Lecture blocs différée :', e);
+          setLoading(false);
+        });
     }
 
+    // 2. Écouteur Supabase Realtime sur la table organization_blocks
+    const channelName = `omni_blocks_${currentTenantId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_blocks',
+          filter: `organization_id=eq.${currentTenantId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const b = payload.new as any;
+            if (b.block_key) {
+              setModulesMap((prev) => {
+                const updated = {
+                  ...prev,
+                  [b.block_key]: {
+                    enabled: Boolean(b.is_active),
+                    updatedAt: b.updated_at ? new Date(b.updated_at).getTime() : Date.now(),
+                  },
+                };
+                setLocalTenantModules(currentTenantId, updated);
+                return updated;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Écoute des événements d'activation émis localement (mise à jour optimiste synchrone)
+    const handleLocalToggled = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        tenantId: string;
+        moduleId: string;
+        payload: { enabled: boolean; updatedAt: number };
+      }>;
+      if (customEvent.detail && customEvent.detail.tenantId === currentTenantId) {
+        setModulesMap((prev) => ({
+          ...prev,
+          [customEvent.detail.moduleId]: customEvent.detail.payload
+        }));
+      }
+    };
+
+    window.addEventListener(MODULE_TOGGLED_EVENT, handleLocalToggled);
+
     return () => {
-      unsubscribeRtdb();
+      supabase.removeChannel(channel);
       window.removeEventListener(MODULE_TOGGLED_EVENT, handleLocalToggled);
     };
   }, [currentTenantId]);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { db, auth } from '../../../../firebase';
 import { 
   PhoneCall, PhoneOff, Video, ShoppingBag, ShieldCheck, 
@@ -50,39 +51,41 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
   const hostDailyFrameRef = useRef<any>(null);
 
   /**
-   * 1. Écoute Firestore des demandes en statut 'ringing'
+   * 1. Écoute Supabase Realtime des appels entrants
    */
   useEffect(() => {
-    // Écoute les demandes entrantes 'ringing'
-    const liveRequestsCol = collection(db, 'live_requests');
-    const q = query(liveRequestsCol, where('status', '==', 'ringing'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (snapshot.empty) {
-        setIncomingCall(null);
-        stopRingtone();
-        return;
-      }
-
-      // Récupérer la dernière demande non traitée
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as IncomingLiveRequest));
-      // Filtrer éventuellement par merchantId si spécifié
-      const matching = docs.filter(d => !merchantId || !d.id || true);
-
-      if (matching.length > 0 && !activeCallRoomUrl) {
-        const top = matching[0];
-        setIncomingCall(top);
-        startRingtone();
-      } else if (matching.length === 0) {
-        setIncomingCall(null);
-        stopRingtone();
-      }
-    }, (err) => {
-      console.warn('[FIRESTORE INCOMING CALL LISTENER]', err);
-    });
+    const channelName = `incoming_calls_${merchantId || 'all'}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+        },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new as any;
+            if (row.type === 'call' && row.status === 'ringing') {
+              setIncomingCall({
+                id: row.id,
+                buyerId: row.sender_id,
+                dailyRoomUrl: row.media_url || '',
+                roomName: row.text || 'Appel Live',
+              });
+              startRingtone();
+            } else if (row.status !== 'ringing') {
+              setIncomingCall(null);
+              stopRingtone();
+            }
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsubscribe();
+      supabase.removeChannel(channel);
       stopRingtone();
     };
   }, [merchantId, activeCallRoomUrl]);

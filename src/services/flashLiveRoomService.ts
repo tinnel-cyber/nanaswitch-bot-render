@@ -3,7 +3,8 @@
 // ============================================================================
 
 import { db } from '../firebaseConfig';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { LiveProductItem } from '../components/wameet/LiveProductCard';
 
 export interface FlashLiveRoomData {
@@ -229,54 +230,67 @@ export async function closeFlashLiveRoom(
 }
 
 /**
- * 4. Abonnement en temps réel aux événements du salon (Push Produit, Clôture, Spectateurs)
+ * 4. Abonnement en temps réel aux événements du salon via Supabase Realtime
  */
 export function subscribeToFlashLiveRoom(
   roomId: string,
   onUpdate: (room: FlashLiveRoomData) => void
 ): () => void {
-  if (!db || !roomId) return () => {};
+  if (!roomId) return () => {};
 
-  try {
-    const roomRef = doc(db, 'flash_live_rooms', roomId);
-    const unsubscribe = onSnapshot(
-      roomRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as FlashLiveRoomData;
-          onUpdate(data);
-        } else {
-          // Si le document de la room n'existe pas encore, écoute sur live_events
-          const fallbackLiveRef = doc(db, 'live_events', roomId);
-          getDoc(fallbackLiveRef).then(liveSnap => {
-            if (liveSnap.exists()) {
-              const ld = liveSnap.data();
-              onUpdate({
-                roomId,
-                title: ld.title || 'Live Flash',
-                sellerId: ld.hostId || 'seller',
-                sellerName: ld.hostName || 'Vendeur Wameet',
-                location: ld.location || 'Abidjan',
-                durationMinutes: 45,
-                expiresAt: ld.expiresAt || new Date(Date.now() + 45 * 60 * 1000).toISOString(),
-                expiresAtMs: Date.now() + 45 * 60 * 1000,
-                status: ld.status === 'ended' ? 'closed' : 'active',
-                isExpired: ld.status === 'ended',
-                pushedProduct: ld.activeProduct || null,
-                viewersCount: ld.viewerCount || 10
-              });
-            }
-          }).catch(() => {});
+  const fetchRoom = async () => {
+    try {
+      const roomRef = doc(db, 'flash_live_rooms', roomId);
+      const docSnap = await getDoc(roomRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data() as FlashLiveRoomData;
+        onUpdate(data);
+      } else {
+        const fallbackLiveRef = doc(db, 'live_events', roomId);
+        const liveSnap = await getDoc(fallbackLiveRef);
+        if (liveSnap.exists()) {
+          const ld = liveSnap.data();
+          onUpdate({
+            roomId,
+            title: ld.title || 'Live Flash',
+            sellerId: ld.hostId || 'seller',
+            sellerName: ld.hostName || 'Vendeur Wameet',
+            location: ld.location || 'Abidjan',
+            durationMinutes: 45,
+            expiresAt: ld.expiresAt || new Date(Date.now() + 45 * 60 * 1000).toISOString(),
+            expiresAtMs: Date.now() + 45 * 60 * 1000,
+            status: ld.status === 'ended' ? 'closed' : 'active',
+            isExpired: ld.status === 'ended',
+            pushedProduct: ld.activeProduct || null,
+            viewersCount: ld.viewerCount || 10
+          });
         }
-      },
-      (err) => {
-        console.warn('[SUBSCRIBE FLASH ROOM NOTICE]', err.message);
       }
-    );
+    } catch (err) {
+      console.warn('[SUBSCRIBE FLASH ROOM NOTICE]', err);
+    }
+  };
 
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[SUBSCRIBE FLASH ROOM INIT ERROR]', err);
-    return () => {};
-  }
+  fetchRoom();
+
+  const channelName = `flash_room_${roomId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${roomId}`,
+      },
+      () => {
+        fetchRoom();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

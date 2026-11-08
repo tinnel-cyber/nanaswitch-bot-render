@@ -4,7 +4,8 @@
  */
 
 import { rtdb } from '../firebase';
-import { ref, set, update, get, onValue } from 'firebase/database';
+import { ref, set, update, get } from 'firebase/database';
+import { supabase } from '../lib/supabase';
 import { APPS_REGISTRY, AppRegistryItem } from '../data/appsRegistry';
 
 export interface InstalledAppData {
@@ -237,7 +238,7 @@ export async function deactivateApp(appId: string, tenantId?: string): Promise<v
 }
 
 /**
- * Écoute en temps réel du nœud RTDB : /tenants/{tenantId}/installedApps
+ * Écoute en temps réel des applications installées pour le tenant via Supabase Realtime & Cache Local
  */
 export function listenToTenantApps(
   tenantId: string, 
@@ -245,7 +246,7 @@ export function listenToTenantApps(
 ): () => void {
   const tId = tenantId || resolveCurrentTenantId();
 
-  // Émission immédiate du cache local
+  // Émission immédiate du cache local (0ms de latence)
   onUpdate(getLocalTenantApps(tId));
 
   // Écoute des événements locaux dans la fenêtre courante
@@ -258,37 +259,45 @@ export function listenToTenantApps(
     window.addEventListener('storage', handleLocalEvent);
   }
 
-  // Écoute du flux Firebase Realtime Database
-  try {
-    const appsRef = ref(rtdb, `tenants/${tId}/installedApps`);
-    const unsubscribeRtdb = onValue(appsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const val = snapshot.val() as Record<string, InstalledAppData>;
-        const merged = { ...DEFAULT_PINNED_APPS, ...val };
-        setLocalTenantApps(tId, merged);
-        onUpdate(merged);
+  // Écouteur Supabase Realtime (remplace toute socket Firebase persistante)
+  const channelName = `tenant_apps_${tId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `tenant_id=eq.${tId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const rec = payload.new as any;
+          if (rec.module_key) {
+            const current = getLocalTenantApps(tId);
+            current[rec.module_key] = {
+              status: rec.is_active ? 'active' : 'trial',
+              activatedAt: rec.created_at ? new Date(rec.created_at).getTime() : Date.now(),
+              expiresAt: null,
+              pinnedToSidebar: true,
+            };
+            setLocalTenantApps(tId, current);
+            onUpdate(current);
+          }
+        }
       }
-    }, (error) => {
-      console.warn(`[RTDB] Écoute temps-réel suspendue pour ${tId}:`, error);
-    });
+    )
+    .subscribe();
 
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener(ACTIVATION_EVENT, handleLocalEvent);
-        window.removeEventListener(PIN_CHANGED_EVENT, handleLocalEvent);
-        window.removeEventListener('storage', handleLocalEvent);
-      }
-      unsubscribeRtdb();
-    };
-  } catch (e) {
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener(ACTIVATION_EVENT, handleLocalEvent);
-        window.removeEventListener(PIN_CHANGED_EVENT, handleLocalEvent);
-        window.removeEventListener('storage', handleLocalEvent);
-      }
-    };
-  }
+  return () => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(ACTIVATION_EVENT, handleLocalEvent);
+      window.removeEventListener(PIN_CHANGED_EVENT, handleLocalEvent);
+      window.removeEventListener('storage', handleLocalEvent);
+    }
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

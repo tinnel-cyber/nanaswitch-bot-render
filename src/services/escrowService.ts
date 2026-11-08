@@ -3,12 +3,13 @@ import {
   doc, 
   setDoc, 
   getDoc, 
+  getDocs,
   collection, 
-  onSnapshot, 
   query, 
   orderBy,
   updateDoc 
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { 
   EscrowProject, 
   EscrowStatus, 
@@ -124,27 +125,50 @@ export function subscribeToStoreProjects(
   }
 
   try {
-    const colRef = collection(db, 'stores', storeId, 'quotes_projects');
-    const q = query(colRef, orderBy('updatedAt', 'desc'));
-
-    return onSnapshot(q, (snapshot) => {
-      const items: EscrowProject[] = [];
-      snapshot.forEach(docSnap => {
-        items.push(docSnap.data() as EscrowProject);
-      });
-      if (items.length > 0) {
-        callback(items);
-        try {
-          localStorage.setItem(`${LOCAL_STORAGE_KEY_PREFIX}${storeId}`, JSON.stringify(items));
-        } catch {
-          // Ignorer
+    const fetchProjects = async () => {
+      try {
+        const colRef = collection(db, 'stores', storeId, 'quotes_projects');
+        const q = query(colRef, orderBy('updatedAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const items: EscrowProject[] = [];
+        snapshot.forEach(docSnap => {
+          items.push(docSnap.data() as EscrowProject);
+        });
+        if (items.length > 0) {
+          callback(items);
+          try {
+            localStorage.setItem(`${LOCAL_STORAGE_KEY_PREFIX}${storeId}`, JSON.stringify(items));
+          } catch {}
         }
+      } catch (e) {
+        console.warn('Erreur lecture quotes_projects :', e);
       }
-    }, (err) => {
-      console.warn('Erreur onSnapshot quotes_projects :', err);
-    });
+    };
+
+    fetchProjects();
+
+    const channelName = `escrow_projects_${storeId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'escrow_projects',
+          filter: `tenant_id=eq.${storeId}`,
+        },
+        () => {
+          fetchProjects();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
-    console.warn('Échec abonnement Firestore quotes_projects :', err);
+    console.warn('Échec abonnement Realtime quotes_projects :', err);
     return () => {};
   }
 }
@@ -318,25 +342,48 @@ export function subscribeToEscrowMessages(
   }
 
   try {
-    const colRef = collection(db, 'public_projects', projectId, 'messages');
-    const q = query(colRef, orderBy('timestamp', 'asc'));
-
-    return onSnapshot(q, (snapshot) => {
-      const messages: EscrowChatMessage[] = [];
-      snapshot.forEach((docSnap) => {
-        messages.push(docSnap.data() as EscrowChatMessage);
-      });
-      if (messages.length > 0) {
-        callback(messages);
-        try {
-          localStorage.setItem(`nana_escrow_chat_${projectId}`, JSON.stringify(messages));
-        } catch {
-          // Ignorer
+    const fetchChat = async () => {
+      try {
+        const colRef = collection(db, 'public_projects', projectId, 'messages');
+        const q = query(colRef, orderBy('timestamp', 'asc'));
+        const snapshot = await getDocs(q);
+        const messages: EscrowChatMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          messages.push(docSnap.data() as EscrowChatMessage);
+        });
+        if (messages.length > 0) {
+          callback(messages);
+          try {
+            localStorage.setItem(`nana_escrow_chat_${projectId}`, JSON.stringify(messages));
+          } catch {}
         }
+      } catch (e) {
+        console.warn('Erreur lecture chat tripartite :', e);
       }
-    }, (err) => {
-      console.warn('Erreur onSnapshot chat tripartite :', err);
-    });
+    };
+
+    fetchChat();
+
+    const channelName = `escrow_chat_${projectId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${projectId}`,
+        },
+        () => {
+          fetchChat();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('Échec abonnement chat tripartite :', err);
     return () => {};
@@ -350,18 +397,42 @@ export function subscribeAllProjectsForAdmin(
   callback: (projects: EscrowProject[]) => void
 ): () => void {
   try {
-    const colRef = collection(db, 'public_projects');
-    const q = query(colRef, orderBy('updatedAt', 'desc'));
+    const fetchAll = async () => {
+      try {
+        const colRef = collection(db, 'public_projects');
+        const q = query(colRef, orderBy('updatedAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const items: EscrowProject[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push(docSnap.data() as EscrowProject);
+        });
+        callback(items);
+      } catch (e) {
+        console.warn('Erreur lecture admin all projects :', e);
+      }
+    };
 
-    return onSnapshot(q, (snapshot) => {
-      const items: EscrowProject[] = [];
-      snapshot.forEach((docSnap) => {
-        items.push(docSnap.data() as EscrowProject);
-      });
-      callback(items);
-    }, (err) => {
-      console.warn('Erreur onSnapshot admin all projects :', err);
-    });
+    fetchAll();
+
+    const channelName = `admin_escrow_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'escrow_projects',
+        },
+        () => {
+          fetchAll();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('Échec abonnement admin all projects :', err);
     return () => {};
@@ -443,26 +514,46 @@ export function subscribeToPublicProject(
   }
 
   try {
-    const docRef = doc(db, 'public_projects', projectId);
-    return onSnapshot(
-      docRef,
-      (docSnap) => {
+    const fetchDoc = async () => {
+      try {
+        const docRef = doc(db, 'public_projects', projectId);
+        const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as EscrowProject;
           callback(data);
           try {
             localStorage.setItem(`nana_public_project_${projectId}`, JSON.stringify(data));
-          } catch {
-            // ignore
-          }
+          } catch {}
         } else {
           callback(null);
         }
-      },
-      (err) => {
-        console.warn('Erreur onSnapshot public_projects :', err);
+      } catch (e) {
+        console.warn('Erreur lecture public_projects :', e);
       }
-    );
+    };
+
+    fetchDoc();
+
+    const channelName = `pub_escrow_${projectId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'escrow_projects',
+          filter: `id=eq.${projectId}`,
+        },
+        () => {
+          fetchDoc();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('Échec abonnement public_projects :', err);
     return () => {};

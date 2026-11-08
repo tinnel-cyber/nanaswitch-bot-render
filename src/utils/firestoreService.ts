@@ -7,16 +7,16 @@ import {
   getDocs, 
   query, 
   where, 
-  onSnapshot, 
   deleteDoc,
   updateDoc,
   increment,
   runTransaction,
   writeBatch,
-  Unsubscribe,
   DocumentData,
   QuerySnapshot
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
+export type Unsubscribe = () => void;
 import { db, auth, rtdb } from './firebase';
 import {
   saveProductOffline,
@@ -267,66 +267,79 @@ export function subscribeToStoreCollection<T extends { id: string; storeId: stri
     // Ignorer les erreurs de lecture du cache local
   }
 
-  try {
-    return onSnapshot(
-      colRef,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        const items: T[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as any;
-          // Filtrage intelligent si 'sales' et 'orders' partagent la sous-collection 'orders'
-          if (collectionName === 'sales') {
-            if (data.orderNumber && !data.paymentMethod) return;
-          } else if (collectionName === 'orders') {
-            if (data.paymentMethod && !data.orderNumber) return;
-          }
-          items.push({ ...data, id: docSnap.id, storeId: tenantId } as T);
-        });
+  // 2. Récupération asynchrone (getDocs unique) & Canal Supabase Realtime
+  let isCancelled = false;
 
-        // 2. Persistance locale actualisée & protection contre l'effacement intempestif
-        if (items.length > 0) {
-          try {
-            localStorage.setItem(localKey, JSON.stringify(items.slice(0, 300)));
-          } catch (storageErr) {
-            console.warn('[STORAGE] Erreur quota persistance locale:', storageErr);
-          }
-          onUpdate(items);
-        } else {
-          // Si Firestore renvoie une liste vide, vérifier d'abord si le cache local a des éléments
-          // pour éviter de supprimer les produits tout juste enregistrés
-          let localFallbackItems: T[] | null = null;
-          try {
-            const cachedRaw = localStorage.getItem(localKey);
-            if (cachedRaw) {
-              const parsed = JSON.parse(cachedRaw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                localFallbackItems = parsed;
-              }
-            }
-          } catch {}
-
-          if (localFallbackItems && localFallbackItems.length > 0) {
-            onUpdate(localFallbackItems);
-          } else {
-            onUpdate([]);
-          }
+  const fetchCollection = async () => {
+    try {
+      const snapshot = await getDocs(colRef);
+      if (isCancelled) return;
+      const items: T[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        if (collectionName === 'sales') {
+          if (data.orderNumber && !data.paymentMethod) return;
+        } else if (collectionName === 'orders') {
+          if (data.paymentMethod && !data.orderNumber) return;
         }
-      },
-      (error) => {
-        console.warn(`[FIRESTORE SNAPSHOT NOTICE] Écouteur ${pathForError} : ${error.message}`);
-        if (onError) {
-          try {
-            handleFirestoreError(error, OperationType.LIST, pathForError);
-          } catch (e) {
-            onError(e as Error);
+        items.push({ ...data, id: docSnap.id, storeId: tenantId } as T);
+      });
+
+      if (items.length > 0) {
+        try {
+          localStorage.setItem(localKey, JSON.stringify(items.slice(0, 300)));
+        } catch (storageErr) {
+          console.warn('[STORAGE] Erreur quota persistance locale:', storageErr);
+        }
+        onUpdate(items);
+      } else {
+        let localFallbackItems: T[] | null = null;
+        try {
+          const cachedRaw = localStorage.getItem(localKey);
+          if (cachedRaw) {
+            const parsed = JSON.parse(cachedRaw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              localFallbackItems = parsed;
+            }
           }
+        } catch {}
+
+        if (localFallbackItems && localFallbackItems.length > 0) {
+          onUpdate(localFallbackItems);
+        } else {
+          onUpdate([]);
         }
       }
-    );
-  } catch (error) {
-    console.warn(`[FIRESTORE INIT NOTICE] Initialisation écouteur pour ${pathForError}:`, error);
-    return () => {};
-  }
+    } catch (error: any) {
+      console.warn(`[STORE SYNC NOTICE] Lecture ${pathForError} : ${error.message}`);
+      if (onError) onError(error);
+    }
+  };
+
+  fetchCollection();
+
+  // Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+  const channelName = `store_col_${tenantId}_${collectionName}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: collectionName === 'products' ? 'products' : collectionName === 'sales' ? 'sales' : 'app_registry',
+        filter: `tenant_id=eq.${tenantId}`,
+      },
+      () => {
+        fetchCollection();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    isCancelled = true;
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -1321,29 +1334,41 @@ export function subscribeToStoreSubscription(
     }
   } catch {}
 
-  // 2. Écouteur en temps réel sur la collection stores/{storeId}
-  const storeRef = doc(db, 'stores', cleanStoreId);
-  const unsubStore = onSnapshot(
-    storeRef,
-    { includeMetadataChanges: true },
-    (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        let sub: StoreSubscription | null = null;
-        if (data.subscription && typeof data.subscription === 'object') {
-          sub = data.subscription as StoreSubscription;
-        } else if (data.subscriptionPlan) {
-          sub = {
-            status: data.subscriptionStatus || 'ACTIVE',
-            plan: data.subscriptionPlan || 'free',
-            expiresAt: data.subscriptionExpiresAt || Date.now() + 30 * 86400000,
-            startedAt: data.subscriptionStartedAt || Date.now(),
-            lastPaymentMethod: data.lastPaymentMethod || 'HYBRID',
-            lastAmountPaid: data.lastAmountPaid || 0,
-          };
-        }
+  // 2. Récupération ponctuelle unique
+  getStoreSubscription(cleanStoreId).then((sub) => {
+    if (sub) {
+      try {
+        localStorage.setItem('nana_store_sub', JSON.stringify(sub));
+        localStorage.setItem('nana_store_plan', sub.plan);
+        localStorage.setItem('nana_user_plan', sub.plan);
+      } catch {}
+      onUpdate(sub);
+    }
+  }).catch(() => {});
 
-        if (sub) {
+  // 3. Écouteur Supabase Realtime sur la table subscriptions
+  const channelName = `sub_store_${cleanStoreId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'subscriptions',
+        filter: `tenant_id=eq.${cleanStoreId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          const sub: StoreSubscription = {
+            status: row.status || 'ACTIVE',
+            plan: row.plan || 'free',
+            expiresAt: row.expires_at ? new Date(row.expires_at).getTime() : Date.now() + 30 * 86400000,
+            startedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            lastPaymentMethod: row.payment_method || 'HYBRID',
+            lastAmountPaid: row.amount_paid || 0,
+          };
           try {
             localStorage.setItem('nana_store_sub', JSON.stringify(sub));
             localStorage.setItem('nana_store_plan', sub.plan);
@@ -1352,55 +1377,16 @@ export function subscribeToStoreSubscription(
           onUpdate(sub);
         }
       }
-    },
-    (err) => {
-      console.warn('[FIRESTORE] Écouteur abonnement store notice :', err);
-    }
-  );
-
-  // 3. Écouteur miroir en temps réel sur users/{targetUserId} (données dénormalisées)
-  let unsubUser: Unsubscribe = () => {};
-  if (targetUserId) {
-    const userRef = doc(db, 'users', targetUserId);
-    unsubUser = onSnapshot(
-      userRef,
-      { includeMetadataChanges: true },
-      (userSnap) => {
-        if (userSnap.exists()) {
-          const uData = userSnap.data();
-          if (uData.subscription || uData.subscriptionPlan || uData.plan) {
-            const plan = uData.plan || uData.subscriptionPlan || 'free';
-            const sub: StoreSubscription = (uData.subscription as StoreSubscription) || {
-              status: uData.subscriptionStatus || 'ACTIVE',
-              plan,
-              expiresAt: uData.subscriptionExpiresAt || Date.now() + 30 * 86400000,
-              startedAt: Date.now(),
-              lastPaymentMethod: 'MANUAL_SUPERADMIN',
-              lastAmountPaid: 0,
-            };
-            try {
-              localStorage.setItem('nana_store_sub', JSON.stringify(sub));
-              localStorage.setItem('nana_store_plan', plan);
-              localStorage.setItem('nana_user_plan', plan);
-            } catch {}
-            onUpdate(sub);
-          }
-        }
-      },
-      (err) => {
-        console.warn('[FIRESTORE] Écouteur abonnement users notice :', err);
-      }
-    );
-  }
+    )
+    .subscribe();
 
   return () => {
-    unsubStore();
-    unsubUser();
+    supabase.removeChannel(channel);
   };
 }
 
 /**
- * Écouteur en temps réel (onSnapshot) sur le profil users/{uid}
+ * Écouteur en temps réel sur le profil users/{uid} via Supabase Realtime
  * Permet de répercuter instantanément sur l'accueil tout changement de plan, quota ou statut
  */
 export function subscribeToUserProfile(
@@ -1409,22 +1395,44 @@ export function subscribeToUserProfile(
 ): Unsubscribe {
   if (!uid) return () => {};
 
-  const userRef = doc(db, 'users', uid);
-  return onSnapshot(
-    userRef,
-    { includeMetadataChanges: true },
-    (snap) => {
+  const fetchProfile = async () => {
+    try {
+      const userRef = doc(db, 'users', uid);
+      const snap = await getDoc(userRef);
       if (snap.exists()) {
-        const data = snap.data();
-        onUpdate(data);
+        onUpdate(snap.data());
       } else {
         onUpdate(null);
       }
-    },
-    (err) => {
-      console.warn('[FIRESTORE] Écouteur profil user notice :', err);
+    } catch (err) {
+      console.warn('[FIRESTORE] Lecture profil user :', err);
     }
-  );
+  };
+
+  fetchProfile();
+
+  const channelName = `prof_${uid}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${uid}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          onUpdate(payload.new as any);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -1780,10 +1788,10 @@ export function subscribeToUserCredits(
     }
   } catch {}
 
-  const userRef = doc(db, 'users', uid);
-  const unsub = onSnapshot(
-    userRef,
-    (snap) => {
+  const fetchCredits = async () => {
+    try {
+      const userRef = doc(db, 'users', uid);
+      const snap = await getDoc(userRef);
       if (snap.exists()) {
         const data = snap.data();
         if (typeof data.credits === 'number') {
@@ -1792,36 +1800,47 @@ export function subscribeToUserCredits(
           } catch {}
           onUpdate(data.credits);
         } else {
-          // Document existant mais champ credits absent : initialiser à 15 crédits
           setDoc(userRef, { credits: DEFAULT_FREE_CREDITS }, { merge: true }).catch(() => {});
-          try {
-            localStorage.setItem(`nana_user_credits_${uid}`, String(DEFAULT_FREE_CREDITS));
-          } catch {}
           onUpdate(DEFAULT_FREE_CREDITS);
         }
       } else {
-        // Document absent : initialiser à 15 crédits gratuits par défaut
-        setDoc(userRef, { 
-          credits: DEFAULT_FREE_CREDITS, 
-          createdAt: new Date().toISOString() 
-        }, { merge: true }).catch(() => {});
         onUpdate(DEFAULT_FREE_CREDITS);
       }
-    },
-    (err) => {
-      console.warn('[FIRESTORE] subscribeToUserCredits notice :', err);
-      try {
-        const cached = localStorage.getItem(`nana_user_credits_${uid}`);
-        if (cached !== null) {
-          onUpdate(parseInt(cached, 10));
-          return;
-        }
-      } catch {}
-      onUpdate(DEFAULT_FREE_CREDITS);
+    } catch (err) {
+      console.warn('[CREDITS] Lecture credits notice :', err);
     }
-  );
+  };
 
-  return unsub;
+  fetchCredits();
+
+  const channelName = `credits_${uid}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${uid}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          if (typeof row.credits === 'number') {
+            try {
+              localStorage.setItem(`nana_user_credits_${uid}`, String(row.credits));
+            } catch {}
+            onUpdate(row.credits);
+          }
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -2383,35 +2402,44 @@ export function subscribeToPlatformSubscriptions(
   onUpdate: (config: PlatformSubscriptionConfig) => void
 ): Unsubscribe {
   const fallback = getLocalSuperAdminFallbackSubscriptions();
-  try {
-    return onSnapshot(
-      doc(db, 'platform_settings', 'subscriptions'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data() as Partial<PlatformSubscriptionConfig>;
-          const sanitized = sanitizePlatformSubscriptions(data);
-          onUpdate(sanitized);
 
-          // Si des anciens tarifs obsolètes 4900/9900/19900 étaient encore présents dans Firestore, les réparer automatiquement
-          if (data.plans && Array.isArray(data.plans)) {
-            const hasStale = data.plans.some((p: any) => p.price === 4900 || p.price === 9900 || p.price === 19900);
-            if (hasStale) {
-              setDoc(doc(db, 'platform_settings', 'subscriptions'), sanitized, { merge: true }).catch(() => {});
-            }
-          }
-        } else {
-          onUpdate(getLocalSuperAdminFallbackSubscriptions());
-        }
-      },
-      (err) => {
-        console.error('[FIRESTORE ERROR] subscribeToPlatformSubscriptions notice :', err);
+  const fetchConfig = async () => {
+    try {
+      const snapshot = await getDoc(doc(db, 'platform_settings', 'subscriptions'));
+      if (snapshot.exists()) {
+        const data = snapshot.data() as Partial<PlatformSubscriptionConfig>;
+        const sanitized = sanitizePlatformSubscriptions(data);
+        onUpdate(sanitized);
+      } else {
+        onUpdate(getLocalSuperAdminFallbackSubscriptions());
       }
-    );
-  } catch (e) {
-    console.error('[FIRESTORE ERROR] subscribeToPlatformSubscriptions init error :', e);
-    onUpdate(fallback);
-    return () => {};
-  }
+    } catch (e) {
+      onUpdate(fallback);
+    }
+  };
+
+  fetchConfig();
+
+  const channelName = `plat_subs_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `module_key=eq.platform_subscriptions`,
+      },
+      () => {
+        fetchConfig();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ============================================================================
@@ -2481,51 +2509,37 @@ export async function saveCentralPaymentConfig(config: CentralPaymentConfig): Pr
 export function subscribeToCentralPaymentConfig(
   onUpdate: (config: CentralPaymentConfig) => void
 ): Unsubscribe {
-  try {
-    return onSnapshot(
-      doc(db, 'parametres', 'paiement'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data() as Partial<CentralPaymentConfig>;
-          onUpdate({
-            ...DEFAULT_CENTRAL_PAYMENT_CONFIG,
-            ...data,
-            orangeMoneyBurkina: {
-              ...DEFAULT_CENTRAL_PAYMENT_CONFIG.orangeMoneyBurkina,
-              ...(data.orangeMoneyBurkina || {})
-            },
-            internationalRecipient: {
-              ...DEFAULT_CENTRAL_PAYMENT_CONFIG.internationalRecipient,
-              ...(data.internationalRecipient || {})
-            },
-            cryptoWallets: {
-              ...DEFAULT_CENTRAL_PAYMENT_CONFIG.cryptoWallets,
-              ...(data.cryptoWallets || {})
-            },
-            cardGatewayKeys: {
-              ...DEFAULT_CENTRAL_PAYMENT_CONFIG.cardGatewayKeys,
-              ...(data.cardGatewayKeys || {})
-            },
-            toggles: {
-              ...DEFAULT_CENTRAL_PAYMENT_CONFIG.toggles,
-              ...(data.toggles || {})
-            },
-            deliveryZones: data.deliveryZones || DEFAULT_CENTRAL_PAYMENT_CONFIG.deliveryZones
-          });
-        } else {
-          onUpdate(DEFAULT_CENTRAL_PAYMENT_CONFIG);
-        }
+  const fetchConfig = async () => {
+    try {
+      const config = await getCentralPaymentConfig();
+      onUpdate(config);
+    } catch (e) {
+      onUpdate(DEFAULT_CENTRAL_PAYMENT_CONFIG);
+    }
+  };
+
+  fetchConfig();
+
+  const channelName = `central_pay_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `module_key=eq.central_payment`,
       },
-      (err) => {
-        console.warn('[FIRESTORE] subscribeToCentralPaymentConfig notice :', err);
-        onUpdate(DEFAULT_CENTRAL_PAYMENT_CONFIG);
+      () => {
+        fetchConfig();
       }
-    );
-  } catch (e) {
-    console.warn('[FIRESTORE] subscribeToCentralPaymentConfig init error :', e);
-    onUpdate(DEFAULT_CENTRAL_PAYMENT_CONFIG);
-    return () => {};
-  }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ============================================================================
@@ -2687,33 +2701,50 @@ export function subscribeToPlatformLegal(
     onUpdate(DEFAULT_PLATFORM_LEGAL);
   }
 
-  // Écouteur Firestore onSnapshot
-  try {
-    return onSnapshot(
-      doc(db, 'platform_settings', 'legal'),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as Partial<PlatformLegalConfig>;
-          const resolved: PlatformLegalConfig = {
-            ticker_text: data.ticker_text || DEFAULT_PLATFORM_LEGAL.ticker_text,
-            legal_mentions_content: data.legal_mentions_content || DEFAULT_PLATFORM_LEGAL.legal_mentions_content,
-            privacy_policy_content: data.privacy_policy_content || DEFAULT_PLATFORM_LEGAL.privacy_policy_content,
-            show_ticker: data.show_ticker !== undefined ? data.show_ticker : DEFAULT_PLATFORM_LEGAL.show_ticker,
-            lastUpdated: data.lastUpdated,
-            updatedBy: data.updatedBy,
-          };
-          localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
-          onUpdate(resolved);
-        }
-      },
-      (err) => {
-        console.warn('[FIRESTORE] subscribeToPlatformLegal notice :', err);
+  const fetchLegal = async () => {
+    try {
+      const docRef = doc(db, 'platform_settings', 'legal');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Partial<PlatformLegalConfig>;
+        const resolved: PlatformLegalConfig = {
+          ticker_text: data.ticker_text || DEFAULT_PLATFORM_LEGAL.ticker_text,
+          legal_mentions_content: data.legal_mentions_content || DEFAULT_PLATFORM_LEGAL.legal_mentions_content,
+          privacy_policy_content: data.privacy_policy_content || DEFAULT_PLATFORM_LEGAL.privacy_policy_content,
+          show_ticker: data.show_ticker !== undefined ? data.show_ticker : DEFAULT_PLATFORM_LEGAL.show_ticker,
+          lastUpdated: data.lastUpdated,
+          updatedBy: data.updatedBy,
+        };
+        localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
+        onUpdate(resolved);
       }
-    );
-  } catch (e) {
-    console.warn('[FIRESTORE] subscribeToPlatformLegal init error :', e);
-    return () => {};
-  }
+    } catch (err) {
+      console.warn('[LEGAL] Lecture platform_legal notice :', err);
+    }
+  };
+
+  fetchLegal();
+
+  const channelName = `legal_cfg_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `module_key=eq.platform_legal`,
+      },
+      () => {
+        fetchLegal();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -2986,64 +3017,80 @@ export function subscribeToLandingPageConfig(
     }
   } catch (e) {}
 
-  try {
-    return onSnapshot(
-      doc(db, 'platform_settings', 'landing'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data() as Partial<LandingPageConfig>;
-          const merged: LandingPageConfig = {
-            featuresSection: {
-              ...DEFAULT_LANDING_PAGE_CONFIG.featuresSection,
-              ...(data.featuresSection || {}),
-              cards: normalizeLandingCards(data.featuresSection?.cards)
+  const fetchLanding = async () => {
+    try {
+      const snapshot = await getDoc(doc(db, 'platform_settings', 'landing'));
+      if (snapshot.exists()) {
+        const data = snapshot.data() as Partial<LandingPageConfig>;
+        const merged: LandingPageConfig = {
+          featuresSection: {
+            ...DEFAULT_LANDING_PAGE_CONFIG.featuresSection,
+            ...(data.featuresSection || {}),
+            cards: normalizeLandingCards(data.featuresSection?.cards)
+          },
+          eliteSection: {
+            ...DEFAULT_LANDING_PAGE_CONFIG.eliteSection,
+            ...(data.eliteSection || {}),
+            slides: data.eliteSection?.slides && data.eliteSection.slides.length > 0
+              ? data.eliteSection.slides
+              : DEFAULT_LANDING_PAGE_CONFIG.eliteSection.slides,
+            impactStats: data.eliteSection?.impactStats && data.eliteSection.impactStats.length > 0
+              ? data.eliteSection.impactStats
+              : DEFAULT_LANDING_PAGE_CONFIG.eliteSection.impactStats
+          },
+          pricingSection: {
+            ...DEFAULT_LANDING_PAGE_CONFIG.pricingSection,
+            ...(data.pricingSection || {}),
+            zeroCommissionBanner: {
+              ...DEFAULT_LANDING_PAGE_CONFIG.pricingSection.zeroCommissionBanner,
+              ...(data.pricingSection?.zeroCommissionBanner || {})
             },
-            eliteSection: {
-              ...DEFAULT_LANDING_PAGE_CONFIG.eliteSection,
-              ...(data.eliteSection || {}),
-              slides: data.eliteSection?.slides && data.eliteSection.slides.length > 0
-                ? data.eliteSection.slides
-                : DEFAULT_LANDING_PAGE_CONFIG.eliteSection.slides,
-              impactStats: data.eliteSection?.impactStats && data.eliteSection.impactStats.length > 0
-                ? data.eliteSection.impactStats
-                : DEFAULT_LANDING_PAGE_CONFIG.eliteSection.impactStats
-            },
-            pricingSection: {
-              ...DEFAULT_LANDING_PAGE_CONFIG.pricingSection,
-              ...(data.pricingSection || {}),
-              zeroCommissionBanner: {
-                ...DEFAULT_LANDING_PAGE_CONFIG.pricingSection.zeroCommissionBanner,
-                ...(data.pricingSection?.zeroCommissionBanner || {})
-              },
-              plans: data.pricingSection?.plans && data.pricingSection.plans.length > 0
-                ? data.pricingSection.plans
-                : DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans
-            },
-            footerSection: {
-              ...DEFAULT_LANDING_PAGE_CONFIG.footerSection,
-              ...(data.footerSection || {})
-            },
-            updatedAt: data.updatedAt,
-            updatedBy: data.updatedBy
-          };
-          try {
-            localStorage.setItem(LANDING_CONFIG_LOCAL_KEY, JSON.stringify(merged));
-          } catch (e) {}
-          onUpdate(merged);
-        } else {
-          onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
-        }
-      },
-      (err) => {
-        console.warn('[FIRESTORE] subscribeToLandingPageConfig notice :', err);
+            plans: data.pricingSection?.plans && data.pricingSection.plans.length > 0
+              ? data.pricingSection.plans
+              : DEFAULT_LANDING_PAGE_CONFIG.pricingSection.plans
+          },
+          footerSection: {
+            ...DEFAULT_LANDING_PAGE_CONFIG.footerSection,
+            ...(data.footerSection || {})
+          },
+          updatedAt: data.updatedAt,
+          updatedBy: data.updatedBy
+        };
+        try {
+          localStorage.setItem(LANDING_CONFIG_LOCAL_KEY, JSON.stringify(merged));
+        } catch (e) {}
+        onUpdate(merged);
+      } else {
         onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
       }
-    );
-  } catch (e) {
-    console.warn('[FIRESTORE] subscribeToLandingPageConfig init notice :', e);
-    onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
-    return () => {};
-  }
+    } catch (err) {
+      console.warn('[LANDING] Lecture platform_settings/landing notice :', err);
+      onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
+    }
+  };
+
+  fetchLanding();
+
+  const channelName = `landing_cfg_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `module_key=eq.landing_config`,
+      },
+      () => {
+        fetchLanding();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ============================================================================

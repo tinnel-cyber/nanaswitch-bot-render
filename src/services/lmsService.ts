@@ -1,6 +1,6 @@
 import { db, storage } from '../firebaseConfig';
 import { 
-  doc, updateDoc, setDoc, getDoc, collection, query, where, onSnapshot, getDocs, deleteDoc 
+  doc, updateDoc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 

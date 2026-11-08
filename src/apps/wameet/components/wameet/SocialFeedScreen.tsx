@@ -53,7 +53,8 @@ import { LiveShowcases, DEFAULT_SHOWCASES, ShowcaseItem, ShowcaseStatusType } fr
 import { WameetUpcomingAppointmentBanner } from './WameetUpcomingAppointmentBanner';
 import { WameetAppointment } from '../../../../services/wameetAppointmentService';
 import { db } from '../../../../firebase';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 export interface SocialFeedScreenProps {
   profile: WameetProfileData;
@@ -416,9 +417,12 @@ export const SocialFeedScreen: React.FC<SocialFeedScreenProps> = ({
   const [remoteSocialPosts, setRemoteSocialPosts] = React.useState<WameetPostItem[]>([]);
 
   React.useEffect(() => {
-    try {
-      const q = query(collection(db, 'social_feed_posts'), orderBy('createdAt', 'desc'), limit(30));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+    let isCancelled = false;
+    const fetchSocialPosts = async () => {
+      try {
+        const q = query(collection(db, 'social_feed_posts'), orderBy('createdAt', 'desc'), limit(30));
+        const snapshot = await getDocs(q);
+        if (isCancelled) return;
         const fetched: WameetPostItem[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -454,13 +458,34 @@ export const SocialFeedScreen: React.FC<SocialFeedScreenProps> = ({
         if (fetched.length > 0) {
           setRemoteSocialPosts(fetched);
         }
-      }, (err) => {
-        console.warn('[FIRESTORE SOCIAL POSTS LOAD]', err);
-      });
-      return () => unsubscribe();
-    } catch (e) {
-      console.warn('[FIRESTORE SUBSCRIPTION ERROR]', e);
-    }
+      } catch (e) {
+        console.warn('[SOCIAL POSTS LOAD]', e);
+      }
+    };
+
+    fetchSocialPosts();
+
+    // Écouteur Supabase Realtime
+    const channelName = `social_feed_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+        },
+        () => {
+          fetchSocialPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isCancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Fusion dynamique des posts distants et locaux

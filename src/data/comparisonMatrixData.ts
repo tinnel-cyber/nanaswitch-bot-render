@@ -1,5 +1,8 @@
-import { doc, onSnapshot, setDoc, Unsubscribe } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
+
+export type Unsubscribe = () => void;
 
 export type ComparisonCategoryKey = 
   | 'ecommerce' 
@@ -419,39 +422,53 @@ export function setCachedComparisonMatrix(items: ComparisonFeatureItem[]) {
 }
 
 /**
- * Écouteur temps réel Firestore sur platform_settings/comparison_matrix
+ * Écouteur temps réel via Supabase Realtime (remplace Firestore onSnapshot)
  */
 export function subscribeToComparisonMatrix(
   onUpdate: (features: ComparisonFeatureItem[]) => void
 ): Unsubscribe {
-  // Fournir immédiatement la valeur en cache pour fluidité d'affichage sans clignotement
   onUpdate(getCachedComparisonMatrix());
 
-  try {
-    return onSnapshot(
-      doc(db, 'platform_settings', 'comparison_matrix'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (Array.isArray(data.features) && data.features.length > 0) {
-            setCachedComparisonMatrix(data.features);
-            onUpdate(data.features);
-            return;
-          }
+  const fetchMatrix = async () => {
+    try {
+      const docRef = doc(db, 'platform_settings', 'comparison_matrix');
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (Array.isArray(data.features) && data.features.length > 0) {
+          setCachedComparisonMatrix(data.features);
+          onUpdate(data.features);
+          return;
         }
-        // Fallback valeurs par défaut si le document n'existe pas encore
-        onUpdate(DEFAULT_COMPARISON_MATRIX);
-      },
-      (error) => {
-        console.warn('[COMPARISON_MATRIX] Écouteur Firestore notice :', error);
-        onUpdate(getCachedComparisonMatrix());
       }
-    );
-  } catch (err) {
-    console.warn('[COMPARISON_MATRIX] Erreur init écouteur :', err);
-    onUpdate(getCachedComparisonMatrix());
-    return () => {};
-  }
+      onUpdate(DEFAULT_COMPARISON_MATRIX);
+    } catch (e) {
+      onUpdate(getCachedComparisonMatrix());
+    }
+  };
+
+  fetchMatrix();
+
+  const channelName = `matrix_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_registry',
+        filter: `module_key=eq.comparison_matrix`,
+      },
+      () => {
+        fetchMatrix();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

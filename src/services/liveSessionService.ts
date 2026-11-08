@@ -8,12 +8,12 @@ import {
   updateDoc, 
   query, 
   where, 
-  onSnapshot,
   addDoc, 
   orderBy, 
   limit, 
   deleteDoc 
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { 
   LiveSession, 
   LiveSessionMode, 
@@ -148,22 +148,41 @@ export function subscribeLiveSession(
 ): () => void {
   if (!sessionId) return () => {};
 
-  try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    const unsubscribe = onSnapshot(docRef, (snap) => {
+  const fetchSession = async () => {
+    try {
+      const docRef = doc(db, 'live_sessions', sessionId);
+      const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data() as LiveSession;
         onUpdate({ ...data, id: snap.id });
       }
-    }, (err) => {
-      console.warn('[liveSessionService] Snapshot listener warning:', err);
-    });
+    } catch (err) {
+      console.warn('[liveSessionService] Lecture session :', err);
+    }
+  };
 
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[liveSessionService] subscribeLiveSession failed:', err);
-    return () => {};
-  }
+  fetchSession();
+
+  const channelName = `live_sess_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${sessionId}`,
+      },
+      () => {
+        fetchSession();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -339,15 +358,14 @@ export function subscribeLiveChatMessages(
   sessionId: string,
   callback: (messages: LiveChatMessage[]) => void
 ): () => void {
-  // Callback initial avec la mémoire locale
   const initial = localChatMemory[sessionId] || localChatMemory['live-demo-session'] || [];
   callback([...initial]);
 
-  try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'messages');
-    const q = query(colRef, orderBy('createdAt', 'asc'), limit(150));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+  const fetchMessages = async () => {
+    try {
+      const colRef = collection(db, 'live_sessions', sessionId, 'messages');
+      const q = query(colRef, orderBy('createdAt', 'asc'), limit(150));
+      const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const firestoreMsgs: LiveChatMessage[] = [];
         snapshot.forEach((docSnap) => {
@@ -355,15 +373,33 @@ export function subscribeLiveChatMessages(
         });
         callback(firestoreMsgs);
       }
-    }, (err) => {
-      console.warn('[liveSessionService] subscribeLiveChatMessages listener warning:', err);
-    });
+    } catch (err) {
+      console.warn('[liveSessionService] Lecture chat messages :', err);
+    }
+  };
 
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[liveSessionService] subscribeLiveChatMessages init warning:', err);
-    return () => {};
-  }
+  fetchMessages();
+
+  const channelName = `live_chat_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${sessionId}`,
+      },
+      () => {
+        fetchMessages();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**
@@ -607,11 +643,11 @@ export function subscribeLiveSubmissions(
   const initial = localSubmissionsMemory[sessionId] || localSubmissionsMemory['live-demo-session'] || [];
   callback([...initial]);
 
-  try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
-    const q = query(colRef, orderBy('submittedAt', 'desc'), limit(100));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+  const fetchSubs = async () => {
+    try {
+      const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
+      const q = query(colRef, orderBy('submittedAt', 'desc'), limit(100));
+      const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const firestoreSubs: LiveSubmission[] = [];
         snapshot.forEach((docSnap) => {
@@ -619,15 +655,33 @@ export function subscribeLiveSubmissions(
         });
         callback(firestoreSubs);
       }
-    }, (err) => {
-      console.warn('[liveSessionService] subscribeLiveSubmissions warning:', err);
-    });
+    } catch (err) {
+      console.warn('[liveSessionService] Lecture submissions :', err);
+    }
+  };
 
-    return unsubscribe;
-  } catch (err) {
-    console.warn('[liveSessionService] subscribeLiveSubmissions init warning:', err);
-    return () => {};
-  }
+  fetchSubs();
+
+  const channelName = `live_subs_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'wameet_messages',
+        filter: `chat_id=eq.${sessionId}`,
+      },
+      () => {
+        fetchSubs();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

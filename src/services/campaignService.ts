@@ -1,4 +1,5 @@
 import { db } from '../firebaseConfig';
+import { supabase } from '../lib/supabase';
 import { PromoCampaign, CampaignBonusItem } from '../types/campaign';
 
 // On-demand dynamic Firestore loader for sub-zero initial bundle weight
@@ -254,46 +255,52 @@ export function subscribeToCampaigns(
   // Notification synchrone immédiate avec le cache local (0ms)
   callback(getLocalCampaigns());
 
-  let unsubscribeSnapshot: (() => void) | null = null;
   let isCancelled = false;
 
-  // Connexion asynchrone non-bloquante au SDK Firestore
-  loadFirestore().then(({ collection, query, orderBy, onSnapshot }) => {
-    if (isCancelled) return;
+  const fetchCampaigns = async () => {
     try {
+      const { collection, query, orderBy, getDocs } = await loadFirestore();
+      if (isCancelled) return;
       const campaignsRef = collection(db, 'campaigns');
       const q = query(campaignsRef, orderBy('createdAt', 'desc'));
-
-      unsubscribeSnapshot = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const firestoreList: PromoCampaign[] = [];
-            snapshot.forEach((docSnap) => {
-              firestoreList.push({ ...(docSnap.data() as PromoCampaign), id: docSnap.id });
-            });
-            const merged = mergeCampaignLists(SEED_PROMO_CAMPAIGNS, firestoreList);
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
-            callback(merged);
-          }
-        },
-        (error) => {
-          console.warn('Snapshot listener campagnes dégradé, mode autonome:', error);
-          callback(getLocalCampaigns());
-        }
-      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const firestoreList: PromoCampaign[] = [];
+        snapshot.forEach((docSnap) => {
+          firestoreList.push({ ...(docSnap.data() as PromoCampaign), id: docSnap.id });
+        });
+        const merged = mergeCampaignLists(SEED_PROMO_CAMPAIGNS, firestoreList);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+        callback(merged);
+      }
     } catch (e) {
-      console.warn('Erreur souscription Firestore campagnes:', e);
+      console.warn('Lecture campagnes autonome :', e);
+      callback(getLocalCampaigns());
     }
-  }).catch((e) => {
-    console.warn('Erreur chargement dynamique Firestore:', e);
-  });
+  };
+
+  fetchCampaigns();
+
+  // Écouteur Supabase Realtime
+  const channelName = `campaigns_${Math.random().toString(36).substring(7)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'email_campaigns',
+      },
+      () => {
+        fetchCampaigns();
+      }
+    )
+    .subscribe();
 
   return () => {
     isCancelled = true;
-    if (unsubscribeSnapshot) {
-      unsubscribeSnapshot();
-    }
+    supabase.removeChannel(channel);
   };
 }
 

@@ -1,13 +1,14 @@
 import { db } from '../firebaseConfig';
 import { 
   collection, 
-  onSnapshot, 
+  getDocs,
   query, 
   orderBy, 
   doc, 
   setDoc,
   serverTimestamp 
 } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { AssignmentSubmission, StudentRosterItem, InstructorKpiMetrics } from '../types';
 
 export interface EnrollmentRecord {
@@ -89,13 +90,13 @@ export function subscribeToEnrollments(
     callback([]);
   }
 
-  // 2. Écouteur Firestore temps réel
+  // 2. Écouteur Supabase Realtime (remplace Firestore onSnapshot)
   try {
-    const colRef = collection(db, 'enrollments');
-    const q = query(colRef);
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
+    const fetchEnrollments = async () => {
+      try {
+        const colRef = collection(db, 'enrollments');
+        const q = query(colRef);
+        const snapshot = await getDocs(q);
         const list: EnrollmentRecord[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -119,7 +120,6 @@ export function subscribeToEnrollments(
           });
         });
 
-        // Mise à jour cache local (suppression si liste vide)
         try {
           if (typeof window !== 'undefined') {
             if (list.length === 0) {
@@ -131,15 +131,34 @@ export function subscribeToEnrollments(
         } catch (e) {}
 
         callback(list);
-      },
-      (err) => {
-        console.warn('[INSTRUCTOR DATA] Erreur écoute Firestore enrollments, repli local:', err);
+      } catch (err) {
+        console.warn('[INSTRUCTOR DATA] Erreur lecture enrollments :', err);
       }
-    );
+    };
 
-    return unsubscribe;
+    fetchEnrollments();
+
+    const channelName = `inst_enrollments_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+        },
+        () => {
+          fetchEnrollments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
-    console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute Firestore enrollments:', err);
+    console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute Realtime enrollments:', err);
     return () => {};
   }
 }
@@ -267,10 +286,10 @@ export function subscribeToSubmissions(
   }
 
   try {
-    const colRef = collection(db, 'assignment_submissions');
-    const unsubscribe = onSnapshot(
-      colRef,
-      (snapshot) => {
+    const fetchSubmissions = async () => {
+      try {
+        const colRef = collection(db, 'assignment_submissions');
+        const snapshot = await getDocs(colRef);
         const list: AssignmentSubmission[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -317,13 +336,32 @@ export function subscribeToSubmissions(
         } catch (e) {}
 
         callback(list);
-      },
-      (err) => {
-        console.warn('[INSTRUCTOR DATA] Erreur écoute submissions Firestore, conservation locale:', err);
+      } catch (err) {
+        console.warn('[INSTRUCTOR DATA] Erreur lecture submissions:', err);
       }
-    );
+    };
 
-    return unsubscribe;
+    fetchSubmissions();
+
+    const channelName = `inst_submissions_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+        },
+        () => {
+          fetchSubmissions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute submissions:', err);
     return () => {};
@@ -351,10 +389,10 @@ export function subscribeToStudentRoster(
   }
 
   try {
-    const colRef = collection(db, 'enrollments');
-    const unsubscribe = onSnapshot(
-      colRef,
-      (snapshot) => {
+    const fetchRoster = async () => {
+      try {
+        const colRef = collection(db, 'enrollments');
+        const snapshot = await getDocs(colRef);
         const studentMap = new Map<string, StudentRosterItem>();
         snapshot.forEach((docSnap) => {
           const d = docSnap.data();
@@ -397,13 +435,32 @@ export function subscribeToStudentRoster(
         } catch (e) {}
 
         callback(list);
-      },
-      (err) => {
-        console.warn('[INSTRUCTOR DATA] Erreur écoute student roster Firestore:', err);
+      } catch (err) {
+        console.warn('[INSTRUCTOR DATA] Erreur lecture student roster :', err);
       }
-    );
+    };
 
-    return unsubscribe;
+    fetchRoster();
+
+    const channelName = `inst_roster_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'enrollments',
+        },
+        () => {
+          fetchRoster();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (err) {
     console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute student roster:', err);
     return () => {};

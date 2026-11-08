@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, query, orderBy, onSnapshot, addDoc, 
+  collection, query, orderBy, getDocs, addDoc, 
   doc, updateDoc, increment, serverTimestamp 
 } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { db } from '../../../../firebase';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { MessageCircle, Share2, Send, X, Check, Copy } from 'lucide-react';
@@ -59,18 +60,17 @@ export const SocialInteractions: React.FC<SocialInteractionsProps> = ({
     }
   }, [reelId, initialCommentCount, initialShareCount]);
 
-  // Écoute en temps réel des commentaires Firestore
+  // Chargement et écoute en temps réel des commentaires via Supabase Realtime
   useEffect(() => {
     if (!isOpenComments || !reelId) return;
 
     let unsubscribed = false;
-    let unsub1: (() => void) | null = null;
-    let unsub2: (() => void) | null = null;
 
-    try {
-      const commentsRef = collection(db, 'reels', reelId, 'comments');
-      const q = query(commentsRef, orderBy('createdAt', 'desc'));
-      unsub1 = onSnapshot(q, (snapshot) => {
+    const loadComments = async () => {
+      try {
+        const commentsRef = collection(db, 'reels', reelId, 'comments');
+        const q = query(commentsRef, orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
         if (!unsubscribed && !snapshot.empty) {
           const loadedComments: Comment[] = snapshot.docs.map((d) => ({
             id: d.id,
@@ -79,39 +79,33 @@ export const SocialInteractions: React.FC<SocialInteractionsProps> = ({
           setComments(loadedComments);
           setCommentCount(loadedComments.length);
         }
-      }, (err) => {
-        console.warn('[COMMENTS] Écoute reels/comments :', err);
-      });
-    } catch (e) {
-      console.warn('[COMMENTS] Initialisation listener reels/comments :', e);
-    }
+      } catch (e) {
+        console.warn('[COMMENTS] Lecture reels/comments :', e);
+      }
+    };
 
-    try {
-      const wameetCommentsRef = collection(db, 'wameet_reels', reelId, 'comments');
-      const q2 = query(wameetCommentsRef, orderBy('createdAt', 'desc'));
-      unsub2 = onSnapshot(q2, (snapshot) => {
-        if (!unsubscribed && !snapshot.empty) {
-          const loadedComments: Comment[] = snapshot.docs.map((d) => ({
-            id: d.id,
-            ...d.data()
-          } as Comment));
-          setComments(prev => {
-            const ids = new Set(prev.map(p => p.id));
-            const fresh = loadedComments.filter(l => !ids.has(l.id));
-            return [...fresh, ...prev];
-          });
+    loadComments();
+
+    const channelName = `comments_${reelId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${reelId}`,
+        },
+        () => {
+          loadComments();
         }
-      }, (err) => {
-        console.warn('[COMMENTS] Écoute wameet_reels/comments :', err);
-      });
-    } catch (e) {
-      console.warn('[COMMENTS] Initialisation listener wameet_reels/comments :', e);
-    }
+      )
+      .subscribe();
 
     return () => {
       unsubscribed = true;
-      if (unsub1) unsub1();
-      if (unsub2) unsub2();
+      supabase.removeChannel(channel);
     };
   }, [isOpenComments, reelId]);
 

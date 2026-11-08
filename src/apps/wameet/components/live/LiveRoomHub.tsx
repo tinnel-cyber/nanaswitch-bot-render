@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { db } from '../../../../firebaseConfig';
 import { 
-  doc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, limit 
+  doc, getDoc, updateDoc, collection, addDoc, query, orderBy, limit 
 } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { 
   LiveWebinar, LivePlatform, LiveRoomMode, LiveRoomStatus, 
   LiveChatMessage, LivePinnedProduct, InventoryProduct, StoreUser, StoreSubscription 
@@ -124,29 +125,24 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. Abonnement en temps réel aux données du webinaire Firestore
+  // 1. Abonnement en temps réel aux données du webinaire via Supabase Realtime
   useEffect(() => {
     if (!webinarId) return;
 
     let isMounted = true;
     const docRef = doc(db, 'webinars', webinarId);
 
-    const unsubscribe = onSnapshot(docRef, (snap) => {
+    // Lecture unique one-off
+    getDoc(docRef).then((snap) => {
       if (!isMounted) return;
       if (snap.exists()) {
         const data = { id: snap.id, ...(snap.data() as any) } as LiveWebinar;
         setWebinar(data);
-        if (data.pinnedProduct) {
-          setPinnedProduct(data.pinnedProduct);
-        }
-        if (data.status === 'live') {
-          setStage('LIVE');
-        } else if (data.status === 'ended') {
-          setStage('ENDED');
-        }
+        if (data.pinnedProduct) setPinnedProduct(data.pinnedProduct);
+        if (data.status === 'live') setStage('LIVE');
+        else if (data.status === 'ended') setStage('ENDED');
         setError(null);
       } else {
-        // Si document non présent dans Firestore, on utilise un modèle local de secours
         if (!initialWebinar) {
           const fallbackWebinar: LiveWebinar = {
             id: webinarId,
@@ -166,14 +162,35 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
         }
       }
       setLoading(false);
-    }, (err) => {
-      console.warn("Info connexion Firestore Live:", err);
+    }).catch(() => {
       if (isMounted) setLoading(false);
     });
 
+    // Écouteur Supabase Realtime
+    const channelName = `webinar_${webinarId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'wameet_messages',
+          filter: `chat_id=eq.${webinarId}`,
+        },
+        (payload) => {
+          if (payload.new && isMounted) {
+            const data = payload.new as any;
+            if (data.status === 'live') setStage('LIVE');
+            else if (data.status === 'ended') setStage('ENDED');
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
-      unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [webinarId, initialWebinar, currentUser?.id]);
 

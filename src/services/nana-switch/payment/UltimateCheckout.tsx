@@ -27,7 +27,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { db } from '../../../firebase';
 import {
   initiateSPayment,
@@ -545,71 +546,81 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   // FLUX ÉTAPE 2B : VALIDATION S & ÉCOUTE TEMPS RÉEL (WEBHOOK / FIRESTORE)
   // =============================================================================
 
-  // Écouteur Firestore onSnapshot automatique via Webhook S (0% SMS)
+  // Écouteur Supabase Realtime automatique via Webhook S (0% SMS)
   useEffect(() => {
     if (!orderId || currentStep === 'STEP_3' || !isProcessingPayment) return;
 
-    let unsub: (() => void) | null = null;
+    let channel: any = null;
     try {
-      const intentDocRef = doc(db, 'payment_intents', orderId);
-      unsub = onSnapshot(intentDocRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          const isPaid =
-            data?.isPaid === true ||
-            data?.paid === true ||
-            ['COMPLETED', 'PAID', 'SUCCESS'].includes(String(data?.status || '').toUpperCase()) ||
-            ['COMPLETED', 'PAID'].includes(String(data?.paymentStatus || '').toUpperCase());
+      const channelName = `ultimate_checkout_${orderId}_${Math.random().toString(36).substring(7)}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sales',
+            filter: `id=eq.${orderId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const data = payload.new as any;
+              const isPaid =
+                data?.isPaid === true ||
+                data?.paid === true ||
+                ['COMPLETED', 'PAID', 'SUCCESS'].includes(String(data?.status || '').toUpperCase()) ||
+                ['COMPLETED', 'PAID'].includes(String(data?.payment_status || '').toUpperCase());
 
-          if (isPaid && currentStep !== 'STEP_3') {
-            console.log('[S WEBHOOK DETECTED] Paiement validé par le Webhook !', data);
-            setIsProcessingPayment(false);
-            const successDetails: PaymentSuccessDetails = {
-              transactionId: data?.transactionId || orderId,
-              orderId,
-              amount: data?.amountPaid || finalTotal,
-              currency,
-              customerName: customerName.trim(),
-              phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
-              deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
-              customerEmail: customerEmail.trim() || undefined,
-              paymentMethod: 'MOBILE_MONEY',
-              country: selectedCountry,
-              operator: selectedOperator,
-              timestamp: Date.now(),
-              status: 'PAID'
-            };
+              if (isPaid && currentStep !== 'STEP_3') {
+                console.log('[S WEBHOOK DETECTED] Paiement validé par le Webhook Supabase !', data);
+                setIsProcessingPayment(false);
+                const successDetails: PaymentSuccessDetails = {
+                  transactionId: data?.transaction_id || data?.id || orderId,
+                  orderId,
+                  amount: data?.amount_paid || finalTotal,
+                  currency,
+                  customerName: customerName.trim(),
+                  phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
+                  deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
+                  customerEmail: customerEmail.trim() || undefined,
+                  paymentMethod: 'MOBILE_MONEY',
+                  country: selectedCountry,
+                  operator: selectedOperator,
+                  timestamp: Date.now(),
+                  status: 'PAID'
+                };
 
-            setCompletedDetails(successDetails);
-            setCurrentStep('STEP_3');
-            playCashChime();
-            if (onSuccess) onSuccess(successDetails);
-          } else {
-            const isFailedOrCancelled =
-              ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED'].includes(String(data?.status || '').toUpperCase()) ||
-              ['FAILED', 'CANCELLED', 'CANCELED'].includes(String(data?.paymentStatus || '').toUpperCase());
+                setCompletedDetails(successDetails);
+                setCurrentStep('STEP_3');
+                playCashChime();
+                if (onSuccess) onSuccess(successDetails);
+              } else {
+                const isFailedOrCancelled =
+                  ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED'].includes(String(data?.status || '').toUpperCase()) ||
+                  ['FAILED', 'CANCELLED', 'CANCELED'].includes(String(data?.payment_status || '').toUpperCase());
 
-            if (isFailedOrCancelled && isProcessingPayment) {
-              setIsProcessingPayment(false);
-              const isCanc = String(data?.status || '').toUpperCase().includes('CANCEL');
-              setPaymentError(
-                isCanc
-                  ? 'Transaction annulée par l\'utilisateur ou par l\'opérateur.'
-                  : (data?.error || 'Le paiement a échoué. Veuillez vérifier votre solde ou réessayer.')
-              );
-              playCancelSound();
+                if (isFailedOrCancelled && isProcessingPayment) {
+                  setIsProcessingPayment(false);
+                  const isCanc = String(data?.status || '').toUpperCase().includes('CANCEL');
+                  setPaymentError(
+                    isCanc
+                      ? 'Transaction annulée par l\'utilisateur ou par l\'opérateur.'
+                      : (data?.error || 'Le paiement a échoué. Veuillez vérifier votre solde ou réessayer.')
+                  );
+                  playCancelSound();
+                }
+              }
             }
           }
-        }
-      }, (err) => {
-        console.warn('[FIRESTORE LISTENER] Webhook snapshot note :', err.message);
-      });
+        )
+        .subscribe();
     } catch (e) {
-      console.warn('[FIRESTORE ATTACH] Erreur attachement :', e);
+      console.warn('[REALTIME ATTACH] Erreur attachement :', e);
     }
 
     return () => {
-      if (unsub) unsub();
+      if (channel) supabase.removeChannel(channel);
     };
   }, [orderId, isProcessingPayment, currentStep, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, onSuccess]);
 
