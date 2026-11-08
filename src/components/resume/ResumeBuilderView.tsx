@@ -317,7 +317,8 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
 
       incrementGeneratedDocumentsCount(currentUser?.storeId);
       playCashChime();
-      setExportToast('✓ CV Haute Définition téléchargé avec succès !');
+      const sizeMsg = result.formattedSize ? ` (${result.formattedSize})` : '';
+      setExportToast(`✓ CV Couleur HD téléchargé avec succès${sizeMsg} !`);
       setTimeout(() => setExportToast(null), 4000);
     } catch (err: any) {
       console.warn('[CV EXPORT HD] Notification d\'incident export direct :', err);

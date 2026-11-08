@@ -1847,36 +1847,43 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         return;
       }
 
-      const isUnderConstruction = Boolean(
-        official.isUnderConstruction ||
+      // Exclusion stricte : Ne plus afficher dans l'Omnibar les modules en cours de développement
+      const isExcludedFromOmnibar = Boolean(
         idLower === 'nana-switch' ||
         idLower === 'crm-automation' ||
         idLower === 'wameet' ||
         idLower === 'app-wameet' ||
         idLower === 'srv-nana-switch' ||
-        idLower === 'srv-crm-automation'
+        idLower === 'srv-crm-automation' ||
+        idLower.includes('crm-automation') ||
+        titleLower.includes('wameet') ||
+        titleLower.includes('crm et automation') ||
+        titleLower.includes('crm & automation')
       );
-      const active = isUnderConstruction ? false : isModuleActive(official.id);
+      if (isExcludedFromOmnibar) {
+        return; // Ne l'affiche même plus dans l'Omnibar
+      }
+
+      const active = isModuleActive(official.id);
       officialCatalogCards.push({
         id: official.id,
         title: official.name, // NOM D'ORIGINE EXACT RESTAURÉ
         subtitle: official.category,
         category: official.category,
         description: official.description,
-        palmares: isUnderConstruction ? '🚧 En construction' : (active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible')),
-        trialBadge: isUnderConstruction ? 'En construction' : (active ? 'Actif' : 'Prêt à l\'emploi'),
+        palmares: active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible'),
+        trialBadge: active ? 'Actif' : 'Prêt à l\'emploi',
         mediaUrl: getCardMediaUrl(official),
         mediaType: 'image' as const,
         routeUrl: official.route,
         targetView: official.view,
         taxonomyType: official.taxonomy === 'APPLICATION' ? 'Application' : official.taxonomy === 'SERVICE' ? 'Service' : official.taxonomy === 'MODULE' ? 'Module' : 'Outil',
-        badge: isUnderConstruction ? '🚧 EN CONSTRUCTION' : official.taxonomy,
+        badge: official.taxonomy,
         isRootApp: official.id === 'app-pos',
         linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'tool-scanner'] : [],
         keywords: official.keywords || [],
         isOfficialCatalog: true,
-        isActive: active,
-        isUnderConstruction
+        isActive: active
       });
     });
 
@@ -1885,6 +1892,21 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     APPS_REGISTRY.forEach((app) => {
       const idLower = app.id.toLowerCase();
       const titleLower = app.appName.toLowerCase().trim();
+
+      // Exclusion stricte de l'Omnibar
+      const isExcluded = Boolean(
+        idLower === 'nana-switch' ||
+        idLower === 'crm-automation' ||
+        idLower === 'wameet' ||
+        idLower === 'app-wameet' ||
+        idLower === 'srv-nana-switch' ||
+        idLower === 'srv-crm-automation' ||
+        idLower.includes('crm-automation') ||
+        titleLower.includes('wameet') ||
+        titleLower.includes('crm et automation') ||
+        titleLower.includes('crm & automation')
+      );
+      if (isExcluded) return;
 
       if (publishedIds.has(idLower) || publishedTitles.has(titleLower)) return;
       if (officialCatalogCards.some(c => c.id.toLowerCase() === idLower || c.title.toLowerCase().trim() === titleLower)) return;
@@ -1910,9 +1932,26 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       });
     });
 
-    // Fusion unifiée : Cartes Block Builder (priorité écrasante) + Catalogue officiel 27 + Catalogue étendu
+    // Fusion unifiée : Cartes Block Builder filtrées + Catalogue officiel + Catalogue étendu
+    const filteredRtdbCards = rtdbCardsWithContext.filter(c => {
+      const idL = String(c.id || '').toLowerCase();
+      const titleL = String(c.title || '').toLowerCase();
+      return !(
+        idL === 'nana-switch' ||
+        idL === 'crm-automation' ||
+        idL === 'wameet' ||
+        idL === 'app-wameet' ||
+        idL === 'srv-nana-switch' ||
+        idL === 'srv-crm-automation' ||
+        idL.includes('crm-automation') ||
+        titleL.includes('wameet') ||
+        titleL.includes('crm et automation') ||
+        titleL.includes('crm & automation')
+      );
+    });
+
     const allAvailableCards: any[] = [
-      ...rtdbCardsWithContext,
+      ...filteredRtdbCards,
       ...officialCatalogCards,
       ...registryCards
     ];
