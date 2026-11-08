@@ -354,7 +354,7 @@ export async function savePlatformPricingToSupabase(
             .upsert({
               code: p.id.toUpperCase(),
               name: p.name,
-              subscription_price_monthly: p.priceMonthly || 0,
+              subscription_price_monthly: (p as any).priceMonthly ?? p.price ?? (p as any).monthlyPriceFCFA ?? 0,
               currency: p.currency || 'XOF',
               features: p.features || [],
               is_active: true,

@@ -28,10 +28,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/payment-service ./payment-service
 
+# Ports réseau : Render utilise 10000 par défaut, les environnements locaux/VPS utilisent 3000
+ENV PORT=10000
+EXPOSE 10000
 EXPOSE 3000
 
-# Healthcheck natif Docker pour orchestration VPS / Conteneur
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
+# Healthcheck natif Docker multi-ports (teste 10000 puis fallback 3000)
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:10000/health || wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
 CMD ["node", "--max-old-space-size=512", "dist/server.cjs"]

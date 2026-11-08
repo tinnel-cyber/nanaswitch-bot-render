@@ -241,6 +241,50 @@ async function startServer() {
     }
   });
 
+  // Route Supabase Tarifs Landing Page (lecture dynamique sans données injectées périmées)
+  app.get('/api/landing-pricing', async (_req, res) => {
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      const { data, error } = await supabase
+        .from('landing_pricing_config')
+        .select('*')
+        .eq('id', 'current')
+        .maybeSingle();
+
+      if (!error && data?.plans) {
+        return res.json({ success: true, pricingSection: data });
+      }
+      return res.json({ success: false, error: error?.message || 'Configuration non trouvée' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Sauvegarde / publication des tarifs dynamiques vers Supabase
+  app.post('/api/landing-pricing', async (req, res) => {
+    try {
+      const { pricingSection, author } = req.body;
+      const { supabase } = await import('./app/utils/supabase.server');
+      const { data, error } = await supabase
+        .from('landing_pricing_config')
+        .upsert({
+          id: 'current',
+          ...(pricingSection || {}),
+          updated_by: author || 'Super-Admin',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      return res.json({ success: true, pricingSection: data });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // API Produits Supabase (Gestion des stocks Nanasore)
   app.get('/api/products', async (req, res) => {
     try {
@@ -3150,6 +3194,24 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Nana Server with Gemini AI & Smart Haggle WebSocket running on http://0.0.0.0:${PORT}`);
   });
+
+  // Dual-bind: si Render ou Docker écoute sur PORT (ex: 10000), écouter également sur le port 3000
+  // pour garantir le passage immédiat des port-scanners et healthchecks Docker/Render
+  if (PORT !== 3000) {
+    try {
+      const mirrorServer = http.createServer(app);
+      mirrorServer.listen(3000, '0.0.0.0', () => {
+        console.log(`Nana Server dual-bind fallback running on http://0.0.0.0:3000`);
+      });
+      mirrorServer.on('error', (err: any) => {
+        if (err.code !== 'EADDRINUSE') {
+          console.warn('Dual-bind port 3000 notice:', err.message);
+        }
+      });
+    } catch (e) {
+      // Ignorer si 3000 n'est pas disponible
+    }
+  }
 }
 
 startServer();
