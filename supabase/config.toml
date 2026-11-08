@@ -1,0 +1,15 @@
+
+[functions.hello-world]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/hello-world/index.ts"
+
+[functions.payment-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/payment-webhook/index.ts"
+
+[functions.email-campaign]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/email-campaign/index.ts"
