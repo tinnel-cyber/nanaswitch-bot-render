@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StoreUser, StoreApprovalStatus } from '../../types';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { supabase } from '@/lib/supabase';
 import { updateStoreApprovalStatus } from '../../utils/firestoreService';
 import { 
   Clock, 
@@ -63,11 +64,68 @@ export const StorePendingApprovalScreen: React.FC<StorePendingApprovalScreenProp
     return null;
   }
 
-  // Écouteur Firestore en temps réel sur le document de la boutique
+  // Écouteur Supabase Realtime & Firestore pour le déblocage instantané du marchand
   useEffect(() => {
     if (!safeStoreId) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'stores', safeStoreId), (snapshot) => {
+    let isSubscribed = true;
+
+    // 1. Supabase Initial Check
+    supabase
+      .from('verification_requests')
+      .select('status')
+      .or(`tenant_id.eq.${safeStoreId},user_id.eq.${currentUser?.id || safeStoreId}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (isSubscribed && data?.status === 'approved') {
+          playValidationBeep();
+          triggerApproved();
+        }
+      })
+      .catch(console.warn);
+
+    // 2. Supabase Realtime Channel
+    const channelName = `kyc_approval_${safeStoreId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'verification_requests',
+        },
+        (payload) => {
+          if (!isSubscribed) return;
+          const rec = payload.new as any;
+          if (rec && (rec.tenant_id === safeStoreId || rec.user_id === currentUser?.id) && rec.status === 'approved') {
+            playValidationBeep();
+            triggerApproved();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          if (!isSubscribed) return;
+          const rec = payload.new as any;
+          if (rec && (rec.id === safeStoreId || rec.firebase_uid === currentUser?.uid) && (rec.kyc_status === 'verified' || rec.kyc_status === 'approved')) {
+            playValidationBeep();
+            triggerApproved();
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Fallback Firestore
+    const unsubscribeFirestore = onSnapshot(doc(db, 'stores', safeStoreId), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         if (data.status === 'APPROVED' || data.approval?.status === 'APPROVED') {
@@ -77,8 +135,12 @@ export const StorePendingApprovalScreen: React.FC<StorePendingApprovalScreenProp
       }
     });
 
-    return () => unsubscribe();
-  }, [safeStoreId]);
+    return () => {
+      isSubscribed = false;
+      supabase.removeChannel(channel);
+      unsubscribeFirestore();
+    };
+  }, [safeStoreId, currentUser]);
 
   const handleManualCheck = () => {
     playTapBeep();
