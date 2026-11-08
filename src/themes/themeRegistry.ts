@@ -108,7 +108,7 @@ export const AVAILABLE_THEMES: ThemeDefinition[] = [
   {
     id: 'theme-mega-store-pro',
     name: 'Mega-Store Pro',
-    subtitle: 'Marketplace Haute Densité (Amazon / Shopify)',
+    subtitle: 'Marketplace Haute Densité (Amazon & Grands Catalogues)',
     description: 'Structure retail haute densité pour gros catalogues. Header 3 niveaux avec barre de recherche géante et menu déroulant de catégories intégré, navigation verticale avec Mega-Menu déroulant et Hero asymétrique 70/30.',
     badge: 'Nouveau',
     version: '1.0.0',
@@ -181,7 +181,7 @@ export const AVAILABLE_THEMES: ThemeDefinition[] = [
     id: 'theme-grid',
     name: 'Catalogue Grand Angle',
     subtitle: 'Grille Immersive Haute Densité',
-    description: 'Inspiré des plus grandes marketplaces internationales (Shopify, ASOS, Zara). Navigation fluide à facettes, fiches produits maximisées et filtres instantanés.',
+    description: 'Inspiré des plus grandes marketplaces internationales (ASOS, Zara). Navigation fluide à facettes, fiches produits maximisées et filtres instantanés.',
     badge: 'Nouveau',
     version: '1.0.0',
     previewMockup: 'grid',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Check, Sparkles, Layout, Smartphone, CheckCircle2, 
+  X, Check, Milestone, Layout, Smartphone, CheckCircle2, 
   ExternalLink, Palette, ShieldCheck, Eye, Layers, ArrowRight, RefreshCw 
 } from 'lucide-react';
 import { AVAILABLE_THEMES, DEFAULT_THEME_ID } from '../../themes/themeRegistry';
@@ -914,12 +914,12 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
 
           {/* Encart explicatif sur l'architecture multi-thèmes */}
           <div className="rounded-2xl p-4 bg-slate-950/60 border border-slate-800 flex items-start gap-3">
-            <div className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="w-7 h-7 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5" title="Signe de sens">
+              <Milestone className="w-3.5 h-3.5" />
             </div>
             <div className="space-y-0.5 text-xs">
               <span className="font-black text-white">
-                Véritable architecture multi-layouts (Standards Shopify)
+                Véritable architecture multi-layouts
               </span>
               <p className="text-slate-400 leading-relaxed text-[11px]">
                 Chaque thème redéfinit la structure complète d'affichage de la boutique, le comportement des rayons et l'immersion des visiteurs. Vos produits, votre panier et vos paiements Wameet restent 100% synchronisés quel que soit le thème sélectionné.
