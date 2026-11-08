@@ -1037,13 +1037,16 @@ export function calculateModularPrice(
   savings: number;
   modulesIncluded: string[];
 } {
-  const normPlan = normalizePlanId(planId);
-  const bundleFullPrice = normPlan === 'business' ? 30000 : normPlan === 'elite' ? 60000 : 15000;
+  const norm = String(planId || '').toLowerCase().trim();
+  const isElite = norm.includes('elite') || norm.includes('enterprise');
+  const isBusiness = norm.includes('business') || norm === 'pro' || norm === 'plan-business';
+  const bundleFullPrice = isElite ? 60000 : isBusiness ? 30000 : 15000;
+  const pTier = isElite ? 'enterprise' : isBusiness ? 'business' : 'starter';
 
   // Si tout est coché ou rien n'est coché (défaut = tout)
   if (selectedPillars.length === 3 || selectedPillars.length === 0) {
     const rawSum = MODULAR_PILLARS.reduce((sum, p) => {
-      const pPrice = normPlan === 'business' ? p.businessPrice : normPlan === 'elite' ? p.enterprisePrice : p.starterPrice;
+      const pPrice = pTier === 'enterprise' ? p.enterprisePrice : pTier === 'business' ? p.businessPrice : p.starterPrice;
       return sum + pPrice;
     }, 0);
     return {
@@ -1059,7 +1062,7 @@ export function calculateModularPrice(
   selectedPillars.forEach(pillarId => {
     const pillar = MODULAR_PILLARS.find(p => p.id === pillarId);
     if (pillar) {
-      const pPrice = normPlan === 'business' ? pillar.businessPrice : normPlan === 'elite' ? pillar.enterprisePrice : pillar.starterPrice;
+      const pPrice = pTier === 'enterprise' ? pillar.enterprisePrice : pTier === 'business' ? pillar.businessPrice : pillar.starterPrice;
       sumPrice += pPrice;
       modules.push(...pillar.includedModules);
     }

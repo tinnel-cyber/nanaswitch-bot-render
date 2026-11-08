@@ -213,7 +213,7 @@ export interface CentralMasterHubViewProps {
   onOpenDocuSign?: (title?: string) => void;
   onLockSession?: () => void;
   onNavigateToCatalog?: () => void;
-  onOpenUpgrade?: () => void;
+  onOpenUpgrade?: (planId?: string) => void;
   onOpenAcademy?: () => void;
 }
 
@@ -1713,13 +1713,12 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
               type="button"
               onClick={() => {
                 playTapBeep();
-                // 1. Déclencher l'ouverture de la grille tarifaire des forfaits
+                // 1. Déclencher l'ouverture de la grille tarifaire des forfaits (Plan Pro canonique = starter à 15 000 F CFA)
                 if (onOpenUpgrade) {
-                  onOpenUpgrade();
-                } else {
-                  window.dispatchEvent(new CustomEvent('nana_open_paywall_modal', { detail: { targetPlanId: 'pro', reason: 'UPGRADE_PRO' } }));
+                  onOpenUpgrade('starter');
                 }
-                window.dispatchEvent(new CustomEvent('nanasore_open_subscription_plans'));
+                window.dispatchEvent(new CustomEvent('nana_open_paywall_modal', { detail: { targetPlanId: 'starter', reason: 'UPGRADE_PRO' } }));
+                window.dispatchEvent(new CustomEvent('nanasore_open_subscription_plans', { detail: { targetPlanId: 'starter' } }));
                 // 2. Si pas de compte ouvert ou gérant invité, orienter vers l'ouverture de compte / KYC
                 const isNoAccount = !currentUser || !currentUser.id || currentUser.id === 'user_default' || !currentUser.email;
                 if (isNoAccount) {

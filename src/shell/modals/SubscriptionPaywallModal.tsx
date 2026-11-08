@@ -12,6 +12,7 @@ import {
   updateStoreSubscription,
   subscribeToPlatformSubscriptions,
   DEFAULT_PLATFORM_SUBSCRIPTIONS,
+  sanitizePlatformSubscriptions,
 } from '../../utils/firestoreService';
 import { getSuperAdminPlatformConfig, isSuperAdminLocally } from '../../services/superAdminService';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
@@ -113,14 +114,27 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     lastAmountPaid: 0,
   };
 
+  // Normalise l'ID de plan canonique (Plan Pro = 'starter' à 15 000 F CFA)
+  const resolveCanonicalPlanId = (id?: string) => {
+    if (!id) return 'starter';
+    const norm = id.toLowerCase().trim();
+    if (norm === 'pro' || norm === 'starter' || norm === 'plan-pro') return 'starter';
+    if (norm === 'business' || norm === 'plan-business') return 'pro';
+    if (norm === 'enterprise' || norm === 'elite' || norm === 'plan-enterprise') return 'elite';
+    if (norm === 'free' || norm === 'zero' || norm === 'freemium') return 'free';
+    return norm;
+  };
+
   // État du tunnel de conversion (Funnel State Machine)
   const [funnelStep, setFunnelStep] = useState<SubscriptionFunnelStep>('PLAN_SELECTION');
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const [downsellAccepted, setDownsellAccepted] = useState<boolean>(false);
 
-  // Configuration dynamique des formules (priorité absolue Super Admin RTDB / LocalStorage)
-  const [platformConfig, setPlatformConfig] = useState<PlatformSubscriptionConfig>(() => getSuperAdminPlatformConfig());
-  const [selectedPlanId, setSelectedPlanId] = useState<string>(initialPlanId || 'pro');
+  // Configuration dynamique des formules strictement assainie avec les normes officielles
+  const [platformConfig, setPlatformConfig] = useState<PlatformSubscriptionConfig>(() => 
+    sanitizePlatformSubscriptions(getSuperAdminPlatformConfig())
+  );
+  const [selectedPlanId, setSelectedPlanId] = useState<string>(() => resolveCanonicalPlanId(initialPlanId));
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -133,10 +147,11 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   // Écouteur temps réel sur platform_settings/subscriptions
   useEffect(() => {
     const unsub = subscribeToPlatformSubscriptions((config) => {
-      setPlatformConfig(config);
-      if (config.plans && config.plans.length > 0) {
-        if (!config.plans.some(p => p.id === selectedPlanId)) {
-          setSelectedPlanId(initialPlanId || config.plans[0].id);
+      const sanitized = sanitizePlatformSubscriptions(config);
+      setPlatformConfig(sanitized);
+      if (sanitized.plans && sanitized.plans.length > 0) {
+        if (!sanitized.plans.some(p => p.id === selectedPlanId)) {
+          setSelectedPlanId(resolveCanonicalPlanId(initialPlanId) || sanitized.plans[0].id);
         }
       }
     });
@@ -146,7 +161,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   // Écouteur direct des mises à jour Super Admin en temps réel
   useEffect(() => {
     const handleSuperAdminUpdate = () => {
-      const cfg = getSuperAdminPlatformConfig();
+      const cfg = sanitizePlatformSubscriptions(getSuperAdminPlatformConfig());
       setPlatformConfig(cfg);
     };
     window.addEventListener('superAdminUpdated', handleSuperAdminUpdate);
@@ -191,7 +206,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     if (isOpen) {
       modalOpenedTimestampRef.current = Date.now();
       if (initialPlanId) {
-        setSelectedPlanId(initialPlanId);
+        setSelectedPlanId(resolveCanonicalPlanId(initialPlanId));
       }
       setSelectedPillars(['caisse_pos', 'vitrine_web', 'formateur_lms']);
       setFunnelStep('PLAN_SELECTION');
@@ -225,6 +240,13 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   const currentPlan = platformConfig.plans.find(p => p.id === selectedPlanId) || platformConfig.plans[0];
 
   // Calcul dynamique du prix selon les piliers modulaires cochés
+  const isBusinessTier = selectedPlanId === 'business' || selectedPlanId === 'pro';
+  const isEliteTier = selectedPlanId === 'elite' || selectedPlanId === 'enterprise';
+  const modularCaissePrice = isEliteTier ? 20000 : isBusinessTier ? 10000 : 5000;
+  const modularVitrinePrice = isEliteTier ? 20000 : isBusinessTier ? 10000 : 5000;
+  const modularFormateurPrice = isEliteTier ? 40000 : isBusinessTier ? 20000 : 10000;
+  const modularBundleSavings = isEliteTier ? 20000 : isBusinessTier ? 10000 : 5000;
+
   const modularCalculation = useMemo(() => {
     if (currentPlan.price === 0 || currentPlan.id === 'free') {
       return {
@@ -652,7 +674,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         <span className="text-xs font-bold text-white">🏪 La Caisse et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
-                        {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
+                        {formatCFA(modularCaissePrice)}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 leading-snug">
@@ -680,7 +702,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         <span className="text-xs font-bold text-white">🌐 La Vitrine et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
-                        {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)}
+                        {formatCFA(modularVitrinePrice)}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 leading-snug">
@@ -708,7 +730,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                         <span className="text-xs font-bold text-white">🎓 Formateur et ses modules uniquement</span>
                       </div>
                       <span className="text-[11px] font-black text-amber-300">
-                        {formatCFA(selectedPlanId === 'business' ? 20000 : selectedPlanId === 'elite' ? 40000 : 10000)}
+                        {formatCFA(modularFormateurPrice)}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 leading-snug">
@@ -727,7 +749,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                       </span>
                       {isAllPillarsSelected && (
                         <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30">
-                          Bundle Complet (Économie {formatCFA(selectedPlanId === 'business' ? 10000 : selectedPlanId === 'elite' ? 20000 : 5000)})
+                          Bundle Complet (Économie {formatCFA(modularBundleSavings)})
                         </span>
                       )}
                     </div>

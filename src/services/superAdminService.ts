@@ -14,7 +14,7 @@ import {
   LandingPageConfig,
   SubscriptionPlanConfig
 } from '../types';
-import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData } from '../utils/firestoreService';
+import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 import { auth, db, RTDB_DEFAULT_URL } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -349,6 +349,14 @@ export function getSuperAdminSettingsLocal(): SuperAdminSettings {
           if (isDemoPhone(parsed.paymentRouting.waveNumber)) parsed.paymentRouting.waveNumber = '';
           if (isDemoPhone(parsed.paymentRouting.mtnNumber)) parsed.paymentRouting.mtnNumber = '';
         }
+        if (parsed.platformConfig) {
+          parsed.platformConfig = sanitizePlatformSubscriptions(parsed.platformConfig);
+          if (raw.includes('4900') || raw.includes('Caisse & Lancement')) {
+            try {
+              localStorage.setItem(LOCAL_SUPER_ADMIN_KEY, JSON.stringify(parsed));
+            } catch {}
+          }
+        }
         memoryCache = parsed;
         return parsed;
       }
@@ -500,7 +508,7 @@ export function getSuperAdminPlanLimits(planId: string): any {
 export function getSuperAdminPlatformConfig(): PlatformSubscriptionConfig {
   const settings = getSuperAdminSettingsLocal();
   if (settings?.platformConfig && Array.isArray(settings.platformConfig.plans) && settings.platformConfig.plans.length > 0) {
-    return settings.platformConfig;
+    return sanitizePlatformSubscriptions(settings.platformConfig);
   }
   return DEFAULT_PLATFORM_SUBSCRIPTIONS;
 }
@@ -522,7 +530,7 @@ export function getSuperAdminCentralPaymentConfig(): CentralPaymentConfig {
 export function getSuperAdminPlans(): SubscriptionPlanConfig[] {
   const settings = getSuperAdminSettingsLocal();
   if (settings?.platformConfig?.plans && Array.isArray(settings.platformConfig.plans) && settings.platformConfig.plans.length > 0) {
-    return settings.platformConfig.plans;
+    return sanitizePlatformSubscriptions(settings.platformConfig).plans;
   }
   return DEFAULT_PLATFORM_SUBSCRIPTIONS.plans;
 }

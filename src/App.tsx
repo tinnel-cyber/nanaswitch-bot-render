@@ -6233,7 +6233,10 @@ export default function App() {
                       window.history.pushState({}, '', '/studio');
                     }
                   }}
-                  onOpenUpgrade={() => setIsPaywallModalOpen(true)}
+                  onOpenUpgrade={(planId?: string) => {
+                    setSelectedCheckoutPlanId(planId || 'starter');
+                    setIsPaywallModalOpen(true);
+                  }}
                   onBack={() => {
                     setCurrentView('MASTER_HUB');
                     if (typeof window !== 'undefined') {
@@ -6530,7 +6533,10 @@ export default function App() {
                 <CentralMasterHubView
                   currentUser={currentUser}
                   subscription={subscription}
-                  onOpenUpgrade={() => setIsPaywallModalOpen(true)}
+                  onOpenUpgrade={(planId?: string) => {
+                    setSelectedCheckoutPlanId(planId || 'starter');
+                    setIsPaywallModalOpen(true);
+                  }}
                   onOpenAcademy={() => setIsAcademyDrawerOpen(true)}
                   sales={salesHistory}
                   inventory={inventory}

@@ -2092,20 +2092,87 @@ export const DEFAULT_PLATFORM_SUBSCRIPTIONS: PlatformSubscriptionConfig = {
   }
 };
 
+export function sanitizePlatformSubscriptions(config?: Partial<PlatformSubscriptionConfig> | null): PlatformSubscriptionConfig {
+  const fallback = DEFAULT_PLATFORM_SUBSCRIPTIONS;
+  if (!config || !Array.isArray(config.plans) || config.plans.length === 0) {
+    return fallback;
+  }
+
+  const hasLegacyStale = config.plans.some(p => 
+    p.price === 4900 || p.price === 9900 || p.price === 19900 ||
+    p.name?.includes('Caisse & Lancement') || p.name?.includes('Grands Comptes')
+  );
+
+  if (hasLegacyStale) {
+    return {
+      ...fallback,
+      paymentSettings: config.paymentSettings || fallback.paymentSettings
+    };
+  }
+
+  const canonicalPlans = fallback.plans.map(officialPlan => {
+    const match = config.plans!.find(p => p.id?.toLowerCase().trim() === officialPlan.id?.toLowerCase().trim());
+    if (!match) return officialPlan;
+
+    if (officialPlan.id === 'free') {
+      return officialPlan;
+    }
+
+    const isObsoletePrice = match.price === 4900 || match.price === 9900 || match.price === 19900;
+    const finalPrice = isObsoletePrice ? officialPlan.price : (typeof match.price === 'number' && match.price > 0 ? match.price : officialPlan.price);
+
+    return {
+      ...officialPlan,
+      ...match,
+      id: officialPlan.id,
+      name: isObsoletePrice ? officialPlan.name : (match.name || officialPlan.name),
+      price: finalPrice,
+      period: match.period || officialPlan.period,
+      badge: match.badge || officialPlan.badge,
+      description: isObsoletePrice ? officialPlan.description : (match.description || officialPlan.description),
+      features: (match.features && match.features.length >= 5 && !isObsoletePrice) ? match.features : officialPlan.features,
+      limits: {
+        ...officialPlan.limits,
+        ...(match.limits || {})
+      }
+    };
+  });
+
+  return {
+    plans: canonicalPlans,
+    paymentSettings: config.paymentSettings || fallback.paymentSettings,
+    updatedAt: config.updatedAt,
+    updatedBy: config.updatedBy
+  };
+}
+
 function getLocalSuperAdminFallbackSubscriptions(): PlatformSubscriptionConfig {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('nana_super_admin_settings') : null;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed?.platformConfig?.plans && parsed.platformConfig.plans.length > 0) {
-        return parsed.platformConfig;
+        const sanitized = sanitizePlatformSubscriptions(parsed.platformConfig);
+        if (raw.includes('4900') || raw.includes('Caisse & Lancement')) {
+          try {
+            parsed.platformConfig = sanitized;
+            localStorage.setItem('nana_super_admin_settings', JSON.stringify(parsed));
+          } catch {}
+        }
+        return sanitized;
       }
     }
     const rawSub = typeof window !== 'undefined' ? localStorage.getItem('nana_platform_subscriptions') : null;
     if (rawSub) {
       const parsedSub = JSON.parse(rawSub);
       if (parsedSub?.plans && parsedSub.plans.length > 0) {
-        return parsedSub;
+        const sanitizedSub = sanitizePlatformSubscriptions(parsedSub);
+        if (rawSub.includes('4900') || rawSub.includes('Caisse & Lancement')) {
+          try {
+            localStorage.setItem('nana_platform_subscriptions', JSON.stringify(sanitizedSub));
+          } catch {}
+        }
+        return sanitizedSub;
       }
     }
   } catch {}
@@ -2141,19 +2208,8 @@ export async function getPlatformSubscriptions(): Promise<PlatformSubscriptionCo
     const docSnap = await getDoc(doc(db, 'platform_settings', 'subscriptions'));
     if (docSnap.exists()) {
       const data = docSnap.data() as Partial<PlatformSubscriptionConfig>;
-      return {
-        plans: data.plans && data.plans.length > 0 ? data.plans : fallback.plans,
-        paymentSettings: {
-          scrollingMarquee: data.paymentSettings?.scrollingMarquee || fallback.paymentSettings.scrollingMarquee,
-          supportW: data.paymentSettings?.supportW || fallback.paymentSettings.supportW,
-          checkoutInstructions: data.paymentSettings?.checkoutInstructions || fallback.paymentSettings.checkoutInstructions,
-          operators: data.paymentSettings?.operators && data.paymentSettings.operators.length > 0
-            ? data.paymentSettings.operators
-            : fallback.paymentSettings.operators,
-        },
-        updatedAt: data.updatedAt,
-        updatedBy: data.updatedBy,
-      };
+      const sanitized = sanitizePlatformSubscriptions(data);
+      return sanitized;
     }
   } catch (e) {
     console.warn('[FIRESTORE] getPlatformSubscriptions error :', e);
@@ -2333,20 +2389,16 @@ export function subscribeToPlatformSubscriptions(
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data() as Partial<PlatformSubscriptionConfig>;
-          const currentFallback = getLocalSuperAdminFallbackSubscriptions();
-          onUpdate({
-            plans: data.plans && data.plans.length > 0 ? data.plans : currentFallback.plans,
-            paymentSettings: {
-              scrollingMarquee: data.paymentSettings?.scrollingMarquee || currentFallback.paymentSettings.scrollingMarquee,
-              supportW: data.paymentSettings?.supportW || currentFallback.paymentSettings.supportW,
-              checkoutInstructions: data.paymentSettings?.checkoutInstructions || currentFallback.paymentSettings.checkoutInstructions,
-              operators: data.paymentSettings?.operators && data.paymentSettings.operators.length > 0
-                ? data.paymentSettings.operators
-                : currentFallback.paymentSettings.operators,
-            },
-            updatedAt: data.updatedAt,
-            updatedBy: data.updatedBy,
-          });
+          const sanitized = sanitizePlatformSubscriptions(data);
+          onUpdate(sanitized);
+
+          // Si des anciens tarifs obsolètes 4900/9900/19900 étaient encore présents dans Firestore, les réparer automatiquement
+          if (data.plans && Array.isArray(data.plans)) {
+            const hasStale = data.plans.some((p: any) => p.price === 4900 || p.price === 9900 || p.price === 19900);
+            if (hasStale) {
+              setDoc(doc(db, 'platform_settings', 'subscriptions'), sanitized, { merge: true }).catch(() => {});
+            }
+          }
         } else {
           onUpdate(getLocalSuperAdminFallbackSubscriptions());
         }
