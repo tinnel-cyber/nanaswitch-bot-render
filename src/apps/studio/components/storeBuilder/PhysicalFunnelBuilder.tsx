@@ -52,7 +52,6 @@ import {
   Video,
   Crown,
   Play,
-  Zap,
   ShoppingBag,
   Tv,
   Package,
@@ -68,6 +67,7 @@ import {
   DEFAULT_PHYSICAL_FUNNEL_BLOCKS
 } from '../../../../types/physicalFunnel';
 import { ImageUploadInput } from '../../../../components/common/ImageUploadInput';
+import MiniMarketDrawer from '../../../../components/funnel/MiniMarketDrawer';
 import {
   DEFAULT_DELIVERY_OPTIONS,
   DEFAULT_ORDER_BUMP,
@@ -125,6 +125,7 @@ const SortableBlockRow: React.FC<SortableBlockRowProps> = ({
       case 'CUSTOMER_REVIEWS': return <Star className="w-3.5 h-3.5 text-amber-300" />;
       case 'FLASH_LIVE_CTA': return <Radio className="w-3.5 h-3.5 text-pink-400" />;
       case 'AUTOPLAY_VIDEO': return <Video className="w-3.5 h-3.5 text-violet-400" />;
+      case 'MINI_MARKET_DRAWER': return <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />;
       default: return <Layers className="w-3.5 h-3.5 text-slate-400" />;
     }
   };
@@ -245,6 +246,7 @@ export const PhysicalFunnelBuilder: React.FC<{
   const [selectedBlockId, setSelectedBlockId] = useState<string>(funnelConfig.blocks[0]?.id || 'block-hero');
   const [devicePreview, setDevicePreview] = useState<'DESKTOP' | 'MOBILE'>('DESKTOP');
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isMiniMarketPreviewOpen, setIsMiniMarketPreviewOpen] = useState(false);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
 
   const brandColor = funnelConfig.brandColor || '#10b981';
@@ -352,7 +354,8 @@ export const PhysicalFunnelBuilder: React.FC<{
       INLINE_CHECKOUT: 'Caisse Geo-Routée Intégrée',
       BENEFITS_LIST: 'Liste d\'Avantages AIDA',
       CUSTOMER_REVIEWS: 'Avis Clients Vérifiés',
-      AUTOPLAY_VIDEO: 'Vidéo Autoplay Silencieuse (Boucle CDN)'
+      AUTOPLAY_VIDEO: 'Vidéo Autoplay Silencieuse (Boucle CDN)',
+      MINI_MARKET_DRAWER: 'Mini-Market Express (Auto-composition)'
     };
 
     const defaultPropsByType: Record<PhysicalFunnelBlockType, Record<string, any>> = {
@@ -455,6 +458,13 @@ export const PhysicalFunnelBuilder: React.FC<{
         aspectRatio: '16/9',
         borderRadius: 'rounded-2xl',
         maxWidth: 'max-w-4xl'
+      },
+      MINI_MARKET_DRAWER: {
+        buttonText: 'Explorer le Mini-Market',
+        badgeText: 'Auto-composition',
+        headline: 'Complétez votre commande avec le Mini-Market',
+        subheadline: 'Ajoutez des articles et accessoires complémentaires directement.',
+        floatingButtonEnabled: true
       }
     };
 
@@ -1386,6 +1396,14 @@ export const PhysicalFunnelBuilder: React.FC<{
                       <Plus className="w-3.5 h-3.5 text-violet-400" />
                       <span>Vidéo Autoplay</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAddBlock('MINI_MARKET_DRAWER')}
+                      className="p-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/50 text-slate-300 text-left font-bold flex items-center gap-1.5 transition col-span-2 sm:col-span-1"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Mini-Market Express</span>
+                    </button>
                   </div>
                 </div>
 
@@ -1999,6 +2017,91 @@ export const PhysicalFunnelBuilder: React.FC<{
                         </div>
                       </div>
                     )}
+
+                    {selectedBlock.type === 'MINI_MARKET_DRAWER' && (
+                      <div className="space-y-3 text-xs">
+                        <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-300 space-y-1">
+                          <span className="font-bold flex items-center gap-1.5 text-emerald-200">
+                            <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Tiroir d'Auto-composition Latérale</span>
+                          </span>
+                          <p className="text-slate-400 text-[10.5px]">
+                            Permet à vos acheteurs d'ajouter en 1 clic des articles complémentaires depuis le stock réel Supabase du magasin avant de valider leur commande en caisse ou Mobile Money.
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] font-bold text-slate-400 block mb-1">
+                            Texte du Bouton Flottant :
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedBlock.props.buttonText || ''}
+                            onChange={(e) => updateBlockProps(selectedBlock.id, { buttonText: e.target.value })}
+                            placeholder="Explorer le Mini-Market"
+                            className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-bold focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] font-bold text-slate-400 block mb-1">
+                            Badge Promotionnel :
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedBlock.props.badgeText || ''}
+                            onChange={(e) => updateBlockProps(selectedBlock.id, { badgeText: e.target.value })}
+                            placeholder="Auto-composition"
+                            className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-bold focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] font-bold text-slate-400 block mb-1">
+                            Titre de la Section Incitative :
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedBlock.props.headline || ''}
+                            onChange={(e) => updateBlockProps(selectedBlock.id, { headline: e.target.value })}
+                            placeholder="Complétez votre commande avec le Mini-Market"
+                            className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-bold focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] font-bold text-slate-400 block mb-1">
+                            Sous-titre / Explication :
+                          </label>
+                          <input
+                            type="text"
+                            value={selectedBlock.props.subheadline || ''}
+                            onChange={(e) => updateBlockProps(selectedBlock.id, { subheadline: e.target.value })}
+                            placeholder="Ajoutez des articles complémentaires sans frais de port supplémentaires."
+                            className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-300">Bouton Flottant Latéral Actif</span>
+                          <input
+                            type="checkbox"
+                            checked={selectedBlock.props.floatingButtonEnabled !== false}
+                            onChange={(e) => updateBlockProps(selectedBlock.id, { floatingButtonEnabled: e.target.checked })}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsMiniMarketPreviewOpen(true)}
+                          className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Tester l'ouverture du tiroir Mini-Market</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2510,6 +2613,48 @@ export const PhysicalFunnelBuilder: React.FC<{
                   );
                 }
 
+                if (block.type === 'MINI_MARKET_DRAWER') {
+                  const headline = block.props.headline || 'Complétez votre commande avec le Mini-Market';
+                  const subheadline = block.props.subheadline || 'Ajoutez des articles et accessoires complémentaires directement.';
+                  const buttonText = block.props.buttonText || 'Explorer le Mini-Market';
+                  const badgeText = block.props.badgeText || 'Auto-composition';
+
+                  return (
+                    <section key={block.id} className="p-5 rounded-3xl bg-slate-900/90 border border-emerald-500/30 space-y-3 shadow-xl">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            <ShoppingBag className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs sm:text-sm font-bold text-white">
+                                {headline}
+                              </h4>
+                              {badgeText && (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                                  {badgeText}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                              {subheadline}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsMiniMarketPreviewOpen(true)}
+                          className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow cursor-pointer"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>{buttonText}</span>
+                        </button>
+                      </div>
+                    </section>
+                  );
+                }
+
                 return null;
               })}
             </div>
@@ -2532,6 +2677,54 @@ export const PhysicalFunnelBuilder: React.FC<{
           setFunnelConfig(newConfig);
           setSelectedBlockId(newConfig.blocks[0]?.id || '');
           playValidationBeep();
+        }}
+      />
+
+      {/* Bouton Flottant Latéral Mini-Market (Si activé dans les blocs) */}
+      {funnelConfig.blocks.some(b => b.type === 'MINI_MARKET_DRAWER' && b.visible !== false && b.props?.floatingButtonEnabled !== false) && (
+        <button
+          type="button"
+          onClick={() => setIsMiniMarketPreviewOpen(true)}
+          className="fixed right-4 bottom-8 z-30 flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-xl border border-emerald-400/40 transition active:scale-95 cursor-pointer text-xs"
+          title="Explorer le Mini-Market"
+        >
+          <ShoppingBag className="w-4 h-4 text-white" />
+          <span className="hidden sm:inline">Explorer le Mini-Market</span>
+        </button>
+      )}
+
+      {/* Drawer Mini-Market en mode prévisualisation Studio */}
+      <MiniMarketDrawer
+        products={[
+          {
+            id: 'prev-1',
+            name: 'Batterie Externe PowerBank 10000mAh',
+            price: 7500,
+            category: 'Accessoires High-Tech',
+            image: 'https://images.unsplash.com/photo-1609592424364-5858066fba94?w=400&q=80',
+            stock: 25,
+          },
+          {
+            id: 'prev-2',
+            name: 'Câble Charge Rapide 3-en-1 Tressé',
+            price: 2500,
+            category: 'Accessoires High-Tech',
+            image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&q=80',
+            stock: 40,
+          },
+          {
+            id: 'prev-3',
+            name: 'Lingettes Microfibres Premium (Pack de 3)',
+            price: 1500,
+            category: 'Entretien',
+            image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
+            stock: 60,
+          }
+        ]}
+        isOpen={isMiniMarketPreviewOpen}
+        onClose={() => setIsMiniMarketPreviewOpen(false)}
+        onCheckout={(cart) => {
+          setIsMiniMarketPreviewOpen(false);
         }}
       />
     </div>

@@ -27,6 +27,8 @@ import {
   Play,
   Zap
 } from 'lucide-react';
+import { supabase } from '../../../lib/supabase';
+import MiniMarketDrawer from '../../../components/funnel/MiniMarketDrawer';
 
 interface PublicPhysicalFunnelViewProps {
   slug: string;
@@ -44,6 +46,58 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [funnel, setFunnel] = useState<PhysicalFunnelConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
+  const [isMiniMarketOpen, setIsMiniMarketOpen] = useState(false);
+  const [miniMarketCart, setMiniMarketCart] = useState<any[]>([]);
+  const [marketProducts, setMarketProducts] = useState<any[]>([
+    {
+      id: 'fb-1',
+      name: 'Batterie Externe PowerBank 10000mAh',
+      price: 7500,
+      category: 'Accessoires High-Tech',
+      image: 'https://images.unsplash.com/photo-1609592424364-5858066fba94?w=400&q=80',
+      stock: 25,
+    },
+    {
+      id: 'fb-2',
+      name: 'Câble Charge Rapide 3-en-1 Tressé',
+      price: 2500,
+      category: 'Accessoires High-Tech',
+      image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&q=80',
+      stock: 40,
+    },
+    {
+      id: 'fb-3',
+      name: 'Lingettes Microfibres Premium (Pack de 3)',
+      price: 1500,
+      category: 'Entretien',
+      image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
+      stock: 60,
+    }
+  ]);
+
+  useEffect(() => {
+    const storeId = funnel?.storeId;
+    async function loadProducts() {
+      try {
+        let query = supabase.from('products').select('*').limit(30);
+        if (storeId) {
+          query = query.eq('tenant_id', storeId);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          setMarketProducts(data.map((p: any) => ({
+            id: String(p.id),
+            name: p.title || p.name || 'Article',
+            price: Number(p.price) || 0,
+            category: p.category || 'Général',
+            image: p.thumbnail_url || p.image_url || p.image || '/placeholder-product.png',
+            stock: p.stock ?? 50
+          })));
+        }
+      } catch (_e) {}
+    }
+    loadProducts();
+  }, [funnel?.storeId]);
 
   // FOMO live sale pulse
   const { currentNotification, isVisible: isFomoVisible, dismiss: dismissFomo } = useLiveSalePulse(
@@ -704,9 +758,90 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
             );
           }
 
+          // 2.11 MINI-MARKET EXPRESS (AUTO-COMPOSITION)
+          if (block.type === 'MINI_MARKET_DRAWER') {
+            const headline = block.props.headline || 'Complétez votre commande avec le Mini-Market';
+            const subheadline = block.props.subheadline || 'Ajoutez des articles complémentaires sans frais de livraison supplémentaires.';
+            const buttonText = block.props.buttonText || 'Explorer le Mini-Market';
+            const badgeText = block.props.badgeText || 'Auto-composition';
+
+            return (
+              <section key={block.id} className="p-5 rounded-3xl bg-slate-900/90 border border-emerald-500/30 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      <ShoppingBag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs sm:text-sm font-bold text-white">
+                          {headline}
+                        </h4>
+                        {badgeText && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                            {badgeText}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {subheadline}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMiniMarketOpen(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow cursor-pointer"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>{buttonText}</span>
+                    {miniMarketCart.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-500 text-[10px] font-black">
+                        {miniMarketCart.reduce((s, i) => s + (i.quantity || 1), 0)}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </section>
+            );
+          }
+
           return null;
         })}
       </main>
+
+      {/* Bouton Flottant Latéral Mini-Market */}
+      <button
+        type="button"
+        onClick={() => setIsMiniMarketOpen(true)}
+        className="fixed right-3 bottom-8 sm:bottom-10 sm:right-6 z-40 flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-[0_12px_30px_-5px_rgba(16,185,129,0.55)] border border-emerald-400/40 backdrop-blur-md transition-all duration-200 active:scale-95 cursor-pointer text-xs"
+        title="Explorer le Mini-Market"
+      >
+        <div className="relative flex items-center justify-center">
+          <ShoppingBag className="w-4 h-4 text-white" />
+          {miniMarketCart.length > 0 && (
+            <span className="absolute -top-2.5 -right-2.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white animate-pulse">
+              {miniMarketCart.reduce((s, i) => s + (i.quantity || 1), 0)}
+            </span>
+          )}
+        </div>
+        <span className="font-bold hidden sm:inline">Mini-Market</span>
+      </button>
+
+      {/* Tiroir d'auto-composition latérale */}
+      <MiniMarketDrawer
+        products={marketProducts}
+        isOpen={isMiniMarketOpen}
+        onClose={() => setIsMiniMarketOpen(false)}
+        onCheckout={(cart) => {
+          setMiniMarketCart(cart);
+          setIsMiniMarketOpen(false);
+          try {
+            localStorage.setItem('nana_checkout_cart', JSON.stringify(cart));
+            window.dispatchEvent(new CustomEvent('nana_cart_updated', { detail: { cart } }));
+          } catch (e) {}
+        }}
+      />
 
       {/* 3. Toast FOMO social proof connecté à Firestore (Preuve Sociale Réelle TrustPulse) */}
       <SocialProofToast

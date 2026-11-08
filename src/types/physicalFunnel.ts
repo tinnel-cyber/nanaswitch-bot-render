@@ -17,7 +17,8 @@ export type PhysicalFunnelBlockType =
   | 'INLINE_CHECKOUT'
   | 'BENEFITS_LIST'
   | 'CUSTOMER_REVIEWS'
-  | 'AUTOPLAY_VIDEO';
+  | 'AUTOPLAY_VIDEO'
+  | 'MINI_MARKET_DRAWER';
 
 export interface PhysicalFunnelBlock {
   id: string;
@@ -133,6 +134,19 @@ export const DEFAULT_PHYSICAL_FUNNEL_BLOCKS: PhysicalFunnelBlock[] = [
         'Livraison Express & Sécurisée',
         'Garantie Authenticité NaNa'
       ]
+    }
+  },
+  {
+    id: 'block-mini-market',
+    type: 'MINI_MARKET_DRAWER',
+    title: 'Mini-Market Express (Auto-composition)',
+    visible: true,
+    props: {
+      buttonText: 'Explorer le Mini-Market',
+      badgeText: 'Auto-composition',
+      headline: 'Complétez votre commande avec le Mini-Market',
+      subheadline: 'Ajoutez des articles et accessoires complémentaires directement.',
+      floatingButtonEnabled: true,
     }
   },
   {
