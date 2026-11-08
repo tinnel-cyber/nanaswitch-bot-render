@@ -11,7 +11,9 @@ compatibility_flags = ["nodejs_compat"]
 # Routes et Domaines personnalisés
 routes = [
   { pattern = "nanasore.com/*", zone_name = "nanasore.com" },
-  { pattern = "*.nanasore.com/*", zone_name = "nanasore.com" }
+  { pattern = "*.nanasore.com/*", zone_name = "nanasore.com" },
+  { pattern = "nsore.shop/*", zone_name = "nsore.shop" },
+  { pattern = "*.nsore.shop/*", zone_name = "nsore.shop" }
 ]
 
 # Variables d'environnement globales
