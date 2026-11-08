@@ -80,14 +80,15 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   isMandatoryBlock = false,
   initialPlanId,
 }) => {
-  // Exemption totale et bypass immédiat du paywall pour le Super Admin
-  if (isSuperAdminLocally(currentUser)) {
+  // Seul le blocage forcé automatique (isMandatoryBlock) est contourné pour le Super Admin.
+  // Quand la modale est appelée pour consulter les tarifs ou souscrire, elle doit TOUJOURS s'ouvrir.
+  if (isMandatoryBlock && isSuperAdminLocally(currentUser)) {
     return null;
   }
   const safeUser: StoreUser = currentUser || {
     id: 'user_default',
     name: 'Gérant',
-    email: 'contact@nanapos.com',
+    email: 'contact@nanasore.com',
     role: 'ADMIN',
     storeId: storeId || 'store-nana-1',
     storeName: storeName || 'Boutique',
@@ -490,12 +491,36 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
           <div className="space-y-6 animate-in fade-in duration-200">
             <div className="space-y-1">
               <h2 className="text-xl sm:text-2xl font-black text-white">
-                {isExpired ? 'Rechargez votre Caisse Tactile' : 'Prolonger votre Accès SaaS Nana POS'}
+                {isExpired ? 'Rechargez votre Accès Nanasore' : 'Activer ou Prolonger votre Accès SaaS Nanasore'}
               </h2>
               <p className="text-xs text-slate-400">
-                Activez le plan adapté à votre boutique pour encaisser, synchroniser vos stocks et gérer vos funnels.
+                Activez le plan adapté à votre activité pour débloquer l'ensemble des modules, synchroniser vos stocks et encaisser sans friction.
               </p>
             </div>
+
+            {/* Bannière Nouveau Marchand / Ouverture de Compte & KYC */}
+            {(!currentUser || !currentUser.id || currentUser.id === 'user_default' || !currentUser.email) && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-900/60 to-indigo-900/60 border border-blue-400/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-lg">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">✨</span>
+                  <div>
+                    <strong className="text-white block font-bold">Nouveau sur Nanasore ?</strong>
+                    <span className="text-blue-200">Ouvrez votre compte et démarrez votre identification KYC pour sécuriser votre activité.</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    onClose();
+                    window.dispatchEvent(new CustomEvent('nanasore_open_kyc', { detail: { type: 'particulier' } }));
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-500 text-white font-black text-xs shrink-0 cursor-pointer transition shadow-md flex items-center gap-1.5"
+                >
+                  <span>Ouvrir mon compte →</span>
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2.5">
               <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -787,7 +812,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
               <div>
                 <h2 className="text-lg sm:text-xl font-black text-amber-300 flex items-center gap-1.5">
                   <Sparkles className="w-5 h-5 text-amber-400" />
-                  Boostez votre Caisse Nana POS
+                  Boostez votre Écosystème Nanasore
                 </h2>
                 <p className="text-xs text-slate-400">
                   Ajoutez les modules premium recommandés pour décupler votre activité.
@@ -901,7 +926,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                   <Tag className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-black text-white">Coupon de Bienvenue Nana POS</h3>
+                  <h3 className="text-xs font-black text-white">Coupon de Bienvenue Nanasore</h3>
                   <p className="text-[11px] text-slate-300">
                     Activez votre caisse aujourd'hui et déduisez directement 2 000 F CFA de votre première facture.
                   </p>
@@ -985,7 +1010,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 productType="subscription"
                 amount={montantTotal}
                 currency="FCFA"
-                orderDescription={`Abonnement SaaS Nana POS - ${currentPlan.name}`}
+                orderDescription={`Abonnement SaaS Nanasore - ${currentPlan.name}`}
                 orderId={`SUB-${effectiveStoreId}-${Date.now().toString(36).toUpperCase()}`}
                 defaultPhone={safeUser.phone || ''}
                 onSuccess={handleGatewaySuccess}
@@ -1098,7 +1123,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 <span>
                   {isFreeActivation
                     ? 'Configurer ma boutique →'
-                    : 'Accéder à ma caisse Nana POS'}
+                    : 'Accéder à mon Espace Nanasore'}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </button>

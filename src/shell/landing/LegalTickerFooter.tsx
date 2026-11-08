@@ -10,7 +10,7 @@ interface LegalTickerFooterProps {
 }
 
 export const LegalTickerFooter: React.FC<LegalTickerFooterProps> = ({
-  tickerText = "© 2026 NaNa POS. Tous droits réservés. • Mentions Légales • Politique de Confidentialité • Sécurité & protection des données marchandes.",
+  tickerText = "© 2026 Nanasore. Tous droits réservés. • Mentions Légales • Politique de Confidentialité • Sécurité & protection des données marchandes.",
   showTicker = true,
   onOpenDoc,
   className = '',

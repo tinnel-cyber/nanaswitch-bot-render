@@ -143,7 +143,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
         {/* Footer */}
         <div className="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0 text-xs">
           <span className="text-slate-500 text-[11px]">
-            © 2026 Nana pos. Tous droits réservés.
+            © 2026 Nanasore. Tous droits réservés.
           </span>
 
           <div className="flex items-center gap-2">

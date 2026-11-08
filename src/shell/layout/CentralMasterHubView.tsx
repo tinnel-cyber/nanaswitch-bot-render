@@ -1646,6 +1646,33 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
               <span className="xs:hidden">{settings.isStoreOpen ? 'Ouverte' : 'Fermée'}</span>
             </button>
 
+            {/* Bouton Passer à la Formule Pro : Appelle les Tarifs & l'Ouverture de Compte */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                // 1. Déclencher l'ouverture de la grille tarifaire des forfaits
+                if (onOpenUpgrade) {
+                  onOpenUpgrade();
+                } else {
+                  window.dispatchEvent(new CustomEvent('nana_open_paywall_modal', { detail: { targetPlanId: 'pro', reason: 'UPGRADE_PRO' } }));
+                }
+                window.dispatchEvent(new CustomEvent('nanasore_open_subscription_plans'));
+                // 2. Si pas de compte ouvert ou gérant invité, orienter vers l'ouverture de compte / KYC
+                const isNoAccount = !currentUser || !currentUser.id || currentUser.id === 'user_default' || !currentUser.email;
+                if (isNoAccount) {
+                  setKycWizardInitialType('particulier');
+                  setIsKycChainWizardOpen(true);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white font-black text-[11px] sm:text-xs shadow-md shadow-indigo-950/40 border border-amber-300/40 active:scale-95 transition cursor-pointer min-h-[36px] sm:min-h-[40px] shrink-0"
+              title="Passer à la Formule Pro — Découvrir les tarifs, ouvrir son compte et souscrire"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-200 fill-amber-200 shrink-0" />
+              <span className="hidden xs:inline">Passer à la Formule Pro</span>
+              <span className="xs:hidden">Formule Pro</span>
+            </button>
+
             {/* Bouton Accès Direct Caisse POS (Masqué en mode Formateur) */}
             {sellerMode !== 'creator_trainer' && (
               <button
@@ -2418,7 +2445,7 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
         {/* Footer Discret & Accès Sécurisé */}
         <footer className="mt-auto py-6 border-t border-blue-900/40 text-center text-xs text-blue-200/70">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <span>© 2026 NaNa POS • Tous droits réservés</span>
+            <span>© 2026 Nanasore • Tous droits réservés</span>
             <button 
               type="button"
               onClick={() => {

@@ -170,10 +170,17 @@ export const QuotaWidget: React.FC<QuotaWidgetProps> = ({
 
   const handleUpgradeClick = () => {
     playValidationBeep();
+    // 1. Déclencher l'appel direct des tarifs d'abonnements
     if (onOpenUpgrade) {
       onOpenUpgrade();
-    } else {
-      window.dispatchEvent(new CustomEvent('nana_open_paywall_modal', { detail: { reason: 'QUOTA_EXCEEDED' } }));
+    }
+    window.dispatchEvent(new CustomEvent('nana_open_paywall_modal', { detail: { targetPlanId: 'pro', reason: 'UPGRADE_PRO' } }));
+    window.dispatchEvent(new CustomEvent('nanasore_open_subscription_plans'));
+
+    // 2. Si pas de compte ouvert ou gérant invité, orienter vers l'ouverture de compte / KYC
+    const isNoAccount = !currentUser || !currentUser.id || currentUser.id === 'user_default' || !currentUser.email;
+    if (isNoAccount) {
+      window.dispatchEvent(new CustomEvent('nanasore_open_kyc', { detail: { type: 'particulier' } }));
     }
   };
 
@@ -238,7 +245,7 @@ export const QuotaWidget: React.FC<QuotaWidgetProps> = ({
           className="self-start sm:self-center px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 hover:from-amber-400 hover:via-rose-400 hover:to-indigo-500 active:scale-95 text-white font-black text-xs transition-all shadow-xl shadow-rose-950/20 flex items-center gap-2 cursor-pointer border border-rose-300/30 shrink-0"
         >
           <Crown className="w-4 h-4 text-amber-200 fill-amber-200" />
-          <span>Passer au Plan Pro 🚀</span>
+          <span>Passer à la Formule Pro 🚀</span>
           <ArrowUpRight className="w-3.5 h-3.5 opacity-80" />
         </button>
       </div>
