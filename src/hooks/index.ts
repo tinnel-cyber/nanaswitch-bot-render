@@ -9,3 +9,4 @@ export * from './useRealtimeWameetChat';
 export * from './useRealtimeLiveSession';
 export * from './useRealtimeAiVideo';
 export * from './useRealtimeContract';
+export * from './useRealtimeCourseProgress';
