@@ -299,12 +299,6 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'sms-otp', 'superadmin'],
     aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs']
   },
-    defaultActive: true,
-    view: 'SETTINGS_EXTENSIONS',
-    icon: 'Cpu',
-    keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'sms-otp'],
-    aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs']
-  },
   {
     id: 'theme-builder',
     slug: 'theme-builder',

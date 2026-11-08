@@ -415,6 +415,8 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       handleModuleClick('CV_CREATOR', '/dashboard/cv');
       return;
     }
+
+    if (appId === 'mod-pos' || appId === 'caisse-pos' || appId.includes('pos') || appTitle.includes('caisse') || appRoute.includes('pos')) {
       if (!settings.isStoreOpen) {
         setShowStoreClosedPrompt(true);
         return;
