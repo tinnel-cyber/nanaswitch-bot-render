@@ -378,7 +378,43 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     const appTitle = ((app as any).title || (app as any).name || '').toLowerCase();
     const appRoute = (app.route || (app as any).routeUrl || '').toLowerCase();
 
-    if (appId === 'mod-pos' || appId === 'caisse-pos' || appId.includes('pos') || appTitle.includes('caisse') || appRoute.includes('pos')) {
+    // Protection des modules en construction (ne répondent pas à l'appel)
+    if (appId === 'nana-switch' || appId === 'wameet' || appId === 'srv-nana-switch' || appId === 'app-wameet' || app.isUnderConstruction) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nana_show_toast', {
+          detail: {
+            title: 'Module en construction',
+            message: `Le module "${(app as any).title || (app as any).name || 'Sélectionné'}" est actuellement en cours de finalisation et ne répond pas aux appels.`,
+            type: 'info'
+          }
+        }));
+      }
+      return;
+    }
+
+    // Protection stricte de CRM et Automation : module réservé exclusivement au Super Administrateur
+    if (appId === 'crm-automation' || appId === 'srv-crm-automation' || appTitle.includes('crm et automation') || appRoute.includes('connecteurs')) {
+      if (!isSuperAdminLocally(currentUser)) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nana_show_toast', {
+            detail: {
+              title: 'Accès Réservé Super Admin',
+              message: 'Le module "CRM et Automation / Connecteurs" est un module d’infrastructure réservé exclusivement au Super Administrateur.',
+              type: 'warning'
+            }
+          }));
+        }
+        return;
+      }
+      handleModuleClick('SETTINGS_EXTENSIONS', '/dashboard/connecteurs');
+      return;
+    }
+
+    // Routage direct pour l'Application CV Pro
+    if (appId === 'cvpro' || appId === 'mod-cvpro' || appId === 'app-cvpro' || appTitle.includes('cvpro') || appTitle.includes('cv pro')) {
+      handleModuleClick('CV_CREATOR', '/dashboard/cv');
+      return;
+    }
       if (!settings.isStoreOpen) {
         setShowStoreClosedPrompt(true);
         return;
@@ -1105,13 +1141,13 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-cv-video',
       category: 'AI',
       title: 'CVPro & Création Documentaire',
-      badge: 'Automatisé',
+      badge: 'APPLICATION',
       badgeColor: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40',
-      description: 'Générateur de CV professionnels à fort impact, fiches techniques et attestations de service certifiées.',
+      description: 'Application officielle de création de CV professionnels haute définition, fiches techniques et attestations de service certifiées.',
       icon: FileBadge,
       iconColor: 'text-fuchsia-400',
       iconBg: 'bg-fuchsia-500/10 border-fuchsia-500/30',
-      actionText: 'Créer un Document',
+      actionText: 'Lancer l’Application CVPro',
       action: () => handleModuleClick('CV_CREATOR', '/dashboard/cv')
     },
 
@@ -1246,29 +1282,53 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     {
       id: 'mod-crm-automation',
       category: 'TECH',
-      title: 'CRM et Automation',
-      badge: 'Service',
-      badgeColor: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
-      description: 'Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Brevo et connecteurs.',
+      title: 'CRM et Automation (Super Admin)',
+      badge: 'SUPER ADMIN',
+      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+      description: 'Module d’infrastructure réservé au Super Administrateur (WooCommerce, Passerelle SMS / OTP, Emailing Pro & connecteurs système).',
       icon: Plug,
-      iconColor: 'text-sky-400',
-      iconBg: 'bg-sky-500/10 border-sky-500/30',
-      actionText: 'Paramètres & Extensions',
-      action: () => handleModuleClick('SETTINGS_EXTENSIONS', '/dashboard/connecteurs'),
+      iconColor: 'text-rose-400',
+      iconBg: 'bg-rose-500/10 border-rose-500/30',
+      actionText: 'Accès Super Admin',
+      action: () => {
+        if (!isSuperAdminLocally(currentUser)) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nana_show_toast', {
+              detail: {
+                title: 'Accès Réservé Super Admin',
+                message: 'Le module "CRM et Automation" est un module d’infrastructure technique réservé exclusivement au Super Administrateur.',
+                type: 'warning'
+              }
+            }));
+          }
+          return;
+        }
+        handleModuleClick('SETTINGS_EXTENSIONS', '/dashboard/connecteurs');
+      },
       taxonomyType: 'Service'
     },
     {
       id: 'mod-nana-switch',
       category: 'TECH',
       title: 'NaNa Switch Cloud (Multi-Comptes)',
-      badge: 'Service',
-      badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-      description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter.',
+      badge: 'EN CONSTRUCTION',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+      description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter (En cours de finalisation).',
       icon: ShieldCheck,
-      iconColor: 'text-indigo-400',
-      iconBg: 'bg-indigo-500/10 border-indigo-500/30',
-      actionText: 'Changer de Boutique',
-      action: () => handleModuleClick('NANA_SWITCH', '/dashboard/switch'),
+      iconColor: 'text-amber-400',
+      iconBg: 'bg-amber-500/10 border-amber-500/30',
+      actionText: '🚧 En Construction',
+      action: () => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nana_show_toast', {
+            detail: {
+              title: 'Module en construction',
+              message: 'Le module NaNa Switch est en cours de développement et sera disponible prochainement.',
+              type: 'info'
+            }
+          }));
+        }
+      },
       taxonomyType: 'Service'
     },
     {

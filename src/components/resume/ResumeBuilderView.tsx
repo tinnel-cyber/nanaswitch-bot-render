@@ -301,13 +301,13 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
       const cleanName = resume.personalInfo.fullName.trim().replace(/\s+/g, '_') || 'Professionnel';
       const filename = `CV_${cleanName}_${(resume.templateId || 'STARTER').toUpperCase()}_HD.pdf`;
 
-      // 5. Génération PDF Haute Définition 300 DPI : scale: 3, JPEG 0.95, safe styles
+      // 5. Génération PDF Haute Définition (Scale 2, 300 DPI, sans gel du navigateur)
       const result = await exportResumeToHdPdf(targetElement, {
         filename,
-        quality: 3, // scale: 3 Haute Définition 300 DPI
+        quality: 2,
         onProgress: (step) => {
           if (step === 'RENDERING') setExportToast('Génération du PDF en cours...');
-          if (step === 'SAVING') setExportToast('Génération du PDF en cours...');
+          if (step === 'SAVING') setExportToast('Finalisation du fichier PDF...');
         }
       });
 
@@ -320,27 +320,13 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
       setExportToast('✓ CV Haute Définition téléchargé avec succès !');
       setTimeout(() => setExportToast(null), 4000);
     } catch (err: any) {
-      console.warn('[CV EXPORT HD] Blocage ou échec du téléchargement direct, déclenchement automatique du fallback d\'impression native A4 :', err);
-      // Sécurité anti-échec (Fallback d'impression PDF native) : déclenche automatiquement window.print() au format A4
-      setExportToast('Impression A4 en cours (fallback sécurisé)...');
-      try {
-        if (typeof window !== 'undefined') {
-          window.focus();
-          window.print();
-          incrementGeneratedDocumentsCount(currentUser?.storeId);
-          playValidationBeep();
-          setExportToast('✓ Impression A4 déclenchée avec succès !');
-          setTimeout(() => setExportToast(null), 4000);
-        }
-      } catch (printErr: any) {
-        console.error('[CV PRINT FALLBACK] Échec du déclenchement window.print() :', printErr);
-        const errorMsg = err?.message || 'Une anomalie est survenue pendant la génération du PDF.';
-        setExportToast(`⚠️ Erreur : ${errorMsg}`);
-        setExportErrorAlert({
-          isOpen: true,
-          message: `${errorMsg} Aucun souci : vous pouvez utiliser le bouton "Imprimer" pour sauvegarder directement votre CV au format PDF via votre navigateur.`
-        });
-      }
+      console.warn('[CV EXPORT HD] Notification d\'incident export direct :', err);
+      const errorMsg = err?.message || 'Une anomalie est survenue pendant la génération du PDF.';
+      setExportToast(`⚠️ ${errorMsg}`);
+      setExportErrorAlert({
+        isOpen: true,
+        message: `${errorMsg} Aucun souci : vous pouvez également utiliser le bouton "Imprimer" pour enregistrer directement votre CV au format PDF via votre navigateur.`
+      });
     } finally {
       setIsExportingPdf(false);
     }

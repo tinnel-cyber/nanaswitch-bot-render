@@ -963,11 +963,21 @@ export function canAccessCvPro(
     };
   }
 
-  // 3. Plan Zéro / Gratuit : Bloqué formellement
+  // 3. Plan Zéro / Gratuit : 1er CV offert pour tester l'application, puis inviter au Plan Pro
+  const storeId = typeof subscription === 'object' && subscription ? (subscription as any).storeId : undefined;
+  const docsCount = getGeneratedDocumentsCount(storeId);
+  if (docsCount < 1) {
+    return {
+      allowed: true,
+      reason: 'FREE_TRIAL_FIRST_DOC',
+      message: '1er CV offert pour tester l\'application Nanasore CVPro !'
+    };
+  }
+
   return {
     allowed: false,
     reason: 'BLOCKED_PLAN_ZERO',
-    message: 'Le module CV Pro n\'est pas inclus dans le Plan Zéro gratuit. Passez au Plan Pro ou activez la formule Pay-As-You-Go (500 F CFA / CV).'
+    message: 'Vous avez utilisé votre 1er CV offert. Pour des téléchargements illimités, passez à la Formule Pro ou rechargez 5 crédits (500 F CFA / CV).'
   };
 }
 

@@ -35,6 +35,7 @@ export interface CanonicalModule {
   aliases?: string[];         // Identifiants alternatifs ou historiques supportés
   requiredRoles?: string[];   // Rôles requis (ex: vendor, admin)
   permissions?: string[];     // Permissions requises pour l'accès
+  isUnderConstruction?: boolean; // Module en construction (ne répond pas aux appels marchands)
 }
 
 // Rétro-compatibilité pour les composants existants
@@ -112,10 +113,11 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     name: 'Wameet',
     route: '/wameet',
     category: 'Réseau & Social',
-    description: 'Réseau social professionnel, messagerie & stories marchands.',
+    description: 'Réseau social professionnel, messagerie & stories marchands (En construction).',
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
-    defaultActive: true,
+    defaultActive: false,
+    isUnderConstruction: true,
     view: 'WAMEET',
     icon: 'MessageSquare',
     keywords: ['wameet', 'social', 'reseau', 'messagerie', 'stories'],
@@ -257,6 +259,21 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     icon: 'UploadCloud',
     keywords: ['upload', 'cours', 'devoir', 'remise', 'professeur', 'etudiant', 'étudiant', 'devoirs', 'r2', 'zip', 'rendu', 'campus'],
     aliases: ['vendor-upload', 'academic-upload', 'studio-upload', 'upload-vendeur', 'upload-academique']
+  },
+  {
+    id: 'cvpro',
+    slug: 'cvpro',
+    name: 'CVPro & Création Documentaire',
+    route: '/dashboard/cv',
+    category: 'Application & Carrière',
+    description: 'Application de génération de CV professionnels haute définition, attestations et portfolios vendeurs.',
+    type: 'APPLICATION',
+    taxonomy: 'APPLICATION',
+    defaultActive: false,
+    view: 'CV_CREATOR',
+    icon: 'FileText',
+    keywords: ['cvpro', 'cv', 'attestations', 'documents', 'curriculum', 'carriere', 'emploi', 'recrutement'],
+    aliases: ['app-cvpro', 'mod-cvpro']
   }
 ];
 
@@ -267,12 +284,21 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
   {
     id: 'crm-automation',
     slug: 'crm-automation',
-    name: 'CRM et Automation',
+    name: 'CRM et Automation (Super Admin)',
     route: '/dashboard/connecteurs',
-    category: 'Intégrations & Extensions',
-    description: 'Paramètres & Intégrations (Modules Extensions) : WooCommerce, Passerelle SMS / OTP, Emailing Pro et connecteurs.',
+    category: 'Super Admin & Intégrations',
+    description: 'Paramètres & Intégrations techniques (Module Super Admin) : WooCommerce, Passerelle SMS / OTP, Emailing Pro et connecteurs système.',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
+    defaultActive: false,
+    isUnderConstruction: true,
+    requiredRoles: ['SUPER_ADMIN', 'super_admin'],
+    permissions: ['manage_system_extensions'],
+    view: 'SETTINGS_EXTENSIONS',
+    icon: 'Cpu',
+    keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'sms-otp', 'superadmin'],
+    aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs']
+  },
     defaultActive: true,
     view: 'SETTINGS_EXTENSIONS',
     icon: 'Cpu',
@@ -345,10 +371,11 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     name: 'NaNa Switch Cloud (Multi-Comptes)',
     route: '/dashboard/switch',
     category: 'Communication & Réseau',
-    description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter.',
+    description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter (En construction).',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
-    defaultActive: true,
+    defaultActive: false,
+    isUnderConstruction: true,
     view: 'NANA_SWITCH',
     icon: 'Repeat',
     keywords: ['switch', 'cloud', 'multi-comptes', 'boutiques'],
@@ -434,21 +461,6 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     icon: 'Users',
     keywords: ['employes', 'caissiers', 'equipe', 'droits', 'shifts', 'pin'],
     aliases: ['mod-team-employees', 'team_staff', 'cashier-sessions']
-  },
-  {
-    id: 'cvpro',
-    slug: 'cvpro',
-    name: 'CVPro & Création Documentaire',
-    route: '/dashboard/cv',
-    category: 'Documents',
-    description: 'Générateur de CV professionnels, attestations et portfolios vendeurs.',
-    type: 'MODULE',
-    taxonomy: 'MODULE',
-    defaultActive: false,
-    view: 'CV_CREATOR',
-    icon: 'FileText',
-    keywords: ['cvpro', 'cv', 'attestations', 'documents'],
-    aliases: ['mod-cvpro']
   },
   {
     id: 'pixels-crm',

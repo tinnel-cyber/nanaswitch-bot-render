@@ -1847,26 +1847,36 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         return;
       }
 
-      const active = isModuleActive(official.id);
+      const isUnderConstruction = Boolean(
+        official.isUnderConstruction ||
+        idLower === 'nana-switch' ||
+        idLower === 'crm-automation' ||
+        idLower === 'wameet' ||
+        idLower === 'app-wameet' ||
+        idLower === 'srv-nana-switch' ||
+        idLower === 'srv-crm-automation'
+      );
+      const active = isUnderConstruction ? false : isModuleActive(official.id);
       officialCatalogCards.push({
         id: official.id,
         title: official.name, // NOM D'ORIGINE EXACT RESTAURÉ
         subtitle: official.category,
         category: official.category,
         description: official.description,
-        palmares: active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible'),
-        trialBadge: active ? 'Actif' : 'Prêt à l\'emploi',
+        palmares: isUnderConstruction ? '🚧 En construction' : (active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible')),
+        trialBadge: isUnderConstruction ? 'En construction' : (active ? 'Actif' : 'Prêt à l\'emploi'),
         mediaUrl: getCardMediaUrl(official),
         mediaType: 'image' as const,
         routeUrl: official.route,
         targetView: official.view,
         taxonomyType: official.taxonomy === 'APPLICATION' ? 'Application' : official.taxonomy === 'SERVICE' ? 'Service' : official.taxonomy === 'MODULE' ? 'Module' : 'Outil',
-        badge: official.taxonomy,
+        badge: isUnderConstruction ? '🚧 EN CONSTRUCTION' : official.taxonomy,
         isRootApp: official.id === 'app-pos',
         linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'tool-scanner'] : [],
         keywords: official.keywords || [],
         isOfficialCatalog: true,
-        isActive: active
+        isActive: active,
+        isUnderConstruction
       });
     });
 
@@ -2006,6 +2016,31 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
   const handleActivateModule = async (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
     e.stopPropagation();
+
+    // 0. Modules en construction ou désactivés de l'appel
+    const idLower = (card.id || '').toLowerCase();
+    const isUnderConstruction = Boolean(
+      (card as any).isUnderConstruction ||
+      idLower === 'nana-switch' ||
+      idLower === 'crm-automation' ||
+      idLower === 'wameet' ||
+      idLower === 'app-wameet' ||
+      idLower === 'srv-nana-switch' ||
+      idLower === 'srv-crm-automation'
+    );
+
+    if (isUnderConstruction) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('nana_show_toast', {
+          detail: {
+            title: 'Module en construction',
+            message: `Le module "${card.title || 'Sélectionné'}" est actuellement en cours de développement et sera disponible prochainement.`,
+            type: 'info'
+          }
+        }));
+      }
+      return;
+    }
 
     // 1. Persistance dynamique dans Firebase RTDB : /tenants/{tenantId}/modules/{moduleId}
     try {
