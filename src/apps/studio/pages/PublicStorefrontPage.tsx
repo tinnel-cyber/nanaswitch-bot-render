@@ -8,6 +8,7 @@ import { ShoppingBag, CreditCard } from 'lucide-react';
 import { formatCFA, playTapBeep } from '../../../utils/audio';
 import { db } from '../../../firebase';
 import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { ensureMandatoryProductSlug } from '../../../utils/slugEngine';
 import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/StoreLegalAndTrackingModals';
 import { OrderConfirmationVaultModal } from '../../../components/storeBuilder/OrderConfirmationVaultModal';
@@ -274,6 +275,39 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
       }
     });
 
+    // Écouteur Supabase Realtime sur app_registry (Synchronisation instantanée du thème)
+    const themeChannelName = `public_theme_${storeIdToUse}_${Math.random().toString(36).substring(7)}`;
+    const themeChannel = supabase
+      .channel(themeChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'app_registry',
+          filter: `tenant_id=eq.${storeIdToUse}`,
+        },
+        (payload) => {
+          if (payload.new && (payload.new as any).module_key === 'theme_config') {
+            const cfg = (payload.new as any).config_json;
+            const newTheme = cfg?.activeThemeId || cfg?.active_theme_id;
+            if (newTheme) {
+              setStoreConfig(prev => {
+                const nextConfig = {
+                  ...prev,
+                  active_theme_id: urlPreviewTheme || newTheme,
+                  activeThemeId: urlPreviewTheme || newTheme,
+                  themeCustomization: cfg?.customConfig || (prev as any).themeCustomization
+                };
+                writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });
+                return nextConfig;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     // Chargement unifié des produits de la boutique (stores/$storeId/products, tenants/$tenantId/products, inventory, et cache local)
     const productMap = new Map<string, StoreProductItem>();
 
@@ -352,7 +386,10 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
       console.warn('[PublicStorefrontPage] Erreur lecture catalogue unifié:', err);
     });
 
-    return () => unsubStore();
+    return () => {
+      unsubStore();
+      supabase.removeChannel(themeChannel);
+    };
   }, [actualStoreId, targetStoreId, resolvedStoreSlug, urlPreviewTheme]);
 
   // Résolution 0ms immédiate du produit cible (via prop ou Deep-Link URL ?product= / ?produit= / #product-)

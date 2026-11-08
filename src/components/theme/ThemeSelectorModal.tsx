@@ -11,6 +11,7 @@ import { playTapBeep, playValidationBeep } from '../../utils/audio';
 import { buildPublicShopUrl } from '../../config/domains';
 import { getThemeRoutePrefix } from '../../utils/themeRoutePrefix';
 import { ensureAndPersistTenantSlug } from '../../utils/slugService';
+import { supabase } from '@/lib/supabase';
 
 interface ThemeSelectorModalProps {
   isOpen: boolean;
@@ -124,6 +125,29 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
         publicShopUrl: publicShopUrl
       }, authUid, { themeId: theme.id });
       console.log(`[THEMES ACTIVATION] Persistance réussie pour ${theme.id}`);
+
+      // 4. Synchronisation instantanée Supabase Realtime (app_registry)
+      try {
+        await supabase
+          .from('app_registry')
+          .upsert({
+            tenant_id: storeId,
+            module_key: 'theme_config',
+            theme_key: theme.id,
+            config_json: {
+              activeThemeId: theme.id,
+              active_theme_id: theme.id,
+              themeId: theme.id,
+              themePrefix,
+              publicShopUrl,
+              themeName: theme.name,
+              updated_at: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'tenant_id,module_key' });
+      } catch (sbErr) {
+        console.warn('[THEMES ACTIVATION] Synchronisation Supabase app_registry:', sbErr);
+      }
     } catch (error: any) {
       console.error('[THEMES ACTIVATION ERROR] Échec complet de synchronisation Firebase :', error);
       setErrorToast(`Échec d'enregistrement Firebase : ${error?.message || error || 'Erreur réseau/permissions'}`);

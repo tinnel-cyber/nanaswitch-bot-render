@@ -1,29 +1,43 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const defaultUrl = 'https://wsxnznobeefrsoicjqte.supabase.co';
+const defaultAnonKey = 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+
+const supabaseUrl = 
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) ||
+  (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_SUPABASE_URL || process.env?.SUPABASE_URL)) ||
+  defaultUrl;
+
+const supabaseAnonKey = 
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY)) ||
+  defaultAnonKey;
+
+const supabaseServiceKey = typeof process !== 'undefined' ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined;
 
 export function getSupabaseClient(useServiceRole: boolean = false): SupabaseClient {
   const url = supabaseUrl;
   const key = useServiceRole && supabaseServiceKey ? supabaseServiceKey : supabaseAnonKey;
 
-  if (!url || !key) {
-    console.warn("⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY n'est pas configuré dans les variables d'environnement.");
-  }
+  const isBrowser = typeof window !== 'undefined';
 
-  return createClient(url || "https://placeholder.supabase.co", key || "placeholder-key", {
+  return createClient(url, key, {
     auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+      persistSession: isBrowser,
+      autoRefreshToken: isBrowser,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
     },
   });
 }
 
 /**
- * Instance Supabase standard côté serveur (App Router)
+ * Instance Supabase standard réactive côté client & serveur (Realtime activé)
  */
-export const supabase = getSupabaseClient();
+export const supabase: SupabaseClient = getSupabaseClient();
 
 /**
  * UIDs et Emails des Super Admins officiels Nanasore

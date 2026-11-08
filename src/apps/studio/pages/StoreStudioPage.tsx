@@ -16,7 +16,8 @@ import { StoreConfig, StoreProductItem } from '../../../components/storeBuilder/
 import { FALLBACK_STUDIO_PRODUCTS, getDefaultCustomConfig } from '../../../components/storeBuilder/themeStudioConstants';
 import { InventoryProduct, StoreUser, StoreSubscription, KycStatus, ThemeCustomizationConfig } from '../../../types';
 import { db, auth } from '../../../firebase';
-import { doc, setDoc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { ensureMandatoryStoreSlug, ensureMandatoryProductSlug, getSafeStoreSlug } from '../../../utils/slugEngine';
 import { getThemeRoutePrefix } from '../../../utils/themeRoutePrefix';
@@ -403,6 +404,33 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         { themeId: activeThemeId, blankIndex }
       );
 
+      // Synchronisation instantanée Supabase Realtime (app_registry & organization_blocks)
+      try {
+        await supabase
+          .from('app_registry')
+          .upsert({
+            tenant_id: targetStoreId,
+            module_key: 'theme_config',
+            theme_key: activeThemeId,
+            config_json: {
+              activeThemeId,
+              active_theme_id: activeThemeId,
+              themePrefix: prefix,
+              publicShopUrl,
+              storeSlug: effectiveStoreSlug,
+              customConfig: draftThemeConfig,
+              colors: {
+                primary: draftThemeConfig.primaryAccentColor || '#2563EB',
+                background: draftThemeConfig.backgroundColor || '#FBF9F5',
+              },
+              updated_at: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'tenant_id,module_key' });
+      } catch (sbErr) {
+        console.warn('[Studio] Notice publication Supabase app_registry:', sbErr);
+      }
+
       setSavedThemeConfig(draftThemeConfig);
       try {
         localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(draftThemeConfig));
@@ -561,90 +589,127 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
     };
   }, []);
 
-  // Écoute temps réel Firestore pour synchroniser storeConfig, activeThemeId et themeCustomization
+  // Écoute temps réel Supabase Realtime (avec fetch initial) pour synchroniser storeConfig, activeThemeId et themeCustomization
   useEffect(() => {
     if (!targetStoreId) return;
-    const storeRef = doc(db, 'stores', targetStoreId);
-    const unsubscribe = onSnapshot(storeRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const existingSlug = data.storeSlug || data.slug;
-        const autoSlug = ensureMandatoryStoreSlug(
-          existingSlug,
-          data.storeName || currentUser?.storeName,
-          currentUser?.email || currentUser?.displayName,
-          currentUser?.uid || targetStoreId
-        );
 
-        if ((!existingSlug || existingSlug.trim().length < 2 || existingSlug === 'boutique-officielle') && currentUser?.uid) {
-          updateDoc(storeRef, {
-            slug: autoSlug,
-            storeSlug: autoSlug
-          }).catch(console.warn);
-        }
+    let isSubscribed = true;
 
-        const incomingTheme = data.activeThemeId || data.active_theme_id;
-        const localTheme = typeof window !== 'undefined' ? localStorage.getItem('nana_active_theme_id') : null;
+    // 1. Initial Fetch (Firestore + Supabase app_registry)
+    const initThemeAndStore = async () => {
+      try {
+        const storeRef = doc(db, 'stores', targetStoreId);
+        const snap = await getDoc(storeRef);
+        if (!isSubscribed) return;
 
-        const isRecentOptimistic = optimisticThemeRef.current && (Date.now() - optimisticThemeRef.current.timestamp < 15000);
-        let resolvedTheme = incomingTheme;
+        if (snap.exists()) {
+          const data = snap.data();
+          const existingSlug = data.storeSlug || data.slug;
+          const autoSlug = ensureMandatoryStoreSlug(
+            existingSlug,
+            data.storeName || currentUser?.storeName,
+            currentUser?.email || currentUser?.displayName,
+            currentUser?.uid || targetStoreId
+          );
 
-        if (isRecentOptimistic && optimisticThemeRef.current) {
-          if (incomingTheme !== optimisticThemeRef.current.themeId) {
-            console.log(`[Studio onSnapshot] Verrou anti-rollback actif : maintien du thème ${optimisticThemeRef.current.themeId} (snapshot Firestore a encore ${incomingTheme})`);
-            resolvedTheme = optimisticThemeRef.current.themeId;
-          } else {
-            optimisticThemeRef.current = null;
+          if ((!existingSlug || existingSlug.trim().length < 2 || existingSlug === 'boutique-officielle') && currentUser?.uid) {
+            updateDoc(storeRef, {
+              slug: autoSlug,
+              storeSlug: autoSlug
+            }).catch(console.warn);
           }
-        } else if (!resolvedTheme) {
-          resolvedTheme = prev.active_theme_id || prev.activeThemeId || localTheme || 'theme-beauty-emerald';
-        }
 
-        setStoreConfig(prev => {
-          return {
+          const incomingTheme = data.activeThemeId || data.active_theme_id;
+          const localTheme = typeof window !== 'undefined' ? localStorage.getItem('nana_active_theme_id') : null;
+          const resolvedTheme = incomingTheme || localTheme || 'theme-beauty-emerald';
+
+          setStoreConfig(prev => ({
             ...prev,
             ...data,
             active_theme_id: resolvedTheme,
             activeThemeId: resolvedTheme,
             storeName: data.storeName || prev.storeName,
             slug: autoSlug
-          };
-        });
-        if (data.kycStatus) {
-          setKycStatus(data.kycStatus);
+          }));
+          if (data.kycStatus) setKycStatus(data.kycStatus);
+          if (data.themeCustomization) {
+            setSavedThemeConfig(data.themeCustomization);
+            try {
+              localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(data.themeCustomization));
+            } catch {}
+          }
         }
-        if (data.themeCustomization) {
-          setSavedThemeConfig(data.themeCustomization);
-          try {
-            localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(data.themeCustomization));
-          } catch {}
-          setDraftThemeConfig(prev => {
-            const isUntouched = JSON.stringify(prev) === JSON.stringify(savedThemeConfig);
-            return isUntouched ? data.themeCustomization : prev;
-          });
+
+        // Compléter avec la configuration Supabase app_registry
+        const { data: registryData } = await supabase
+          .from('app_registry')
+          .select('*')
+          .eq('tenant_id', targetStoreId)
+          .eq('module_key', 'theme_config')
+          .maybeSingle();
+
+        if (isSubscribed && registryData?.config_json) {
+          const cfg = registryData.config_json;
+          const themeId = cfg.activeThemeId || cfg.active_theme_id;
+          if (themeId) {
+            setStoreConfig(prev => ({
+              ...prev,
+              active_theme_id: themeId,
+              activeThemeId: themeId
+            }));
+          }
+          if (cfg.customConfig) {
+            setSavedThemeConfig(cfg.customConfig);
+          }
         }
-      } else if (currentUser?.uid && (targetStoreId === currentUser.uid || targetStoreId.startsWith('store-'))) {
-        const autoSlug = ensureMandatoryStoreSlug(
-          null,
-          currentUser?.storeName,
-          currentUser?.email || currentUser?.displayName,
-          currentUser?.uid || targetStoreId
-        );
-        setDoc(storeRef, {
-          storeName: currentUser?.storeName || 'Ma Boutique Studio',
-          slug: autoSlug,
-          storeSlug: autoSlug,
-          activeThemeId: 'theme-beauty-emerald',
-          active_theme_id: 'theme-beauty-emerald',
-          theme: 'dark',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }, { merge: true }).catch(console.warn);
+      } catch (initErr) {
+        console.warn('[Studio Supabase] Erreur initialisation store/thème:', initErr);
       }
-    }, (err) => {
-      console.warn('[Studio] Listener Firestore store error:', err);
-    });
-    return () => unsubscribe();
+    };
+
+    initThemeAndStore();
+
+    // 2. Écouteur Supabase Realtime (remplace Firestore onSnapshot pour les thèmes)
+    const channelName = `studio_theme_sync_${targetStoreId}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'app_registry',
+          filter: `tenant_id=eq.${targetStoreId}`,
+        },
+        (payload) => {
+          if (!isSubscribed) return;
+          const newRecord = payload.new as any;
+          if (newRecord && newRecord.module_key === 'theme_config') {
+            const cfg = newRecord.config_json;
+            const newTheme = cfg?.activeThemeId || cfg?.active_theme_id;
+            if (newTheme) {
+              setStoreConfig(prev => ({
+                ...prev,
+                active_theme_id: newTheme,
+                activeThemeId: newTheme
+              }));
+            }
+            if (cfg?.customConfig) {
+              setSavedThemeConfig(cfg.customConfig);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[Studio Supabase Realtime] Écouteur actif pour tenant: ${targetStoreId}`);
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+      supabase.removeChannel(channel);
+    };
   }, [targetStoreId, currentUser, savedThemeConfig]);
 
   return (
