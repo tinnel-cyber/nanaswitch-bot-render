@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Sparkles, Upload, Mic, MicOff, X, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { uploadMediaToStorage } from '../../../firebase';
+import { uploadImageToImgbb } from '../../../services/imgbbService';
 import { PhysicalFunnelBlock, PhysicalFunnelConfig, DEFAULT_PHYSICAL_FUNNEL_BLOCKS } from '../../../types/physicalFunnel';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
@@ -84,11 +84,11 @@ export const AutoFunnelAiModal: React.FC<AutoFunnelAiModalProps> = ({
 
     try {
       if (imageFile) {
-        // Upload avec timeout de 2.5s maximum pour ne jamais bloquer l'utilisateur
-        const uploadPromise = uploadMediaToStorage(imageFile, `funnels/products/${Date.now()}_${imageFile.name}`);
-        const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
         try {
-          uploadedImageUrl = await Promise.race([uploadPromise, timeoutPromise]);
+          const res = await uploadImageToImgbb(imageFile);
+          if (res?.success && res?.url) {
+            uploadedImageUrl = res.url;
+          }
         } catch {
           uploadedImageUrl = imagePreview;
         }

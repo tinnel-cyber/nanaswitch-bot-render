@@ -2023,7 +2023,7 @@ export const PhysicalFunnelBuilder: React.FC<{
                         <div className="p-2.5 rounded-xl bg-violet-950/30 border border-violet-500/30 text-[11px] text-violet-300 space-y-1">
                           <span className="font-bold flex items-center gap-1.5 text-violet-200">
                             <ShieldCheck className="w-3.5 h-3.5 text-violet-400" />
-                            <span>Économie Bande Passante Firebase</span>
+                            <span>Économie Bande Passante & CDN Rapide</span>
                           </span>
                           <p className="text-slate-400 text-[10.5px]">
                             Collez l'URL de votre vidéo hébergée sur Cloudinary, CDN ou MP4 direct. Aucun upload lourd n'est effectué.
