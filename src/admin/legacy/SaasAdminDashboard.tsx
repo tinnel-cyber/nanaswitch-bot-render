@@ -148,7 +148,8 @@ import {
   GraduationCap,
   Save,
   AlertCircle,
-  LayoutGrid
+  LayoutGrid,
+  Mail
 } from 'lucide-react';
 import {
   supabase,

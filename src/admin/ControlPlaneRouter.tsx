@@ -25,7 +25,7 @@ import { ModuleErrorBoundary } from '../components/ModuleErrorBoundary';
 const HubBuilderPage = React.lazy(() => import('../pages/admin/HubBuilder'));
 
 // Import dynamique du Grand Tableau de Bord Super Admin (12 modules complets)
-const SaasAdminDashboard = React.lazy(() => import('./legacy/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard })));
+const SaasAdminDashboard = React.lazy(() => import('./legacy/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard || m.default })));
 
 export type ControlPlaneTab = 'dashboard' | 'tenants' | 'kyc' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin';
 
