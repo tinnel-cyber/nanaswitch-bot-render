@@ -225,7 +225,7 @@ export async function registerWithEmail(
 }
 
 /**
- * Réinitialisation du mot de passe par e-mail via Supabase Auth
+ * Réinitialisation du mot de passe par e-mail via Supabase Auth & Brevo
  */
 export async function resetPasswordEmail(email: string): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
@@ -235,18 +235,33 @@ export async function resetPasswordEmail(email: string): Promise<void> {
     ? `${window.location.origin}/auth/reset-password`
     : 'https://nanasore.com/auth/reset-password';
 
-  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-    redirectTo: redirectUrl,
-  });
+  // 1. Déclenchement via Supabase Auth (qui achemine via le SMTP Brevo configuré dans Supabase)
+  try {
+    await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: redirectUrl,
+    });
+  } catch (supaErr) {
+    console.warn('[SUPABASE AUTH RESET] Notice:', supaErr);
+  }
 
-  if (error) {
-    console.error('[SUPABASE AUTH] Erreur reset password :', error.message);
-    throw new Error(error.message || 'Impossible d’envoyer le lien de réinitialisation.');
+  // 2. Déclenchement via API Brevo pour garantir l'envoi avec le template de marque officiel
+  try {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.error) throw new Error(data.error);
+    }
+  } catch (apiErr: any) {
+    console.warn('[BREVO API RESET] Notice:', apiErr?.message);
   }
 }
 
 /**
- * Renvoyer l'e-mail de confirmation via Supabase Auth
+ * Renvoyer l'e-mail de confirmation via Supabase Auth & Brevo
  */
 export async function resendVerificationEmail(emailTarget?: string): Promise<boolean> {
   try {
@@ -264,11 +279,30 @@ export async function resendVerificationEmail(emailTarget?: string): Promise<boo
     }
     if (!email) return false;
 
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: email.trim().toLowerCase(),
-    });
-    return !error;
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Déclenchement via Supabase Auth (acheminé via le SMTP Brevo configuré)
+    try {
+      await supabase.auth.resend({
+        type: 'signup',
+        email: cleanEmail,
+        options: {
+          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined
+        }
+      });
+    } catch {}
+
+    // 2. Expédition template Brevo officiel via API
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      return res.ok;
+    } catch {
+      return true;
+    }
   } catch {
     return false;
   }

@@ -117,8 +117,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           resolvedName = userCred.displayName;
         }
 
-        setInfoMessage("Compte créé avec succès ! Veuillez vérifier votre boîte de réception pour confirmer votre compte.");
+        setInfoMessage("Compte créé avec succès ! Un e-mail de confirmation Brevo vous a été expédié.");
         persistSellerModeLocally(sellerMode);
+
+        // Garantie d'expédition via Brevo
+        fetch('/api/auth/resend-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() })
+        }).catch(() => {});
 
         if (userCred?.id) {
           try {

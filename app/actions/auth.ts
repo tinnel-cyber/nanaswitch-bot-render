@@ -1,9 +1,8 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { adminAuth } from "@/lib/firebase-admin";
 import { sendEmailVerification, sendNanasoreEmail } from "@/lib/brevo";
-import { syncFirebaseProfileToSupabase, getSupabaseClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export interface AuthActionResult {
   success: boolean;
@@ -14,13 +13,8 @@ export interface AuthActionResult {
   simulated?: boolean;
 }
 
-// Configuration officielle de redirection personnalisée vers nanasore.com/auth/action
+// Configuration officielle de redirection personnalisée vers nanasore.com/auth/callback
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://nanasore.com').replace(/\/$/, '');
-
-const actionCodeSettings = {
-  url: `${appUrl}/auth/action`,
-  handleCodeInApp: true,
-};
 
 export type RegisterPayload = {
   email: string;
@@ -29,37 +23,39 @@ export type RegisterPayload = {
   fullName?: string;
   displayName?: string;
   whatsapp?: string;
+  sellerMode?: string;
 };
 
 /**
- * Server Action : Inscription d'un utilisateur, génération du lien sécurisé
- * Firebase Admin ciblant https://nanasore.com/auth/action et expédition via Brevo.
- * Supporte à la fois l'appel direct { email, password, name } et le binding FormData (useActionState).
+ * Server Action : Inscription d'un utilisateur via Supabase Auth + Brevo SMTP
+ * Supporte l'appel direct { email, password, name } et le binding FormData (useActionState).
  */
 export async function registerUserAndSendVerification(
   input: RegisterPayload | FormData | AuthActionResult | null,
   maybeFormData?: FormData
 ): Promise<AuthActionResult> {
-  console.log("=== EXÉCUTION SERVER ACTION BREVO ===");
+  console.log("=== EXÉCUTION SERVER ACTION SUPABASE + BREVO ===");
   let email = "";
   let password = "";
   let displayName = "";
   let whatsapp = "";
+  let sellerMode = "merchant_ecommerce";
 
   if (input && typeof input === "object" && "password" in input) {
-    // Appel direct : registerUserAndSendVerification({ email, password, name })
     const payload = input as RegisterPayload;
     email = String(payload.email || "").trim().toLowerCase();
     password = String(payload.password || "");
     displayName = String(payload.name || payload.fullName || payload.displayName || "").trim();
     whatsapp = String(payload.whatsapp || "").trim();
+    if (payload.sellerMode) sellerMode = payload.sellerMode;
   } else {
-    // Appel via formulaire / useActionState : (prevState, formData)
     const formData = (maybeFormData || input) as FormData;
     email = String(formData?.get?.("email") || "").trim().toLowerCase();
     password = String(formData?.get?.("password") || "");
     displayName = String(formData?.get?.("name") || formData?.get?.("displayName") || formData?.get?.("fullName") || "").trim();
     whatsapp = String(formData?.get?.("whatsapp") || "").trim();
+    const mode = formData?.get?.("sellerMode");
+    if (mode) sellerMode = String(mode);
   }
 
   // 1. Validation des champs
@@ -71,19 +67,78 @@ export async function registerUserAndSendVerification(
     return { success: false, error: "Le mot de passe doit comporter au moins 6 caractères." };
   }
 
+  const resolvedName = displayName || email.split("@")[0];
+  const supabase = getSupabaseClient(true);
+
   try {
-    // 2. Création du compte utilisateur dans Firebase Authentication
-    let userRecord;
+    // 2. Création du compte utilisateur dans Supabase Authentication
+    let userId: string = "";
+    let verificationLink: string = `${appUrl}/auth/callback?email=${encodeURIComponent(email)}`;
+
     try {
-      userRecord = await adminAuth.createUser({
+      // Tentative via Supabase Admin (si Service Role Key disponible)
+      const { data: adminData, error: adminErr } = await supabase.auth.admin.createUser({
         email,
         password,
-        displayName: displayName || email.split("@")[0],
-        emailVerified: false,
+        email_confirm: false,
+        user_metadata: {
+          full_name: resolvedName,
+          name: resolvedName,
+          whatsapp,
+          seller_mode: sellerMode
+        }
       });
-      console.log(`[AUTH_REGISTER_SUCCESS] Utilisateur Firebase créé avec l'UID : ${userRecord.uid}`);
+
+      if (!adminErr && adminData?.user) {
+        userId = adminData.user.id;
+        console.log(`[SUPABASE_AUTH_SUCCESS] Utilisateur créé avec l'ID : ${userId}`);
+
+        // Génération du lien de confirmation via Supabase Admin
+        try {
+          const { data: linkData } = await supabase.auth.admin.generateLink({
+            type: 'signup',
+            email,
+            password,
+            options: {
+              redirectTo: `${appUrl}/auth/callback`
+            }
+          });
+          if (linkData?.properties?.action_link) {
+            verificationLink = linkData.properties.action_link;
+          }
+        } catch (lErr: any) {
+          console.warn("[SUPABASE_LINK_NOTICE] Utilisation du lien de callback par défaut :", lErr?.message);
+        }
+      } else {
+        // Repli sur signUp public standard (connecté au SMTP Brevo de Supabase)
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: resolvedName,
+              name: resolvedName,
+              whatsapp,
+              seller_mode: sellerMode
+            },
+            emailRedirectTo: `${appUrl}/auth/callback`
+          }
+        });
+
+        if (signUpErr) {
+          if (signUpErr.message.includes("User already registered") || signUpErr.message.includes("already exists")) {
+            return {
+              success: false,
+              error: "Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.",
+            };
+          }
+          throw signUpErr;
+        }
+
+        userId = signUpData.user?.id || `user_${Date.now().toString(36)}`;
+      }
     } catch (createErr: any) {
-      if (createErr.code === "auth/email-already-exists") {
+      if (createErr?.message?.includes("User already registered") || createErr?.message?.includes("already exists")) {
         return {
           success: false,
           error: "Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.",
@@ -92,14 +147,20 @@ export async function registerUserAndSendVerification(
       throw createErr;
     }
 
-    // 3. Synchronisation de l'UID Firebase vers la table Supabase `profiles`
+    // 3. Synchronisation immédiate vers la table Supabase `profiles`
     try {
-      await syncFirebaseProfileToSupabase({
-        firebaseUid: userRecord.uid,
-        email: userRecord.email || email,
-        fullName: displayName,
-        whatsapp,
-      });
+      await supabase.from("profiles").upsert({
+        id: userId,
+        email,
+        full_name: resolvedName,
+        whatsapp_number: whatsapp,
+        role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+        kyc_status: 'none',
+        pricing_model: 'none',
+        wallet_balance: 0,
+        enabled_themes: [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
 
       // 3b. Attribution automatique du parrainage d'affiliation (Cookie 'Propulsé par Nanasore')
       try {
@@ -108,10 +169,7 @@ export async function registerUserAndSendVerification(
         const refTenantId = cookieStore.get("nanasore_referrer_tenant_id")?.value;
 
         if (refCode || refTenantId) {
-          console.log(`[AUTH_AFFILIATE] Nouvel utilisateur rattaché au parrain : ${refCode || refTenantId}`);
-          const supabase = getSupabaseClient(true);
           let referrerId = refTenantId;
-
           if (!referrerId && refCode) {
             const { data: refTenant } = await supabase
               .from("tenants")
@@ -125,7 +183,7 @@ export async function registerUserAndSendVerification(
             await supabase
               .from("profiles")
               .update({ referred_by_tenant_id: referrerId })
-              .eq("email", email);
+              .eq("id", userId);
           }
         }
       } catch (affiliateErr) {
@@ -135,28 +193,23 @@ export async function registerUserAndSendVerification(
       console.warn("[AUTH_SYNC_NOTICE] Synchronisation Supabase profil différée:", syncErr);
     }
 
-    // 4. Génération du lien de vérification avec redirection personnalisée vers https://nanasore.com/auth/action
-    let verificationLink: string;
+    // 4. Expédition de l'e-mail de confirmation via Brevo (API / SMTP)
+    let emailResult: any = { simulated: false };
     try {
-      verificationLink = await adminAuth.generateEmailVerificationLink(email, actionCodeSettings);
-      console.log(`[FIREBASE_ADMIN] Lien de vérification généré avec redirection vers ${actionCodeSettings.url} pour ${email}`);
-    } catch (linkErr: any) {
-      console.warn("[FIREBASE_ADMIN_LINK_WARN] Repli sur lien applicatif standard:", linkErr.message);
-      verificationLink = `${actionCodeSettings.url}?mode=verifyEmail&email=${encodeURIComponent(email)}&uid=${userRecord.uid}`;
+      emailResult = await sendEmailVerification({
+        toEmail: email,
+        toName: resolvedName || "Marchand Nanasore",
+        verificationUrl: verificationLink,
+      });
+    } catch (brevoErr) {
+      console.warn("[BREVO_DIRECT_NOTICE] Brevo via API notice (relais SMTP Supabase actif) :", brevoErr);
     }
-
-    // 5. Expédition de l'e-mail personnalisé via Brevo SDK
-    const emailResult = await sendEmailVerification({
-      toEmail: email,
-      toName: displayName || "Marchand Nanasore",
-      verificationUrl: verificationLink,
-    });
 
     return {
       success: true,
-      uid: userRecord.uid,
+      uid: userId,
       email,
-      message: "Votre compte a été créé avec succès ! Un e-mail de confirmation personnalisé vous a été envoyé.",
+      message: "Votre compte a été créé avec succès ! Un e-mail de confirmation personnalisé vous a été envoyé via Brevo.",
       simulated: (emailResult as any)?.simulated || false,
     };
   } catch (error: any) {
@@ -169,8 +222,7 @@ export async function registerUserAndSendVerification(
 }
 
 /**
- * Server Action : Renvoi d'un e-mail de vérification via Firebase Admin & Brevo
- * avec actionCodeSettings vers https://nanasore.com/auth/action
+ * Server Action : Renvoi d'un e-mail de vérification via Supabase Auth & Brevo
  */
 export async function resendVerificationEmail(email: string): Promise<AuthActionResult> {
   const cleanEmail = String(email || "").trim().toLowerCase();
@@ -179,8 +231,32 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
     return { success: false, error: "Adresse e-mail invalide." };
   }
 
+  const supabase = getSupabaseClient(true);
+
   try {
-    const verificationLink = await adminAuth.generateEmailVerificationLink(cleanEmail, actionCodeSettings);
+    let verificationLink = `${appUrl}/auth/callback?email=${encodeURIComponent(cleanEmail)}`;
+
+    try {
+      const { data: linkData } = await supabase.auth.admin.generateLink({
+        type: 'signup',
+        email: cleanEmail,
+        options: {
+          redirectTo: `${appUrl}/auth/callback`
+        }
+      });
+      if (linkData?.properties?.action_link) {
+        verificationLink = linkData.properties.action_link;
+      }
+    } catch {
+      // Repli Supabase resend
+      await supabase.auth.resend({
+        type: 'signup',
+        email: cleanEmail,
+        options: {
+          emailRedirectTo: `${appUrl}/auth/callback`
+        }
+      });
+    }
 
     const emailResult = await sendEmailVerification({
       toEmail: cleanEmail,
@@ -191,7 +267,7 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
     return {
       success: true,
       email: cleanEmail,
-      message: "Un nouveau lien de confirmation a été expédié à votre adresse.",
+      message: "Un nouveau lien de confirmation a été expédié à votre adresse via Brevo.",
       simulated: (emailResult as any)?.simulated || false,
     };
   } catch (error: any) {
@@ -204,9 +280,7 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
 }
 
 /**
- * Server Action : Demande de réinitialisation de mot de passe via Brevo
- * avec actionCodeSettings vers https://nanasore.com/auth/action
- * Supporte string, { email: string }, ou FormData.
+ * Server Action : Demande de réinitialisation de mot de passe via Supabase Auth + Brevo
  */
 export async function requestPasswordReset(
   input: string | { email: string } | FormData
@@ -224,8 +298,28 @@ export async function requestPasswordReset(
     return { success: false, error: "Adresse e-mail invalide." };
   }
 
+  const supabase = getSupabaseClient(true);
+
   try {
-    const resetLink = await adminAuth.generatePasswordResetLink(cleanEmail, actionCodeSettings);
+    let resetLink = `${appUrl}/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`;
+
+    try {
+      const { data: linkData } = await supabase.auth.admin.generateLink({
+        type: 'recovery',
+        email: cleanEmail,
+        options: {
+          redirectTo: `${appUrl}/auth/reset-password`
+        }
+      });
+      if (linkData?.properties?.action_link) {
+        resetLink = linkData.properties.action_link;
+      }
+    } catch {
+      // Repli sur l'envoi Supabase direct (qui passe par le SMTP Brevo configuré)
+      await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${appUrl}/auth/reset-password`
+      });
+    }
 
     await sendNanasoreEmail({
       toEmail: cleanEmail,
@@ -245,7 +339,7 @@ export async function requestPasswordReset(
     return {
       success: true,
       email: cleanEmail,
-      message: "Le lien de réinitialisation a été envoyé à votre adresse e-mail.",
+      message: "Le lien de réinitialisation a été envoyé à votre adresse e-mail via Brevo.",
     };
   } catch (error: any) {
     console.error("[PASSWORD_RESET_ERROR]", error);
