@@ -462,7 +462,7 @@ export interface CustomDomainTenant {
   storeName?: string;
   customDomain: string;
   vendorType?: 'ecommerce' | 'elearning' | 'hybrid' | string;
-  type?: 'store' | 'campus' | 'ecommerce' | 'elearning';
+  type?: 'store' | 'campus' | 'ecommerce' | 'elearning' | 'funnel';
   logoUrl?: string;
   bannerImage?: string;
   primaryColor?: string;

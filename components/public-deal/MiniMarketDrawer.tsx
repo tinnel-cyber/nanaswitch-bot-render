@@ -88,26 +88,36 @@ export default function MiniMarketDrawer({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm transition-opacity">
-      <div className="absolute inset-y-0 right-0 flex max-w-full pl-10">
-        <div className="w-screen max-w-md transform bg-white shadow-2xl transition-transform duration-300 ease-in-out flex flex-col">
-          
-          {/* En-tête du Tiroir */}
-          <div className="flex items-center justify-between border-b px-4 py-3 bg-gray-50">
-            <div className="flex items-center space-x-2">
-              <ShoppingBag className="h-5 w-5 text-emerald-600" />
-              <h2 className="text-base font-bold text-gray-900">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 transition-all"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] sm:max-h-[85vh] transform transition-all duration-300 animate-in zoom-in-95 my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        
+        {/* En-tête du Super Popup */}
+        <div className="flex items-center justify-between border-b px-4 py-3.5 bg-gray-50/90 shrink-0">
+          <div className="flex items-center space-x-2">
+            <div className="p-1.5 rounded-xl bg-emerald-100 text-emerald-600">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-extrabold text-gray-900 leading-tight">
                 Mini-Market Express
               </h2>
+              <p className="text-[10.5px] text-gray-500">Auto-composition d'articles en direct</p>
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-full p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition"
-              aria-label="Fermer le tiroir"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
+          <button
+            onClick={onClose}
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition cursor-pointer"
+            aria-label="Fermer le popup"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
           {/* Barre de Recherche & Catégories */}
           <div className="p-4 border-b space-y-3 bg-white">
@@ -254,6 +264,5 @@ export default function MiniMarketDrawer({
 
         </div>
       </div>
-    </div>
   )
 }

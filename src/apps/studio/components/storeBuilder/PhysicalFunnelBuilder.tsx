@@ -68,6 +68,7 @@ import {
 } from '../../../../types/physicalFunnel';
 import { ImageUploadInput } from '../../../../components/common/ImageUploadInput';
 import MiniMarketDrawer from '../../../../components/funnel/MiniMarketDrawer';
+import CheckoutModal from '@/components/public-deal/CheckoutModal';
 import {
   DEFAULT_DELIVERY_OPTIONS,
   DEFAULT_ORDER_BUMP,
@@ -159,8 +160,10 @@ const SortableBlockRow: React.FC<SortableBlockRowProps> = ({
       <div className="flex items-center gap-1 shrink-0">
         <button
           type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
-          className={`p-1 rounded-lg transition ${block.visible ? 'text-slate-400 hover:text-white' : 'text-slate-600'}`}
+          className={`p-1.5 rounded-lg transition active:scale-95 ${block.visible ? 'text-slate-400 hover:text-white' : 'text-slate-600'}`}
           title={block.visible ? 'Masquer' : 'Afficher'}
         >
           <Eye className="w-3.5 h-3.5" />
@@ -168,11 +171,17 @@ const SortableBlockRow: React.FC<SortableBlockRowProps> = ({
 
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="p-1 rounded-lg text-slate-600 hover:text-rose-400 hover:bg-rose-500/20 transition"
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onDelete();
+          }}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/20 active:scale-95 transition cursor-pointer"
           title="Supprimer le bloc"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -245,8 +254,11 @@ export const PhysicalFunnelBuilder: React.FC<{
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string>(funnelConfig.blocks[0]?.id || 'block-hero');
   const [devicePreview, setDevicePreview] = useState<'DESKTOP' | 'MOBILE'>('DESKTOP');
+  const [mobileView, setMobileView] = useState<'preview' | 'editor'>('preview');
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isMiniMarketPreviewOpen, setIsMiniMarketPreviewOpen] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [composedCart, setComposedCart] = useState<any[]>([]);
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
 
   const brandColor = funnelConfig.brandColor || '#10b981';
@@ -476,16 +488,31 @@ export const PhysicalFunnelBuilder: React.FC<{
       props: defaultPropsByType[type] || {}
     };
 
-    setFunnelConfig(prev => ({ ...prev, blocks: [...prev.blocks, newBlock] }));
+    setFunnelConfig(prev => ({
+      ...prev,
+      blocks: [...prev.blocks, newBlock],
+      updatedAt: Date.now()
+    }));
     setSelectedBlockId(newId);
+    setSavedNotification(`Bloc "${titles[type]}" ajouté !`);
+    setTimeout(() => setSavedNotification(null), 2500);
   };
 
   const handleDeleteBlock = (blockId: string) => {
     playTapBeep();
-    setFunnelConfig(prev => ({
-      ...prev,
-      blocks: prev.blocks.filter(b => b.id !== blockId)
-    }));
+    setFunnelConfig(prev => {
+      const remaining = prev.blocks.filter(b => b.id !== blockId);
+      if (selectedBlockId === blockId) {
+        setSelectedBlockId(remaining[0]?.id || '');
+      }
+      return {
+        ...prev,
+        blocks: remaining,
+        updatedAt: Date.now()
+      };
+    });
+    setSavedNotification('Bloc supprimé.');
+    setTimeout(() => setSavedNotification(null), 2000);
   };
 
   const handleToggleVisible = (blockId: string) => {
@@ -740,10 +767,47 @@ export const PhysicalFunnelBuilder: React.FC<{
         </div>
       )}
 
+      {/* Sélecteur Mobile Slider / Segmenté (Canvas Live vs Éditeur) */}
+      <div className="lg:hidden px-3 py-2 bg-slate-950 border-b border-slate-800 flex items-center justify-center shrink-0">
+        <div className="w-full max-w-md grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold shadow-inner">
+          <button
+            type="button"
+            onClick={() => { playTapBeep(); setMobileView('preview'); }}
+            style={{
+              backgroundColor: mobileView === 'preview' ? brandColor : undefined,
+              boxShadow: mobileView === 'preview' ? `0 4px 15px -3px ${brandColor}60` : undefined,
+              color: mobileView === 'preview' ? '#ffffff' : undefined
+            }}
+            className={`py-2 px-3 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
+              mobileView === 'preview' ? 'font-black' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            <span>👁️ Aperçu Live (Canvas)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { playTapBeep(); setMobileView('editor'); }}
+            style={{
+              backgroundColor: mobileView === 'editor' ? brandColor : undefined,
+              boxShadow: mobileView === 'editor' ? `0 4px 15px -3px ${brandColor}60` : undefined,
+              color: mobileView === 'editor' ? '#ffffff' : undefined
+            }}
+            className={`py-2 px-3 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
+              mobileView === 'editor' ? 'font-black' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>⚙️ Blocs & Édition</span>
+          </button>
+        </div>
+      </div>
+
       {/* 2. Workspace Principal Divisé (Split-Screen) */}
-      <div className="flex-1 w-full flex overflow-hidden">
+      <div className="flex-1 w-full flex overflow-hidden relative">
         {/* Colonne Gauche : Structure & Blocs OU Paramètres Généraux */}
-        <div className="w-80 sm:w-[440px] bg-slate-900/95 border-r border-slate-800 flex flex-col shrink-0 overflow-hidden">
+        <div className={`${mobileView === 'editor' ? 'flex w-full' : 'hidden'} lg:flex lg:w-[440px] bg-slate-900/95 border-r border-slate-800 flex-col shrink-0 overflow-hidden`}>
           {/* Onglets Principaux : Structure/Blocs vs Paramètres Généraux */}
           <div className="p-2.5 bg-slate-950/80 border-b border-slate-800 grid grid-cols-2 gap-1.5 shrink-0">
             <button
@@ -2102,6 +2166,17 @@ export const PhysicalFunnelBuilder: React.FC<{
                         </button>
                       </div>
                     )}
+                    {/* Bouton de Suppression Rapide du Bloc Sélectionné */}
+                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBlock(selectedBlock.id)}
+                        className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold border border-rose-500/30 flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Supprimer ce bloc ({selectedBlock.title})</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2127,7 +2202,7 @@ export const PhysicalFunnelBuilder: React.FC<{
         </div>
 
         {/* Colonne Droite : Canvas Live Preview 60 FPS (Scrollable et Fluide) */}
-        <div className="flex-1 bg-[#020617] overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar flex justify-center p-3 sm:p-6 lg:p-8">
+        <div className={`${mobileView === 'preview' ? 'flex w-full' : 'hidden'} lg:flex flex-1 bg-[#020617] overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar justify-center p-3 sm:p-6 lg:p-8`}>
           <div
             className={`transition-all duration-300 ${
               devicePreview === 'MOBILE'
@@ -2724,8 +2799,58 @@ export const PhysicalFunnelBuilder: React.FC<{
         isOpen={isMiniMarketPreviewOpen}
         onClose={() => setIsMiniMarketPreviewOpen(false)}
         onCheckout={(cart) => {
+          setComposedCart(cart);
           setIsMiniMarketPreviewOpen(false);
+          setIsCheckoutModalOpen(true);
         }}
+      />
+
+      {/* Switcher Flottant Rapide sur Téléphone */}
+      <div className="lg:hidden fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-slate-950/95 backdrop-blur-md p-1.5 rounded-full border border-slate-700 shadow-2xl flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => { playTapBeep(); setMobileView('preview'); }}
+          style={{
+            backgroundColor: mobileView === 'preview' ? brandColor : undefined,
+            color: mobileView === 'preview' ? '#ffffff' : undefined
+          }}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            mobileView === 'preview' ? 'shadow-md' : 'text-slate-400'
+          }`}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>Canvas</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { playTapBeep(); setMobileView('editor'); }}
+          style={{
+            backgroundColor: mobileView === 'editor' ? brandColor : undefined,
+            color: mobileView === 'editor' ? '#ffffff' : undefined
+          }}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            mobileView === 'editor' ? 'shadow-md' : 'text-slate-400'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Éditeur</span>
+        </button>
+      </div>
+
+      {/* Modale de Paiement Mobile Money & Token Caisse Réelle */}
+      <CheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        dealProduct={{
+          id: funnelConfig.productId || funnelConfig.id,
+          title: funnelConfig.title,
+          price: (funnelConfig.blocks.find(b => isHeroBlock(b.type))?.props?.price) || 25000,
+          imageUrl: (funnelConfig.blocks.find(b => isHeroBlock(b.type))?.props?.imageUrl) || ''
+        }}
+        dealQuantity={1}
+        cartItems={composedCart}
+        tenantId={funnelConfig.storeId}
+        tenantName={funnelConfig.title}
       />
     </div>
   );

@@ -60,6 +60,7 @@ export interface FunnelProductItem {
   sku?: string;
   wooCommerceId?: number;
   courseId?: string; // Si itemType === 'digital'
+  storeId?: string;
 }
 
 export interface UpsellOfferConfig {

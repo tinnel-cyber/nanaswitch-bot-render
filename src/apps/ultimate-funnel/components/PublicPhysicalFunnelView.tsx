@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import MiniMarketDrawer from '../../../components/funnel/MiniMarketDrawer';
+import CheckoutModal from '@/components/public-deal/CheckoutModal';
 
 interface PublicPhysicalFunnelViewProps {
   slug: string;
@@ -47,6 +48,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isLoading, setIsLoading] = useState(true);
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [isMiniMarketOpen, setIsMiniMarketOpen] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [miniMarketCart, setMiniMarketCart] = useState<any[]>([]);
   const [marketProducts, setMarketProducts] = useState<any[]>([
     {
@@ -840,6 +842,32 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
             localStorage.setItem('nana_checkout_cart', JSON.stringify(cart));
             window.dispatchEvent(new CustomEvent('nana_cart_updated', { detail: { cart } }));
           } catch (e) {}
+          setIsCheckoutModalOpen(true);
+        }}
+      />
+
+      {/* Modale de Paiement Mobile Money & Token Caisse Réelle */}
+      <CheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        dealProduct={{
+          id: activeFunnel.productId || activeFunnel.id,
+          title: activeFunnel.title,
+          price: heroProps.price || activeFunnel.ogMetadata?.priceAmount || 35000,
+          imageUrl: activeFunnel.ogMetadata?.imageUrl || heroProps.imageUrl || ''
+        }}
+        dealQuantity={1}
+        cartItems={miniMarketCart}
+        tenantId={activeFunnel.storeId}
+        tenantName={activeFunnel.title}
+        onPaymentSuccess={(orderRef) => {
+          setCompletedOrder({
+            transactionId: orderRef,
+            customerName: 'Client Nanasore',
+            totalAmount: (heroProps.price || 35000) + miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0),
+            provider: 'MOBILE MONEY'
+          });
+          playCashChime();
         }}
       />
 

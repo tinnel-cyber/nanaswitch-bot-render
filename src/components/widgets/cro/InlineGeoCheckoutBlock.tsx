@@ -63,6 +63,26 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [ussdModalCode, setUssdModalCode] = useState<string | null>(null);
 
+  // État des articles auto-composés depuis le Mini-Market
+  const [miniMarketItems, setMiniMarketItems] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('nana_checkout_cart');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e?.detail?.cart) {
+        setMiniMarketItems(e.detail.cart);
+      }
+    };
+    window.addEventListener('nana_cart_updated', handler);
+    return () => window.removeEventListener('nana_cart_updated', handler);
+  }, []);
+
   // Synchronise si les options changent
   useEffect(() => {
     if (activeDeliveryList.length > 0 && !activeDeliveryList.some(d => d.id === selectedDelivery.id)) {
@@ -72,7 +92,11 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
 
   const bumpPrice = (orderBumpEnabled && includeOrderBump) ? activeBump.price : 0;
   const shippingPrice = selectedDelivery ? selectedDelivery.price : 0;
-  const totalAmount = price + bumpPrice + shippingPrice;
+  const miniMarketTotal = miniMarketItems.reduce(
+    (acc, i) => acc + (Number(i.price) || 0) * (Number(i.quantity) || 1),
+    0
+  );
+  const totalAmount = price + bumpPrice + shippingPrice + miniMarketTotal;
 
   const handlePay = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +136,8 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
           totalAmount,
           provider,
           delivery: selectedDelivery,
-          orderBumpAccepted: includeOrderBump
+          orderBumpAccepted: includeOrderBump,
+          composedItems: miniMarketItems
         });
       }
     }, 1800);
@@ -195,7 +220,6 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               required
-              style={{ focusBorderColor: brandColor }}
               className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-emerald-500 transition"
               placeholder="Ex: Salif Ouédraogo"
             />
@@ -288,6 +312,22 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
               <p className="text-[10.5px] text-slate-300 pt-0.5">{activeBump.description}</p>
             </div>
           </label>
+        )}
+
+        {/* Récapitulatif Auto-composition Mini-Market si présent */}
+        {miniMarketItems.length > 0 && (
+          <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-black text-emerald-400">
+              <span>Articles auto-composés ({miniMarketItems.length}) :</span>
+              <span className="font-mono text-white">+{formatCFA(miniMarketTotal)}</span>
+            </div>
+            {miniMarketItems.map((item: any) => (
+              <div key={item.id} className="flex justify-between text-[11px] text-slate-300 pl-2">
+                <span className="truncate pr-2">• {item.name} <strong className="text-slate-400 font-mono">x{item.quantity}</strong></span>
+                <span className="font-mono text-slate-300 shrink-0">{formatCFA(item.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* 5. Bouton de Paiement / Confirmation avec brandColor */}

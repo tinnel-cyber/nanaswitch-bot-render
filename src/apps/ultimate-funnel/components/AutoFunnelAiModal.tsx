@@ -78,177 +78,193 @@ export const AutoFunnelAiModal: React.FC<AutoFunnelAiModalProps> = ({
     e.preventDefault();
     playValidationBeep();
     setIsGenerating(true);
-    setGenerationStep('Téléversement sécurisé de l\'image produit...');
+    setGenerationStep("Téléversement et analyse du produit...");
 
     let uploadedImageUrl = imagePreview;
 
     try {
       if (imageFile) {
-        const path = `funnels/products/${Date.now()}_${imageFile.name}`;
-        uploadedImageUrl = await uploadMediaToStorage(imageFile, path);
-      }
-    } catch (err) {
-      console.warn('Upload image fallback to preview url:', err);
-    }
-
-    setGenerationStep('NaNa AI rédige votre page de vente (Framework AIDA)...');
-
-    try {
-      const response = await fetch('/api/ai/auto-funnel/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productName,
-          description,
-          priceCFA,
-          originalPriceCFA,
-          imageUrl: uploadedImageUrl
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.blocks) {
-          const slug = productName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 25);
-          const generatedConfig: PhysicalFunnelConfig = {
-            id: `funnel_${Date.now()}`,
-            slug,
-            productId: `prod_${Date.now()}`,
-            title: productName,
-            brandColor: result.brandColor || '#10b981',
-            blocks: result.blocks,
-            ogMetadata: {
-              title: productName,
-              description: description.slice(0, 150),
-              imageUrl: uploadedImageUrl,
-              priceAmount: priceCFA,
-              currency: 'FCFA'
-            },
-            isPublished: false,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          };
-
-          onFunnelGenerated(generatedConfig);
-          onClose();
-          return;
+        // Upload avec timeout de 2.5s maximum pour ne jamais bloquer l'utilisateur
+        const uploadPromise = uploadMediaToStorage(imageFile, `funnels/products/${Date.now()}_${imageFile.name}`);
+        const timeoutPromise = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500));
+        try {
+          uploadedImageUrl = await Promise.race([uploadPromise, timeoutPromise]);
+        } catch {
+          uploadedImageUrl = imagePreview;
         }
       }
-    } catch (err) {
-      console.warn('Backend generation fallback to client AIDA template:', err);
-    }
 
-    // Fallback template client autonome AIDA haute conversion
-    const slug = productName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 25);
-    const fallbackBlocks: PhysicalFunnelBlock[] = [
-      {
-        id: 'block-hero',
-        type: 'HERO_PRODUCT',
-        title: 'Hero Vitrine',
-        visible: true,
-        props: {
-          headline: `${productName} : L'Élégance & la Précision au Quotidien`,
-          subheadline: description,
-          badgeText: 'VENTE FLASH EXCLUSIVE • STOCK LIMITÉ',
-          price: priceCFA,
-          originalPrice: originalPriceCFA,
-          discountBadge: `-${Math.round(((originalPriceCFA - priceCFA) / originalPriceCFA) * 100)}% AUJOURD\'HUI`,
-          ctaText: 'Commander avec Wave / Orange Money',
-          imageUrl: uploadedImageUrl
+      setGenerationStep('NaNa AI rédige votre page de vente (Framework AIDA)...');
+
+      // Tentative d'appel API avec timeout de 4 secondes
+      let generatedBlocks: PhysicalFunnelBlock[] | null = null;
+      let brandColor = '#10b981';
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const response = await fetch('/api/ai/auto-funnel/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            productName,
+            description,
+            priceCFA,
+            originalPriceCFA,
+            imageUrl: uploadedImageUrl
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && Array.isArray(result.blocks) && result.blocks.length > 0) {
+            generatedBlocks = result.blocks;
+            if (result.brandColor) brandColor = result.brandColor;
+          }
         }
-      },
-      {
-        id: 'block-scarcity',
-        type: 'SCARCITY_URGENCY',
-        title: 'Jauge Rareté',
-        visible: true,
-        props: {
-          totalStock: 30,
-          remainingStock: 7,
-          hoursLeft: 3,
-          urgencyText: 'Plus que 7 exemplaires disponibles à ce tarif promotionnel !'
-        }
-      },
-      {
-        id: 'block-benefits',
-        type: 'BENEFITS_LIST',
-        title: 'Avantages Clés AIDA',
-        visible: true,
-        props: {
-          headline: 'Ce qui rend ce produit unique :',
-          bullets: [
-            { title: 'Qualité Supérieure Certifiée', desc: 'Matériaux nobles garantis contre l\'usure.' },
-            { title: 'Livraison Express 2H', desc: 'Reçu en main propre avant de régler.' },
-            { title: 'Garantie Totale NaNa', desc: 'Échange immédiat en cas de défaut.' }
-          ]
-        }
-      },
-      {
-        id: 'block-flash-live',
-        type: 'FLASH_LIVE_CTA',
-        title: 'Bouton Concierge WebRTC',
-        visible: true,
-        props: {
-          buttonText: '👁️ Voir le produit en direct (Visio 5 min)',
-          badgeText: 'VENDEUR DISPONIBLE EN BOUTIQUE'
-        }
-      },
-      {
-        id: 'block-trust',
-        type: 'TRUST_BADGES',
-        title: 'Badges de Confiance',
-        visible: true,
-        props: {
-          badges: [
-            'Paiement 100% Sécurisé Wave & Orange Money',
-            'Livraison Express Bobo & Abidjan',
-            'Garantie Caisse NaNa'
-          ]
-        }
-      },
-      {
-        id: 'block-checkout',
-        type: 'INLINE_CHECKOUT',
-        title: 'Caisse Intégrée',
-        visible: true,
-        props: {
-          heading: 'Finalisez votre commande en 1 minute',
-          subheading: 'Paiement sans contact ou règlement à la livraison'
-        }
-      },
-      {
-        id: 'block-fomo',
-        type: 'LIVE_SALE_TOAST',
-        title: 'Preuve Sociale FOMO',
-        visible: true,
-        props: {
-          intervalSeconds: 12,
-          enabled: true
-        }
+      } catch (err) {
+        console.warn('[AutoFunnelAI] Bascule sur la génération locale AIDA:', err);
       }
-    ];
 
-    const fallbackConfig: PhysicalFunnelConfig = {
-      id: `funnel_${Date.now()}`,
-      slug,
-      productId: `prod_${Date.now()}`,
-      title: productName,
-      brandColor: '#10b981',
-      blocks: fallbackBlocks,
-      ogMetadata: {
+      // Si l'API n'a pas répondu ou en mode hors-ligne, génération locale immédiate
+      if (!generatedBlocks) {
+        const discountPct = Math.max(10, Math.round(((originalPriceCFA - priceCFA) / originalPriceCFA) * 100));
+        generatedBlocks = [
+          {
+            id: `block_hero_${Date.now()}`,
+            type: 'HERO_PRODUCT',
+            title: 'Hero Vitrine Standard CRO',
+            visible: true,
+            props: {
+              headline: `${productName} : L'Élégance & la Précision au Quotidien`,
+              subheadline: description || 'Commandez en direct au tarif promotionnel et bénéficiez de la livraison express.',
+              badgeText: 'VENTE FLASH EXCLUSIVE • STOCK LIMITÉ',
+              price: priceCFA,
+              originalPrice: originalPriceCFA,
+              discountBadge: `-${discountPct}% AUJOURD'HUI`,
+              ctaText: 'Commander avec Wave / Orange Money',
+              imageUrl: uploadedImageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=80'
+            }
+          },
+          {
+            id: `block_scarcity_${Date.now()}`,
+            type: 'SCARCITY_URGENCY',
+            title: 'Jauge Rareté & Compte à Rebours',
+            visible: true,
+            props: {
+              totalStock: 30,
+              remainingStock: 7,
+              hoursLeft: 3,
+              urgencyText: 'Plus que 7 exemplaires disponibles à ce tarif promotionnel !'
+            }
+          },
+          {
+            id: `block_benefits_${Date.now()}`,
+            type: 'BENEFITS_LIST',
+            title: 'Avantages Clés AIDA',
+            visible: true,
+            props: {
+              headline: 'Ce qui rend ce produit unique :',
+              bullets: [
+                { title: 'Qualité Supérieure Certifiée', desc: 'Matériaux nobles garantis contre l\'usure du temps.' },
+                { title: 'Livraison Express Sous 4H', desc: 'Reçu en main propre et inspecté avant de régler.' },
+                { title: 'Garantie Totale NaNa', desc: 'Échange immédiat en boutique en cas de défaut.' }
+              ]
+            }
+          },
+          {
+            id: `block_flash_live_${Date.now()}`,
+            type: 'FLASH_LIVE_CTA',
+            title: 'Bouton Concierge WebRTC',
+            visible: true,
+            props: {
+              buttonText: '👁️ Voir le produit en direct (Visio 5 min)',
+              badgeText: 'VENDEUR DISPONIBLE EN BOUTIQUE',
+              merchantPhone: '+22507000000'
+            }
+          },
+          {
+            id: `block_trust_${Date.now()}`,
+            type: 'TRUST_BADGES',
+            title: 'Badges de Confiance',
+            visible: true,
+            props: {
+              badges: [
+                'Paiement 100% Sécurisé Wave & Orange Money',
+                'Livraison Express & Sécurisée',
+                'Garantie Satisfait ou Remboursé'
+              ]
+            }
+          },
+          {
+            id: `block_mini_market_${Date.now()}`,
+            type: 'MINI_MARKET_DRAWER',
+            title: 'Mini-Market Express (Auto-composition)',
+            visible: true,
+            props: {
+              buttonText: 'Explorer le Mini-Market',
+              badgeText: 'Auto-composition',
+              headline: 'Complétez votre commande avec le Mini-Market',
+              subheadline: 'Ajoutez des articles et accessoires complémentaires directement.',
+              floatingButtonEnabled: true
+            }
+          },
+          {
+            id: `block_checkout_${Date.now()}`,
+            type: 'INLINE_CHECKOUT',
+            title: 'Caisse Intégrée',
+            visible: true,
+            props: {
+              heading: 'Finalisez votre commande en 1 minute',
+              subheading: 'Paiement sans contact ou règlement à la livraison'
+            }
+          },
+          {
+            id: `block_fomo_${Date.now()}`,
+            type: 'LIVE_SALE_TOAST',
+            title: 'Preuve Sociale FOMO',
+            visible: true,
+            props: {
+              intervalSeconds: 12,
+              enabled: true
+            }
+          }
+        ];
+      }
+
+      const slug = (productName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 25)) || 'offre-exclusive';
+
+      const generatedConfig: PhysicalFunnelConfig = {
+        id: `funnel_${Date.now()}`,
+        slug,
+        productId: `prod_${Date.now()}`,
         title: productName,
-        description,
-        imageUrl: uploadedImageUrl,
-        priceAmount: priceCFA,
-        currency: 'FCFA'
-      },
-      isPublished: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+        brandColor,
+        blocks: generatedBlocks,
+        ogMetadata: {
+          title: productName,
+          description: description ? description.slice(0, 150) : productName,
+          imageUrl: uploadedImageUrl,
+          priceAmount: priceCFA,
+          currency: 'FCFA'
+        },
+        isPublished: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
 
-    onFunnelGenerated(fallbackConfig);
-    onClose();
+      onFunnelGenerated(generatedConfig);
+      onClose();
+    } catch (criticalErr) {
+      console.error('[AutoFunnelAI] Erreur fatale génération:', criticalErr);
+      alert('Une erreur est survenue. Veuillez vérifier les champs et réessayer.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
