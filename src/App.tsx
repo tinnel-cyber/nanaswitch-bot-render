@@ -5432,6 +5432,7 @@ export default function App() {
         <React.Suspense fallback={<LazyModuleFallback label="Chargement Control Plane Super Admin..." />}>
           <ControlPlaneRouter
             onExitToMerchant={() => setCurrentView('MASTER_HUB')}
+            currentUser={currentUser}
           />
         </React.Suspense>
       </ModuleErrorBoundary>

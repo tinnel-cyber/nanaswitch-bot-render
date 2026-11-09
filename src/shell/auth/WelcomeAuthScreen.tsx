@@ -136,8 +136,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [pinStep, setPinStep] = useState<'ENTER' | 'CONFIRM'>('ENTER');
 
-  // Pending Firebase User during PIN setup
-  const [pendingFirebaseUser, setPendingFirebaseUser] = useState<any>(null);
+  // Pending Supabase User during PIN setup
+  const [pendingAuthUser, setPendingAuthUser] = useState<any>(null);
 
   // Email verification cooldown
   const [isResending, setIsResending] = useState<boolean>(false);
@@ -231,7 +231,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         if (profile?.pinCode || profile?.masterPin) {
           // Synchronisation neutre Supabase en arrière-plan
           syncAuthProfileWithSupabase({
-            firebaseUid: fbUser.uid,
+            userId: fbUser.uid,
             email: fbUser.email || '',
             fullName: profile.name || fbUser.displayName || '',
             whatsapp: profile.phone || ''
@@ -263,7 +263,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           };
           onLoginSuccess(completedUser);
         } else {
-          setPendingFirebaseUser(fbUser);
+          setPendingAuthUser(fbUser);
           setStep('PIN_SETUP');
         }
       }
@@ -298,7 +298,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
       // Synchronisation neutre dans Supabase (kyc_status: none, pricing_model: none)
       await syncAuthProfileWithSupabase({
-        firebaseUid: user.uid,
+        userId: user.uid,
         email: user.email || emailInput.trim(),
         fullName: user.displayName || fullName || ''
       });
@@ -332,7 +332,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         playCashChime();
         onLoginSuccess(storeUser);
       } else {
-        setPendingFirebaseUser(user);
+        setPendingAuthUser(user);
         setStep('PIN_SETUP');
       }
     } catch (err: any) {
@@ -384,13 +384,13 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       // Persistance Neutre Immédiate dans Supabase :
       // kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
       await syncAuthProfileWithSupabase({
-        firebaseUid: user.uid,
+        userId: user.uid,
         email: user.email || emailInput.trim(),
         fullName: fullName.trim() || 'Utilisateur Nanasore',
         whatsapp: fullWhatsapp
       });
 
-      setPendingFirebaseUser(user);
+      setPendingAuthUser(user);
       setInfoMessage('Compte créé avec succès !');
 
       if (!user.emailVerified) {
@@ -425,7 +425,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
         // Persistance neutre dans Supabase
         await syncAuthProfileWithSupabase({
-          firebaseUid: fbUser.uid,
+          userId: fbUser.uid,
           email: fbUser.email || '',
           fullName: fbUser.displayName || 'Utilisateur Nanasore'
         });
@@ -461,7 +461,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           return;
         }
 
-        setPendingFirebaseUser(fbUser);
+        setPendingAuthUser(fbUser);
         setStep('PIN_SETUP');
         playValidationBeep();
       }
@@ -520,7 +520,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   // Finalisation Master PIN & Entrée directe dans le Tableau de Bord Unifié
   const finalizeMasterPinSetup = async (pinValue: string) => {
     setIsLoading(true);
-    const currentUserAuth = pendingFirebaseUser || (await getSupabaseCurrentUser());
+    const currentUserAuth = pendingAuthUser || (await getSupabaseCurrentUser());
     const uid = currentUserAuth?.uid || `user-${Date.now()}`;
     const userEmail = currentUserAuth?.email || emailInput.trim();
     const cleanFullName = fullName.trim() || currentUserAuth?.displayName || 'Utilisateur Nanasore';
@@ -567,7 +567,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
     // Persistance Neutre dans Supabase
     await syncAuthProfileWithSupabase({
-      firebaseUid: uid,
+      userId: uid,
       email: userEmail,
       fullName: cleanFullName,
       whatsapp: fullWhatsapp

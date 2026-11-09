@@ -116,6 +116,16 @@ export class ModuleErrorBoundary extends Component<Props, State> {
               Recharger la page
             </button>
           </div>
+          {this.state.error && (
+            <details className="mt-3 text-[11px] text-slate-400">
+              <summary className="cursor-pointer hover:text-slate-300 font-semibold select-none">
+                Détails du dysfonctionnement
+              </summary>
+              <pre className="mt-2 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-rose-300 text-[10px] font-mono whitespace-pre-wrap overflow-x-auto max-h-40">
+                {this.state.error.message || String(this.state.error)}
+              </pre>
+            </details>
+          )}
         </div>
       );
     }

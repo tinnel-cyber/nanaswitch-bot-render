@@ -234,8 +234,9 @@ export function playChaChingSound(): void {
 /**
  * Format currency in F CFA with non-breaking spaces
  */
-export function formatCFA(amount: number): string {
-  const formatted = Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+export function formatCFA(amount?: number | null): string {
+  const num = typeof amount === 'number' && !isNaN(amount) ? amount : (Number(amount) || 0);
+  const formatted = Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return `${formatted} F CFA`;
 }
 

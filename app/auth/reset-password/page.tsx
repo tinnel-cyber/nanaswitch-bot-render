@@ -1,16 +1,16 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { confirmPasswordReset } from "firebase/auth";
-import { auth } from "@/lib/firebase-client";
-import { Lock, CheckCircle2, AlertOctagon, ArrowRight, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { Lock, CheckCircle2, AlertOctagon, ArrowRight, ShieldCheck, Eye, EyeOff, Loader2 } from "lucide-react";
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const oobCode = searchParams.get("oobCode");
+  const code = searchParams.get("code");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -18,22 +18,101 @@ function ResetPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [hasValidToken, setHasValidToken] = useState(false);
 
-  if (!oobCode) {
+  // Vérification initiale du jeton (Supabase PKCE code, hash tokens, ou oobCode Firebase)
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkToken() {
+      try {
+        // 1. Supabase PKCE Code
+        if (code) {
+          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (!exchangeErr && isMounted) {
+            setHasValidToken(true);
+            setIsVerifying(false);
+            return;
+          }
+        }
+
+        // 2. Supabase Hash Tokens (#access_token=...)
+        if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+          if (accessToken && refreshToken) {
+            const { error: setErr } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!setErr && isMounted) {
+              setHasValidToken(true);
+              setIsVerifying(false);
+              return;
+            }
+          }
+        }
+
+        // 3. Session Supabase déjà active (ex: clic lien magique)
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session && isMounted) {
+          setHasValidToken(true);
+          setIsVerifying(false);
+          return;
+        }
+
+        // 4. Firebase oobCode (Repli historique)
+        if (oobCode && isMounted) {
+          setHasValidToken(true);
+          setIsVerifying(false);
+          return;
+        }
+
+        if (isMounted) {
+          setHasValidToken(false);
+          setIsVerifying(false);
+        }
+      } catch (e) {
+        if (isMounted) {
+          setHasValidToken(false);
+          setIsVerifying(false);
+        }
+      }
+    }
+
+    checkToken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [code, oobCode]);
+
+  if (isVerifying) {
+    return (
+      <div className="text-center py-6 space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+        <p className="text-xs text-slate-400">Vérification de votre lien de sécurité...</p>
+      </div>
+    );
+  }
+
+  if (!hasValidToken) {
     return (
       <div className="text-center py-4 space-y-4">
         <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 mx-auto flex items-center justify-center">
           <AlertOctagon className="w-8 h-8" />
         </div>
-        <h1 className="text-xl font-bold text-white">Lien de réinitialisation invalide</h1>
-        <p className="text-xs text-slate-400">
-          Le jeton de sécurité est manquant. Veuillez redemander un lien de réinitialisation.
+        <h1 className="text-xl font-bold text-white">Lien de réinitialisation expiré ou invalide</h1>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Le jeton de sécurité est manquant ou a expiré. Veuillez redemander un lien de réinitialisation.
         </p>
         <Link
           href="/"
-          className="inline-block w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold"
+          className="inline-block w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30"
         >
-          Retour à l'accueil
+          Retour à la connexion
         </Link>
       </div>
     );
@@ -56,20 +135,36 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      await confirmPasswordReset(auth, oobCode, password);
-      setSuccess(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 3000);
-    } catch (err: any) {
-      console.error("Erreur complète reset :", err);
-      if (err.code === "auth/expired-action-code") {
-        setError("Ce lien de réinitialisation a expiré. Veuillez refaire une demande.");
-      } else if (err.code === "auth/invalid-action-code") {
-        setError("Ce lien a déjà été utilisé ou est invalide.");
-      } else {
-        setError(err?.message || "Erreur lors de la réinitialisation du mot de passe.");
+      // 1. Mise à jour prioritaire via Supabase Auth
+      const { error: supaErr } = await supabase.auth.updateUser({ password });
+      if (!supaErr) {
+        setSuccess(true);
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 2000);
+        return;
       }
+
+      // 2. Repli éventuel sur Firebase si oobCode présent
+      if (oobCode) {
+        try {
+          const { confirmPasswordReset } = await import("firebase/auth");
+          const { auth } = await import("@/lib/firebase-client");
+          await confirmPasswordReset(auth, oobCode, password);
+          setSuccess(true);
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 2000);
+          return;
+        } catch (fbErr: any) {
+          throw supaErr || fbErr;
+        }
+      }
+
+      throw supaErr;
+    } catch (err: any) {
+      console.error("[RESET_PASSWORD_ERROR]", err);
+      setError(err?.message || "Erreur lors de la mise à jour du mot de passe.");
     } finally {
       setLoading(false);
     }
@@ -78,21 +173,18 @@ function ResetPasswordForm() {
   if (success) {
     return (
       <div className="text-center py-4 space-y-4">
-        <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center">
-          <CheckCircle2 className="w-10 h-10" />
+        <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+          <CheckCircle2 className="w-8 h-8" />
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          Sécurité Mise à Jour
-        </span>
-        <h1 className="text-2xl font-black text-white">Mot de passe réinitialisé !</h1>
-        <p className="text-xs text-slate-300">
-          Votre nouveau mot de passe a été enregistré avec succès. Redirection vers votre espace...
+        <h1 className="text-xl font-bold text-white">Mot de passe réinitialisé !</h1>
+        <p className="text-xs text-slate-400">
+          Votre mot de passe a été mis à jour avec succès. Redirection vers votre tableau de bord...
         </p>
         <Link
           href="/dashboard"
-          className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase"
+          className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30"
         >
-          <span>Accéder au tableau de bord</span>
+          Accéder au Tableau de Bord
           <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
@@ -100,42 +192,42 @@ function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 text-left">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="text-center mb-6">
-        <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center mb-3">
-          <Lock className="w-7 h-7" />
+        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 mx-auto flex items-center justify-center mb-3">
+          <ShieldCheck className="w-6 h-6" />
         </div>
-        <h1 className="text-xl font-bold text-white">Nouveau Mot de Passe</h1>
+        <h1 className="text-xl font-bold text-white">Nouveau mot de passe</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Choisissez un nouveau mot de passe sécurisé pour votre compte Nanasore.
+          Choisissez un mot de passe robuste d'au moins 6 caractères.
         </p>
       </div>
 
       {error && (
-        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
           <AlertOctagon className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       <div>
-        <label className="block text-xs font-bold text-slate-300 mb-1.5">
-          Nouveau mot de passe *
+        <label className="block text-xs font-medium text-slate-300 mb-1.5">
+          Nouveau mot de passe
         </label>
         <div className="relative">
+          <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type={showPassword ? "text" : "password"}
-            required
-            minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Minimum 6 caractères"
-            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-600 pr-10"
+            placeholder="••••••••"
+            required
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
           >
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
@@ -143,26 +235,35 @@ function ResetPasswordForm() {
       </div>
 
       <div>
-        <label className="block text-xs font-bold text-slate-300 mb-1.5">
-          Confirmer le nouveau mot de passe *
+        <label className="block text-xs font-medium text-slate-300 mb-1.5">
+          Confirmer le mot de passe
         </label>
-        <input
-          type={showPassword ? "text" : "password"}
-          required
-          minLength={6}
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="Retapez le mot de passe"
-          className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
-        />
+        <div className="relative">
+          <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type={showPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition"
+          />
+        </div>
       </div>
 
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-blue-600/25 flex items-center justify-center gap-2 disabled:opacity-50"
+        className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
       >
-        {loading ? "Enregistrement en cours..." : "Valider mon nouveau mot de passe"}
+        {loading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Modification en cours...</span>
+          </>
+        ) : (
+          <span>Enregistrer le nouveau mot de passe</span>
+        )}
       </button>
     </form>
   );
@@ -172,20 +273,9 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100 flex items-center justify-center p-6 font-sans">
       <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl backdrop-blur-xl relative overflow-hidden">
-        <Suspense
-          fallback={
-            <div className="py-12 flex justify-center">
-              <div className="w-8 h-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
-            </div>
-          }
-        >
+        <Suspense fallback={<div className="text-center text-xs text-slate-500 py-6">Chargement...</div>}>
           <ResetPasswordForm />
         </Suspense>
-
-        <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-[11px] text-slate-500">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Chiffrement Firebase sécurisé</span>
-        </div>
       </div>
     </div>
   );

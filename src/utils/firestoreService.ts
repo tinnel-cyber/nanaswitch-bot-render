@@ -1559,17 +1559,49 @@ export async function savePrivacyPolicy(policy: PrivacyPolicyConfig) {
 }
 
 /**
- * Récupère le profil utilisateur Firestore users/{uid}
+ * Récupère le profil utilisateur (Priorité Supabase profiles, repli LocalStorage & Firestore)
  * Initialise automatiquement les 15 crédits gratuits s'ils ne sont pas présents
  */
 export async function getUserProfile(uid: string): Promise<Record<string, any> | null> {
   if (!uid) return null;
+
+  // 1. Priorité Supabase PostgreSQL (Source de vérité)
+  try {
+    const { data: supaProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (supaProfile) {
+      return {
+        ...supaProfile,
+        pinCode: supaProfile.pin_code || (supaProfile as any).pinCode,
+        masterPin: supaProfile.master_pin || (supaProfile as any).masterPin,
+        storeId: (supaProfile as any).store_id || `store-${uid.slice(0, 8)}`,
+        name: supaProfile.full_name || (supaProfile as any).name || 'Utilisateur Nanasore',
+        phone: supaProfile.whatsapp_number || (supaProfile as any).phone,
+        credits: (supaProfile as any).credits !== undefined ? (supaProfile as any).credits : DEFAULT_FREE_CREDITS,
+      };
+    }
+  } catch (sErr) {
+    console.warn('[SUPABASE_PROFILE_READ] Notice :', sErr);
+  }
+
+  // 2. Repli Cache LocalStorage
+  try {
+    const localProfile = localStorage.getItem(`nana_user_profile_${uid}`);
+    if (localProfile) {
+      return JSON.parse(localProfile);
+    }
+  } catch {}
+
+  // 3. Repli Firestore si nécessaire
   try {
     const userRef = doc(db, 'users', uid);
     const userDoc = await getDoc(userRef);
     if (userDoc.exists()) {
       const data = userDoc.data();
-      // Tout nouvel utilisateur reçoit automatiquement 15 crédits gratuits par défaut pour découvrir l'outil
       if (data.credits === undefined) {
         data.credits = DEFAULT_FREE_CREDITS;
         setDoc(userRef, { credits: DEFAULT_FREE_CREDITS }, { merge: true }).catch(() => {});
@@ -1652,6 +1684,22 @@ export async function saveUserProfile(uid: string, profileData: Record<string, a
     ...profileData,
     updatedAt: new Date().toISOString(),
   });
+
+  // 1. Sauvegarde prioritaire dans Supabase `profiles`
+  try {
+    await supabase.from('profiles').upsert({
+      id: uid,
+      email: profileData.email || '',
+      full_name: profileData.name || profileData.fullName || '',
+      whatsapp_number: profileData.phone || profileData.whatsapp || '',
+      pin_code: profileData.pinCode || null,
+      master_pin: profileData.masterPin || null,
+      role: profileData.role || 'GERANT',
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  } catch (supaErr) {
+    console.warn('[SUPABASE_PROFILE_SAVE] Notice :', supaErr);
+  }
 
   try {
     await setDoc(userRef, payload, { merge: true });

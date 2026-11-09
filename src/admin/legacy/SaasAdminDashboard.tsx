@@ -407,7 +407,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     auth.currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
     currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
     auth.currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
-    currentUser?.email?.toLowerCase().includes('admin') ||
+    Boolean(currentUser?.email?.toLowerCase()?.includes('admin')) ||
     (typeof window !== 'undefined' && (
       localStorage.getItem('nana_is_superadmin') === 'true' ||
       localStorage.getItem('nana_superadmin_unlocked') === 'true' ||
@@ -836,8 +836,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         updatedBy: currentUser?.email || 'Super-Admin',
       };
 
-      const operators = platformConfig.paymentSettings.operators || [];
-      const findOpNum = (name: string) => operators.find(o => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
+      const operators = platformConfig?.paymentSettings?.operators || [];
+      const findOpNum = (name: string) => operators.find(o => String(o.operator || '').toLowerCase().includes(name.toLowerCase()) || String(o.id || '').toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
 
       const paymentRouting = {
         orangeNumber: findOpNum('orange') || '',
@@ -911,8 +911,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         updatedBy: currentUser?.email || 'Super-Admin',
       };
 
-      const operators = platformConfig.paymentSettings.operators || [];
-      const findOpNum = (name: string) => operators.find(o => o.operator?.toLowerCase().includes(name.toLowerCase()) || o.id?.toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
+      const operators = platformConfig?.paymentSettings?.operators || [];
+      const findOpNum = (name: string) => operators.find(o => String(o.operator || '').toLowerCase().includes(name.toLowerCase()) || String(o.id || '').toLowerCase().includes(name.toLowerCase()))?.merchantNumber;
 
       const paymentRouting = {
         orangeNumber: findOpNum('orange') || '',
@@ -960,7 +960,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     if (e) e.preventDefault();
     playTapBeep();
 
-    const currentPlan = platformConfig.plans[selectedEditPlanIdx];
+    const currentPlan = platformConfig?.plans?.[selectedEditPlanIdx];
     if (!currentPlan) return;
 
     // Validation stricte du bon ID de document ciblé
@@ -998,7 +998,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         limits: cleanedLimits,
       };
 
-      const updatedPlans = [...platformConfig.plans];
+      const updatedPlans = [...(platformConfig?.plans || [])];
       updatedPlans[selectedEditPlanIdx] = cleanedPlan;
 
       const updatedPlatform: PlatformSubscriptionConfig = {
@@ -1532,8 +1532,10 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   };
 
   // Filtering stores
-  const filteredStores = stores.filter((store) => {
-    if (selectedCountry !== 'ALL' && !store.country.toLowerCase().includes(selectedCountry.toLowerCase())) {
+  const filteredStores = (stores || []).filter((store) => {
+    if (!store) return false;
+    const countryStr = String(store.country || '');
+    if (selectedCountry !== 'ALL' && !countryStr.toLowerCase().includes(selectedCountry.toLowerCase())) {
       return false;
     }
     if (healthFilter === 'DANGER' && store.health !== 'CRITICAL') return false;
@@ -1543,19 +1545,20 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        store.name.toLowerCase().includes(q) ||
-        store.ownerName.toLowerCase().includes(q) ||
-        store.city.toLowerCase().includes(q)
+        String(store.name || '').toLowerCase().includes(q) ||
+        String(store.ownerName || '').toLowerCase().includes(q) ||
+        String(store.city || '').toLowerCase().includes(q)
       );
     }
     return true;
   });
 
   // Danger stores specifically for Section 2
-  const dangerStores = stores.filter((s) => s.health === 'CRITICAL' || s.health === 'WARNING');
+  const dangerStores = (stores || []).filter((s) => s && (s.health === 'CRITICAL' || s.health === 'WARNING'));
 
   // Filtering tasks for Section 3
-  const filteredTasks = tasks.filter((t) => {
+  const filteredTasks = (tasks || []).filter((t) => {
+    if (!t) return false;
     if (taskFilter === 'PENDING') return !t.completed;
     if (taskFilter === 'DONE') return t.completed;
     if (taskFilter === 'URGENT') return !t.completed && t.priority === 'URGENT';
@@ -1563,7 +1566,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   });
 
   // Filtering KYC Requests
-  const filteredKycList = kycRequests.filter((req) => {
+  const filteredKycList = (kycRequests || []).filter((req) => {
+    if (!req) return false;
     const matchFilter = 
       kycFilter === 'ALL' ||
       (kycFilter === 'PENDING' && req.status === 'pending_approval') ||
@@ -1573,15 +1577,16 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     const q = kycSearch.trim().toLowerCase();
     const matchSearch = 
       !q ||
-      req.storeName.toLowerCase().includes(q) ||
-      req.managerFullName.toLowerCase().includes(q) ||
-      req.whatsappPhone.toLowerCase().includes(q);
+      String(req.storeName || '').toLowerCase().includes(q) ||
+      String(req.managerFullName || '').toLowerCase().includes(q) ||
+      String(req.whatsappPhone || '').toLowerCase().includes(q);
 
     return matchFilter && matchSearch;
   });
 
   // Filtering Enterprise KYC Submissions (/kyc_submissions)
-  const filteredEnterpriseList = enterpriseSubmissions.filter((sub) => {
+  const filteredEnterpriseList = (enterpriseSubmissions || []).filter((sub) => {
+    if (!sub) return false;
     const isPending = sub.status === 'pending' || sub.status === 'pending_approval';
     const isVerified = sub.status === 'verified' || sub.status === 'approved';
     const isRejected = sub.status === 'rejected';
@@ -1595,19 +1600,19 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     const q = kycSearch.trim().toLowerCase();
     const matchSearch =
       !q ||
-      (sub.companyName && sub.companyName.toLowerCase().includes(q)) ||
-      (sub.storeName && sub.storeName.toLowerCase().includes(q)) ||
-      (sub.managerFullName && sub.managerFullName.toLowerCase().includes(q)) ||
-      (sub.whatsappPhone && sub.whatsappPhone.toLowerCase().includes(q)) ||
-      (sub.ifuNumber && sub.ifuNumber.toLowerCase().includes(q)) ||
-      (sub.rccmNumber && sub.rccmNumber.toLowerCase().includes(q)) ||
-      (sub.userId && sub.userId.toLowerCase().includes(q));
+      (sub.companyName && String(sub.companyName).toLowerCase().includes(q)) ||
+      (sub.storeName && String(sub.storeName).toLowerCase().includes(q)) ||
+      (sub.managerFullName && String(sub.managerFullName).toLowerCase().includes(q)) ||
+      (sub.whatsappPhone && String(sub.whatsappPhone).toLowerCase().includes(q)) ||
+      (sub.ifuNumber && String(sub.ifuNumber).toLowerCase().includes(q)) ||
+      (sub.rccmNumber && String(sub.rccmNumber).toLowerCase().includes(q)) ||
+      (sub.userId && String(sub.userId).toLowerCase().includes(q));
 
     return matchFilter && matchSearch;
   });
 
 
-  const pendingTasksCount = tasks.filter((t) => !t.completed).length;
+  const pendingTasksCount = (tasks || []).filter((t) => t && !t.completed).length;
 
   // Real-time network refresh
   const handleRefreshNetwork = async () => {
@@ -2280,7 +2285,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
             {/* Geographical Quick Breakdown Pills */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              {kpiMetrics.countriesCovered.map((c) => (
+              {(kpiMetrics?.countriesCovered || []).map((c) => (
                 <span
                   key={c}
                   className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10.5px] font-medium text-slate-400"
@@ -2301,20 +2306,20 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 </span>
                 <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/30 text-emerald-400 flex items-center gap-0.5">
                   <ArrowUpRight className="w-3 h-3" />
-                  +{kpiMetrics.newStoresThisMonth} ce mois
+                  +{kpiMetrics?.newStoresThisMonth ?? 0} ce mois
                 </span>
               </div>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-3xl font-black text-white tracking-tight">
-                  {kpiMetrics.activeStoresCount}
+                  {kpiMetrics?.activeStoresCount ?? 0}
                 </span>
                 <span className="text-xs text-slate-400 font-medium">
-                  / {kpiMetrics.totalStoresCount} inscrites
+                  / {kpiMetrics?.totalStoresCount ?? 0} inscrites
                 </span>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2">
                 <span>Taux de santé réseau</span>
-                <span className="font-bold text-emerald-400">{kpiMetrics.healthyStoresRate}% saines</span>
+                <span className="font-bold text-emerald-400">{kpiMetrics?.healthyStoresRate ?? 100}% saines</span>
               </div>
             </div>
 
@@ -2326,18 +2331,18 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                   Volume d'Affaires Réseau (GMV)
                 </span>
                 <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/30 text-emerald-400 flex items-center gap-0.5">
-                  {kpiMetrics.growthRateGMV}
+                  {kpiMetrics?.growthRateGMV || '0%'}
                 </span>
               </div>
               <div className="flex items-baseline gap-1.5 mt-2">
                 <span className="text-2xl sm:text-3xl font-black text-emerald-400 tracking-tight">
-                  {formatCFA(kpiMetrics.totalNetworkGMV)}
+                  {formatCFA(kpiMetrics?.totalNetworkGMV ?? 0)}
                 </span>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2">
                 <span>Transactions réseau</span>
                 <span className="font-bold text-slate-200">
-                  {kpiMetrics.totalTransactionsCount.toLocaleString()} ventes
+                  {Number(kpiMetrics?.totalTransactionsCount || 0).toLocaleString()} ventes
                 </span>
               </div>
             </div>
@@ -2355,14 +2360,14 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               </div>
               <div className="flex items-baseline gap-1 mt-2">
                 <span className="text-3xl font-black text-amber-300 tracking-tight">
-                  {formatCFA(kpiMetrics.monthlyRecurringRevenueMRR)}
+                  {formatCFA(kpiMetrics?.monthlyRecurringRevenueMRR ?? 0)}
                 </span>
                 <span className="text-xs text-slate-400 font-medium">/mois</span>
               </div>
               <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2">
                 <span>Panier moyen client</span>
                 <span className="font-bold text-slate-200">
-                  {formatCFA(kpiMetrics.averageBasketSizeNetwork)}
+                  {formatCFA(kpiMetrics?.averageBasketSizeNetwork ?? 0)}
                 </span>
               </div>
             </div>
@@ -4399,7 +4404,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             </div>
 
             {/* Formulaire d'édition du Plan Sélectionné */}
-            {platformConfig.plans[selectedEditPlanIdx] && (
+            {platformConfig?.plans?.[selectedEditPlanIdx] && (
               <div className="space-y-3.5 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -4532,12 +4537,12 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 <div className="space-y-2 pt-2 border-t border-slate-800">
                   <div className="flex items-center justify-between">
                     <label className="block text-[10.5px] font-bold text-slate-300 uppercase tracking-wide">
-                      Avantages Inclus ({platformConfig.plans[selectedEditPlanIdx].features.length} puces) :
+                      Avantages Inclus ({platformConfig?.plans?.[selectedEditPlanIdx]?.features?.length || 0} puces) :
                     </label>
                   </div>
 
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                    {platformConfig.plans[selectedEditPlanIdx].features.map((feature, fIdx) => (
+                    {(platformConfig?.plans?.[selectedEditPlanIdx]?.features || []).map((feature, fIdx) => (
                       <div
                         key={fIdx}
                         className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200"
@@ -4725,7 +4730,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               {/* Liste des opérateurs existants */}
               <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
                 {(platformConfig.paymentSettings?.operators || []).map((op) => {
-                  const isBfOrange = op.country.toLowerCase().includes('burkina') && op.operator.toLowerCase().includes('orange');
+                  const isBfOrange = String(op.country || '').toLowerCase().includes('burkina') && String(op.operator || '').toLowerCase().includes('orange');
                   return (
                     <div
                       key={op.id}

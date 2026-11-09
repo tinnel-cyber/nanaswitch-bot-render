@@ -85,8 +85,8 @@ export const ComparisonMatrixAdminTab: React.FC<ComparisonMatrixAdminTabProps> =
     return features.filter((feat) => {
       const matchCat = selectedCategoryFilter === 'ALL' || feat.category === selectedCategoryFilter;
       const matchSearch = searchQuery.trim() === '' || 
-        feat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (feat.tooltip && feat.tooltip.toLowerCase().includes(searchQuery.toLowerCase()));
+        String(feat.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (feat.tooltip && String(feat.tooltip).toLowerCase().includes(searchQuery.toLowerCase()));
       return matchCat && matchSearch;
     });
   }, [features, selectedCategoryFilter, searchQuery]);

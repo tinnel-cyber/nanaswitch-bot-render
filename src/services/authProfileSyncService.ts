@@ -17,17 +17,19 @@ export interface ContextualAuthProfile {
  * Synchronise un compte Firebase Auth avec Supabase en mode NEUTRE sans KYC à l'entrée
  */
 export async function syncAuthProfileWithSupabase(params: {
-  firebaseUid: string;
+  userId?: string;
+  firebaseUid?: string;
   email: string;
   fullName?: string;
   whatsapp?: string;
 }): Promise<ContextualAuthProfile> {
-  const { firebaseUid, email, fullName, whatsapp } = params;
+  const resolvedUid = params.userId || params.firebaseUid || "";
+  const { email, fullName, whatsapp } = params;
 
   // 1. Synchronisation prioritaire directe dans la table Supabase `profiles`
   try {
     const { data: supaProfile } = await supabase.from('profiles').upsert({
-      id: firebaseUid,
+      id: resolvedUid,
       email,
       full_name: fullName || '',
       whatsapp_number: whatsapp || '',
@@ -37,7 +39,7 @@ export async function syncAuthProfileWithSupabase(params: {
     if (supaProfile) {
       const profile: ContextualAuthProfile = {
         id: supaProfile.id,
-        firebase_uid: firebaseUid,
+        firebase_uid: resolvedUid,
         email: supaProfile.email || email,
         full_name: supaProfile.full_name || fullName,
         whatsapp_number: supaProfile.whatsapp_number || whatsapp,
@@ -49,7 +51,7 @@ export async function syncAuthProfileWithSupabase(params: {
 
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem(`nana_contextual_profile_${firebaseUid}`, JSON.stringify(profile));
+          localStorage.setItem(`nana_contextual_profile_${resolvedUid}`, JSON.stringify(profile));
           localStorage.setItem('nana_user_kyc_status', profile.kyc_status);
           localStorage.setItem('nana_user_pricing_model', profile.pricing_model);
           localStorage.setItem('nana_user_wallet_balance', String(profile.wallet_balance));
@@ -83,7 +85,7 @@ export async function syncAuthProfileWithSupabase(params: {
         const p = json.profile;
         const profile: ContextualAuthProfile = {
           id: p.profile_id || p.id,
-          firebase_uid: firebaseUid,
+          firebase_uid: resolvedUid,
           email: p.email || email,
           full_name: p.full_name || fullName,
           whatsapp_number: p.whatsapp_number || whatsapp,
@@ -96,7 +98,7 @@ export async function syncAuthProfileWithSupabase(params: {
         // Cache local immédiat
         if (typeof window !== 'undefined') {
           try {
-            localStorage.setItem(`nana_contextual_profile_${firebaseUid}`, JSON.stringify(profile));
+            localStorage.setItem(`nana_contextual_profile_${resolvedUid}`, JSON.stringify(profile));
             localStorage.setItem('nana_user_kyc_status', profile.kyc_status);
             localStorage.setItem('nana_user_pricing_model', profile.pricing_model);
             localStorage.setItem('nana_user_wallet_balance', String(profile.wallet_balance));
@@ -113,7 +115,7 @@ export async function syncAuthProfileWithSupabase(params: {
 
   // Profil neutre par défaut en cas de latence réseau
   const fallbackProfile: ContextualAuthProfile = {
-    firebase_uid: firebaseUid,
+    firebase_uid: resolvedUid,
     email,
     full_name: fullName,
     whatsapp_number: whatsapp,
@@ -125,7 +127,7 @@ export async function syncAuthProfileWithSupabase(params: {
 
   if (typeof window !== 'undefined') {
     try {
-      localStorage.setItem(`nana_contextual_profile_${firebaseUid}`, JSON.stringify(fallbackProfile));
+      localStorage.setItem(`nana_contextual_profile_${resolvedUid}`, JSON.stringify(fallbackProfile));
       localStorage.setItem('nana_user_kyc_status', 'none');
       localStorage.setItem('nana_user_pricing_model', 'none');
       localStorage.setItem('nana_user_wallet_balance', '0');

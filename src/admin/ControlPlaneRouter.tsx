@@ -27,11 +27,14 @@ const HubBuilderPage = React.lazy(() => import('../pages/admin/HubBuilder'));
 // Import dynamique du Grand Tableau de Bord Super Admin (12 modules complets)
 const SaasAdminDashboard = React.lazy(() => import('./legacy/SaasAdminDashboard').then(m => ({ default: m.SaasAdminDashboard || m.default })));
 
+import { StoreUser } from '../types';
+
 export type ControlPlaneTab = 'dashboard' | 'tenants' | 'kyc' | 'pricing' | 'system-health' | 'hub-builder' | 'saas-admin';
 
 export interface ControlPlaneRouterProps {
   initialTab?: ControlPlaneTab;
   onExitToMerchant?: () => void;
+  currentUser?: StoreUser | null;
 }
 
 /**
@@ -43,7 +46,8 @@ export interface ControlPlaneRouterProps {
  */
 export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
   initialTab = 'dashboard',
-  onExitToMerchant
+  onExitToMerchant,
+  currentUser
 }) => {
   const [currentTab, setCurrentTab] = useState<ControlPlaneTab>(initialTab);
 
@@ -263,7 +267,7 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
             <ModuleErrorBoundary moduleName="Grand Dashboard Super Admin">
               <React.Suspense fallback={<div className="p-12 text-center text-slate-400 animate-pulse">Chargement du Grand Tableau de Bord Fondateur (12 Modules)...</div>}>
                 <div className="rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-2xl">
-                  <SaasAdminDashboard onBackToPOS={() => navigateToTab('dashboard')} />
+                  <SaasAdminDashboard onBackToPOS={() => navigateToTab('dashboard')} currentUser={currentUser} />
                 </div>
               </React.Suspense>
             </ModuleErrorBoundary>

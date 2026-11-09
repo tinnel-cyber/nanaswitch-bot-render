@@ -234,9 +234,9 @@ export const AdminTutorialsTab: React.FC = () => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      t.title.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q) ||
-      t.categoryLabel.toLowerCase().includes(q)
+      String(t.title || '').toLowerCase().includes(q) ||
+      String(t.description || '').toLowerCase().includes(q) ||
+      String(t.categoryLabel || '').toLowerCase().includes(q)
     );
   });
 
