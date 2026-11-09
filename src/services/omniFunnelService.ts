@@ -4,6 +4,7 @@
  * calculs de livraison, synchronisation WooCommerce, Brevo et Twilio.
  */
 
+import { supabase } from '../lib/supabase';
 import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref as rtdbRef, set as rtdbSet, get as rtdbGet } from 'firebase/database';
 import { db, rtdb } from '../firebase';
@@ -617,6 +618,23 @@ export async function registerSubdomainInFirebase(subdomain: string, title?: str
       ...additionalData
     };
 
+    // 0. Sauvegarde prioritaire dans Supabase (table public.funnels) & cache local
+    try {
+      localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
+      localStorage.setItem(`nana_funnel_${cleanSub}`, JSON.stringify(payload));
+      localStorage.setItem(`nana_funnel_c-${cleanSub}`, JSON.stringify(payload));
+
+      await supabase.from('funnels').upsert({
+        slug: cleanSub,
+        title: funnelTitle,
+        template_data: payload,
+        is_published: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'slug' });
+    } catch (supaErr) {
+      console.warn('[OMNI-FUNNEL] Sauvegarde Supabase notice:', supaErr);
+    }
+
     // 1. Sauvegarde directe dans 'funnels' sous la clé typée préfixée (t-slug, c-slug, f-slug) pour zéro conflit
     await setDoc(doc(db, 'funnels', typeKey), payload, { merge: true });
 
@@ -748,6 +766,25 @@ export async function saveFunnelConfig(funnelData: any): Promise<boolean> {
   };
 
   try {
+    // 0. Sauvegarde prioritaire dans Supabase (table public.funnels) & cache local
+    try {
+      localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
+      localStorage.setItem(`nana_funnel_${slug}`, JSON.stringify(payload));
+      if (linkPrefix === 'c') {
+        localStorage.setItem(`nana_funnel_c-${slug}`, JSON.stringify(payload));
+      }
+
+      await supabase.from('funnels').upsert({
+        slug,
+        title: payload.title || payload.funnelTitle || `Tunnel ${slug}`,
+        template_data: payload,
+        is_published: payload.isPublished !== false,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'slug' });
+    } catch (supaErr) {
+      console.warn('[OMNI-FUNNEL] Sauvegarde Supabase notice:', supaErr);
+    }
+
     // 1. Sauvegarde standardisée par clé typée pour isolation absolue (zéro collision)
     await setDoc(doc(db, 'funnels', typeKey), payload, { merge: true });
 
@@ -847,6 +884,36 @@ export async function getFunnelBySlug(slug: string, typeHint?: string): Promise<
     typeHint === 'f' || typeHint === 'ultimate' ? 'f' : 't';
 
   const typeKey = `${normType}-${cleanSlug}`;
+
+  // 0. Priorité 0 : Récupération Supabase (public.funnels) & cache local (0ms)
+  try {
+    const cachedTyped = localStorage.getItem(`nana_funnel_${typeKey}`) ||
+      localStorage.getItem(`nana_funnel_${normType}-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_c-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_${cleanSlug}`);
+    if (cachedTyped) {
+      const parsed = JSON.parse(cachedTyped);
+      if (parsed && (parsed.blocks || parsed.steps || parsed.title)) {
+        return parsed;
+      }
+    }
+
+    const { data: supaRow, error } = await supabase
+      .from('funnels')
+      .select('template_data, title, slug, is_published')
+      .eq('slug', cleanSlug)
+      .maybeSingle();
+
+    if (!error && supaRow?.template_data && Object.keys(supaRow.template_data).length > 0) {
+      try {
+        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(supaRow.template_data));
+        localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(supaRow.template_data));
+      } catch (e) {}
+      return supaRow.template_data;
+    }
+  } catch (supaErr) {
+    console.warn('[OMNI-FUNNEL] Supabase getFunnelBySlug notice:', supaErr);
+  }
 
   // 1. Priorité 1 : Si on cherche le Funnel Modulaire 12 blocs ('t'), vérifier d'abord le stockage dédié modular_funnel
   if (normType === 't') {
@@ -1065,7 +1132,28 @@ export async function fetchVendorFunnels(storeId?: string): Promise<VendorFunnel
     }
   } catch {}
 
-  // 2. Récupérer dans Firestore (collection 'funnels')
+  // 2. Récupérer dans Supabase (table 'funnels')
+  try {
+    const { data: supaList, error } = await supabase.from('funnels').select('*');
+    if (!error && supaList) {
+      supaList.forEach((row: any) => {
+        const cleanId = String(row.slug || row.id).replace(/^[fct]-/, '');
+        const funnelTitle = row.title || cleanId;
+        if (!funnelsMap.has(cleanId)) {
+          funnelsMap.set(cleanId, {
+            id: cleanId,
+            title: funnelTitle,
+            slug: row.slug || cleanId,
+            linkPrefix: row.template_data?.linkPrefix || 't'
+          });
+        }
+      });
+    }
+  } catch (supaErr) {
+    console.warn('[OMNI-FUNNEL] fetchVendorFunnels Supabase notice:', supaErr);
+  }
+
+  // 3. Récupérer dans Firestore (collection 'funnels') en fallback
   try {
     const funnelsCol = collection(db, 'funnels');
     const snap = await getDocs(funnelsCol);

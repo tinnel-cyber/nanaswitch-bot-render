@@ -1212,7 +1212,7 @@ export const FunnelSettingsModal = ({
               ) : (
                 <Check className="w-4 h-4 stroke-[2.5]" />
               )}
-              <span>{isSaving ? 'Enregistrement Firestore...' : 'Enregistrer les Modifications'}</span>
+              <span>{isSaving ? 'Enregistrement en cours...' : 'Enregistrer les Modifications'}</span>
             </button>
           </div>
         </div>

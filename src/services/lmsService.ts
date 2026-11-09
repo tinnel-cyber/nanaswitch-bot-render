@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import { db, storage } from '../firebaseConfig';
 import { 
   doc, updateDoc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc 
@@ -539,13 +540,28 @@ export async function uploadContentBankFile(
   let downloadUrl = '';
   const storagePath = `courses/${courseId}/content_bank/${Date.now()}_${file.name}`;
 
+  // 1. Upload prioritaire vers Supabase Storage (bucket academic_uploads)
   try {
-    const storageRef = ref(storage, storagePath);
-    const uploadResult = await uploadBytes(storageRef, file);
-    downloadUrl = await getDownloadURL(uploadResult.ref);
-  } catch (err) {
-    console.warn("Erreur upload Firebase Storage, génération URL locale sécurisée:", err);
-    downloadUrl = URL.createObjectURL(file);
+    const supaPath = `courses/${courseId}/${Date.now()}_${file.name}`;
+    const { data: supaUpload, error: supaErr } = await supabase.storage.from('academic_uploads').upload(supaPath, file);
+    if (!supaErr && supaUpload?.path) {
+      const { data: pubData } = supabase.storage.from('academic_uploads').getPublicUrl(supaUpload.path);
+      if (pubData?.publicUrl) {
+        downloadUrl = pubData.publicUrl;
+      }
+    }
+  } catch (_e) {}
+
+  // 2. Fallback Firebase Storage / local
+  if (!downloadUrl) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      const uploadResult = await uploadBytes(storageRef, file);
+      downloadUrl = await getDownloadURL(uploadResult.ref);
+    } catch (err) {
+      console.warn("Upload fallback local sécurisé:", err);
+      downloadUrl = URL.createObjectURL(file);
+    }
   }
 
   const resource: LessonResource = {

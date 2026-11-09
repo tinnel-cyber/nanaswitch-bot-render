@@ -216,7 +216,7 @@ export const READY_TO_USE_BLOCKS = [
     category: 'sections',
     name: 'Vidéo Autoplay Silencieuse',
     badge: 'Loop CDN ⚡',
-    description: 'Vidéo courte muette en boucle 100% largeur (Cloudinary, BunnyCDN, MP4 direct) économisant la bande passante Firebase.',
+    description: 'Vidéo courte muette en boucle 100% largeur (Cloudinary, BunnyCDN, MP4 direct) optimisée pour le CDN Cloudflare.',
     icon: Video,
     defaultData: {
       ...DEFAULT_AUTOPLAY_VIDEO_DATA,
@@ -3028,7 +3028,7 @@ export const UltimateFunnelBuilder = ({
                           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                           <div>
                             <span className="text-slate-200 font-bold">Domaine racine (sans www) : </span>
-                            Créez un enregistrement <code className="text-amber-300 font-mono">A</code> avec le nom <code className="text-amber-300 font-mono">@</code> pointant vers <code className="text-amber-300 font-mono">199.36.158.100</code> (IP Anycast CDN Firebase).
+                            Créez un enregistrement <code className="text-amber-300 font-mono">CNAME</code> ou <code className="text-amber-300 font-mono">A</code> pointant vers <code className="text-amber-300 font-mono">cname.nanasore.com</code> (Réseau Cloudflare Edge & SSL automatique).
                           </div>
                         </div>
 

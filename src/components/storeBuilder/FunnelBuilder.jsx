@@ -762,7 +762,7 @@ export const DIVI_MODULES_CATALOG = [
     badge: 'Loop CDN ⚡',
     icon: Video,
     color: '#8b5cf6',
-    description: 'Vidéo courte muette en boucle automatique 100% largeur (Cloudinary, CDN, MP4 direct) économisant la bande passante Firebase.',
+    description: 'Vidéo courte muette en boucle automatique 100% largeur (Cloudinary, CDN, MP4 direct) optimisée pour le CDN Cloudflare.',
     createDefaultData: (prod) => ({
       ...DEFAULT_AUTOPLAY_VIDEO_DATA,
       videoUrl: ''
@@ -5977,10 +5977,10 @@ export const FunnelBuilder = ({
             <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-[11px] text-indigo-300 space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-indigo-200">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Économie de Bande Passante Firebase</span>
+                <span>Économie de Bande Passante & CDN Rapide</span>
               </div>
               <p className="text-slate-400">
-                Collez simplement l'URL directe de votre vidéo hébergée sur Cloudinary, BunnyCDN, S3 ou un lien direct MP4. Aucun fichier lourd n'est téléversé sur Firebase.
+                Collez simplement l'URL directe de votre vidéo hébergée sur Cloudinary, BunnyCDN, S3 ou un lien direct MP4. Le streaming s'effectue via le réseau Edge Cloudflare.
               </p>
             </div>
 
@@ -12015,7 +12015,7 @@ export const FunnelBuilder = ({
                   onClick={handleSave}
                   disabled={saveStatus === 'saving'}
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/30 active:scale-98 cursor-pointer disabled:opacity-50"
-                  title="Enregistrer toutes les personnalisations dans Firebase"
+                  title="Enregistrer toutes les personnalisations dans Supabase"
                 >
                   {saveStatus === 'saving' ? (
                     <>

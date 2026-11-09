@@ -14,6 +14,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
+import { uploadImageToImgbb } from './imgbbService';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -173,6 +174,16 @@ export async function uploadChatMediaToStorage(
         uploadFile = compressed.file;
       } catch (compErr) {
         console.warn('[WAMEET CHAT STORAGE] Compression image ignorée (fallback original):', compErr);
+      }
+
+      // 1. Upload prioritaire CDN ImgBB
+      try {
+        const imgbbRes = await uploadImageToImgbb(uploadFile);
+        if (imgbbRes?.success && imgbbRes?.url) {
+          return imgbbRes.url;
+        }
+      } catch (imgbbErr) {
+        console.warn('[WAMEET CHAT STORAGE] ImgBB notice:', imgbbErr);
       }
 
       const storagePath = `chat_medias/${chatId}/img_${timestamp}_${randomSuffix}.webp`;
