@@ -380,6 +380,8 @@ export default function App() {
         pathname.startsWith('/pos') ||
         pathname === '/dashboard' ||
         pathname.startsWith('/dashboard') ||
+        pathname === '/auth/callback' ||
+        pathname.startsWith('/auth/callback') ||
         pathname === '/admin' ||
         pathname.startsWith('/admin')
       ) {

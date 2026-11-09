@@ -13,7 +13,7 @@ export interface AuthActionResult {
   simulated?: boolean;
 }
 
-// Configuration officielle de redirection personnalisée vers nanasore.com/auth/callback
+// Configuration officielle de redirection personnalisée vers nanasore.com/dashboard
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://nanasore.com').replace(/\/$/, '');
 
 export type RegisterPayload = {
@@ -73,7 +73,7 @@ export async function registerUserAndSendVerification(
   try {
     // 2. Création du compte utilisateur dans Supabase Authentication
     let userId: string = "";
-    let verificationLink: string = `${appUrl}/auth/callback?email=${encodeURIComponent(email)}`;
+    let verificationLink: string = `${appUrl}/dashboard?email=${encodeURIComponent(email)}`;
 
     try {
       // Tentative via Supabase Admin (si Service Role Key disponible)
@@ -100,7 +100,7 @@ export async function registerUserAndSendVerification(
             email,
             password,
             options: {
-              redirectTo: `${appUrl}/auth/callback`
+              redirectTo: `${appUrl}/dashboard`
             }
           });
           if (linkData?.properties?.action_link) {
@@ -121,7 +121,7 @@ export async function registerUserAndSendVerification(
               whatsapp,
               seller_mode: sellerMode
             },
-            emailRedirectTo: `${appUrl}/auth/callback`
+            emailRedirectTo: `${appUrl}/dashboard`
           }
         });
 
@@ -130,6 +130,12 @@ export async function registerUserAndSendVerification(
             return {
               success: false,
               error: "Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.",
+            };
+          }
+          if (signUpErr.message.includes("Error sending confirmation email")) {
+            return {
+              success: false,
+              error: "Erreur d'envoi d'e-mail par Supabase (relais SMTP Brevo non authentifié). Veuillez désactiver 'Confirm email' dans votre console Supabase (Auth > Providers > Email) ou corriger l'identifiant Brevo.",
             };
           }
           throw signUpErr;
@@ -234,14 +240,14 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
   const supabase = getSupabaseClient(true);
 
   try {
-    let verificationLink = `${appUrl}/auth/callback?email=${encodeURIComponent(cleanEmail)}`;
+    let verificationLink = `${appUrl}/dashboard?email=${encodeURIComponent(cleanEmail)}`;
 
     try {
       const { data: linkData } = await supabase.auth.admin.generateLink({
         type: 'signup',
         email: cleanEmail,
         options: {
-          redirectTo: `${appUrl}/auth/callback`
+          redirectTo: `${appUrl}/dashboard`
         }
       });
       if (linkData?.properties?.action_link) {
@@ -253,7 +259,7 @@ export async function resendVerificationEmail(email: string): Promise<AuthAction
         type: 'signup',
         email: cleanEmail,
         options: {
-          emailRedirectTo: `${appUrl}/auth/callback`
+          emailRedirectTo: `${appUrl}/dashboard`
         }
       });
     }

@@ -371,7 +371,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
 
     try {
-      const user = await registerWithEmail(emailInput.trim(), passwordInput);
+      const user = await registerWithEmail(emailInput.trim(), passwordInput, fullName.trim());
       playValidationBeep();
 
       // Expédition de l'email de vérification officiel via Brevo & Server Action (contact@nanasore.com)

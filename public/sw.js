@@ -82,15 +82,21 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Ne pas intercepter les requêtes non-GET ou externes aux APIs Firebase / Gemini
+  // Ne pas intercepter les requêtes non-GET, APIs externes ou routes dynamiques d'authentification et de tableau de bord
   if (req.method !== 'GET') return;
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('firebaseio.com') ||
     url.hostname.includes('generativelanguage.googleapis.com') ||
     url.hostname.includes('identitytoolkit.googleapis.com') ||
+    url.hostname.includes('supabase.co') ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/v1/switch/')
+    url.pathname.startsWith('/v1/switch/') ||
+    url.pathname.startsWith('/auth') ||
+    url.pathname.startsWith('/login') ||
+    url.pathname.startsWith('/register') ||
+    url.pathname.startsWith('/dashboard') ||
+    url.pathname.startsWith('/admin')
   ) {
     return;
   }

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { applyActionCode } from "firebase/auth";
 import { auth } from "@/lib/firebase-client";
+import { supabase } from "@/lib/supabase";
 import {
   CheckCircle2,
   AlertOctagon,
@@ -30,9 +31,56 @@ function AuthActionHandler() {
   const [countdown, setCountdown] = useState<number>(4);
 
   useEffect(() => {
+    let isMounted = true;
+
+    // 0. Branche Supabase Auth (PKCE code ou token_hash ou hash tokens)
+    const code = searchParams.get("code");
+    const tokenHash = searchParams.get("token_hash");
+    const type = searchParams.get("type");
+
+    if (code || tokenHash || (typeof window !== "undefined" && window.location.hash.includes("access_token"))) {
+      (async () => {
+        try {
+          if (code) {
+            const { error } = await supabase.auth.exchangeCodeForSession(code);
+            if (error) throw error;
+          } else if (tokenHash) {
+            const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: (type as any) || "email" });
+            if (error) throw error;
+          } else if (window.location.hash.includes("access_token")) {
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken = hashParams.get("access_token");
+            const refreshToken = hashParams.get("refresh_token");
+            if (accessToken && refreshToken) {
+              const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+              if (error) throw error;
+            }
+          }
+
+          if (isMounted) {
+            setStatus("success");
+            console.log("[SUPABASE_AUTH] Confirmation e-mail réussie.");
+          }
+        } catch (err: any) {
+          if (isMounted) {
+            setStatus("error");
+            setErrorMessage(err?.message || "Échec de validation du jeton Supabase.");
+          }
+        }
+      })();
+      return () => { isMounted = false; };
+    }
+
     if (!mode || !oobCode) {
-      setStatus("error");
-      setErrorMessage("Paramètres de validation manquants ou URL incomplète.");
+      // Si une session Supabase est déjà valide, rediriger vers le dashboard
+      supabase.auth.getSession().then(({ data }) => {
+        if (data?.session && isMounted) {
+          setStatus("success");
+        } else if (isMounted) {
+          setStatus("error");
+          setErrorMessage("Paramètres de validation manquants ou URL incomplète.");
+        }
+      });
       return;
     }
 

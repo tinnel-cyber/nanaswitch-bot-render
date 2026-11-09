@@ -25,9 +25,9 @@ export interface SupabaseAuthUser {
  */
 function getAuthRedirectUrl(): string {
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/auth/callback`;
+    return `${window.location.origin}/dashboard`;
   }
-  return 'https://nanasore.com/auth/callback';
+  return 'https://nanasore.com/dashboard';
 }
 
 /**
@@ -168,8 +168,10 @@ export async function registerWithEmail(
   if (error) {
     console.error('[SUPABASE AUTH] Erreur inscription :', error.message);
     let msg = error.message;
-    if (msg.includes('User already registered')) {
+    if (msg.includes('User already registered') || msg.includes('already registered')) {
       msg = 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.';
+    } else if (msg.includes('Error sending confirmation email')) {
+      msg = "Supabase n'a pas pu envoyer l'e-mail de confirmation via votre relais SMTP (rejet Brevo). Dans votre console Supabase (Auth > Providers > Email), désactivez 'Confirm email' pour valider les inscriptions immédiatement sans blocage.";
     }
     throw new Error(msg);
   }
