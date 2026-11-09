@@ -1,4 +1,5 @@
 import { KycStatusTier, PricingModelTier } from '../types';
+import { supabase } from '../lib/supabase';
 
 export interface ContextualAuthProfile {
   id?: string;
@@ -22,6 +23,45 @@ export async function syncAuthProfileWithSupabase(params: {
   whatsapp?: string;
 }): Promise<ContextualAuthProfile> {
   const { firebaseUid, email, fullName, whatsapp } = params;
+
+  // 1. Synchronisation prioritaire directe dans la table Supabase `profiles`
+  try {
+    const { data: supaProfile } = await supabase.from('profiles').upsert({
+      id: firebaseUid,
+      email,
+      full_name: fullName || '',
+      whatsapp_number: whatsapp || '',
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' }).select().maybeSingle();
+
+    if (supaProfile) {
+      const profile: ContextualAuthProfile = {
+        id: supaProfile.id,
+        firebase_uid: firebaseUid,
+        email: supaProfile.email || email,
+        full_name: supaProfile.full_name || fullName,
+        whatsapp_number: supaProfile.whatsapp_number || whatsapp,
+        kyc_status: (supaProfile.kyc_status as KycStatusTier) || 'none',
+        pricing_model: (supaProfile.pricing_model as PricingModelTier) || 'none',
+        wallet_balance: typeof supaProfile.wallet_balance === 'number' ? supaProfile.wallet_balance : 0,
+        enabled_themes: Array.isArray(supaProfile.enabled_themes) ? supaProfile.enabled_themes : []
+      };
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`nana_contextual_profile_${firebaseUid}`, JSON.stringify(profile));
+          localStorage.setItem('nana_user_kyc_status', profile.kyc_status);
+          localStorage.setItem('nana_user_pricing_model', profile.pricing_model);
+          localStorage.setItem('nana_user_wallet_balance', String(profile.wallet_balance));
+          window.dispatchEvent(new CustomEvent('nana_profile_synced', { detail: { profile } }));
+        } catch {}
+      }
+
+      return profile;
+    }
+  } catch (supaErr) {
+    console.warn('[AUTH_SYNC_SUPABASE_DIRECT_NOTICE]', supaErr);
+  }
 
   try {
     const res = await fetch('/api/auth-profile', {

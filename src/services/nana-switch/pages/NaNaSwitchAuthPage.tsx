@@ -37,7 +37,9 @@ import {
   ChevronLeft,
   KeyRound
 } from 'lucide-react';
-import { auth, db, googleProvider } from '../../../firebase';
+import { loginWithEmail, registerWithEmail, signInWithGoogle } from '../../../services/supabaseAuthService';
+import { supabase } from '../../../lib/supabase';
+import { auth, db } from '../../../firebase';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -284,15 +286,15 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
 
       try {
         // Tentative de création du compte Firebase Auth
-        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-        registeredUser = cred.user;
+        const supaUser = await registerWithEmail(cleanEmail, cleanPassword, orgName);
+        registeredUser = supaUser as any;
       } catch (authErr: any) {
         // Gestion intelligente si l'e-mail existe déjà sur Firebase Auth (ex: utilisateur ayant un compte Nanasore)
         if (authErr?.code === 'auth/email-already-in-use') {
           try {
             // On vérifie le mot de passe fourni pour lier l'organisation
-            const loginCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-            registeredUser = loginCred.user;
+            const loginUser = await loginWithEmail(cleanEmail, cleanPassword);
+            registeredUser = loginUser as any;
           } catch (loginErr: any) {
             setErrorMessage(
               'Cette adresse e-mail existe déjà dans notre système. Veuillez entrer le mot de passe exact correspondant à cet e-mail pour activer votre espace NaNaSwitch Cloud.'
@@ -367,8 +369,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
     setIsLoading(true);
 
     try {
-      const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-      const user = cred.user;
+      const user: any = await loginWithEmail(cleanEmail, cleanPassword);
 
       // Vérifier si le compte possède un espace switch_accounts/{uid}
       const accountRef = doc(db, 'switch_accounts', user.uid);
@@ -408,8 +409,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
     setIsLoading(true);
 
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      const user: any = await signInWithGoogle();
 
       // Vérifier si switch_accounts/{uid} existe
       const accountRef = doc(db, 'switch_accounts', user.uid);

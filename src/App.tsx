@@ -49,7 +49,7 @@ import { PosSearchBar } from './components/PosSearchBar';
 import { PinKeypadModal } from './components/PinKeypadModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { isCashierSession } from './utils/managerSecurityService';
-import { auth, logoutUser } from './firebase';
+import { auth, logoutUser, onSupabaseAuthStateChange } from './firebase';
 import { GoogleFlowToast } from './components/GoogleFlowToast';
 import { ClassroomErrorBoundary } from './components/lms/ClassroomErrorBoundary';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
@@ -2025,6 +2025,37 @@ export default function App() {
     }
     return null;
   });
+
+  // Synchronisation de session Supabase Auth en temps réel
+  useEffect(() => {
+    const unsub = onSupabaseAuthStateChange((supaUser) => {
+      if (supaUser) {
+        setCurrentUser((prev) => {
+          if (prev && prev.id === supaUser.id) return prev;
+          const storeId = prev?.storeId || `store-${supaUser.id.slice(0, 8)}`;
+          return {
+            id: supaUser.id,
+            storeId,
+            name: supaUser.displayName || supaUser.name || 'Utilisateur Nanasore',
+            email: supaUser.email,
+            role: (supaUser.role as any) || 'GERANT',
+            vendorType: 'ecommerce',
+            sellerMode: (supaUser.sellerMode as any) || 'merchant_ecommerce',
+            phone: prev?.phone || '+226 00 00 00 00',
+            city: prev?.city || 'Ouagadougou',
+            country: 'Burkina Faso',
+            currency: 'F CFA',
+            defaultCreditLimit: 20000,
+            loginProvider: 'google',
+            kycStatus: 'none',
+            plan: prev?.plan || 'free',
+            ...prev
+          };
+        });
+      }
+    });
+    return unsub;
+  }, []);
 
   // Résout systématiquement l'identifiant strict de la boutique du compte connecté
   const getCurrentStoreId = (): string => {

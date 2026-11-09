@@ -70,7 +70,7 @@ export function useCheckout(onPaymentCompleted?: (tx: CheckoutTransaction) => vo
       setError(null);
 
       // Résolution de l'identité de l'utilisateur (authentifié ou session anonyme d'achat)
-      const currentUid = auth.currentUser?.uid || `guest_${Date.now().toString(36)}`;
+      const currentUid = (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('nana_store_auth_user') || '{}')?.id : null) || auth.currentUser?.uid || `guest_${Date.now().toString(36)}`;
       const txId = `tx_${params.provider.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       const transactionPayload: CheckoutTransaction = {

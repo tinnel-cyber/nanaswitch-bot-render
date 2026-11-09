@@ -19,11 +19,11 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../utils/audio';
-import { loginWithEmail, registerWithEmail, signInWithGoogle, auth } from '../../firebase';
+import { loginWithEmail, registerWithEmail, signInWithGoogle } from '../../services/supabaseAuthService';
+import { supabase } from '../../lib/supabase';
 import { Logo } from '../common/Logo';
 import { SellerMode } from '../../types';
 import { resolveSellerMode, persistSellerModeLocally } from '../../utils/planFeatures';
-import { updateSellerModeInFirestore } from '../../utils/firestoreService';
 
 export interface AuthScreenProps {
   role?: 'teacher' | 'merchant' | 'admin';
@@ -112,86 +112,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       let resolvedName = fullName.trim() || (isTeacher ? "Prof. Formateur Nanasore" : "Commerçant Nanasore");
 
       if (isSignUp) {
-        // Utilisation de la nouvelle route API backend pour l'inscription avec email de confirmation
-        try {
-          const response = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: email.trim(),
-              password,
-              name: resolvedName,
-              sellerMode
-            })
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.error || 'Erreur lors de la création du compte');
-          }
-
-          // Succès de l'inscription
-          setInfoMessage("Compte créé avec succès ! Un email de confirmation a été envoyé à votre adresse. Veuillez vérifier votre boîte de réception.");
-
-          // Simulation de chargement de 1 seconde (cahier des charges)
-          setTimeout(() => {
-            setIsLoading(false);
-            playValidationBeep();
-            if (onSuccess) {
-              onSuccess({
-                email: email.trim(),
-                name: resolvedName,
-                role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-                sellerMode
-              });
-            }
-          }, 1000);
-
-        } catch (apiErr: any) {
-          // Fallback vers Firebase si l'API échoue
-          console.warn("[AuthScreen] API backend non disponible, fallback Firebase :", apiErr?.message);
-          try {
-            const userCred = await registerWithEmail(email.trim(), password);
-            if (userCred && userCred.displayName) {
-              resolvedName = userCred.displayName;
-            }
-          } catch (firebaseErr: any) {
-            console.warn("[AuthScreen] Firebase notice (mode autonome actif) :", firebaseErr?.message || firebaseErr);
-          }
-
-          persistSellerModeLocally(sellerMode);
-          if (auth.currentUser?.uid) {
-            updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
-          }
-
-          setTimeout(() => {
-            setIsLoading(false);
-            playValidationBeep();
-            if (onSuccess) {
-              onSuccess({
-                email: email.trim(),
-                name: resolvedName,
-                role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-                sellerMode
-              });
-            }
-          }, 1000);
-        }
-      } else {
-        // Connexion existante (pas d'inscription)
-        try {
-          const userCred = await loginWithEmail(email.trim(), password);
-          if (userCred && userCred.displayName) {
-            resolvedName = userCred.displayName;
-          }
-        } catch (authErr: any) {
-          console.warn("[AuthScreen] Firebase notice (mode autonome actif) :", authErr?.message || authErr);
+        const userCred = await registerWithEmail(email.trim(), password, resolvedName, sellerMode);
+        if (userCred?.displayName) {
+          resolvedName = userCred.displayName;
         }
 
+        setInfoMessage("Compte créé avec succès ! Veuillez vérifier votre boîte de réception pour confirmer votre compte.");
         persistSellerModeLocally(sellerMode);
-        if (auth.currentUser?.uid) {
-          updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
+
+        if (userCred?.id) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: userCred.id,
+              email: email.trim(),
+              full_name: resolvedName,
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+          } catch {}
         }
 
         setTimeout(() => {
@@ -205,7 +143,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               sellerMode
             });
           }
-        }, 1000);
+        }, 800);
+      } else {
+        const userCred = await loginWithEmail(email.trim(), password);
+        if (userCred?.displayName) {
+          resolvedName = userCred.displayName;
+        }
+
+        persistSellerModeLocally(sellerMode);
+        if (userCred?.id) {
+          try {
+            await supabase.from('profiles').update({
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT'
+            }).eq('id', userCred.id);
+          } catch {}
+        }
+
+        setTimeout(() => {
+          setIsLoading(false);
+          playValidationBeep();
+          if (onSuccess) {
+            onSuccess({
+              email: email.trim(),
+              name: resolvedName,
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+              sellerMode
+            });
+          }
+        }, 800);
       }
 
     } catch (err: any) {
@@ -215,7 +180,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
-  // Authentification via Google
+  // Authentification via Google Supabase
   const handleGoogleAuth = async () => {
     setErrorMessage(null);
     setInfoMessage(null);
@@ -226,22 +191,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       let resolvedEmail = isTeacher ? "formateur@google.nanasore.ci" : "commercant@google.nanasore.ci";
       let resolvedName = isTeacher ? "Prof. Ibrahim Konkobo" : "Commerçant Nanasore";
 
-      try {
-        const userCred = await signInWithGoogle();
-        if (userCred) {
-          if (userCred.email) resolvedEmail = userCred.email;
-          if (userCred.displayName) resolvedName = userCred.displayName;
+      const userCred = await signInWithGoogle();
+      if (userCred) {
+        if (userCred.email) resolvedEmail = userCred.email;
+        if (userCred.displayName) resolvedName = userCred.displayName;
+        if (userCred.id) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: userCred.id,
+              email: resolvedEmail,
+              full_name: resolvedName,
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT'
+            }, { onConflict: 'id' });
+          } catch {}
         }
-      } catch (authErr: any) {
-        console.warn("[AuthScreen] Google Auth notice (mode démonstration actif) :", authErr?.message || authErr);
       }
 
       persistSellerModeLocally(sellerMode);
-      if (auth.currentUser?.uid) {
-        updateSellerModeInFirestore(sellerMode, auth.currentUser.uid, auth.currentUser.uid).catch(() => {});
-      }
 
-      // Simulation de chargement de 1 seconde (cahier des charges)
       setTimeout(() => {
         setIsLoading(false);
         playValidationBeep();
@@ -253,7 +220,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             sellerMode
           });
         }
-      }, 1000);
+      }, 800);
 
     } catch (err: any) {
       setIsLoading(false);

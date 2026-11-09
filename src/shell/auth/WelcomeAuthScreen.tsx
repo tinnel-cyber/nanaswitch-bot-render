@@ -7,9 +7,9 @@ import {
   resendVerificationEmail, 
   signInWithGoogle, 
   resetPasswordEmail,
-  auth,
-  logoutUser
-} from '../../firebase';
+  logoutUser,
+  getSupabaseCurrentUser
+} from '../../services/supabaseAuthService';
 import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
 import { hashMasterPin, generateStoreUniqueId } from '../../utils/managerSecurityService';
 import { syncAuthProfileWithSupabase } from '../../services/authProfileSyncService';
@@ -214,17 +214,13 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     });
   };
 
-  // Au chargement, vérifier session active Firebase Auth
+  // Au chargement, vérifier session active Supabase Auth
   useEffect(() => {
     const checkCurrentAuth = async () => {
-      const fbUser = auth.currentUser;
+      const fbUser = await getSupabaseCurrentUser();
       if (fbUser) {
         setEmailInput(fbUser.email || '');
         if (fbUser.displayName) setFullName(fbUser.displayName);
-
-        try {
-          await fbUser.reload();
-        } catch {}
 
         if (!fbUser.emailVerified && fbUser.providerData.some(p => p.providerId === 'password')) {
           setStep('EMAIL_VERIFICATION');
@@ -524,7 +520,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   // Finalisation Master PIN & Entrée directe dans le Tableau de Bord Unifié
   const finalizeMasterPinSetup = async (pinValue: string) => {
     setIsLoading(true);
-    const currentUserAuth = pendingFirebaseUser || auth.currentUser;
+    const currentUserAuth = pendingFirebaseUser || (await getSupabaseCurrentUser());
     const uid = currentUserAuth?.uid || `user-${Date.now()}`;
     const userEmail = currentUserAuth?.email || emailInput.trim();
     const cleanFullName = fullName.trim() || currentUserAuth?.displayName || 'Utilisateur Nanasore';

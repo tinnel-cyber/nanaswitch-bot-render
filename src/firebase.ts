@@ -193,87 +193,21 @@ export const rtdb: Database = getDatabase(app, RTDB_DEFAULT_URL);
 export const functions: Functions = getFunctions(app, 'europe-west1');
 export const getAppFunctions = (region = 'europe-west1'): Functions => getFunctions(app, region);
 
-/**
- * Fonction d'authentification Google avec popup sécurisée
- */
-export async function signInWithGoogle(): Promise<FirebaseUser | null> {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error: any) {
-    console.warn('[FIREBASE AUTH] Connexion Google via popup :', error?.message || error);
-    throw error;
-  }
-}
-
-/**
- * Connexion avec Email et Mot de passe Firebase Auth
- */
-export async function loginWithEmail(email: string, password: string): Promise<FirebaseUser> {
-  const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-  return cred.user;
-}
-
-/**
- * Création de compte avec Email et Mot de passe Firebase Auth
- * NOTE: Les e-mails de vérification sont exclusivement délégués aux Server Actions
- * côté serveur (@/app/actions/auth) via Brevo & Firebase Admin pour garantir la délivrabilité.
- */
-export async function registerWithEmail(email: string, password: string): Promise<FirebaseUser> {
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  return cred.user;
-}
-
-/**
- * Renvoyer l'email de confirmation via API serveur / Server Action
- * (Aucun appel direct au SDK client Firebase sendEmailVerification dans le navigateur)
- */
-export async function resendVerificationEmail(): Promise<boolean> {
-  const targetEmail = auth.currentUser?.email;
-  if (!targetEmail) return false;
-  try {
-    const res = await fetch('/api/auth/resend-verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: targetEmail })
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('[AUTH] Échec renvoi e-mail serveur:', err);
-    return false;
-  }
-}
-
-/**
- * Réinitialisation du mot de passe par email via API serveur / Server Action
- * (Aucun appel direct au SDK client Firebase sendPasswordResetEmail dans le navigateur)
- */
-export async function resetPasswordEmail(email: string): Promise<void> {
-  const cleanEmail = email.trim();
-  if (!cleanEmail) throw new Error('Email requis pour la réinitialisation.');
-  try {
-    const res = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || (data && data.success === false)) {
-      const detail = data?.error || `Erreur serveur HTTP ${res.status} ${res.statusText || ''}`.trim();
-      throw new Error(detail);
-    }
-  } catch (err: any) {
-    console.error("Erreur complète reset :", err);
-    throw err;
-  }
-}
-
-/**
- * Déconnexion Firebase Auth
- */
-export async function logoutUser(): Promise<void> {
-  await firebaseSignOut(auth);
-}
+// ============================================================================
+// AUTHENTIFICATION SUPABASE (MIGRATION COMPLÈTE OFFICIELLE)
+// L'ensemble des flux d'authentification (Google OAuth, Email/Mot de passe, Sessions)
+// est désormais officiellement piloté par Supabase Auth.
+// ============================================================================
+export {
+  signInWithGoogle,
+  loginWithEmail,
+  registerWithEmail,
+  resendVerificationEmail,
+  resetPasswordEmail,
+  logoutUser,
+  getSupabaseCurrentUser,
+  onSupabaseAuthStateChange
+} from './services/supabaseAuthService';
 
 /**
  * Téléversement d'image vers Firebase Storage
