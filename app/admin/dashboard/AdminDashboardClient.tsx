@@ -20,7 +20,8 @@ import {
   Check,
   X,
   Clock,
-  LayoutDashboard
+  LayoutDashboard,
+  Layers
 } from "lucide-react";
 
 interface PendingAffiliate {
@@ -168,8 +169,15 @@ export default function AdminDashboardClient({
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition active:scale-95 flex items-center gap-2 shadow-lg shadow-blue-900/30"
               >
                 <LayoutDashboard className="w-4 h-4" />
-                <span>Tableau de Bord Général</span>
+                <span>Tableau de Bord Marchand (/dashboard)</span>
                 <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+              <Link
+                href="/hub"
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold uppercase tracking-wider transition active:scale-95 flex items-center gap-2"
+              >
+                <Layers className="w-4 h-4 text-indigo-400" />
+                <span>Hub Central (27 Modules)</span>
               </Link>
               <button
                 onClick={() => setSelectedTab(selectedTab === "affiliates" ? "overview" : "affiliates")}

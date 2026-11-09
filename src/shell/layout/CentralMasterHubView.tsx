@@ -378,8 +378,13 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
     const appTitle = ((app as any).title || (app as any).name || '').toLowerCase();
     const appRoute = (app.route || (app as any).routeUrl || '').toLowerCase();
 
+    if (appId === 'nana-switch' || appId === 'srv-nana-switch') {
+      window.location.href = '/dashboard';
+      return;
+    }
+
     // Protection des modules en construction (ne répondent pas à l'appel)
-    if (appId === 'nana-switch' || appId === 'wameet' || appId === 'srv-nana-switch' || appId === 'app-wameet' || app.isUnderConstruction) {
+    if (appId === 'wameet' || appId === 'app-wameet' || app.isUnderConstruction) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('nana_show_toast', {
           detail: {
@@ -1313,22 +1318,16 @@ export const CentralMasterHubView: React.FC<CentralMasterHubViewProps> = ({
       id: 'mod-nana-switch',
       category: 'TECH',
       title: 'NaNa Switch Cloud (Multi-Comptes)',
-      badge: 'EN CONSTRUCTION',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter (En cours de finalisation).',
+      badge: 'ACTIF B2B',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+      description: 'Agrégateur de paiement multi-pays, gestion des clés API, webhooks et tableau de bord marchand autonome.',
       icon: ShieldCheck,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/10 border-amber-500/30',
-      actionText: '🚧 En Construction',
+      iconColor: 'text-emerald-400',
+      iconBg: 'bg-emerald-500/10 border-emerald-500/30',
+      actionText: '⚡ Ouvrir NanaSwitch',
       action: () => {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('nana_show_toast', {
-            detail: {
-              title: 'Module en construction',
-              message: 'Le module NaNa Switch est en cours de développement et sera disponible prochainement.',
-              type: 'info'
-            }
-          }));
+          window.location.href = '/dashboard';
         }
       },
       taxonomyType: 'Service'
