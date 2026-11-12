@@ -243,7 +243,8 @@ import {
   isSuperAdminLocally, 
   verifySuperAdminPrivileges, 
   KNOWN_SUPERADMIN_UIDS, 
-  KNOWN_SUPERADMIN_EMAILS 
+  KNOWN_SUPERADMIN_EMAILS,
+  promoteSuperAdminLocally
 } from './services/superAdminService';
 
 const SUPERADMIN_EMAILS = KNOWN_SUPERADMIN_EMAILS;
@@ -2038,12 +2039,18 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-  // État (Google Sign-In)
+  // État (Google Sign-In / Supabase Auth)
   const [currentUser, setCurrentUser] = useState<StoreUser | null>(() => {
     const saved = safeGetItem('nana_store_auth_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed?.email && KNOWN_SUPERADMIN_EMAILS.includes(parsed.email.toLowerCase())) {
+          parsed.role = 'SUPER_ADMIN';
+          parsed.isSuperAdmin = true;
+          promoteSuperAdminLocally(parsed.id || 'pousbila04-superadmin');
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse saved user', e);
       }
@@ -2055,26 +2062,34 @@ export default function App() {
   useEffect(() => {
     const unsub = onSupabaseAuthStateChange((supaUser) => {
       if (supaUser) {
+        const isSuperAdminUser = supaUser.email && KNOWN_SUPERADMIN_EMAILS.includes(supaUser.email.toLowerCase());
+        if (isSuperAdminUser) {
+          promoteSuperAdminLocally(supaUser.id || 'pousbila04-superadmin');
+        }
+
         setCurrentUser((prev) => {
-          if (prev && prev.id === supaUser.id) return prev;
+          if (prev && prev.id === supaUser.id && prev.role === (isSuperAdminUser ? 'SUPER_ADMIN' : prev.role)) return prev;
           const storeId = prev?.storeId || `store-${supaUser.id.slice(0, 8)}`;
           return {
+            ...prev,
             id: supaUser.id,
             storeId,
             name: supaUser.displayName || supaUser.name || 'Utilisateur Nanasore',
             email: supaUser.email,
-            role: (supaUser.role as any) || 'GERANT',
-            vendorType: 'ecommerce',
-            sellerMode: (supaUser.sellerMode as any) || 'merchant_ecommerce',
+            role: isSuperAdminUser ? 'SUPER_ADMIN' : ((supaUser.role as any) || prev?.role || 'GERANT'),
+            isSuperAdmin: Boolean(isSuperAdminUser || prev?.isSuperAdmin),
+            vendorType: prev?.vendorType || 'ecommerce',
+            sellerMode: (supaUser.sellerMode as any) || prev?.sellerMode || 'merchant_ecommerce',
             phone: prev?.phone || '+226 00 00 00 00',
             city: prev?.city || 'Ouagadougou',
             country: 'Burkina Faso',
             currency: 'F CFA',
-            defaultCreditLimit: 20000,
+            defaultCreditLimit: isSuperAdminUser ? 10000000 : (prev?.defaultCreditLimit || 20000),
             loginProvider: 'google',
-            kycStatus: 'none',
-            plan: prev?.plan || 'free',
-            ...prev
+            kycStatus: isSuperAdminUser ? 'verified' : (prev?.kycStatus || 'none'),
+            plan: isSuperAdminUser ? 'elite' : (prev?.plan || 'free'),
+            subscriptionStatus: isSuperAdminUser ? 'active' : (prev?.subscriptionStatus || 'active'),
+            storeApprovalStatus: isSuperAdminUser ? 'APPROVED' : (prev?.storeApprovalStatus || 'APPROVED'),
           };
         });
       }
@@ -2129,6 +2144,38 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isAuthScreenExplicitlyBypassed, setIsAuthScreenExplicitlyBypassed] = useState(false);
   const [isSecretAdminModalOpen, setIsSecretAdminModalOpen] = useState(false);
+
+  const handleSecretAdminSuccess = useCallback(() => {
+    setIsSecretAdminModalOpen(false);
+    setShowWelcomeShowcase(false);
+    promoteSuperAdminLocally(currentUser?.id || 'pousbila04-superadmin');
+    setCurrentUser((prev) => ({
+      ...(prev || {
+        id: 'pousbila04-superadmin',
+        storeId: 'store-pousbila04',
+        name: 'Pousbila Super Admin',
+        email: 'pousbila04@gmail.com',
+        vendorType: 'ecommerce',
+        sellerMode: 'merchant_ecommerce',
+        phone: '+226 00 00 00 00',
+        city: 'Ouagadougou',
+        country: 'Burkina Faso',
+        currency: 'F CFA',
+        defaultCreditLimit: 10000000,
+        loginProvider: 'google',
+      }),
+      role: 'SUPER_ADMIN',
+      isSuperAdmin: true,
+      kycStatus: 'verified',
+      plan: 'elite',
+      subscriptionStatus: 'active',
+      storeApprovalStatus: 'APPROVED',
+    }));
+    setCurrentView('SAAS_ADMIN');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/admin');
+    }
+  }, [currentUser]);
 
   // État de la Landing Page Showcase de bienvenue
   const [showWelcomeShowcase, setShowWelcomeShowcase] = useState<boolean>(() => {
@@ -5753,10 +5800,7 @@ export default function App() {
         <SecretAdminAccessModal
           isOpen={isSecretAdminModalOpen}
           onClose={() => setIsSecretAdminModalOpen(false)}
-          onSuccess={() => {
-            setIsSecretAdminModalOpen(false);
-            setCurrentView('SAAS_ADMIN');
-          }}
+          onSuccess={handleSecretAdminSuccess}
         />
         {renderGlobalAssistantAndAcademy('HOME')}
       </React.Suspense>
@@ -5781,10 +5825,7 @@ export default function App() {
         <SecretAdminAccessModal
           isOpen={isSecretAdminModalOpen}
           onClose={() => setIsSecretAdminModalOpen(false)}
-          onSuccess={() => {
-            setIsSecretAdminModalOpen(false);
-            setCurrentView('SAAS_ADMIN');
-          }}
+          onSuccess={handleSecretAdminSuccess}
         />
         {renderGlobalAssistantAndAcademy('AUTH')}
       </React.Suspense>
@@ -7561,10 +7602,7 @@ export default function App() {
             <SecretAdminAccessModal
               isOpen={isSecretAdminModalOpen}
               onClose={() => setIsSecretAdminModalOpen(false)}
-              onSuccess={() => {
-                setIsSecretAdminModalOpen(false);
-                setCurrentView('SAAS_ADMIN');
-              }}
+              onSuccess={handleSecretAdminSuccess}
             />
           </React.Suspense>
         )}

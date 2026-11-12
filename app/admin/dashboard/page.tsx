@@ -10,7 +10,7 @@ export const metadata = {
 // Server Component asynchrone (Next.js App Router)
 export default async function AdminDashboardPage() {
   let isAuthorized = true;
-  let userEmail = "contact@nanasore.com";
+  let userEmail = "pousbila04@gmail.com";
   let totalStores = 0;
   let activeUsers = 0;
   let monthlyRevenueCFA = 0;

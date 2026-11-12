@@ -48,8 +48,8 @@ export const KNOWN_SUPERADMIN_UIDS = [
 ];
 
 export const KNOWN_SUPERADMIN_EMAILS = [
+  'pousbila04@gmail.com', // Super Admin Principal Officiel Supabase
   'pousbila36@gmail.com',
-  'pousbila04@gmail.com',
   'contact@nanasore.com',
   'admin@nanasore.com'
 ];
@@ -180,6 +180,24 @@ export async function checkIsSuperAdmin(userIdOrUid?: string | null, email?: str
           .from("super_admins")
           .select("user_id")
           .eq("user_id", profile.id)
+          .maybeSingle();
+
+        if (adminRecord) return true;
+      }
+    }
+
+    if (email) {
+      const { data: profileByEmail } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email.toLowerCase())
+        .maybeSingle();
+
+      if (profileByEmail?.id) {
+        const { data: adminRecord } = await supabase
+          .from("super_admins")
+          .select("user_id")
+          .eq("user_id", profileByEmail.id)
           .maybeSingle();
 
         if (adminRecord) return true;

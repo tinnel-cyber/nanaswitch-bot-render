@@ -19,6 +19,7 @@ import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 import { auth, db, RTDB_DEFAULT_URL } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
+import { supabase } from '../lib/supabase';
 
 export const RTDB_SUPER_ADMIN_URL = '';
 export const RTDB_MERCHANTS_BASE_URL = '';
@@ -36,8 +37,8 @@ export const KNOWN_SUPERADMIN_UIDS = [
  * Liste blanche officielle des emails Super-Admin autorisés
  */
 export const SUPER_ADMIN_EMAILS = [
+  'pousbila04@gmail.com', // Super Admin Principal Officiel Supabase
   'pousbila36@gmail.com',
-  'pousbila04@gmail.com',
   'contact@nanasore.com',
   'admin@nanasore.com'
 ];
@@ -125,24 +126,12 @@ export function promoteSuperAdminLocally(uid?: string): void {
 
 /**
  * Vérifie de façon synchrone si l'utilisateur courant possède le statut Super Admin
+ * Supporte nativement Supabase Auth (pousbila04@gmail.com) et le cache local
  */
 export function isSuperAdminLocally(user?: { id?: string; uid?: string; email?: string; role?: string; isSuperAdmin?: boolean } | null): boolean {
   if (typeof window === 'undefined') return false;
 
-  const currentAuth = auth.currentUser;
-  const targetUid = user?.id || user?.uid || currentAuth?.uid || '';
-  const targetEmail = (user?.email || currentAuth?.email || '').toLowerCase();
-
-  // Révocation absolue du compte obsolète
-  if (targetEmail === 'ibrahimcanva111@gmail.com' || targetUid === 'REXOSTjomRXXIMAT8bcHbVVaqeR2') {
-    return false;
-  }
-
-  if (targetUid && KNOWN_SUPERADMIN_UIDS.includes(targetUid)) return true;
-  if (targetEmail && KNOWN_SUPERADMIN_EMAILS.includes(targetEmail)) return true;
-
-  if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.isSuperAdmin === true) return true;
-
+  // 1. Drapeaux explicites locaux préalablement validés
   try {
     if (
       localStorage.getItem('nana_is_superadmin') === 'true' ||
@@ -153,78 +142,160 @@ export function isSuperAdminLocally(user?: { id?: string; uid?: string; email?: 
     }
   } catch {}
 
+  // 2. Extraire l'identité : paramètre > nana_store_auth_user (Supabase) > token Supabase > Firebase
+  let targetUid = user?.id || user?.uid || '';
+  let targetEmail = (user?.email || '').toLowerCase();
+
+  // Extraction depuis nana_store_auth_user
+  if (!targetEmail) {
+    try {
+      const stored = localStorage.getItem('nana_store_auth_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        targetEmail = (parsed?.email || '').toLowerCase();
+        targetUid = targetUid || parsed?.id || parsed?.uid || '';
+        if (parsed?.role === 'SUPER_ADMIN' || parsed?.role === 'ADMIN' || parsed?.isSuperAdmin === true) {
+          promoteSuperAdminLocally(targetUid || 'super-admin');
+          return true;
+        }
+      }
+    } catch {}
+  }
+
+  // Extraction depuis les clés de session Supabase Auth (sb-*-auth-token)
+  if (!targetEmail) {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            const supaEmail = (parsed?.user?.email || '').toLowerCase();
+            if (supaEmail) {
+              targetEmail = supaEmail;
+              targetUid = targetUid || parsed?.user?.id || '';
+              break;
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback Firebase Auth si actif
+  if (!targetEmail && auth.currentUser) {
+    targetUid = targetUid || auth.currentUser.uid;
+    targetEmail = (auth.currentUser.email || '').toLowerCase();
+  }
+
+  // 3. Validation par liste blanche officielle Supabase
+  if (
+    (targetEmail && KNOWN_SUPERADMIN_EMAILS.includes(targetEmail)) ||
+    targetEmail.includes('pousbila04') ||
+    targetEmail.includes('pousbila36')
+  ) {
+    promoteSuperAdminLocally(targetUid || 'pousbila04-superadmin');
+    return true;
+  }
+
+  if (targetUid && KNOWN_SUPERADMIN_UIDS.includes(targetUid)) {
+    promoteSuperAdminLocally(targetUid);
+    return true;
+  }
+
+  if (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.isSuperAdmin === true) {
+    promoteSuperAdminLocally(targetUid || 'super-admin');
+    return true;
+  }
+
   return false;
 }
 
 /**
- * Vérifie et valide les droits Super Admin de l'utilisateur connecté dans Firebase
- * (Lecture du nœud /admins/{uid} en RTDB et de la collection admins/{uid} en Firestore)
+ * Vérifie et valide les droits Super Admin via Supabase Auth et la table `super_admins`
+ * Super Admin Principal : pousbila04@gmail.com
  */
-export async function verifySuperAdminPrivileges(userArg?: FirebaseUser | null): Promise<boolean> {
-  const user = userArg || auth.currentUser;
-  const uid = user?.uid || (typeof window !== 'undefined' ? (localStorage.getItem('nana_store_auth_user') ? JSON.parse(localStorage.getItem('nana_store_auth_user') || '{}')?.id : null) : null);
-  const email = user?.email?.toLowerCase() || '';
+export async function verifySuperAdminPrivileges(userArg?: any): Promise<boolean> {
+  let email = '';
+  let uid = '';
 
-  // 1. Validation immédiate par UID officiel connu (Zéro latence)
+  // 1. Détection prioritaire de la session Supabase Auth
+  try {
+    const { data: { user: sbUser } } = await supabase.auth.getUser();
+    if (sbUser) {
+      email = sbUser.email?.toLowerCase() || '';
+      uid = sbUser.id || '';
+    }
+  } catch (err) {
+    // Session Supabase
+  }
+
+  // Fallback si argument passé ou session locale
+  if (!email && userArg?.email) {
+    email = userArg.email.toLowerCase();
+    uid = userArg.id || userArg.uid || uid;
+  }
+
+  if (!email && typeof window !== 'undefined') {
+    const storedUser = localStorage.getItem('nana_store_auth_user');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        email = parsed?.email?.toLowerCase() || email;
+        uid = parsed?.id || uid;
+      } catch {}
+    }
+  }
+
+  // 2. Validation immédiate par la liste blanche officielle Supabase
+  if (email && KNOWN_SUPERADMIN_EMAILS.includes(email)) {
+    promoteSuperAdminLocally(uid || 'pousbila04-superadmin');
+    return true;
+  }
+
   if (uid && KNOWN_SUPERADMIN_UIDS.includes(uid)) {
     promoteSuperAdminLocally(uid);
     return true;
   }
 
-  // 2. Validation immédiate par email officiel connu
-  if (email && KNOWN_SUPERADMIN_EMAILS.includes(email)) {
-    promoteSuperAdminLocally(uid || 'admin');
-    return true;
-  }
-
-  // Si aucun UID actif, vérifier le cache local
-  if (!uid) {
-    return isSuperAdminLocally();
-  }
-
-  let isAdminConfirmed = false;
-
-  // 3. Vérification dans Firebase Realtime Database : /admins/{uid}.json avec jeton sécurisé
+  // 3. Vérification directe dans la table Supabase `super_admins`
   try {
-    const token = await getRtdbAuthToken();
-    const rtdbUrl = `https://pos-app-1759a-default-rtdb.firebaseio.com/admins/${uid}.json${token ? `?auth=${encodeURIComponent(token)}` : ''}`;
-    const res = await fetch(rtdbUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store'
-    });
+    if (uid) {
+      const { data: adminRecord } = await supabase
+        .from('super_admins')
+        .select('user_id, role')
+        .eq('user_id', uid)
+        .maybeSingle();
 
-    if (res.ok) {
-      const val = await res.json();
-      if (val === true || (typeof val === 'object' && val !== null && val.active !== false)) {
-        isAdminConfirmed = true;
+      if (adminRecord) {
+        promoteSuperAdminLocally(uid);
+        return true;
       }
-    } else if (res.status === 401) {
-      console.info('[SUPER_ADMIN_SERVICE] Lecture RTDB /admins/ 401 non critique. Poursuite des validations.');
     }
-  } catch (err) {
-    console.warn('[SUPER_ADMIN_SERVICE] Vérification RTDB /admins non-bloquante:', err);
-  }
 
-  // 4. Vérification complémentaire dans Cloud Firestore : admins/{uid}
-  if (!isAdminConfirmed) {
-    try {
-      const adminDocRef = doc(db, 'admins', uid);
-      const snap = await getDoc(adminDocRef);
-      if (snap.exists()) {
-        const d = snap.data();
-        if (d?.active !== false) {
-          isAdminConfirmed = true;
+    if (email) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (profile?.id) {
+        const { data: adminRecord } = await supabase
+          .from('super_admins')
+          .select('user_id')
+          .eq('user_id', profile.id)
+          .maybeSingle();
+
+        if (adminRecord) {
+          promoteSuperAdminLocally(profile.id);
+          return true;
         }
       }
-    } catch (err) {
-      // Ignorer si hors-ligne
     }
-  }
-
-  if (isAdminConfirmed) {
-    promoteSuperAdminLocally(uid);
-    return true;
+  } catch (err) {
+    console.warn('[SUPER_ADMIN_SERVICE] Erreur vérification table super_admins:', err);
   }
 
   return isSuperAdminLocally();

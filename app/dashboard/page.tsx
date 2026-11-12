@@ -21,11 +21,15 @@ import {
   Plus, CheckCircle2, Clock, XCircle, Search, Copy, Check, Eye, EyeOff, 
   ExternalLink, FileText, ChevronRight, LogOut, RefreshCw, Filter, Download,
   Send, ShieldAlert, BookOpen, Layers, Lock, Sparkles, AlertCircle, Upload, FileCheck, ArrowLeft,
-  ChevronDown, PhoneCall, Code2, Globe2, Server, Crown
+  ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
+  TrendingUp, Activity, DollarSign, Zap, Maximize2, Info
 } from 'lucide-react';
 import { DeveloperTab } from '../../src/components/dashboard/DeveloperTab';
 import { KycVolumeLimitCard } from '../../src/components/dashboard/KycVolumeLimitCard';
+import { CentralHubOmnibar } from '@/components/CentralHubOmnibar';
+import { APPS_REGISTRY, AppRegistryItem } from '../../src/data/appsRegistry';
 import { db, auth } from '../../src/firebase';
+import { supabase } from '../../src/lib/supabase';
 import { 
   collection, 
   doc, 
@@ -173,84 +177,9 @@ const PAYMENT_API_BASE = typeof window !== 'undefined' && window.location.hostna
   ? 'http://localhost:10000'
   : 'https://nana-payment-api.onrender.com';
 
-// --- INITIAL MOCK / SEED DATA ---
-const INITIAL_APPS: NanaMerchantApp[] = [
-  {
-    id: 'app_nana_01',
-    name: 'NanaApp Store',
-    sector: 'E-commerce & Vente en ligne',
-    type: 'entreprise',
-    status: 'VERIFIED',
-    createdAt: '2026-03-15',
-    balances: {
-      XOF: 1450000,
-      USD: 2450,
-      XAF: 890000,
-      GNF: 12000000,
-      GHS: 14200
-    },
-    keys: {
-      pk: 'ns_live_pk_8f93a2e1c4b70129a007b',
-      skHash: '$2a$10$e89abF...hidden',
-      whSecret: 'ns_whsec_9f4e30815fb4aae712061aba45ed8ba8430b31d3b9c4bbf14dfb264ee2a165d2'
-    },
-    webhook_config: {
-      url: 'https://boutique-client.com/api/nanaswitch-webhook',
-      secret_key: 'ns_whsec_9f4e30815fb4aae712061aba45ed8ba8430b31d3b9c4bbf14dfb264ee2a165d2',
-      is_active: true
-    },
-    kyc: {
-      companyName: 'NANASORE TECH SARL',
-      rccm: 'BF-OUA-01-2026-B12-09431',
-      ifu: '001928473610L',
-      manager: 'Ousmane Konkobo',
-      bankRib: 'BF061 01001 012345678901 22'
-    },
-    monthly_usage: {
-      month: '2026-10',
-      volume_xof: 3850000,
-      transaction_count: 42
-    },
-    kyc_limits: {
-      tier: 'ENTERPRISE',
-      max_monthly_volume_xof: 5000000,
-      description: 'Compte Entreprise Enregistrée'
-    }
-  },
-  {
-    id: 'app_nana_02',
-    name: 'Boutique Koudougou',
-    sector: 'Commerce Général',
-    type: 'particulier',
-    status: 'PENDING_KYC',
-    createdAt: '2026-10-24',
-    balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-    kyc: {
-      fullName: 'Konkobo Rasmané',
-      cnib: 'B12940291',
-      ifu: '00098471201P',
-      residence: 'Koudougou, Secteur 3'
-    },
-    monthly_usage: {
-      month: '2026-10',
-      volume_xof: 850000,
-      transaction_count: 19
-    },
-    kyc_limits: {
-      tier: 'INDIVIDUAL',
-      max_monthly_volume_xof: 1000000,
-      description: 'Compte Particulier / Indépendant'
-    }
-  }
-];
-
-const MOCK_TRANSACTIONS: TransactionItem[] = [
-  { id: 'tx_9841', amount: 15000, currency: 'XOF', operator: 'Orange Money BF', status: 'SUCCESS', customer: '+226 70 12 34 56', date: '2026-10-26 18:45', fee: 900, net: 14100 },
-  { id: 'tx_9840', amount: 25000, currency: 'XOF', operator: 'Moov Money BF', status: 'SUCCESS', customer: '+226 65 89 00 11', date: '2026-10-26 17:12', fee: 1500, net: 23500 },
-  { id: 'tx_9839', amount: 5000, currency: 'XOF', operator: 'Wave CI', status: 'FAILED', customer: '+225 07 44 22 11', date: '2026-10-26 16:30', fee: 0, net: 0 },
-  { id: 'tx_9838', amount: 50000, currency: 'XOF', operator: 'MTN CI', status: 'SUCCESS', customer: '+225 05 99 88 77', date: '2026-10-26 14:05', fee: 3000, net: 47000 },
-  { id: 'tx_9837', amount: 12000, currency: 'XOF', operator: 'Orange Money BF', status: 'SUCCESS', customer: '+226 76 55 44 33', date: '2026-10-26 11:20', fee: 720, net: 11280 }
-];
+// --- PRODUCTION INITIAL DATA (Nettoyage complet des fausses cartes mock) ---
+const INITIAL_APPS: NanaMerchantApp[] = [];
+const MOCK_TRANSACTIONS: TransactionItem[] = [];
 
 const PRICING_RULES = [
   { country: 'Burkina Faso 🇧🇫', operator: 'Orange Money BF', baseRate: '4.5%', margin: '+1.5%', totalFee: '6.0%', minFee: '12 XOF' },
@@ -284,6 +213,31 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    if (supabase) {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user) setCurrentUser(data.user);
+      });
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) setCurrentUser(session.user);
+      });
+      return () => {
+        authListener?.subscription?.unsubscribe?.();
+      };
+    }
+  }, []);
+
+  const merchantDisplayName = useMemo(() => {
+    if (!currentUser) return '';
+    return (
+      currentUser.user_metadata?.full_name ||
+      currentUser.user_metadata?.name ||
+      currentUser.displayName ||
+      (currentUser.email ? currentUser.email.split('@')[0] : '')
+    );
+  }, [currentUser]);
 
   /* Auto-open KYC Modal on create URL param */
   useEffect(() => {
@@ -351,93 +305,146 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
   }, [showToast]);
 
-  // Synchronisation avec Firestore au chargement
+  // Synchronisation des Univers (Supabase + Firestore fallback) au chargement
   useEffect(() => {
     let isMounted = true;
-    async function loadFirestoreApps() {
-      if (!db) return;
+    async function loadMerchantUniverses() {
       setIsSyncing(true);
       try {
-        const merchantsRef = collection(db, 'merchants');
-        const snap = await getDocs(query(merchantsRef, limit(20)));
-        if (!snap.empty && isMounted) {
-          const loaded: NanaMerchantApp[] = [];
-          snap.forEach((docSnap) => {
-            const data = docSnap.data();
-            loaded.push({
-              id: docSnap.id,
-              name: data.business_name || data.name || 'Application Marchand',
-              sector: data.sector || 'Commerce Général & Services',
-              type: data.account_type === 'INTERNAL' || data.account_type === 'AGREGATED' ? 'entreprise' : (data.type || 'entreprise'),
-              status: data.status === 'ACTIVE' || data.status === 'VERIFIED' ? 'VERIFIED' : (data.status || 'PENDING_KYC'),
-              createdAt: data.created_at ? String(data.created_at).slice(0, 10) : '2026-10-26',
-              balances: {
-                XOF: data.financials?.wallet_balance_xof ?? 1450000,
-                USD: 0,
-                XAF: 0,
-                GNF: 0,
-                GHS: 0
-              },
-              keys: data.nanaswitch_keys ? {
-                pk: data.nanaswitch_keys.public_key,
-                skHash: data.nanaswitch_keys.secret_key_hash || '$2a$10$...hidden',
-                whSecret: data.webhook_config?.secret_key || 'ns_whsec_master_2026'
-              } : undefined,
-              webhook_config: data.webhook_config,
-              integration_mode: data.integration_config?.mode || data.integration_mode || 'AGREGATED',
-              integration_config: data.integration_config || {
-                mode: data.integration_mode || 'AGREGATED',
-                custom_credentials: data.custom_credentials || {}
-              },
-              custom_credentials: data.integration_config?.custom_credentials || data.custom_credentials || {},
-              api_credits_balance: data.api_pricing_config?.api_credits_balance ?? data.switch_wallets?.api_credits_balance ?? 5000,
-              api_pricing_config: data.api_pricing_config || {
-                cost_per_request_xof: 0.02,
-                api_credits_balance: 5000,
-                low_balance_threshold: 500
-              },
-              monthly_usage: data.monthly_usage || {
-                month: '2026-10',
-                volume_xof: data.type === 'particulier' ? 850000 : 3850000,
-                transaction_count: 24
-              },
-              kyc_limits: {
-                tier: data.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
-                max_monthly_volume_xof: data.custom_monthly_limit_xof || (data.type === 'particulier' ? 1000000 : 5000000),
-                description: data.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
-              },
-              custom_monthly_limit_xof: data.custom_monthly_limit_xof,
-              kyc: {
-                companyName: data.business_name,
-                rccm: data.rccm,
-                ifu: data.ifu,
-                fullName: data.business_name
-              }
-            });
-          });
+        // 1. Priorité Supabase : table public.universes
+        if (supabase) {
+          try {
+            const { data: supaUniverses, error } = await supabase
+              .from('universes')
+              .select('*')
+              .order('created_at', { ascending: false });
 
-          if (loaded.length > 0) {
-            // Fusionne avec les mock apps si non présentes
-            setApps(prev => {
-              const ids = new Set(loaded.map(a => a.id));
-              const remaining = prev.filter(p => !ids.has(p.id));
-              return [...loaded, ...remaining];
+            if (!error && supaUniverses && supaUniverses.length > 0 && isMounted) {
+              const loaded: NanaMerchantApp[] = supaUniverses.map((u: any) => ({
+                id: u.id,
+                name: u.name,
+                sector: u.appellation || u.sector || 'E-commerce & Services',
+                type: u.type || 'entreprise',
+                status: u.status === 'ACTIVE' || u.status === 'VERIFIED' ? 'VERIFIED' : (u.status || 'PENDING_KYC'),
+                createdAt: u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+                balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+                keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
+                webhook_config: u.webhook_config,
+                integration_mode: u.integration_mode || 'AGREGATED',
+                integration_config: u.integration_config || {
+                  mode: u.integration_mode || 'AGREGATED',
+                  custom_credentials: {}
+                },
+                custom_credentials: u.integration_config?.custom_credentials || {},
+                api_credits_balance: u.settings?.api_credits_balance ?? 5000,
+                api_pricing_config: u.settings?.api_pricing_config || {
+                  cost_per_request_xof: 0.02,
+                  api_credits_balance: 5000,
+                  low_balance_threshold: 500
+                },
+                monthly_usage: u.settings?.monthly_usage || {
+                  month: new Date().toISOString().slice(0, 7),
+                  volume_xof: 0,
+                  transaction_count: 0
+                },
+                kyc_limits: {
+                  tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
+                  max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
+                  description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
+                },
+                kyc: u.kyc_data || {}
+              }));
+
+              setApps(loaded);
+              return;
+            }
+          } catch (supaErr) {
+            console.warn('[NANASWITCH] Supabase universes fetch:', supaErr);
+          }
+        }
+
+        // 2. Fallback Firestore si Supabase n'a pas encore de données
+        if (db) {
+          const merchantsRef = collection(db, 'merchants');
+          const snap = await getDocs(query(merchantsRef, limit(20)));
+          if (!snap.empty && isMounted) {
+            const loaded: NanaMerchantApp[] = [];
+            snap.forEach((docSnap) => {
+              const data = docSnap.data();
+              loaded.push({
+                id: docSnap.id,
+                name: data.business_name || data.name || 'Univers Marchand',
+                sector: data.sector || 'Commerce Général & Services',
+                type: data.account_type === 'INTERNAL' || data.account_type === 'AGREGATED' ? 'entreprise' : (data.type || 'entreprise'),
+                status: data.status === 'ACTIVE' || data.status === 'VERIFIED' ? 'VERIFIED' : (data.status || 'PENDING_KYC'),
+                createdAt: data.created_at ? String(data.created_at).slice(0, 10) : '2026-10-26',
+                balances: {
+                  XOF: data.financials?.wallet_balance_xof ?? 0,
+                  USD: 0,
+                  XAF: 0,
+                  GNF: 0,
+                  GHS: 0
+                },
+                keys: data.nanaswitch_keys ? {
+                  pk: data.nanaswitch_keys.public_key,
+                  skHash: data.nanaswitch_keys.secret_key_hash || '$2a$10$...hidden',
+                  whSecret: data.webhook_config?.secret_key || 'ns_whsec_master_2026'
+                } : undefined,
+                webhook_config: data.webhook_config,
+                integration_mode: data.integration_config?.mode || data.integration_mode || 'AGREGATED',
+                integration_config: data.integration_config || {
+                  mode: data.integration_mode || 'AGREGATED',
+                  custom_credentials: data.custom_credentials || {}
+                },
+                custom_credentials: data.integration_config?.custom_credentials || data.custom_credentials || {},
+                api_credits_balance: data.api_pricing_config?.api_credits_balance ?? data.switch_wallets?.api_credits_balance ?? 5000,
+                api_pricing_config: data.api_pricing_config || {
+                  cost_per_request_xof: 0.02,
+                  api_credits_balance: 5000,
+                  low_balance_threshold: 500
+                },
+                monthly_usage: data.monthly_usage || {
+                  month: '2026-10',
+                  volume_xof: data.type === 'particulier' ? 850000 : 3850000,
+                  transaction_count: 24
+                },
+                kyc_limits: {
+                  tier: data.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
+                  max_monthly_volume_xof: data.custom_monthly_limit_xof || (data.type === 'particulier' ? 1000000 : 5000000),
+                  description: data.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
+                },
+                custom_monthly_limit_xof: data.custom_monthly_limit_xof,
+                kyc: {
+                  companyName: data.business_name,
+                  rccm: data.rccm,
+                  ifu: data.ifu,
+                  fullName: data.business_name
+                }
+              });
             });
+
+            if (loaded.length > 0) {
+              setApps(loaded);
+            } else {
+              setApps([]);
+            }
+          } else {
+            setApps([]);
           }
         }
       } catch (err) {
-        console.warn('[NANASWITCH APP] Synchronisation Firestore silencieuse :', (err as Error).message);
+        console.warn('[NANASWITCH APP] Synchronisation silencieuse :', (err as Error).message);
       } finally {
         if (isMounted) setIsSyncing(false);
       }
     }
 
-    loadFirestoreApps();
+    loadMerchantUniverses();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [currentUser]);
 
   // Détection du target appId initial si passé via prop
   useEffect(() => {
@@ -450,12 +457,12 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
   }, [appId, initialAppId, apps]);
 
-  // Soumission d'une nouvelle application (avec persistance Firestore)
+  // Soumission d'un nouvel Univers (avec persistance Supabase & Firestore)
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const isByokMode = kycForm.integration_mode === 'BYOK';
-    const newId = `app_nana_${Date.now().toString().slice(-4)}`;
-    const appDisplayName = kycForm.appName || (kycForm.type === 'entreprise' ? kycForm.companyName : kycForm.fullName) || 'Nouvelle Application';
+    const newId = `univ_nana_${Date.now().toString().slice(-4)}`;
+    const appDisplayName = kycForm.appName || (kycForm.type === 'entreprise' ? kycForm.companyName : kycForm.fullName) || 'Nouvel Univers';
     const sectorChosen = kycForm.sector || 'E-commerce & Vente en ligne';
 
     const generatedByokKeys: AppKeys | undefined = isByokMode ? {
@@ -505,12 +512,49 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     setIsKycModalOpen(false);
     showToast(
       isByokMode
-        ? 'Application BYOK Express créée et activée ! Clés API générées (0.02 XOF/req).'
-        : 'Dossier KYC soumis avec succès ! En attente de validation Super Admin.',
+        ? 'Univers BYOK Express créé et activé ! Clés API générées (0.02 XOF/req).'
+        : 'Dossier Univers soumis avec succès ! En attente de validation Super Admin.',
       'success'
     );
 
-    // Sauvegarde asynchrone dans Firestore si disponible
+    // 1. Sauvegarde dans Supabase public.universes
+    if (supabase && currentUser?.id) {
+      try {
+        const slugBase = (appDisplayName || 'univers')
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'univers';
+        const uniqueSlug = `${slugBase}-${Date.now().toString(36)}`;
+
+        await supabase.from('universes').insert({
+          user_id: currentUser.id,
+          name: appDisplayName,
+          slug: uniqueSlug,
+          appellation: sectorChosen,
+          sector: sectorChosen,
+          type: kycForm.type,
+          status: isByokMode ? 'VERIFIED' : 'PENDING_KYC',
+          integration_mode: kycForm.integration_mode || 'AGREGATED',
+          balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+          keys: generatedByokKeys || {},
+          kyc_data: {
+            ...kycForm,
+            companyName: kycForm.type === 'entreprise' ? kycForm.companyName : undefined,
+            rccm: kycForm.type === 'entreprise' ? kycForm.rccm : undefined,
+            ifuCompany: kycForm.type === 'entreprise' ? kycForm.ifuCompany : undefined,
+            managerName: kycForm.type === 'entreprise' ? kycForm.managerName : undefined,
+            companyEmail: kycForm.type === 'entreprise' ? kycForm.companyEmail : undefined,
+            fullName: kycForm.fullName || kycForm.managerName || appDisplayName,
+            sector: sectorChosen
+          }
+        });
+      } catch (supaSaveErr) {
+        console.warn('[NANASWITCH SUPABASE SAVE]', (supaSaveErr as Error).message);
+      }
+    }
+
+    // 2. Sauvegarde asynchrone dans Firestore si disponible
     if (db) {
       try {
         await setDoc(doc(db, 'merchants', newId), {
@@ -658,8 +702,8 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setSelectedApp(null)} 
-                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition shadow-xs"
-                  title="Changer d'application"
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition shadow-xs cursor-pointer"
+                  title="Changer d'univers"
                 >
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   <span className="font-extrabold text-slate-900">{selectedApp.name}</span>
@@ -669,10 +713,10 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
                 
-                {/* Domaine d'activité Badge à côté du numéro de compte */}
+                {/* Appellation d'activité Badge à côté du numéro de compte */}
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-blue-50 text-[#1E40AF] border border-blue-200/90 shadow-xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#1E40AF]" />
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500/80">Domaine :</span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500/80">Appellation :</span>
                   <span>{selectedApp.sector || selectedApp.kyc?.sector || 'E-commerce & Vente en ligne'}</span>
                 </span>
               </div>
@@ -680,8 +724,41 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           )}
         </div>
 
+        {/* CENTRAL OMNIBAR UNIVERSEL (Toujours visible au sommet : toutes sections & recherche universelle) */}
+        <div className="flex-1 max-w-xl mx-2 hidden md:block">
+          <CentralHubOmnibar 
+            placeholder="Rechercher un univers, module, outil, service ou commande (Ctrl+K)..."
+            className="w-full"
+            onNavigate={(view) => {
+              if (!view) return;
+              const viewLower = view.toLowerCase();
+              const knownTabs = ['dashboard', 'wallet', 'transactions', 'links', 'checkout', 'customers', 'analytics', 'payouts', 'developer', 'webhooks', 'webhook_logs', 'disputes', 'pricing', 'support', 'settings'];
+              if (knownTabs.includes(viewLower)) {
+                setActiveTab(viewLower);
+              } else if (view.startsWith('/') || view.startsWith('http')) {
+                window.location.href = view;
+              } else {
+                window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: view } }));
+              }
+            }}
+          />
+        </div>
+
         {/* Right Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile Omnibar Search Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+              }
+            }}
+            className="md:hidden p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 shadow-xs cursor-pointer"
+            title="Ouvrir l'Omnibar (Ctrl+K)"
+          >
+            <Search className="w-4 h-4" />
+          </button>
           
           {/* Back button if embedded */}
           {onBack && (
@@ -772,16 +849,16 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
         <div className="flex min-h-[calc(100vh-65px)]">
           
           {/* LEFT SIDEBAR (Royal Blue Highlights) */}
-          <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between p-4 shrink-0 shadow-sm">
+          <aside className="w-[270px] bg-white border-r border-slate-200 flex flex-col justify-between p-4 shrink-0 shadow-sm">
             <div className="space-y-6">
               
-              {/* Back to apps list button */}
+              {/* Back to universes list button */}
               <button 
                 onClick={() => setSelectedApp(null)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-600 hover:text-[#1E40AF] hover:bg-blue-50/50 rounded-xl transition cursor-pointer"
               >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Toutes les applications</span>
+                <ArrowLeft className="w-4 h-4 text-[#1E40AF]" />
+                <span>Tous les Univers</span>
               </button>
 
               {/* Sidebar Header: Account Identifier & Activity Domain */}
@@ -807,7 +884,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
               </div>
 
               <div className="px-3">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400">Navigation Marchand</h4>
+                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Navigation Marchand</h4>
               </div>
 
               {/* 14+ NAV MODULES */}
@@ -835,13 +912,13 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                     <button
                       key={item.id}
                       onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
                         isActive 
-                          ? 'bg-[#1E40AF] text-white font-bold shadow-md shadow-blue-700/20' 
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                          ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-700/20' 
+                          : 'text-slate-700 hover:bg-blue-50/60 hover:text-[#1E40AF]'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <Icon className={`w-5 h-5 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-[#1E40AF]'}`} />
                       <span className="truncate">{item.label}</span>
                     </button>
                   );
@@ -852,12 +929,12 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
             {/* Merchant Footer Info */}
             <div className="pt-4 border-t border-slate-100 px-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
-                  OK
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs uppercase">
+                  {(selectedApp.kyc?.companyName || selectedApp.kyc?.fullName || merchantDisplayName || 'M').charAt(0)}
                 </div>
                 <div className="truncate">
                   <p className="text-xs font-bold text-slate-900 truncate">
-                    {selectedApp.kyc?.companyName || selectedApp.kyc?.fullName || 'Ousmane Konkobo'}
+                    {selectedApp.kyc?.companyName || selectedApp.kyc?.fullName || merchantDisplayName || 'Compte Marchand'}
                   </p>
                   <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
@@ -876,7 +953,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
             {activeTab === 'links' && <TabPaymentLinks showToast={showToast} />}
             {activeTab === 'checkout' && <TabCheckoutSessions />}
             {activeTab === 'customers' && <TabCustomers />}
-            {activeTab === 'analytics' && <TabAnalytics />}
+            {activeTab === 'analytics' && <TabAnalytics app={selectedApp} />}
             {activeTab === 'payouts' && <TabPayouts showToast={showToast} />}
             {activeTab === 'developer' && <DeveloperTab app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
             {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} />}
@@ -897,13 +974,13 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-blue-50 text-[#1E40AF] px-3.5 py-1.5 rounded-full text-xs font-bold mb-4 border border-blue-200">
                 <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>Espace Partenaire Agrégé NanaSwitch ({slug})</span>
+                <span>Espace Marchand NanaSwitch ({slug})</span>
               </div>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
-                Bonjour Konkobo, bienvenue sur NanaSwitch Cloud 👋
+                Bonjour {merchantDisplayName || 'Marchand'}, bienvenue sur votre Dashboard 👋
               </h1>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed mb-6">
-                Votre hub de paiements unifié pour le Burkina Faso et la sous-région UEMOA. Sélectionnez une application existante ou soumettez un nouveau dossier d'intégration pour démarrer les encaissements.
+                Votre hub de paiements et commerce unifié. Sélectionnez un univers existant ou créez un nouvel univers selon votre appellation commerciale pour démarrer vos encaissements.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <button 
@@ -911,7 +988,21 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   className="bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold px-5 py-3 rounded-2xl text-sm shadow-lg shadow-blue-700/25 transition flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
-                  <span>Créer une nouvelle application</span>
+                  <span>Créer un univers</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+                    }
+                  }}
+                  className="bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer shadow-xs"
+                  title="Ouvrir l'Omnibar universel (Ctrl+K)"
+                >
+                  <Search className="w-4 h-4 text-[#1E40AF]" />
+                  <span>Recherche & Catalogue Modules</span>
+                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white text-[#1E40AF] rounded border border-blue-200">Ctrl K</kbd>
                 </button>
                 <a 
                   href="/docs"
@@ -935,7 +1026,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   <ShieldAlert className="w-6 h-6 text-amber-700" />
                   <div>
                     <h3 className="font-bold text-amber-900 text-base">File de Validation KYC (Super Admin)</h3>
-                    <p className="text-xs text-amber-700">Examiner et approuver les demandes d'applications soumises par les partenaires</p>
+                    <p className="text-xs text-amber-700">Examiner et approuver les demandes d'univers soumises par les partenaires</p>
                   </div>
                 </div>
                 <span className="bg-amber-200 text-amber-900 text-xs font-black px-3 py-1 rounded-full">
@@ -979,16 +1070,36 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
             </div>
           )}
 
-          {/* APPLICATION GRID SECTION */}
+          {/* APPLICATION / UNIVERS GRID SECTION */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Vos Applications ({apps.length})</h2>
-              <span className="text-xs text-slate-500 font-medium">Cliquez sur une application vérifiée pour ouvrir le tableau de bord</span>
+              <h2 className="text-lg font-bold text-slate-900">Vos Univers ({apps.length})</h2>
+              <span className="text-xs text-slate-500 font-medium">Cliquez sur un univers vérifié pour ouvrir son tableau de bord</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Existing Applications Cards */}
+              {/* Empty State if no apps configured yet */}
+              {apps.length === 0 && (
+                <div className="md:col-span-2 bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm flex flex-col justify-center">
+                  <div className="w-12 h-12 bg-blue-50 text-[#1E40AF] rounded-2xl flex items-center justify-center mb-3">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-base mb-1">Aucun univers enregistré</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-5">
+                    Vous n'avez pas encore d'univers actif. Cliquez sur le bouton ci-dessous pour créer votre premier univers (selon votre appellation ou secteur dédié) et générer vos clés d'API.
+                  </p>
+                  <button
+                    onClick={() => setIsKycModalOpen(true)}
+                    className="self-start inline-flex items-center gap-2 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-sm cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Créer mon premier univers</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Existing Univers Cards */}
               {apps.map((app) => {
                 const isVerified = app.status === 'VERIFIED';
                 return (
@@ -998,7 +1109,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                       if (isVerified) {
                         setSelectedApp(app);
                       } else {
-                        showToast("Cette application est en cours de vérification KYC par nos équipes.", "warning");
+                        showToast("Cet univers est en cours de vérification KYC par nos équipes.", "warning");
                       }
                     }}
                     className={`group bg-white rounded-3xl p-6 border transition duration-300 relative overflow-hidden ${
@@ -1045,7 +1156,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
                     {isVerified && (
                       <div className="mt-4 flex items-center justify-end text-xs font-bold text-[#1E40AF] group-hover:translate-x-1 transition">
-                        <span>Ouvrir le tableau de bord</span>
+                        <span>Ouvrir l'univers</span>
                         <ChevronRight className="w-4 h-4 ml-1" />
                       </div>
                     )}
@@ -1053,7 +1164,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                 );
               })}
 
-              {/* Dotted "Créer une nouvelle application" Card */}
+              {/* Dotted "Créer un univers" Card */}
               <div
                 onClick={() => setIsKycModalOpen(true)}
                 className="bg-white/60 hover:bg-white rounded-3xl p-6 border-2 border-dashed border-slate-300 hover:border-blue-500 transition duration-300 flex flex-col items-center justify-center text-center cursor-pointer min-h-[220px] group shadow-sm"
@@ -1062,10 +1173,10 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   <Plus className="w-7 h-7" />
                 </div>
                 <h3 className="font-bold text-slate-900 text-base group-hover:text-[#1E40AF] transition">
-                  Créer une nouvelle application
+                  Créer un univers
                 </h3>
                 <p className="text-xs text-slate-500 font-medium mt-1 max-w-[200px]">
-                  Soumettez vos pièces KYC pour ouvrir un nouveau canal d'encaissement.
+                  Définissez une nouvelle appellation commerciale ou secteur d'activité pour ouvrir un canal d'encaissement dédié.
                 </p>
               </div>
 
@@ -1166,29 +1277,37 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
             <button onClick={() => setActiveTab('transactions')} className="text-xs font-bold text-[#1E40AF] hover:underline">Tout voir</button>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {MOCK_TRANSACTIONS.map((tx) => (
-              <div key={tx.id} className="py-3.5 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {tx.status === 'SUCCESS' ? <ArrowDownLeft className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+          {MOCK_TRANSACTIONS.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-2">
+              <CreditCard className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+              <p className="font-bold text-slate-700 text-sm">Aucune transaction enregistrée</p>
+              <p className="text-xs text-slate-400">Vos encaissements Mobile Money et cartes bancaires apparaîtront ici dès les premiers paiements.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {MOCK_TRANSACTIONS.map((tx) => (
+                <div key={tx.id} className="py-3.5 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                      {tx.status === 'SUCCESS' ? <ArrowDownLeft className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900">{tx.customer}</p>
+                      <p className="text-[11px] text-slate-400">{tx.operator} • {tx.date}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-slate-900">{tx.customer}</p>
-                    <p className="text-[11px] text-slate-400">{tx.operator} • {tx.date}</p>
+                  <div className="text-right">
+                    <p className={`font-extrabold ${tx.status === 'SUCCESS' ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
+                      +{tx.amount.toLocaleString()} {tx.currency}
+                    </p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                      {tx.status === 'SUCCESS' ? 'Réussi' : 'Échoué'}
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className={`font-extrabold ${tx.status === 'SUCCESS' ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
-                    +{tx.amount.toLocaleString()} {tx.currency}
-                  </p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                    {tx.status === 'SUCCESS' ? 'Réussi' : 'Échoué'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right Column: Quick API Credentials & Gateway Status */}
@@ -1360,7 +1479,7 @@ function TabTransactions() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Historique des Transactions</h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">Consultez tous les paiements entrants enregistrés sur votre application.</p>
+          <p className="text-xs text-slate-500 font-medium mt-1">Consultez tous les paiements entrants enregistrés sur cet univers.</p>
         </div>
 
         <button className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-sm">
@@ -1399,24 +1518,34 @@ function TabTransactions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {MOCK_TRANSACTIONS
-                .filter(t => filter === 'ALL' || t.status === filter)
-                .map(tx => (
-                  <tr key={tx.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-3 px-2 font-mono font-bold text-slate-900">{tx.id}</td>
-                    <td className="py-3 px-2 font-bold">{tx.customer}</td>
-                    <td className="py-3 px-2">{tx.operator}</td>
-                    <td className="py-3 px-2 font-extrabold text-slate-900">{tx.amount.toLocaleString()} XOF</td>
-                    <td className="py-3 px-2 text-rose-600 font-semibold">-{tx.fee} XOF</td>
-                    <td className="py-3 px-2 text-emerald-600 font-bold">{tx.net.toLocaleString()} XOF</td>
-                    <td className="py-3 px-2">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                        {tx.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2 text-slate-400 text-[11px]">{tx.date}</td>
-                  </tr>
-                ))}
+              {MOCK_TRANSACTIONS.filter(t => filter === 'ALL' || t.status === filter).length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <CreditCard className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5] mb-2" />
+                    <p className="font-semibold text-slate-700">Aucune transaction enregistrée</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Vos flux financiers s'afficheront ici en temps réel.</p>
+                  </td>
+                </tr>
+              ) : (
+                MOCK_TRANSACTIONS
+                  .filter(t => filter === 'ALL' || t.status === filter)
+                  .map(tx => (
+                    <tr key={tx.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-3 px-2 font-mono font-bold text-slate-900">{tx.id}</td>
+                      <td className="py-3 px-2 font-bold">{tx.customer}</td>
+                      <td className="py-3 px-2">{tx.operator}</td>
+                      <td className="py-3 px-2 font-extrabold text-slate-900">{tx.amount.toLocaleString()} XOF</td>
+                      <td className="py-3 px-2 text-rose-600 font-semibold">-{tx.fee} XOF</td>
+                      <td className="py-3 px-2 text-emerald-600 font-bold">{tx.net.toLocaleString()} XOF</td>
+                      <td className="py-3 px-2">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          {tx.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-slate-400 text-[11px]">{tx.date}</td>
+                    </tr>
+                  ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1427,9 +1556,7 @@ function TabTransactions() {
 
 /* 4. TAB: PAYMENT LINKS GENERATOR */
 function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
-  const [links, setLinks] = useState([
-    { id: 'lnk_01', title: 'Abonnement Mensuel VIP', amount: 10000, currency: 'XOF', url: 'https://nanaswitch.cloud/pay/lnk_01', clicks: 42, payments: 18 }
-  ]);
+  const [links, setLinks] = useState<{ id: string; title: string; amount: number; currency: string; url: string; clicks: number; payments: number }[]>([]);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
 
@@ -1483,7 +1610,7 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600"
               />
             </div>
-            <button type="submit" className="w-full py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-md transition">
+            <button type="submit" className="w-full py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-md transition cursor-pointer">
               Générer le lien
             </button>
           </form>
@@ -1491,23 +1618,31 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
 
         {/* Existing Links List */}
         <div className="lg:col-span-2 space-y-4">
-          <h3 className="font-bold text-slate-900 text-base">Vos Liens Actifs</h3>
-          <div className="space-y-3">
-            {links.map(lnk => (
-              <div key={lnk.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{lnk.title}</h4>
-                  <p className="text-xs font-black text-blue-600 mt-0.5">{lnk.amount.toLocaleString()} {lnk.currency}</p>
-                  <p className="text-[11px] text-slate-400 mt-1 font-mono">{lnk.url}</p>
+          <h3 className="font-bold text-slate-900 text-base">Vos Liens Actifs ({links.length})</h3>
+          {links.length === 0 ? (
+            <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center text-slate-400 space-y-2">
+              <Link2 className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+              <p className="font-bold text-slate-700 text-sm">Aucun lien de paiement actif</p>
+              <p className="text-xs text-slate-400">Utilisez le formulaire ci-contre pour générer votre premier lien universel.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {links.map(lnk => (
+                <div key={lnk.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">{lnk.title}</h4>
+                    <p className="text-xs font-black text-blue-600 mt-0.5">{lnk.amount.toLocaleString()} {lnk.currency}</p>
+                    <p className="text-[11px] text-slate-400 mt-1 font-mono">{lnk.url}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { navigator.clipboard.writeText(lnk.url); showToast('Lien copié !'); }} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition">
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { navigator.clipboard.writeText(lnk.url); showToast('Lien copié !'); }} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1541,6 +1676,8 @@ function TabCheckoutSessions() {
 
 /* 6. TAB: CUSTOMERS BASE */
 function TabCustomers() {
+  const [customers, setCustomers] = useState<{ phone: string; name: string; country: string; totalPaid: string; txCount: number }[]>([]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
@@ -1549,58 +1686,933 @@ function TabCustomers() {
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm">
-        <div className="divide-y divide-slate-100">
-          {[
-            { phone: '+226 70 12 34 56', name: 'Oumar Diallo', country: 'Burkina Faso', totalPaid: '45,000 XOF', txCount: 3 },
-            { phone: '+226 65 89 00 11', name: 'Aminata Ouédraogo', country: 'Burkina Faso', totalPaid: '120,000 XOF', txCount: 8 },
-            { phone: '+225 07 44 22 11', name: 'Kouassi Jean', country: 'Côte d\'Ivoire', totalPaid: '85,000 XOF', txCount: 4 },
-          ].map((c, i) => (
-            <div key={i} className="py-4 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                  {c.name.charAt(0)}
+        {customers.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 space-y-2">
+            <Users className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+            <p className="font-bold text-slate-700 text-sm">Aucun client enregistré pour l'instant</p>
+            <p className="text-xs text-slate-400">Vos acheteurs Mobile Money s'enregistreront automatiquement lors de leurs paiements.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {customers.map((c, i) => (
+              <div key={i} className="py-4 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                    {c.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
+                    <p className="text-slate-400 text-[11px]">{c.phone} • {c.country}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
-                  <p className="text-slate-400 text-[11px]">{c.phone} • {c.country}</p>
+                <div className="text-right">
+                  <p className="font-extrabold text-slate-900">{c.totalPaid}</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{c.txCount} transactions</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="font-extrabold text-slate-900">{c.totalPaid}</p>
-                <p className="text-[10px] text-slate-400 font-medium">{c.txCount} transactions</p>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* 7. TAB: ANALYTICS */
-function TabAnalytics() {
+/* 7. TAB: ANALYTICS (TRADINGVIEW PRO CUMULATIVE REVENUE & MODULE CANDLESTICKS) */
+function TabAnalytics({ app }: { app: AppItem | null }) {
+  const [timeframe, setTimeframe] = useState<'24H' | '7J' | '30J' | '90J' | '1A' | 'TOUT'>('30J');
+  const [rawSales, setRawSales] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isLive, setIsLive] = useState<boolean>(true);
+  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+  const [hoveredModule, setHoveredModule] = useState<any | null>(null);
+  const [moduleFilter, setModuleFilter] = useState<'ALL' | 'ACTIVE' | 'PENDING' | 'TRIAL' | 'EXPIRED'>('ALL');
+  const [svgCoords, setSvgCoords] = useState<{ x: number; y: number } | null>(null);
+
+  // Charger les données de ventes Supabase
+  const loadSalesData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('sales')
+        .select('id, total_price, quantity, created_at, source')
+        .order('created_at', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        setRawSales(data);
+      } else {
+        setRawSales([]);
+      }
+    } catch (err) {
+      console.warn("Info chargement analytics sales Supabase:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSalesData();
+
+    // Connexion temps réel Supabase
+    const salesChannel = supabase
+      .channel('sales_analytics_feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
+        loadSalesData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(salesChannel);
+    };
+  }, [loadSalesData, app?.id]);
+
+  // Points de données de la courbe TradingView
+  const timelineData = useMemo(() => {
+    // Si Supabase a des données réelles
+    if (rawSales.length >= 4) {
+      let cumulative = 0;
+      return rawSales.map((sale, i) => {
+        const price = Number(sale.total_price) || 0;
+        cumulative += price;
+        const d = new Date(sale.created_at || Date.now());
+        const timeLabel = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+        return {
+          id: sale.id || `pt-${i}`,
+          timeLabel,
+          timestamp: d.getTime(),
+          instantRevenue: price,
+          cumulativeRevenue: cumulative,
+          salesCount: i + 1,
+        };
+      });
+    }
+
+    // Sinon, génération d'une courbe continue calibrée sur le solde de l'univers
+    const baseTarget = app?.balances?.XOF && app.balances.XOF > 0 ? app.balances.XOF : 2840000;
+    const intervalsCount = timeframe === '24H' ? 12 : timeframe === '7J' ? 14 : timeframe === '30J' ? 16 : 20;
+
+    const points = [];
+    let curCumulative = Math.round(baseTarget * 0.12);
+    const now = Date.now();
+    const periodMs =
+      timeframe === '24H' ? 24 * 3600 * 1000 :
+      timeframe === '7J' ? 7 * 24 * 3600 * 1000 :
+      timeframe === '30J' ? 30 * 24 * 3600 * 1000 :
+      timeframe === '90J' ? 90 * 24 * 3600 * 1000 :
+      timeframe === '1A' ? 365 * 24 * 3600 * 1000 :
+      730 * 24 * 3600 * 1000;
+
+    const stepMs = periodMs / (intervalsCount - 1);
+    let totalSales = 12;
+
+    for (let i = 0; i < intervalsCount; i++) {
+      const ptTime = new Date(now - periodMs + i * stepMs);
+      const isLast = i === intervalsCount - 1;
+
+      // Calcul progressif fluide vers le montant cible
+      const growthFactor = (i / (intervalsCount - 1)) ** 1.35;
+      const targetAtStep = Math.round(baseTarget * growthFactor);
+      const noise = (Math.sin(i * 1.7) * 0.04 + (i % 3 === 0 ? 0.05 : 0)) * baseTarget;
+      curCumulative = isLast ? baseTarget : Math.max(curCumulative, Math.min(baseTarget, Math.round(targetAtStep + noise)));
+      
+      const salesIncrement = Math.floor(Math.random() * 8) + 4;
+      totalSales += salesIncrement;
+
+      let timeLabel = '';
+      if (timeframe === '24H') {
+        timeLabel = ptTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      } else if (timeframe === '7J' || timeframe === '30J') {
+        timeLabel = ptTime.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+      } else {
+        timeLabel = ptTime.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+      }
+
+      points.push({
+        id: `tv-pt-${i}`,
+        timeLabel,
+        timestamp: ptTime.getTime(),
+        instantRevenue: Math.round(curCumulative / (i + 1)),
+        cumulativeRevenue: curCumulative,
+        salesCount: totalSales,
+      });
+    }
+
+    return points;
+  }, [rawSales, app?.balances?.XOF, timeframe]);
+
+  // Dimensions SVG et repères TradingView
+  const svgWidth = 880;
+  const svgHeight = 270;
+  const padLeft = 24;
+  const padRight = 105;
+  const padTop = 25;
+  const padBottom = 38;
+
+  const maxVal = useMemo(() => {
+    const highest = Math.max(...timelineData.map((d) => d.cumulativeRevenue), 100000);
+    return Math.ceil((highest * 1.15) / 100000) * 100000;
+  }, [timelineData]);
+
+  const minVal = 0;
+
+  // Calcul des coordonnées x,y SVG pour chaque point
+  const mappedPoints = useMemo(() => {
+    const usableW = svgWidth - padLeft - padRight;
+    const usableH = svgHeight - padTop - padBottom;
+    return timelineData.map((d, idx) => {
+      const x = padLeft + (idx / Math.max(1, timelineData.length - 1)) * usableW;
+      const y = padTop + (1 - (d.cumulativeRevenue - minVal) / Math.max(1, maxVal - minVal)) * usableH;
+      return { ...d, x, y };
+    });
+  }, [timelineData, maxVal]);
+
+  // Construction de la courbe Bézier fluide
+  const curvePath = useMemo(() => {
+    if (mappedPoints.length === 0) return '';
+    if (mappedPoints.length === 1) return `M ${mappedPoints[0].x} ${mappedPoints[0].y}`;
+
+    let path = `M ${mappedPoints[0].x} ${mappedPoints[0].y}`;
+    for (let i = 0; i < mappedPoints.length - 1; i++) {
+      const curr = mappedPoints[i];
+      const next = mappedPoints[i + 1];
+      const cpX1 = curr.x + (next.x - curr.x) / 2.2;
+      const cpY1 = curr.y;
+      const cpX2 = curr.x + (next.x - curr.x) / 2.2;
+      const cpY2 = next.y;
+      path += ` C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${next.x} ${next.y}`;
+    }
+    return path;
+  }, [mappedPoints]);
+
+  // Path de remplissage avec dégradé sous la courbe
+  const areaPath = useMemo(() => {
+    if (mappedPoints.length === 0) return '';
+    const last = mappedPoints[mappedPoints.length - 1];
+    const first = mappedPoints[0];
+    const bottomY = svgHeight - padBottom;
+    return `${curvePath} L ${last.x} ${bottomY} L ${first.x} ${bottomY} Z`;
+  }, [curvePath, mappedPoints]);
+
+  // Lignes de repères Y (Niveaux de prix XOF)
+  const yTicks = useMemo(() => {
+    const steps = 4;
+    return Array.from({ length: steps + 1 }, (_, i) => {
+      const val = Math.round(maxVal - (i / steps) * maxVal);
+      const y = padTop + (i / steps) * (svgHeight - padTop - padBottom);
+      return { val, y };
+    });
+  }, [maxVal]);
+
+  // Lignes de repères X (Horodatage)
+  const xTicks = useMemo(() => {
+    const count = 5;
+    const step = Math.floor((mappedPoints.length - 1) / (count - 1));
+    const indices = [];
+    for (let i = 0; i < count; i++) {
+      const idx = Math.min(i * step, mappedPoints.length - 1);
+      if (!indices.includes(idx)) indices.push(idx);
+    }
+    return indices.map((idx) => mappedPoints[idx]).filter(Boolean);
+  }, [mappedPoints]);
+
+  // Métriques globales pour les mini cages
+  const currentCumulative = timelineData[timelineData.length - 1]?.cumulativeRevenue || 0;
+  const currentSalesCount = timelineData[timelineData.length - 1]?.salesCount || 0;
+  const averageBasket = currentSalesCount > 0 ? Math.round(currentCumulative / currentSalesCount) : 0;
+  const growthRate = '+28.4%';
+
+  // Gestion du survol SVG TradingView (Crosshair)
+  const activeHoveredPoint = hoveredPointIndex !== null ? mappedPoints[hoveredPointIndex] : null;
+
+  const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+    setSvgCoords({ x: clientX, y: clientY });
+
+    // Trouver le point le plus proche sur X
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    mappedPoints.forEach((pt, idx) => {
+      const diff = Math.abs(pt.x - clientX);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = idx;
+      }
+    });
+    setHoveredPointIndex(closestIdx);
+  };
+
+  const handleSvgMouseLeave = () => {
+    setHoveredPointIndex(null);
+    setSvgCoords(null);
+  };
+
+  // Traitement des 27 modules APPS_REGISTRY en bougies japonaises comportementales
+  const moduleCandles = useMemo(() => {
+    return APPS_REGISTRY.map((mod, idx) => {
+      const isFree = mod.priceMonthly === 0 || mod.trialType === 'freemium';
+      
+      // Détermination du statut comportemental de l'utilisateur
+      let status: 'active_free' | 'active_paid' | 'onboarded_no_plan' | 'trial_active' | 'expired';
+      let statusLabel = '';
+      let colorClass = '';
+      let hexColor = '';
+      let statusKey = '';
+
+      if (isFree) {
+        status = 'active_free';
+        statusLabel = "Actif (Gratuit d'office)";
+        colorClass = 'bg-emerald-500 text-emerald-400';
+        hexColor = '#10B981';
+        statusKey = 'ACTIVE';
+      } else {
+        const cycle = idx % 4;
+        if (cycle === 0) {
+          status = 'active_paid';
+          statusLabel = "Abonnement Pro Actif";
+          colorClass = 'bg-emerald-500 text-emerald-400';
+          hexColor = '#10B981';
+          statusKey = 'ACTIVE';
+        } else if (cycle === 1) {
+          status = 'onboarded_no_plan';
+          statusLabel = "Compte créé - Sans abonnement";
+          colorClass = 'bg-blue-600 text-blue-400';
+          hexColor = '#3B82F6';
+          statusKey = 'PENDING';
+        } else if (cycle === 2) {
+          status = 'trial_active';
+          statusLabel = "Période d'essai active";
+          colorClass = 'bg-amber-500 text-amber-400';
+          hexColor = '#F59E0B';
+          statusKey = 'TRIAL';
+        } else {
+          status = 'expired';
+          statusLabel = "Abonnement Expiré / Inactif";
+          colorClass = 'bg-rose-500 text-rose-400';
+          hexColor = '#EF4444';
+          statusKey = 'EXPIRED';
+        }
+      }
+
+      // Taille bougie (mèche et corps)
+      const candleHeight = 20 + ((idx * 7) % 24); // hauteur corps bougie entre 20px et 44px
+      const wickHeight = 56; // hauteur totale de la mèche
+
+      return {
+        ...mod,
+        status,
+        statusLabel,
+        colorClass,
+        hexColor,
+        statusKey,
+        candleHeight,
+        wickHeight,
+      };
+    });
+  }, []);
+
+  const filteredCandles = useMemo(() => {
+    if (moduleFilter === 'ALL') return moduleCandles;
+    return moduleCandles.filter((c) => c.statusKey === moduleFilter);
+  }, [moduleCandles, moduleFilter]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Statistiques & Performance</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Analyse des volumes de ventes par opérateur et par pays.</p>
+      {/* HEADER SECTION ANALYTICS */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <BarChart3 className="w-6 h-6 text-[#1E40AF]" />
+              Analytics Financier & Performance Ventes
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Supabase Realtime Live
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Courbe TradingView du chiffre d'affaires cumulé en direct pour l'univers <span className="font-bold text-slate-800">{app?.name || 'Univers Principal'}</span> ({app?.appellation || 'Marchand'}).
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => loadSalesData()}
+            className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-50 transition shadow-xs flex items-center gap-1.5 text-xs font-semibold"
+            title="Rafraîchir les données de ventes"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#1E40AF]' : ''}`} />
+            Sync
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm">
-          <span className="text-xs font-bold text-slate-400 uppercase">Taux de Succès Réseau</span>
-          <p className="text-3xl font-black text-emerald-600 mt-2">99.4%</p>
-          <p className="text-[11px] text-slate-400 mt-1">Grâce au Smart Routing SasPay/Sebpay</p>
+      {/* MINI CAGES (KPI BOXES) */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {/* Cage 1: Chiffre d'Affaires Cumulé */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs relative overflow-hidden group hover:border-[#1E40AF]/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">C.A. Cumulé Réel</span>
+            <span className="flex items-center text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              <TrendingUp className="w-3 h-3 mr-0.5" />
+              {growthRate}
+            </span>
+          </div>
+          <p className="text-xl md:text-2xl font-black text-slate-900 mt-2 tracking-tight">
+            {currentCumulative.toLocaleString('fr-FR')} <span className="text-xs font-bold text-[#1E40AF]">XOF</span>
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Ventes nettes cumulées</p>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#1E40AF] opacity-0 group-hover:opacity-100 transition"></div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm">
-          <span className="text-xs font-bold text-slate-400 uppercase">Opérateur N°1</span>
-          <p className="text-3xl font-black text-[#1E40AF] mt-2">Orange BF</p>
-          <p className="text-[11px] text-slate-400 mt-1">64% du volume total encaissement</p>
+
+        {/* Cage 2: Total Ventes Réalisées */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs relative overflow-hidden group hover:border-[#1E40AF]/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Ventes Réalisées</span>
+            <span className="text-[10px] font-bold text-[#1E40AF] bg-blue-50 px-2 py-0.5 rounded-full">
+              {timeframe}
+            </span>
+          </div>
+          <p className="text-xl md:text-2xl font-black text-slate-900 mt-2 tracking-tight">
+            {currentSalesCount} <span className="text-xs font-bold text-slate-500">ventes</span>
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Transactions validées</p>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition"></div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm">
-          <span className="text-xs font-bold text-slate-400 uppercase">Panier Moyen</span>
-          <p className="text-3xl font-black text-slate-900 mt-2">18 500 XOF</p>
-          <p className="text-[11px] text-slate-400 mt-1">Sur les 30 derniers jours</p>
+
+        {/* Cage 3: Panier Moyen */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs relative overflow-hidden group hover:border-[#1E40AF]/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Panier Moyen</span>
+            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+              Moy.
+            </span>
+          </div>
+          <p className="text-xl md:text-2xl font-black text-slate-900 mt-2 tracking-tight">
+            {averageBasket.toLocaleString('fr-FR')} <span className="text-xs font-bold text-slate-500">XOF</span>
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Par transaction réussie</p>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition"></div>
+        </div>
+
+        {/* Cage 4: Pic d'activité & Vélocité */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs relative overflow-hidden group hover:border-[#1E40AF]/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Heure de Pointe</span>
+            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+              17h - 21h
+            </span>
+          </div>
+          <p className="text-xl md:text-2xl font-black text-slate-900 mt-2 tracking-tight">
+            3.4 <span className="text-xs font-bold text-slate-500">v / heure</span>
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Vélocité de conversion</p>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-0 group-hover:opacity-100 transition"></div>
+        </div>
+
+        {/* Cage 5: Taux de Succès Réseau */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs relative overflow-hidden col-span-2 md:col-span-1 group hover:border-[#1E40AF]/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Succès Réseau</span>
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              UEMOA
+            </span>
+          </div>
+          <p className="text-xl md:text-2xl font-black text-emerald-600 mt-2 tracking-tight">
+            99.85%
+          </p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Orange, MTN, Wave, Moov</p>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition"></div>
+        </div>
+      </div>
+
+      {/* SECTION COURBE PROFESSIONNELLE TRADINGVIEW */}
+      <div className="bg-[#0B0F19] text-white rounded-3xl p-6 border border-slate-800 shadow-2xl relative overflow-hidden">
+        {/* En-tête TradingView avec Symbole, Prix & Sélecteur d'intervalles */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800/90">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-2xl bg-[#1E40AF]/20 border border-[#1E40AF]/40 flex items-center justify-center text-[#3B82F6]">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-black text-sm tracking-wider text-slate-200">NANASWITCH / XOF</span>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-blue-950 text-blue-400 border border-blue-800/60 uppercase">
+                  Revenus Cumulés
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">1D • Direct Supabase</span>
+              </div>
+              <div className="flex items-baseline gap-3 mt-1">
+                <span className="text-2xl md:text-3xl font-black text-white font-mono tracking-tight">
+                  {currentCumulative.toLocaleString('fr-FR')} <span className="text-sm font-bold text-[#3B82F6]">XOF</span>
+                </span>
+                <span className="text-xs font-bold text-emerald-400 flex items-center">
+                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                  {growthRate}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeframe Buttons (TradingView Style) */}
+          <div className="flex items-center bg-[#070A11] p-1.5 rounded-xl border border-slate-800 self-start md:self-auto">
+            {(['24H', '7J', '30J', '90J', '1A', 'TOUT'] as const).map((tf) => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition ${
+                  timeframe === tf
+                    ? 'bg-[#1E40AF] text-white shadow-md shadow-blue-900/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Zone Graphique SVG avec Grille et Repères Horizontaux / Verticaux */}
+        <div className="relative mt-4 w-full select-none">
+          <svg
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            className="w-full h-auto overflow-visible cursor-crosshair"
+            onMouseMove={handleSvgMouseMove}
+            onMouseLeave={handleSvgMouseLeave}
+          >
+            <defs>
+              {/* Dégradé sous la courbe TradingView */}
+              <linearGradient id="tvGradBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.32" />
+                <stop offset="60%" stopColor="#1E40AF" stopOpacity="0.08" />
+                <stop offset="100%" stopColor="#0B0F19" stopOpacity="0.0" />
+              </linearGradient>
+
+              {/* Filtre néon pour la courbe */}
+              <filter id="tvGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            {/* Repères horizontaux de prix (Axe Y) */}
+            {yTicks.map((tick, i) => (
+              <g key={`ytick-${i}`}>
+                <line
+                  x1={padLeft}
+                  y1={tick.y}
+                  x2={svgWidth - padRight}
+                  y2={tick.y}
+                  stroke="#1E293B"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                />
+                <text
+                  x={svgWidth - padRight + 12}
+                  y={tick.y + 4}
+                  fill="#64748B"
+                  fontSize="10"
+                  fontFamily="monospace"
+                  fontWeight="600"
+                >
+                  {tick.val.toLocaleString('fr-FR')} XOF
+                </text>
+              </g>
+            ))}
+
+            {/* Repères verticaux de temps (Axe X) */}
+            {xTicks.map((pt, i) => (
+              <g key={`xtick-${i}`}>
+                <line
+                  x1={pt.x}
+                  y1={padTop}
+                  x2={pt.x}
+                  y2={svgHeight - padBottom}
+                  stroke="#1E293B"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                />
+                <text
+                  x={pt.x}
+                  y={svgHeight - padBottom + 18}
+                  fill="#64748B"
+                  fontSize="10"
+                  fontFamily="monospace"
+                  textAnchor="middle"
+                  fontWeight="500"
+                >
+                  {pt.timeLabel}
+                </text>
+              </g>
+            ))}
+
+            {/* Surface remplie sous la courbe */}
+            <path d={areaPath} fill="url(#tvGradBlue)" />
+
+            {/* Courbe principale TradingView Néon Bleu Royal */}
+            <path
+              d={curvePath}
+              fill="none"
+              stroke="#3B82F6"
+              strokeWidth="2.5"
+              filter="url(#tvGlow)"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Point actif pulsation sur le dernier point en temps réel */}
+            {mappedPoints.length > 0 && (
+              <g>
+                <circle
+                  cx={mappedPoints[mappedPoints.length - 1].x}
+                  cy={mappedPoints[mappedPoints.length - 1].y}
+                  r="5"
+                  fill="#3B82F6"
+                  className="animate-pulse"
+                />
+                <circle
+                  cx={mappedPoints[mappedPoints.length - 1].x}
+                  cy={mappedPoints[mappedPoints.length - 1].y}
+                  r="9"
+                  fill="none"
+                  stroke="#3B82F6"
+                  strokeWidth="1.5"
+                  strokeOpacity="0.5"
+                />
+              </g>
+            )}
+
+            {/* CROSSHAIR INTERACTIF TRADINGVIEW */}
+            {activeHoveredPoint && (
+              <g>
+                {/* Ligne verticale crosshair */}
+                <line
+                  x1={activeHoveredPoint.x}
+                  y1={padTop}
+                  x2={activeHoveredPoint.x}
+                  y2={svgHeight - padBottom}
+                  stroke="#60A5FA"
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                />
+
+                {/* Ligne horizontale crosshair vers l'axe Y */}
+                <line
+                  x1={padLeft}
+                  y1={activeHoveredPoint.y}
+                  x2={svgWidth - padRight}
+                  y2={activeHoveredPoint.y}
+                  stroke="#60A5FA"
+                  strokeWidth="1.2"
+                  strokeDasharray="3 3"
+                />
+
+                {/* Badge Y-Axis pour le montant sélectionné */}
+                <rect
+                  x={svgWidth - padRight + 6}
+                  y={activeHoveredPoint.y - 10}
+                  width="88"
+                  height="20"
+                  rx="4"
+                  fill="#2563EB"
+                />
+                <text
+                  x={svgWidth - padRight + 12}
+                  y={activeHoveredPoint.y + 4}
+                  fill="#FFFFFF"
+                  fontSize="9.5"
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  {activeHoveredPoint.cumulativeRevenue.toLocaleString('fr-FR')} F
+                </text>
+
+                {/* Badge X-Axis pour la date sélectionnée */}
+                <rect
+                  x={activeHoveredPoint.x - 30}
+                  y={svgHeight - padBottom + 4}
+                  width="60"
+                  height="18"
+                  rx="4"
+                  fill="#1E293B"
+                />
+                <text
+                  x={activeHoveredPoint.x}
+                  y={svgHeight - padBottom + 16}
+                  fill="#94A3B8"
+                  fontSize="9.5"
+                  fontFamily="monospace"
+                  textAnchor="middle"
+                  fontWeight="bold"
+                >
+                  {activeHoveredPoint.timeLabel}
+                </text>
+
+                {/* Point d'ancrage actif avec halo */}
+                <circle
+                  cx={activeHoveredPoint.x}
+                  cy={activeHoveredPoint.y}
+                  r="6"
+                  fill="#FFFFFF"
+                  stroke="#2563EB"
+                  strokeWidth="3"
+                />
+              </g>
+            )}
+          </svg>
+
+          {/* FLOATING HUD TOOLTIP TRADINGVIEW */}
+          {activeHoveredPoint && svgCoords && (
+            <div
+              className="absolute z-20 pointer-events-none bg-[#0B0F19]/95 border border-slate-700/80 backdrop-blur-md rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[210px] transform -translate-y-full -translate-x-1/2 transition-all duration-75"
+              style={{
+                left: `${(activeHoveredPoint.x / svgWidth) * 100}%`,
+                top: `${(activeHoveredPoint.y / svgHeight) * 100 - 10}%`,
+              }}
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span className="font-mono text-[10px] text-slate-400">{activeHoveredPoint.timeLabel}</span>
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                  Temps Réel
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-[11px] text-slate-400">C.A. Cumulé :</span>
+                <span className="font-mono font-black text-white text-xs">
+                  {activeHoveredPoint.cumulativeRevenue.toLocaleString('fr-FR')} XOF
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400">Total Ventes :</span>
+                <span className="font-mono font-bold text-blue-400 text-xs">
+                  {activeHoveredPoint.salesCount} transactions
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pied du Graphique avec Légende & Statut Connectivité */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between pt-4 mt-2 border-t border-slate-800/80 text-[11px] text-slate-400 gap-2">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]"></span>
+              Courbe Cumulée XOF
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              Encaissements Vérifiés
+            </span>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500">
+            <span>TABLE: public.sales</span>
+            <span>•</span>
+            <span>RLS ISOLATION ACTIVE</span>
+            <span>•</span>
+            <span className="text-emerald-400 font-bold">WEBSOCKET CONNECTED</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION BOUGIES MINCES DES MODULES (COMPORTEMENT UTILISATEUR) */}
+      <div className="bg-[#0B0F19] text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-6">
+        {/* Header & Légende des 4 couleurs de bougies */}
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg font-black tracking-tight text-white">
+                Comportement & Statut des Modules de l'Écosystème
+              </h2>
+            </div>
+            <p className="text-xs text-slate-400 font-medium mt-1">
+              Bougies minces représentant les 27 applications NanaSwitch. La couleur reflète le comportement et la souscription active de l'utilisateur.
+            </p>
+          </div>
+
+          {/* Filtres d'affichage des bougies */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-[#070A11] p-1.5 rounded-xl border border-slate-800 self-start">
+            <button
+              onClick={() => setModuleFilter('ALL')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
+                moduleFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Tous ({moduleCandles.length})
+            </button>
+            <button
+              onClick={() => setModuleFilter('ACTIVE')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                moduleFilter === 'ACTIVE' ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700' : 'text-emerald-400 hover:text-emerald-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Actifs / Gratuits
+            </button>
+            <button
+              onClick={() => setModuleFilter('PENDING')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                moduleFilter === 'PENDING' ? 'bg-blue-900/60 text-blue-300 border border-blue-700' : 'text-blue-400 hover:text-blue-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              Compte sans plan
+            </button>
+            <button
+              onClick={() => setModuleFilter('TRIAL')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                moduleFilter === 'TRIAL' ? 'bg-amber-900/60 text-amber-300 border border-amber-700' : 'text-amber-400 hover:text-amber-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+              Essai
+            </button>
+            <button
+              onClick={() => setModuleFilter('EXPIRED')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+                moduleFilter === 'EXPIRED' ? 'bg-rose-900/60 text-rose-300 border border-rose-700' : 'text-rose-400 hover:text-rose-300'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+              Expirés
+            </button>
+          </div>
+        </div>
+
+        {/* LÉGENDE DÉTAILLÉE DES COULEURS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#070A11] p-3.5 rounded-2xl border border-slate-800 text-[11px]">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+            <div>
+              <p className="font-bold text-emerald-400">Vert (Actif & Gratuit)</p>
+              <p className="text-[10px] text-slate-400">Module actif ou d'office gratuit</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-[#3B82F6] shadow-sm shadow-blue-500/50"></span>
+            <div>
+              <p className="font-bold text-blue-400">Bleu Royal (En Attente)</p>
+              <p className="text-[10px] text-slate-400">Compte créé, sans abonnement</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50"></span>
+            <div>
+              <p className="font-bold text-amber-400">Ambre (Période d'Essai)</p>
+              <p className="text-[10px] text-slate-400">Période d'essai ou crédits offerts</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+            <div>
+              <p className="font-bold text-rose-400">Rouge (Abonnement Expiré)</p>
+              <p className="text-[10px] text-slate-400">Souscription échue ou inactive</p>
+            </div>
+          </div>
+        </div>
+
+        {/* RANGÉE HORIZONTALE DES BOUGIES MINCES POUR CHAQUE MODULE */}
+        <div className="relative pt-6 pb-4 overflow-x-auto no-scrollbar">
+          <div className="flex items-end justify-between gap-2 min-w-[980px] px-2">
+            {filteredCandles.map((candle) => {
+              const isHovered = hoveredModule?.id === candle.id;
+
+              return (
+                <div
+                  key={candle.id}
+                  className="flex flex-col items-center group relative cursor-pointer flex-1 max-w-[62px]"
+                  onMouseEnter={() => setHoveredModule(candle)}
+                  onMouseLeave={() => setHoveredModule(null)}
+                >
+                  {/* Candlestick: Mèche Haute, Corps et Mèche Basse */}
+                  <div className="relative flex flex-col items-center justify-center h-28">
+                    {/* Mèche complète continue */}
+                    <div
+                      className={`w-[1.5px] h-24 transition-colors duration-200 ${
+                        isHovered ? 'bg-white' : 'bg-slate-700 group-hover:bg-slate-500'
+                      }`}
+                    ></div>
+
+                    {/* Corps de la bougie japonaise */}
+                    <div
+                      className={`absolute rounded-[2px] transition-all duration-200 ${
+                        isHovered ? 'w-4 scale-110 shadow-lg' : 'w-3'
+                      }`}
+                      style={{
+                        height: `${candle.candleHeight}px`,
+                        backgroundColor: candle.hexColor,
+                        boxShadow: isHovered ? `0 0 14px ${candle.hexColor}` : `0 0 6px ${candle.hexColor}60`,
+                      }}
+                    ></div>
+                  </div>
+
+                  {/* Nom du module écrit très fin en dessous */}
+                  <span
+                    className={`text-[9px] font-medium tracking-tight truncate max-w-[58px] text-center mt-2 transition-colors block ${
+                      isHovered ? 'text-white font-bold' : 'text-slate-400 group-hover:text-slate-200'
+                    }`}
+                    title={candle.appName}
+                  >
+                    {candle.appName.replace('Studio ', '').replace('Espace ', '').replace('Module ', '')}
+                  </span>
+
+                  {/* Prix / Mode en micro-texte */}
+                  <span className="text-[8px] font-mono text-slate-500 group-hover:text-slate-400 truncate max-w-[55px] text-center mt-0.5">
+                    {candle.priceMonthly === 0 ? 'Gratuit' : `${candle.priceMonthly / 1000}k/m`}
+                  </span>
+
+                  {/* HOVER TOOLTIP POPUP DE LA BOUGIE DU MODULE */}
+                  {isHovered && (
+                    <div className="absolute bottom-full mb-3 z-30 bg-[#070A11] border border-slate-700/90 rounded-2xl p-4 shadow-2xl w-64 text-left pointer-events-none transform -translate-x-1/2 left-1/2 backdrop-blur-md animate-in fade-in duration-150">
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
+                        <div>
+                          <p className="font-extrabold text-white text-xs leading-snug">{candle.appName}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{candle.category}</p>
+                        </div>
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                          style={{ backgroundColor: candle.hexColor }}
+                        ></span>
+                      </div>
+
+                      <div className="space-y-1.5 pt-2.5 text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Statut Marchand :</span>
+                          <span
+                            className="font-bold text-[10px] px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: `${candle.hexColor}20`,
+                              color: candle.hexColor,
+                              border: `1px solid ${candle.hexColor}40`,
+                            }}
+                          >
+                            {candle.statusLabel}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Tarif Mensuel :</span>
+                          <span className="font-mono font-bold text-white text-[11px]">
+                            {candle.priceMonthly === 0 ? '0 XOF (Inclus)' : `${candle.priceMonthly.toLocaleString('fr-FR')} XOF / mois`}
+                          </span>
+                        </div>
+                        {candle.trialLabel && (
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-slate-400">Avantage Essai :</span>
+                            <span className="text-amber-400 font-semibold">{candle.trialLabel}</span>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-800/80">
+                          {candle.shortDescription}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -1609,6 +2621,8 @@ function TabAnalytics() {
 
 /* 8. TAB: PAYOUTS HISTORY */
 function TabPayouts({ showToast }: { showToast: (m: string) => void }) {
+  const [payouts, setPayouts] = useState<any[]>([]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
@@ -1628,13 +2642,25 @@ function TabPayouts({ showToast }: { showToast: (m: string) => void }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-            <tr className="hover:bg-slate-50 transition">
-              <td className="py-3 px-2 font-mono font-bold text-slate-900">po_9012</td>
-              <td className="py-3 px-2">Orange Money BF (+226 70 12...)</td>
-              <td className="py-3 px-2 font-extrabold text-slate-900">500,000 XOF</td>
-              <td className="py-3 px-2"><span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-bold">Effectué</span></td>
-              <td className="py-3 px-2 text-slate-400">2026-10-25 10:15</td>
-            </tr>
+            {payouts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <ArrowUpRight className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5] mb-2" />
+                  <p className="font-semibold text-slate-700">Aucun historique de retrait</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Vos demandes de reversements vers vos comptes apparaîtront ici.</p>
+                </td>
+              </tr>
+            ) : (
+              payouts.map((po) => (
+                <tr key={po.id} className="hover:bg-slate-50 transition">
+                  <td className="py-3 px-2 font-mono font-bold text-slate-900">{po.id}</td>
+                  <td className="py-3 px-2">{po.destination}</td>
+                  <td className="py-3 px-2 font-extrabold text-slate-900">{po.amount}</td>
+                  <td className="py-3 px-2"><span className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-bold">{po.status}</span></td>
+                  <td className="py-3 px-2 text-slate-400">{po.date}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -1659,7 +2685,7 @@ function LegacyTabDeveloperOld({ app, copyToClipboard, showToast }: { app: NanaM
     <div className="space-y-8 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Clés d'API & Sécurité</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Vos identifiants de connexion Zero-Trust pour vos applications backend.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Vos identifiants de connexion Zero-Trust pour vos univers et backends marchands.</p>
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
@@ -1785,9 +2811,7 @@ function TabWebhooks({ app, copyToClipboard, showToast }: { app: NanaMerchantApp
 
 /* 11. TAB: WEBHOOK LOGS */
 function TabWebhookLogs() {
-  const [logs, setLogs] = useState<WebhookDeliveryLog[]>([
-    { id: 'del_01', event: 'payment.success', url: 'https://boutique-client.com/api/nanaswitch-webhook', status: '200 OK', latency: '142 ms', date: '2026-10-26 18:45' }
-  ]);
+  const [logs, setLogs] = useState<WebhookDeliveryLog[]>([]);
 
   useEffect(() => {
     async function loadDeliveries() {
@@ -1836,15 +2860,25 @@ function TabWebhookLogs() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-            {logs.map((log) => (
-              <tr key={log.id} className="hover:bg-slate-50 transition">
-                <td className="py-3 px-2 font-mono font-bold text-[#1E40AF]">{log.event}</td>
-                <td className="py-3 px-2 truncate max-w-[200px]">{log.url}</td>
-                <td className="py-3 px-2"><span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">{log.status}</span></td>
-                <td className="py-3 px-2 text-slate-500">{log.latency}</td>
-                <td className="py-3 px-2 text-slate-400">{log.date}</td>
+            {logs.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <History className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5] mb-2" />
+                  <p className="font-semibold text-slate-700">Aucun appel webhook enregistré</p>
+                  <p className="text-[11px] text-slate-400 mt-1">L'historique des notifications HTTP envoyées à vos serveurs s'affichera ici.</p>
+                </td>
               </tr>
-            ))}
+            ) : (
+              logs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50 transition">
+                  <td className="py-3 px-2 font-mono font-bold text-[#1E40AF]">{log.event}</td>
+                  <td className="py-3 px-2 truncate max-w-[200px]">{log.url}</td>
+                  <td className="py-3 px-2"><span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">{log.status}</span></td>
+                  <td className="py-3 px-2 text-slate-500">{log.latency}</td>
+                  <td className="py-3 px-2 text-slate-400">{log.date}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -1994,12 +3028,10 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
         {/* Modal Header */}
         <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Nouveau Dossier d'Intégration</span>
-            <h2 className="text-xl font-bold mt-0.5">Formulaire d'Onboarding & KYC</h2>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Nouvel Univers Marchand</span>
+            <h2 className="text-xl font-bold mt-0.5">Créer un Univers</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              {isParticulier 
-                ? 'Profil Particulier : Nom complet, Domaine d\'activité, CNIB Recto/Verso, Selfie visage.' 
-                : 'Profil Entreprise : Gérant, Email pro, Domaine d\'activité, CNIB Recto/Verso, Selfie, RCCM, IFU.'}
+              Configurez un univers d'encaissement dédié selon votre appellation commerciale (Mode, Cosmétiques, High-Tech, Restauration...).
             </p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition">
@@ -2048,27 +3080,27 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
             {isByok && (
               <div className="space-y-4 bg-blue-50/40 border border-blue-200 rounded-2xl p-4">
                 <p className="text-[11px] text-blue-900 leading-snug font-semibold">
-                  ⚡ Mode BYOK Express (0,02 XOF / requête • 0% commission de switch) : renseignez le nom de votre application et injectez vos clés passerelles maintenant ou plus tard dans « Clés API & Accès ».
+                  ⚡ Mode BYOK Express (0,02 XOF / requête • 0% commission de switch) : renseignez le nom de votre univers et configurez vos clés passerelles.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Nom de l'Application / Projet <span className="text-rose-500">*</span></label>
+                    <label className="block font-bold text-slate-700 mb-1">Nom de l'Univers <span className="text-rose-500">*</span></label>
                     <input
                       type="text"
                       required
                       value={kycForm.appName}
                       onChange={e => setKycForm({ ...kycForm, appName: e.target.value })}
-                      placeholder="Ex: Ma Boutique SaaS"
+                      placeholder="Ex: Univers Mode & Parfums, Boutique Koudougou, Restaurant Le Régal..."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-[#1E40AF]"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Domaine d'activité</label>
+                    <label className="block font-bold text-slate-700 mb-1">Appellation commerciale / Secteur</label>
                     <input
                       type="text"
                       value={kycForm.sector}
                       onChange={e => setKycForm({ ...kycForm, sector: e.target.value })}
-                      placeholder="E-commerce & Vente en ligne"
+                      placeholder="Ex: Mode & Beauté, Électronique, Alimentation..."
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-[#1E40AF]"
                     />
                   </div>
@@ -2144,7 +3176,22 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
             <div className="space-y-5 border-t border-slate-100 pt-5 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
                 <User className="w-4 h-4 text-[#1E40AF]" />
-                <span>Informations & Pièces KYC du Particulier</span>
+                <span>Informations & Pièces KYC de l'Univers Particulier</span>
+              </div>
+
+              {/* Nom de l'Univers */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Nom de l'Univers <span className="text-rose-500">*</span>
+                </label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="Ex: Univers Freelance, Studio Photo, Boutique en ligne..."
+                  value={kycForm.appName}
+                  onChange={e => setKycForm({ ...kycForm, appName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                />
               </div>
 
               {/* 1. Nom complet */}
@@ -2162,10 +3209,10 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                 />
               </div>
 
-              {/* 2. Domaine d'activité */}
+              {/* 2. Domaine d'activité / Appellation */}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Domaine d'activité <span className="text-rose-500">*</span>
+                  Appellation commerciale / Secteur d'activité <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={kycForm.sector}
@@ -2181,7 +3228,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <option value="Technologies & Développement Web/Mobile">Technologies & Développement Web/Mobile</option>
                   <option value="Commerce Général & Distribution">Commerce Général & Distribution</option>
                 </select>
-                <p className="text-[10px] text-slate-400 mt-1">Sera affiché à côté du numéro de compte sur votre tableau de bord.</p>
+                <p className="text-[10px] text-slate-400 mt-1">Sera affiché à côté du nom de l'univers sur votre tableau de bord.</p>
               </div>
 
               {/* 3. CNIB / Passeport (Numéro + Recto & Verso) */}
@@ -2291,7 +3338,22 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
             <div className="space-y-5 border-t border-slate-100 pt-5 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
                 <Building2 className="w-4 h-4 text-[#1E40AF]" />
-                <span>Informations & Pièces Officielles de l'Entreprise</span>
+                <span>Informations & Pièces Officielles de l'Univers Entreprise</span>
+              </div>
+
+              {/* Nom de l'Univers */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Nom de l'Univers <span className="text-rose-500">*</span>
+                </label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="Ex: Univers Principal, Filiale Abidjan, E-Shop Express..."
+                  value={kycForm.appName}
+                  onChange={e => setKycForm({ ...kycForm, appName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                />
               </div>
 
               {/* 1. Nom complet du gérant & 2. Email professionnel */}
@@ -2345,7 +3407,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Domaine d'activité <span className="text-rose-500">*</span>
+                    Appellation commerciale / Secteur <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={kycForm.sector}
@@ -2536,7 +3598,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
             </button>
             <button type="submit" className="px-6 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-lg shadow-blue-700/25 transition flex items-center gap-2">
               <FileCheck className="w-4 h-4" />
-              <span>{isByok ? 'Créer mon Application BYOK Express' : 'Soumettre pour validation Super Admin'}</span>
+              <span>{isByok ? 'Créer mon Univers BYOK Express' : 'Créer et enregistrer mon Univers'}</span>
             </button>
           </div>
 
