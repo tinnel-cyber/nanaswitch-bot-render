@@ -105,27 +105,103 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
 };
 
 /**
- * Récupère une session Live par son slug ou son ID depuis Firestore
+ * Convertit un document webinar (CreateWebinarModal) en LiveSession complète avec le vrai lien collé
+ */
+function mapWebinarToLiveSession(id: string, w: any): LiveSession {
+  const realUrl = (w.streamUrl || w.meetingUrl || w.socialStreamUrl || '').trim();
+  const plat = String(w.platform || '').toLowerCase();
+  const isMeetingRoom = plat === 'google_meet' || plat === 'zoom' || plat === 'google_classroom' || plat === 'jitsi' ||
+    realUrl.includes('meet.google.com') || realUrl.includes('zoom.us') || realUrl.includes('classroom.google.com') || realUrl.includes('meet.jit.si');
+
+  return {
+    ...FALLBACK_LIVE_SESSION,
+    id,
+    sessionSlug: w.sessionSlug || id,
+    storeId: w.merchantId || w.storeId || FALLBACK_LIVE_SESSION.storeId,
+    storeName: w.storeName || FALLBACK_LIVE_SESSION.storeName,
+    title: w.title || FALLBACK_LIVE_SESSION.title,
+    description: w.description || FALLBACK_LIVE_SESSION.description,
+    sessionMode: w.roomMode === 'CLASSROOM' ? 'interactive_class' : (w.sessionMode || 'live_shopping'),
+    status: 'live',
+    sourceType: plat === 'facebook' ? 'facebook' : (realUrl.endsWith('.mp4') ? 'mp4' : realUrl.endsWith('.m3u8') ? 'hls' : 'youtube'),
+    streamUrl: realUrl || FALLBACK_LIVE_SESSION.streamUrl,
+    coachingRoomUrl: isMeetingRoom ? realUrl : w.coachingRoomUrl,
+    aspectRatio: w.aspectRatio || '16:9',
+    scheduledAt: w.date ? new Date(w.date).getTime() : Date.now(),
+    createdAt: typeof w.createdAt === 'number' ? w.createdAt : Date.now()
+  };
+}
+
+/**
+ * Récupère une session Live par son slug ou son ID depuis Firestore (live_sessions + webinars) et le cache local
  */
 export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | null> {
   if (!slug) return FALLBACK_LIVE_SESSION;
 
+  // 0. Vérification rapide dans le cache local (pour un accès instantané après création)
+  if (typeof window !== 'undefined') {
+    try {
+      const rawSessCache = localStorage.getItem('nana_live_sessions_cache');
+      if (rawSessCache) {
+        const parsedSess = JSON.parse(rawSessCache);
+        if (parsedSess && parsedSess[slug]) {
+          return {
+            ...FALLBACK_LIVE_SESSION,
+            ...parsedSess[slug],
+            id: parsedSess[slug].id || slug,
+            sessionSlug: parsedSess[slug].sessionSlug || slug
+          };
+        }
+      }
+      const rawWebinars = localStorage.getItem('nana_merchant_webinars');
+      if (rawWebinars) {
+        const parsedWebinars = JSON.parse(rawWebinars);
+        if (Array.isArray(parsedWebinars)) {
+          const foundW = parsedWebinars.find((item: any) => item && (item.id === slug || item.sessionSlug === slug));
+          if (foundW) {
+            return mapWebinarToLiveSession(foundW.id || slug, foundW);
+          }
+        }
+      }
+    } catch {}
+  }
+
   try {
-    // 1. Recherche par sessionSlug
+    // 1. Recherche par sessionSlug dans live_sessions
     const sessionsRef = collection(db, 'live_sessions');
     const q = query(sessionsRef, where('sessionSlug', '==', slug));
     const snapshot = await getDocs(q);
 
     if (!snapshot.empty) {
-      const docData = snapshot.docs[0].data() as LiveSession;
-      return { ...docData, id: snapshot.docs[0].id };
+      const docData = snapshot.docs[0].data() as any;
+      const realUrl = (docData.streamUrl || docData.meetingUrl || docData.socialStreamUrl || '').trim();
+      return {
+        ...FALLBACK_LIVE_SESSION,
+        ...docData,
+        streamUrl: realUrl || docData.streamUrl || FALLBACK_LIVE_SESSION.streamUrl,
+        id: snapshot.docs[0].id
+      };
     }
 
-    // 2. Recherche par ID direct
+    // 2. Recherche par ID direct dans live_sessions
     const docRef = doc(db, 'live_sessions', slug);
     const directSnap = await getDoc(docRef);
     if (directSnap.exists()) {
-      return { ...(directSnap.data() as LiveSession), id: directSnap.id };
+      const docData = directSnap.data() as any;
+      const realUrl = (docData.streamUrl || docData.meetingUrl || docData.socialStreamUrl || '').trim();
+      return {
+        ...FALLBACK_LIVE_SESSION,
+        ...docData,
+        streamUrl: realUrl || docData.streamUrl || FALLBACK_LIVE_SESSION.streamUrl,
+        id: directSnap.id
+      };
+    }
+
+    // 3. Recherche par ID direct dans webinars (sessions créées via le Générateur de Live CreateWebinarModal)
+    const webinarRef = doc(db, 'webinars', slug);
+    const webinarSnap = await getDoc(webinarRef);
+    if (webinarSnap.exists()) {
+      return mapWebinarToLiveSession(webinarSnap.id, webinarSnap.data());
     }
   } catch (err) {
     console.warn('[liveSessionService] Firestore offline or error, using fallback session:', err);

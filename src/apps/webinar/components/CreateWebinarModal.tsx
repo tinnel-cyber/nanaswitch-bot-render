@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom';
 import { db } from '../../../firebaseConfig';
 import { 
-  collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, serverTimestamp 
+  collection, addDoc, setDoc, getDocs, deleteDoc, doc, query, where, orderBy, serverTimestamp 
 } from 'firebase/firestore';
 import { 
   X, Video, Radio, Calendar, Sparkles, Share2, Copy, Check, 
@@ -265,9 +265,48 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   };
 
-  // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD
-  const handleAutoGenerateRoomUrl = useCallback((targetPlatform: LivePlatform) => {
+  // Détection automatique de la plateforme à partir d'un lien collé par l'utilisateur
+  const detectPlatformFromUrl = useCallback((rawUrl: string): LivePlatform | null => {
+    const u = (rawUrl || '').trim().toLowerCase();
+    if (!u) return null;
+    if (u.includes('meet.google.com')) return 'google_meet';
+    if (u.includes('zoom.us') || u.includes('zoom.com')) return 'zoom';
+    if (u.includes('classroom.google.com')) return 'google_classroom';
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+    if (u.includes('tiktok.com')) return 'tiktok';
+    if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.gg')) return 'facebook';
+    if (u.includes('instagram.com')) return 'instagram';
+    if (u.includes('linkedin.com')) return 'linkedin';
+    if (u.includes('meet.jit.si') || u.includes('jitsi.')) return 'jitsi';
+    if (u.includes('daily.co')) return 'daily';
+    return null;
+  }, []);
+
+  // Vérifie si l'URL actuelle est une URL interne auto-générée (et non un lien collé par l'utilisateur)
+  const isInternalGeneratedUrl = useCallback((rawUrl: string): boolean => {
+    const u = (rawUrl || '').trim();
+    if (!u) return true;
+    return u.includes('meet.jit.si/nana-live-') || u.includes('nanasore.daily.co/nana-live-');
+  }, []);
+
+  // Gestionnaire universel quand l'utilisateur colle ou modifie un lien de live
+  const handleLiveUrlInput = useCallback((val: string) => {
+    setMeetingUrl(val);
+    setStreamUrl(val);
+    const detected = detectPlatformFromUrl(val);
+    if (detected && detected !== platform) {
+      setPlatform(detected);
+    }
+  }, [detectPlatformFromUrl, platform]);
+
+  // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD (uniquement sur demande explicite ou si vide)
+  const handleAutoGenerateRoomUrl = useCallback((targetPlatform: LivePlatform, forceOverwrite: boolean = false) => {
     playTapBeep();
+    const currentUrl = (meetingUrl || streamUrl).trim();
+    if (!forceOverwrite && currentUrl && !isInternalGeneratedUrl(currentUrl)) {
+      // Ne jamais écraser un lien collé manuellement par l'utilisateur (ex: Google Meet, Zoom, YouTube...)
+      return;
+    }
     const roomId = generateUniqueRoomId();
     if (targetPlatform === 'jitsi') {
       const url = `https://meet.jit.si/${roomId}`;
@@ -278,14 +317,14 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMeetingUrl(url);
       setStreamUrl(url);
     }
-  }, [generateUniqueRoomId]);
+  }, [generateUniqueRoomId, isInternalGeneratedUrl, meetingUrl, streamUrl]);
 
-  // Initialisation automatique du lien Jitsi dès qu'on choisit Jitsi
+  // Initialisation automatique du lien Jitsi uniquement si aucun lien n'a été collé
   useEffect(() => {
-    if (platform === 'jitsi' && !meetingUrl) {
-      handleAutoGenerateRoomUrl('jitsi');
+    if (platform === 'jitsi' && !meetingUrl && !streamUrl) {
+      handleAutoGenerateRoomUrl('jitsi', false);
     }
-  }, [platform, meetingUrl, handleAutoGenerateRoomUrl]);
+  }, [platform, meetingUrl, streamUrl, handleAutoGenerateRoomUrl]);
 
   // Charger les Lives du commerçant
   const loadMyWebinars = useCallback(async () => {
@@ -364,12 +403,11 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     loadFunnels();
   }, [loadMyWebinars, loadFunnels]);
 
-  // Utiliser un modèle prêt à l'emploi (1-clic)
+  // Utiliser un modèle prêt à l'emploi (1-clic) sans écraser un lien déjà collé par l'utilisateur
   const handleUseTemplate = (template: WebinarTemplate) => {
     playValidationBeep();
     setTitle(template.title);
     setDescription(template.description);
-    setPlatform(template.platform);
     setRoomMode(template.roomMode);
     setIsPaid(template.isPaid);
     setPrice(template.suggestedPrice.toString());
@@ -383,23 +421,30 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     const localIso = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     setDate(localIso);
 
-    if (template.platform === 'jitsi') {
-      const url = `https://meet.jit.si/${generateUniqueRoomId()}`;
-      setMeetingUrl(url);
-      setStreamUrl(url);
-    } else if (template.platform === 'daily') {
-      const url = `https://nanasore.daily.co/${generateUniqueRoomId()}`;
-      setMeetingUrl(url);
-      setStreamUrl(url);
+    const existingCustomUrl = (meetingUrl || streamUrl).trim();
+    if (existingCustomUrl && !isInternalGeneratedUrl(existingCustomUrl)) {
+      const detected = detectPlatformFromUrl(existingCustomUrl);
+      if (detected) setPlatform(detected);
     } else {
-      setMeetingUrl('');
-      setStreamUrl('');
+      setPlatform(template.platform);
+      if (template.platform === 'jitsi') {
+        const url = `https://meet.jit.si/${generateUniqueRoomId()}`;
+        setMeetingUrl(url);
+        setStreamUrl(url);
+      } else if (template.platform === 'daily') {
+        const url = `https://nanasore.daily.co/${generateUniqueRoomId()}`;
+        setMeetingUrl(url);
+        setStreamUrl(url);
+      } else {
+        setMeetingUrl('');
+        setStreamUrl('');
+      }
     }
 
     setIsCreatingFormOpen(true);
   };
 
-  // Soumission et création du Webinaire
+  // Soumission et création du Webinaire + Synchronisation directe avec la Salle Live (/live/:id)
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) {
@@ -407,8 +452,12 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       return;
     }
 
-    if ((platform === 'zoom' || platform === 'google_meet' || platform === 'google_classroom') && !meetingUrl.trim()) {
-      setErrorMsg(`Veuillez coller le lien de votre réunion ${platformLabels[platform].name}.`);
+    const rawPastedUrl = (meetingUrl.trim() || streamUrl.trim());
+    const detectedPlat = detectPlatformFromUrl(rawPastedUrl);
+    const effectivePlatform: LivePlatform = detectedPlat || platform;
+
+    if ((effectivePlatform === 'zoom' || effectivePlatform === 'google_meet' || effectivePlatform === 'google_classroom') && !rawPastedUrl) {
+      setErrorMsg(`Veuillez coller le lien de votre réunion ${platformLabels[effectivePlatform].name}.`);
       return;
     }
 
@@ -418,22 +467,29 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
     try {
       const numericPrice = isPaid ? Math.max(0, parseInt(price) || 0) : 0;
-      const finalMeetingUrl = meetingUrl.trim() || (platform === 'jitsi' ? `https://meet.jit.si/${generateUniqueRoomId()}` : '');
-      const finalStreamUrl = streamUrl.trim() || finalMeetingUrl;
+      const finalMeetingUrl = rawPastedUrl || (
+        effectivePlatform === 'jitsi'
+          ? `https://meet.jit.si/${generateUniqueRoomId()}`
+          : effectivePlatform === 'daily'
+            ? `https://nanasore.daily.co/${generateUniqueRoomId()}`
+            : ''
+      );
+      const finalStreamUrl = rawPastedUrl || finalMeetingUrl;
 
-      // 1. Enregistrement dans Firebase Firestore
+      // 1. Enregistrement dans Firebase Firestore (webinars)
       const newWebinarData = {
         merchantId,
         storeName,
         title: title.trim(),
         description: description.trim(),
         date,
-        platform,
+        platform: effectivePlatform,
         roomMode,
         aspectRatio,
         resolution,
         socialStreamUrl: finalStreamUrl || null,
         meetingUrl: finalMeetingUrl || null,
+        streamUrl: finalStreamUrl || null,
         isPaid,
         price: numericPrice,
         currency: 'FCFA',
@@ -451,7 +507,46 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
       }
 
-      // 2. Mise à jour du cache local
+      // 1b. Synchronisation immédiate dans la collection 'live_sessions' utilisée par la route /live/:id
+      const liveSessionPayload = {
+        id: liveId,
+        sessionSlug: liveId,
+        storeId: merchantId || 'merchant-store',
+        storeName: storeName || 'Ma Boutique',
+        title: title.trim(),
+        description: description.trim(),
+        sessionMode: roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping',
+        status: 'live',
+        sourceType: effectivePlatform === 'youtube'
+          ? 'youtube'
+          : effectivePlatform === 'facebook'
+            ? 'facebook'
+            : (finalStreamUrl.endsWith('.mp4') ? 'mp4' : finalStreamUrl.endsWith('.m3u8') ? 'hls' : 'youtube'),
+        platform: effectivePlatform,
+        streamUrl: finalStreamUrl,
+        meetingUrl: finalMeetingUrl,
+        socialStreamUrl: finalStreamUrl,
+        coachingRoomUrl: (effectivePlatform === 'google_meet' || effectivePlatform === 'zoom' || effectivePlatform === 'google_classroom' || effectivePlatform === 'jitsi')
+          ? finalMeetingUrl
+          : undefined,
+        aspectRatio: aspectRatio || '16:9',
+        isPaid,
+        price: numericPrice,
+        currency: 'FCFA',
+        scheduledAt: new Date(date).getTime() || Date.now(),
+        startedAt: Date.now(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        allowChat: true
+      };
+
+      try {
+        await setDoc(doc(db, 'live_sessions', liveId), liveSessionPayload, { merge: true });
+      } catch (syncErr) {
+        console.warn("[WEBINAR] Sync live_sessions local fallback:", syncErr);
+      }
+
+      // 2. Mise à jour du cache local (nana_merchant_webinars + nana_live_sessions_cache)
       const localWebinarItem: LiveWebinar = {
         id: liveId,
         ...newWebinarData,
@@ -462,11 +557,15 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMyWebinars(updatedLocalList);
       try {
         localStorage.setItem('nana_merchant_webinars', JSON.stringify(updatedLocalList));
+        const rawSessionsCache = localStorage.getItem('nana_live_sessions_cache');
+        const sessionsMap = rawSessionsCache ? JSON.parse(rawSessionsCache) : {};
+        sessionsMap[liveId] = liveSessionPayload;
+        localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
       } catch {}
 
-      // 3. Génération du lien de la Landing Page publique
-      const origin = typeof window !== 'undefined' && window.location.origin 
-        ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
+      // 3. Génération du lien de la Salle Live publique (utilise l'origine courante)
+      const origin = typeof window !== 'undefined' && window.location.origin
+        ? window.location.origin
         : 'https://nanasore.com';
       const publicUrl = `${origin}/live/${liveId}`;
       setGeneratedLink(publicUrl);
@@ -893,7 +992,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                         const newPlat = e.target.value as LivePlatform;
                         setPlatform(newPlat);
                         if (newPlat === 'jitsi' || newPlat === 'daily') {
-                          handleAutoGenerateRoomUrl(newPlat);
+                          handleAutoGenerateRoomUrl(newPlat, false);
                         }
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition min-h-[44px] cursor-pointer"
@@ -924,18 +1023,18 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                     </p>
                   </div>
 
-                  {/* Bouton de génération 1-clic pour Jitsi ou NaNa Live */}
+                  {/* Bouton de génération 1-clic ou collage direct de lien (Google Meet, Zoom, YouTube, Jitsi...) */}
                   {(platform === 'jitsi' || platform === 'daily') && (
                     <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                          Salle {platform === 'jitsi' ? 'Jitsi Meet' : 'NaNa Live HD'} générée en 1-clic
+                          Collez votre lien Live (Google Meet, Zoom, YouTube...) ou utilisez la salle {platform === 'jitsi' ? 'Jitsi Meet' : 'NaNa Live HD'}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleAutoGenerateRoomUrl(platform)}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          onClick={() => handleAutoGenerateRoomUrl(platform, true)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
                         >
                           <RefreshCw className="w-3 h-3" />
                           <span>Régénérer</span>
@@ -944,11 +1043,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       <input 
                         type="url" 
                         value={meetingUrl || streamUrl} 
-                        onChange={(e) => {
-                          setMeetingUrl(e.target.value);
-                          setStreamUrl(e.target.value);
-                        }} 
-                        placeholder={platform === 'jitsi' ? 'https://meet.jit.si/nana-live-...' : 'https://nanasore.daily.co/...'}
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
+                        placeholder="Collez un lien (https://meet.google.com/..., https://zoom.us/..., YouTube...) ou laissez générer"
                         className="w-full bg-slate-950/80 border border-indigo-500/30 rounded-xl px-3 py-2 text-xs font-mono text-indigo-200 focus:outline-none min-h-[38px]"
                       />
                     </div>
@@ -964,11 +1060,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       </label>
                       <input 
                         type="url" 
-                        value={meetingUrl} 
-                        onChange={(e) => {
-                          setMeetingUrl(e.target.value);
-                          setStreamUrl(e.target.value);
-                        }} 
+                        value={meetingUrl || streamUrl} 
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
                         required
                         placeholder={
                           platform === 'zoom' 
@@ -999,8 +1092,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       </label>
                       <input 
                         type="url" 
-                        value={streamUrl} 
-                        onChange={(e) => setStreamUrl(e.target.value)} 
+                        value={streamUrl || meetingUrl} 
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
                         placeholder="https://..."
                         className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition min-h-[44px]"
                       />

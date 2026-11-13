@@ -168,56 +168,162 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
     }
   }, []);
 
-  // Détection et conversion de la source vidéo universelle
-  const embedSource = useMemo(() => {
-    const raw = (session.streamUrl || '').trim();
+  const [copiedDirectUrl, setCopiedDirectUrl] = useState<boolean>(false);
 
-    // 1. YouTube Live / Vidéo
+  // Détection et conversion de la source vidéo universelle (YouTube, Google Meet, Zoom, Jitsi, Daily, Facebook, TikTok, etc.)
+  const embedSource = useMemo(() => {
+    const raw = (session.streamUrl || (session as any).meetingUrl || session.coachingRoomUrl || '').trim();
+    if (!raw) return null;
+
+    // 1. Google Meet (meet.google.com refuse les iframes tierces X-Frame-Options -> passerelle de lancement direct du vrai lien)
+    if (raw.includes('meet.google.com')) {
+      return {
+        type: 'external_meeting' as const,
+        label: 'Google Meet',
+        url: raw.startsWith('http') ? raw : `https://${raw}`
+      };
+    }
+
+    // 2. Zoom (zoom.us / zoom.com)
+    if (raw.includes('zoom.us') || raw.includes('zoom.com')) {
+      return {
+        type: 'external_meeting' as const,
+        label: 'Zoom Video',
+        url: raw.startsWith('http') ? raw : `https://${raw}`
+      };
+    }
+
+    // 3. Google Classroom
+    if (raw.includes('classroom.google.com')) {
+      return {
+        type: 'external_meeting' as const,
+        label: 'Google Classroom',
+        url: raw.startsWith('http') ? raw : `https://${raw}`
+      };
+    }
+
+    // 4. Jitsi Meet (intégration iframe directe de la salle collée)
+    if (raw.includes('meet.jit.si') || raw.includes('jitsi.')) {
+      const baseJitsi = raw.split('#')[0];
+      return {
+        type: 'jitsi' as const,
+        label: 'Jitsi Meet',
+        url: `${baseJitsi}#config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.disableDeepLinking=true`
+      };
+    }
+
+    // 5. Daily.co (intégration iframe WebRTC directe de la salle collée)
+    if (raw.includes('daily.co')) {
+      return {
+        type: 'daily' as const,
+        label: 'NaNa Live HD (Daily)',
+        url: raw
+      };
+    }
+
+    // 6. YouTube Live / Vidéo
     const ytMatch = raw.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/live\/)([^"&?\/\s]{11})/i);
     if (ytMatch && ytMatch[1]) {
       return {
-        type: 'youtube',
+        type: 'youtube' as const,
+        label: 'YouTube Live',
         url: `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&mute=${isMuted ? 1 : 0}&enablejsapi=1&rel=0`
       };
     }
 
-    // 2. Facebook Live
-    if (raw.includes('facebook.com')) {
+    // 7. Facebook Live
+    if (raw.includes('facebook.com') || raw.includes('fb.watch') || raw.includes('fb.gg')) {
       return {
-        type: 'facebook',
+        type: 'facebook' as const,
+        label: 'Facebook Live',
         url: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(raw)}&autoplay=true&mute=${isMuted ? '1' : '0'}`
       };
     }
 
-    // 3. Vimeo
+    // 8. TikTok Live / Vidéo
+    if (raw.includes('tiktok.com')) {
+      const matchTiktok = raw.match(/\/video\/(\d+)/) || raw.match(/\/live\/(\d+)/);
+      if (matchTiktok && matchTiktok[1]) {
+        return {
+          type: 'tiktok' as const,
+          label: 'TikTok Live',
+          url: `https://www.tiktok.com/player/v1/${matchTiktok[1]}?autoplay=1`
+        };
+      }
+      return {
+        type: 'external_meeting' as const,
+        label: 'TikTok Live',
+        url: raw
+      };
+    }
+
+    // 9. Instagram Live / Reel
+    if (raw.includes('instagram.com')) {
+      const matchInsta = raw.match(/instagram\.com\/(p|reel|tv)\/([^/?#&]+)/);
+      if (matchInsta) {
+        return {
+          type: 'instagram' as const,
+          label: 'Instagram Live',
+          url: `https://www.instagram.com/${matchInsta[1]}/${matchInsta[2]}/embed/captioned/`
+        };
+      }
+      return {
+        type: 'external_meeting' as const,
+        label: 'Instagram Live',
+        url: raw
+      };
+    }
+
+    // 10. LinkedIn Live
+    if (raw.includes('linkedin.com')) {
+      return {
+        type: 'external_meeting' as const,
+        label: 'LinkedIn Live',
+        url: raw
+      };
+    }
+
+    // 11. Vimeo
     const vimeoMatch = raw.match(/vimeo\.com\/(?:video\/)?([0-9]+)/i);
     if (vimeoMatch && vimeoMatch[1]) {
       return {
-        type: 'vimeo',
+        type: 'vimeo' as const,
+        label: 'Vimeo Live',
         url: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&muted=${isMuted ? 1 : 0}`
       };
     }
 
-    // 4. Twitch
+    // 12. Twitch
     if (raw.includes('twitch.tv')) {
       const channel = raw.split('twitch.tv/')[1]?.split('/')[0]?.split('?')[0];
       const host = typeof window !== 'undefined' ? window.location.hostname : 'nsore.shop';
       return {
-        type: 'twitch',
+        type: 'twitch' as const,
+        label: 'Twitch Live',
         url: `https://player.twitch.tv/?channel=${channel}&parent=${host}&autoplay=true`
       };
     }
 
-    // 5. MP4 / HLS / Simulive
+    // 13. MP4 / HLS / Simulive
     if (raw.endsWith('.mp4') || raw.endsWith('.m3u8') || session.sourceType === 'mp4' || session.sourceType === 'hls') {
       return {
-        type: 'html5',
+        type: 'html5' as const,
+        label: 'Flux Vidéo Direct',
+        url: raw
+      };
+    }
+
+    // 14. Tout autre lien HTTP/HTTPS collé par l'utilisateur -> ne jamais l'ignorer !
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return {
+        type: 'external_meeting' as const,
+        label: 'Salle en Direct',
         url: raw
       };
     }
 
     return null;
-  }, [session.streamUrl, session.sourceType, isMuted]);
+  }, [session.streamUrl, (session as any).meetingUrl, session.coachingRoomUrl, session.sourceType, isMuted]);
 
   // Résolution du badge dynamique selon le mode de session
   const badgeConfig = useMemo(() => {
@@ -396,8 +502,61 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
               )}
             </div>
           ) : embedSource ? (
-            /* LECTEURS EXTERNES (YOUTUBE, FACEBOOK, VIMEO, TWITCH, HTML5) */
-            embedSource.type === 'youtube' || embedSource.type === 'facebook' || embedSource.type === 'vimeo' || embedSource.type === 'twitch' ? (
+            /* LECTEURS EXTERNES & PASSERELLES DE VISIOCONFÉRENCE (GOOGLE MEET, ZOOM, JITSI, DAILY, YOUTUBE, FACEBOOK, TIKTOK...) */
+            embedSource.type === 'external_meeting' ? (
+              <div className="w-full h-full relative flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/80 space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/40 flex items-center justify-center shadow-lg">
+                  <Radio className="w-8 h-8 animate-pulse" />
+                </div>
+                <div className="space-y-1.5 max-w-md mx-auto">
+                  <span className="inline-block px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
+                    Salon {embedSource.label} Connecté
+                  </span>
+                  <h3 className="text-base sm:text-xl font-black text-white">
+                    {session.title || `Session ${embedSource.label} en Direct`}
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Cliquez ci-dessous pour rejoindre directement le salon <strong>{embedSource.label}</strong> configuré par l'organisateur :
+                  </p>
+                  <p className="text-[11px] font-mono text-blue-300/90 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 truncate max-w-sm mx-auto select-all">
+                    {embedSource.url}
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-1">
+                  <a
+                    href={embedSource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={playValidationBeep}
+                    className="px-6 py-3.5 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-extrabold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-blue-950/60 transition cursor-pointer min-h-[44px]"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Rejoindre le Salon {embedSource.label}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      navigator.clipboard?.writeText(embedSource.url);
+                      setCopiedDirectUrl(true);
+                      setTimeout(() => setCopiedDirectUrl(false), 2500);
+                    }}
+                    className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-2xl flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer min-h-[44px]"
+                  >
+                    {copiedDirectUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedDirectUrl ? 'Lien copié !' : 'Copier le lien'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : embedSource.type === 'jitsi' || embedSource.type === 'daily' ? (
+              <iframe
+                src={embedSource.url}
+                title={session.title || embedSource.label}
+                className="w-full h-full border-none"
+                allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+                allowFullScreen
+              />
+            ) : embedSource.type === 'youtube' || embedSource.type === 'facebook' || embedSource.type === 'vimeo' || embedSource.type === 'twitch' || embedSource.type === 'tiktok' || embedSource.type === 'instagram' ? (
               <iframe
                 src={embedSource.url}
                 title={session.title}
