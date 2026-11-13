@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { db } from '../../../firebaseConfig';
-import { 
-  collection, addDoc, setDoc, getDocs, deleteDoc, doc, query, where, orderBy, serverTimestamp 
-} from 'firebase/firestore';
+import { supabase } from '../../../lib/supabase';
 import { 
   X, Video, Radio, Calendar, Sparkles, Share2, Copy, Check, 
   ExternalLink, PhoneCall, Globe, AlertCircle, RefreshCw,
@@ -326,18 +323,63 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   }, [platform, meetingUrl, streamUrl, handleAutoGenerateRoomUrl]);
 
-  // Charger les Lives du commerçant
+  // Génère un UUID v4 valide pour la clé primaire UUID de public.live_sessions dans Supabase
+  const generateSupabaseUuid = useCallback((): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }, []);
+
+  // Charger les Lives du commerçant depuis Supabase (table public.live_sessions) + cache local
   const loadMyWebinars = useCallback(async () => {
     setLoadingList(true);
     let loaded: LiveWebinar[] = [];
     try {
-      const q = query(collection(db, 'webinars'), where('merchantId', '==', merchantId));
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        loaded.push({ id: docSnap.id, ...(docSnap.data() as any) } as LiveWebinar);
-      });
+      const queryBuilder = supabase
+        .from('live_sessions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      const { data: rows, error: sbErr } = merchantId
+        ? await queryBuilder.or(`tenant_id.eq.${merchantId},host_id.eq.${merchantId}`)
+        : await queryBuilder;
+
+      if (!sbErr && Array.isArray(rows)) {
+        rows.forEach((row: any) => {
+          const meta = row?.pinned_product_data?._meta || {};
+          const resolvedUrl = (row.stream_url || meta.streamUrl || meta.meetingUrl || meta.socialStreamUrl || '').trim();
+          const detectedPlat = detectPlatformFromUrl(resolvedUrl) || meta.platform || 'daily';
+          loaded.push({
+            id: row.id,
+            merchantId: row.tenant_id || row.host_id || merchantId,
+            storeName: meta.storeName || storeName,
+            title: row.title || 'Live en direct',
+            description: row.description || '',
+            date: meta.date || row.created_at || new Date().toISOString(),
+            platform: detectedPlat,
+            roomMode: meta.roomMode || 'WEBINAR',
+            aspectRatio: meta.aspectRatio || '16:9',
+            resolution: meta.resolution || '720p',
+            socialStreamUrl: resolvedUrl || null,
+            meetingUrl: meta.meetingUrl || resolvedUrl || null,
+            streamUrl: resolvedUrl || null,
+            isPaid: Boolean(meta.isPaid),
+            price: Number(meta.price || 0),
+            currency: meta.currency || 'FCFA',
+            status: (row.status || 'scheduled') as LiveRoomStatus,
+            createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            registeredCount: Number(meta.registeredCount || row.viewer_count || 0)
+          } as LiveWebinar);
+        });
+      }
     } catch (e) {
-      console.warn("Lecture Firestore webinars fallback:", e);
+      console.warn("[SUPABASE WEBINAR] Lecture Supabase live_sessions fallback:", e);
     }
 
     // Récupération du cache local pour résilience
@@ -358,7 +400,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     loaded.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
     setMyWebinars(loaded);
     setLoadingList(false);
-  }, [merchantId]);
+  }, [merchantId, storeName, detectPlatformFromUrl]);
 
   // Charger les funnels sauvegardés
   const loadFunnels = useCallback(() => {
@@ -444,7 +486,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     setIsCreatingFormOpen(true);
   };
 
-  // Soumission et création du Webinaire + Synchronisation directe avec la Salle Live (/live/:id)
+  // Soumission et création du Webinaire dans Supabase (public.live_sessions) + Salle Live (/live/:id)
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) {
@@ -476,7 +518,68 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       );
       const finalStreamUrl = rawPastedUrl || finalMeetingUrl;
 
-      // 1. Enregistrement dans Firebase Firestore (webinars)
+      let liveId = generateSupabaseUuid();
+
+      const coachingRoom = (
+        effectivePlatform === 'google_meet' ||
+        effectivePlatform === 'zoom' ||
+        effectivePlatform === 'google_classroom' ||
+        effectivePlatform === 'jitsi'
+      )
+        ? finalMeetingUrl
+        : undefined;
+
+      const metaData = {
+        sessionSlug: liveId,
+        storeId: merchantId || 'merchant-store',
+        storeName: storeName || 'Ma Boutique',
+        date,
+        platform: effectivePlatform,
+        roomMode,
+        sessionMode: roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping',
+        aspectRatio: aspectRatio || '16:9',
+        resolution: resolution || '720p',
+        streamUrl: finalStreamUrl,
+        meetingUrl: finalMeetingUrl,
+        socialStreamUrl: finalStreamUrl,
+        coachingRoomUrl: coachingRoom,
+        isPaid,
+        price: numericPrice,
+        currency: 'FCFA',
+        registeredCount: 0
+      };
+
+      // 1. Enregistrement direct dans Supabase PostgreSQL (table public.live_sessions)
+      try {
+        const { data: insertedRow, error: sbErr } = await supabase
+          .from('live_sessions')
+          .upsert({
+            id: liveId,
+            tenant_id: merchantId || 'default',
+            host_id: merchantId || 'host',
+            title: title.trim(),
+            description: description.trim(),
+            is_live: true,
+            viewer_count: 1,
+            stream_url: finalStreamUrl,
+            status: 'live',
+            pinned_product_data: {
+              _meta: metaData
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+
+        if (sbErr) {
+          console.warn("[SUPABASE WEBINAR] Avertissement upsert live_sessions:", sbErr.message);
+        } else if (insertedRow?.id) {
+          liveId = insertedRow.id;
+        }
+      } catch (sbCatchErr) {
+        console.warn("[SUPABASE WEBINAR] Mode résilient activé:", sbCatchErr);
+      }
+
       const newWebinarData = {
         merchantId,
         storeName,
@@ -494,20 +597,9 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         price: numericPrice,
         currency: 'FCFA',
         status: 'scheduled' as LiveRoomStatus,
-        createdAt: serverTimestamp(),
         registeredCount: 0
       };
 
-      let liveId = '';
-      try {
-        const docRef = await addDoc(collection(db, 'webinars'), newWebinarData);
-        liveId = docRef.id;
-      } catch (fErr: any) {
-        console.warn("[WEBINAR] Enregistrement direct Firestore différé, activation du mode local résilient:", fErr);
-        liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
-      }
-
-      // 1b. Synchronisation immédiate dans la collection 'live_sessions' utilisée par la route /live/:id
       const liveSessionPayload = {
         id: liveId,
         sessionSlug: liveId,
@@ -526,9 +618,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         streamUrl: finalStreamUrl,
         meetingUrl: finalMeetingUrl,
         socialStreamUrl: finalStreamUrl,
-        coachingRoomUrl: (effectivePlatform === 'google_meet' || effectivePlatform === 'zoom' || effectivePlatform === 'google_classroom' || effectivePlatform === 'jitsi')
-          ? finalMeetingUrl
-          : undefined,
+        coachingRoomUrl: coachingRoom,
         aspectRatio: aspectRatio || '16:9',
         isPaid,
         price: numericPrice,
@@ -539,12 +629,6 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         updatedAt: Date.now(),
         allowChat: true
       };
-
-      try {
-        await setDoc(doc(db, 'live_sessions', liveId), liveSessionPayload, { merge: true });
-      } catch (syncErr) {
-        console.warn("[WEBINAR] Sync live_sessions local fallback:", syncErr);
-      }
 
       // 2. Mise à jour du cache local (nana_merchant_webinars + nana_live_sessions_cache)
       const localWebinarItem: LiveWebinar = {
@@ -578,20 +662,26 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   };
 
-  // Suppression d'un webinaire
+  // Suppression d'un webinaire dans Supabase (public.live_sessions) + cache local
   const handleDeleteWebinar = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce live ?")) return;
     playTapBeep();
 
     try {
-      await deleteDoc(doc(db, 'webinars', id));
+      await supabase.from('live_sessions').delete().eq('id', id);
     } catch {}
 
     const updated = myWebinars.filter(w => w.id !== id);
     setMyWebinars(updated);
     try {
       localStorage.setItem('nana_merchant_webinars', JSON.stringify(updated));
+      const rawSessionsCache = localStorage.getItem('nana_live_sessions_cache');
+      if (rawSessionsCache) {
+        const sessionsMap = JSON.parse(rawSessionsCache);
+        delete sessionsMap[id];
+        localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
+      }
     } catch {}
   };
 

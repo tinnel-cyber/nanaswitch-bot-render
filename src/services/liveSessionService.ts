@@ -1,22 +1,6 @@
-import { db } from '../firebaseConfig';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where, 
-  addDoc, 
-  orderBy, 
-  limit, 
-  deleteDoc 
-} from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { 
   LiveSession, 
-  LiveSessionMode, 
   LiveSessionStatus,
   LiveChatMessage, 
   LiveQuizQuestion, 
@@ -86,14 +70,14 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
   sessionMode: 'live_shopping',
   status: 'live',
   sourceType: 'youtube',
-  streamUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', // Stream live démo stable
+  streamUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
   posterUrl: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1080&auto=format&fit=crop&q=85',
   aspectRatio: '16:9',
   scheduledAt: Date.now(),
   startedAt: Date.now() - 1000 * 60 * 18,
   viewerCount: 168,
   countdownTitle: '⏳ Tarif Flash du Direct garanti pendant :',
-  countdownEndsAt: Date.now() + 1000 * 3600 * 2, // 2h de chrono
+  countdownEndsAt: Date.now() + 1000 * 3600 * 2,
   pinnedProductId: 'live-prod-01',
   pinnedProduct: DEMO_LIVE_PRODUCTS[0],
   products: DEMO_LIVE_PRODUCTS,
@@ -104,14 +88,38 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
   createdAt: Date.now()
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(val: string): boolean {
+  return UUID_REGEX.test((val || '').trim());
+}
+
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /**
- * Convertit un document webinar (CreateWebinarModal) en LiveSession complète avec le vrai lien collé
+ * Convertit un document webinar local en LiveSession complète avec le vrai lien collé
  */
 function mapWebinarToLiveSession(id: string, w: any): LiveSession {
   const realUrl = (w.streamUrl || w.meetingUrl || w.socialStreamUrl || '').trim();
   const plat = String(w.platform || '').toLowerCase();
-  const isMeetingRoom = plat === 'google_meet' || plat === 'zoom' || plat === 'google_classroom' || plat === 'jitsi' ||
-    realUrl.includes('meet.google.com') || realUrl.includes('zoom.us') || realUrl.includes('classroom.google.com') || realUrl.includes('meet.jit.si');
+  const isMeetingRoom =
+    plat === 'google_meet' ||
+    plat === 'zoom' ||
+    plat === 'google_classroom' ||
+    plat === 'jitsi' ||
+    realUrl.includes('meet.google.com') ||
+    realUrl.includes('zoom.us') ||
+    realUrl.includes('classroom.google.com') ||
+    realUrl.includes('meet.jit.si');
 
   return {
     ...FALLBACK_LIVE_SESSION,
@@ -133,23 +141,171 @@ function mapWebinarToLiveSession(id: string, w: any): LiveSession {
 }
 
 /**
- * Récupère une session Live par son slug ou son ID depuis Firestore (live_sessions + webinars) et le cache local
+ * Convertit une ligne Supabase `public.live_sessions` en `LiveSession` complète
+ */
+function mapSupabaseRowToLiveSession(row: any): LiveSession {
+  const rawPinned = row?.pinned_product_data || {};
+  const meta = rawPinned?._meta || {};
+  const pinnedProduct: StoreProductItem | null = rawPinned?.id
+    ? (rawPinned as StoreProductItem)
+    : (rawPinned?.product || FALLBACK_LIVE_SESSION.pinnedProduct || null);
+
+  const realUrl = (
+    row?.stream_url ||
+    meta?.streamUrl ||
+    meta?.meetingUrl ||
+    meta?.socialStreamUrl ||
+    ''
+  ).trim();
+
+  const plat = String(meta?.platform || '').toLowerCase();
+  const isMeetingRoom =
+    plat === 'google_meet' ||
+    plat === 'zoom' ||
+    plat === 'google_classroom' ||
+    plat === 'jitsi' ||
+    realUrl.includes('meet.google.com') ||
+    realUrl.includes('zoom.us') ||
+    realUrl.includes('classroom.google.com') ||
+    realUrl.includes('meet.jit.si');
+
+  return {
+    ...FALLBACK_LIVE_SESSION,
+    id: row.id,
+    sessionSlug: meta.sessionSlug || row.id,
+    storeId: row.tenant_id || meta.storeId || FALLBACK_LIVE_SESSION.storeId,
+    storeName: meta.storeName || FALLBACK_LIVE_SESSION.storeName,
+    title: row.title || FALLBACK_LIVE_SESSION.title,
+    description: row.description ?? FALLBACK_LIVE_SESSION.description,
+    sessionMode: meta.sessionMode || (meta.roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping'),
+    status: (row.status || 'live') as LiveSessionStatus,
+    sourceType: plat === 'facebook' ? 'facebook' : (realUrl.endsWith('.mp4') ? 'mp4' : realUrl.endsWith('.m3u8') ? 'hls' : 'youtube'),
+    streamUrl: realUrl || FALLBACK_LIVE_SESSION.streamUrl,
+    coachingRoomUrl: meta.coachingRoomUrl || (isMeetingRoom ? realUrl : undefined),
+    aspectRatio: meta.aspectRatio || '16:9',
+    viewerCount: typeof row.viewer_count === 'number' && row.viewer_count > 0 ? row.viewer_count : FALLBACK_LIVE_SESSION.viewerCount,
+    pinnedProductId: row.pinned_product_id !== undefined ? row.pinned_product_id : FALLBACK_LIVE_SESSION.pinnedProductId,
+    pinnedProduct: row.pinned_product_id === null ? null : pinnedProduct,
+    activeQuiz: meta.activeQuiz || undefined,
+    activeAssignment: meta.activeAssignment || undefined,
+    handRaisedUsers: Array.isArray(meta.handRaisedUsers) ? meta.handRaisedUsers : undefined,
+    pinnedMessage: meta.pinnedMessage || undefined,
+    scheduledAt: meta.date ? new Date(meta.date).getTime() : (row.created_at ? new Date(row.created_at).getTime() : Date.now()),
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+  };
+}
+
+/**
+ * Helper interne pour mettre à jour les métadonnées JSONB `_meta` d'une session dans Supabase `public.live_sessions`
+ */
+async function updateSupabaseSessionMeta(
+  sessionId: string,
+  metaPatch: Record<string, any>,
+  columnPatch: Record<string, any> = {}
+): Promise<void> {
+  if (!sessionId) return;
+
+  // Mise à jour du cache local immédiate
+  if (typeof window !== 'undefined') {
+    try {
+      const rawSessCache = localStorage.getItem('nana_live_sessions_cache');
+      if (rawSessCache) {
+        const parsed = JSON.parse(rawSessCache);
+        if (parsed && parsed[sessionId]) {
+          parsed[sessionId] = { ...parsed[sessionId], ...metaPatch };
+          localStorage.setItem('nana_live_sessions_cache', JSON.stringify(parsed));
+        }
+      }
+    } catch {}
+  }
+
+  if (!isUuid(sessionId)) return;
+
+  try {
+    const { data: existing } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const currentPinned = existing?.pinned_product_data || {};
+    const currentMeta = currentPinned._meta || {};
+
+    await supabase
+      .from('live_sessions')
+      .update({
+        ...columnPatch,
+        pinned_product_data: {
+          ...currentPinned,
+          _meta: {
+            ...currentMeta,
+            ...metaPatch
+          }
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+  } catch (err) {
+    console.warn('[liveSessionService] Supabase meta update warning:', err);
+  }
+}
+
+/**
+ * Récupère une session Live par son slug ou son ID depuis Supabase (`public.live_sessions`) et le cache local
  */
 export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | null> {
   if (!slug) return FALLBACK_LIVE_SESSION;
 
-  // 0. Vérification rapide dans le cache local (pour un accès instantané après création)
+  // 1. Recherche prioritaire dans Supabase PostgreSQL (table public.live_sessions)
+  try {
+    if (isUuid(slug)) {
+      const { data: directRow, error: directErr } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('id', slug)
+        .maybeSingle();
+
+      if (!directErr && directRow) {
+        return mapSupabaseRowToLiveSession(directRow);
+      }
+    }
+
+    // Recherche par sessionSlug dans les dernières sessions Supabase
+    const { data: recentRows, error: listErr } = await supabase
+      .from('live_sessions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!listErr && Array.isArray(recentRows)) {
+      const matched = recentRows.find((r: any) => {
+        const metaSlug = r?.pinned_product_data?._meta?.sessionSlug;
+        return r.id === slug || metaSlug === slug;
+      });
+      if (matched) {
+        return mapSupabaseRowToLiveSession(matched);
+      }
+    }
+  } catch (err) {
+    console.warn('[liveSessionService] Supabase lookup fallback to local cache:', err);
+  }
+
+  // 2. Vérification dans le cache local (pour résilience hors-ligne ou ID locaux)
   if (typeof window !== 'undefined') {
     try {
       const rawSessCache = localStorage.getItem('nana_live_sessions_cache');
       if (rawSessCache) {
         const parsedSess = JSON.parse(rawSessCache);
         if (parsedSess && parsedSess[slug]) {
+          const cached = parsedSess[slug];
+          const realUrl = (cached.streamUrl || cached.meetingUrl || cached.socialStreamUrl || '').trim();
           return {
             ...FALLBACK_LIVE_SESSION,
-            ...parsedSess[slug],
-            id: parsedSess[slug].id || slug,
-            sessionSlug: parsedSess[slug].sessionSlug || slug
+            ...cached,
+            streamUrl: realUrl || FALLBACK_LIVE_SESSION.streamUrl,
+            id: cached.id || slug,
+            sessionSlug: cached.sessionSlug || slug
           };
         }
       }
@@ -166,57 +322,16 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
     } catch {}
   }
 
-  try {
-    // 1. Recherche par sessionSlug dans live_sessions
-    const sessionsRef = collection(db, 'live_sessions');
-    const q = query(sessionsRef, where('sessionSlug', '==', slug));
-    const snapshot = await getDocs(q);
-
-    if (!snapshot.empty) {
-      const docData = snapshot.docs[0].data() as any;
-      const realUrl = (docData.streamUrl || docData.meetingUrl || docData.socialStreamUrl || '').trim();
-      return {
-        ...FALLBACK_LIVE_SESSION,
-        ...docData,
-        streamUrl: realUrl || docData.streamUrl || FALLBACK_LIVE_SESSION.streamUrl,
-        id: snapshot.docs[0].id
-      };
-    }
-
-    // 2. Recherche par ID direct dans live_sessions
-    const docRef = doc(db, 'live_sessions', slug);
-    const directSnap = await getDoc(docRef);
-    if (directSnap.exists()) {
-      const docData = directSnap.data() as any;
-      const realUrl = (docData.streamUrl || docData.meetingUrl || docData.socialStreamUrl || '').trim();
-      return {
-        ...FALLBACK_LIVE_SESSION,
-        ...docData,
-        streamUrl: realUrl || docData.streamUrl || FALLBACK_LIVE_SESSION.streamUrl,
-        id: directSnap.id
-      };
-    }
-
-    // 3. Recherche par ID direct dans webinars (sessions créées via le Générateur de Live CreateWebinarModal)
-    const webinarRef = doc(db, 'webinars', slug);
-    const webinarSnap = await getDoc(webinarRef);
-    if (webinarSnap.exists()) {
-      return mapWebinarToLiveSession(webinarSnap.id, webinarSnap.data());
-    }
-  } catch (err) {
-    console.warn('[liveSessionService] Firestore offline or error, using fallback session:', err);
-  }
-
-  // Fallback propre pour la démonstration
+  // 3. Fallback propre de démonstration
   return {
     ...FALLBACK_LIVE_SESSION,
     sessionSlug: slug,
-    id: `session-${slug}`
+    id: slug
   };
 }
 
 /**
- * Abonnement en temps réel aux mises à jour de la session Live (spectateurs, produit épinglé, etc.)
+ * Abonnement en temps réel aux mises à jour de la session Live via Supabase Realtime (`public.live_sessions`)
  */
 export function subscribeLiveSession(
   sessionId: string,
@@ -226,14 +341,18 @@ export function subscribeLiveSession(
 
   const fetchSession = async () => {
     try {
-      const docRef = doc(db, 'live_sessions', sessionId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as LiveSession;
-        onUpdate({ ...data, id: snap.id });
+      if (!isUuid(sessionId)) return;
+      const { data, error } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (!error && data) {
+        onUpdate(mapSupabaseRowToLiveSession(data));
       }
     } catch (err) {
-      console.warn('[liveSessionService] Lecture session :', err);
+      console.warn('[liveSessionService] Lecture Supabase session :', err);
     }
   };
 
@@ -247,11 +366,15 @@ export function subscribeLiveSession(
       {
         event: '*',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
+        table: 'live_sessions',
+        filter: isUuid(sessionId) ? `id=eq.${sessionId}` : undefined,
       },
-      () => {
-        fetchSession();
+      (payload) => {
+        if (payload.new && (payload.new as any).id === sessionId) {
+          onUpdate(mapSupabaseRowToLiveSession(payload.new));
+        } else {
+          fetchSession();
+        }
       }
     )
     .subscribe();
@@ -262,7 +385,7 @@ export function subscribeLiveSession(
 }
 
 /**
- * Épingler un produit en direct à l'écran chez tous les spectateurs
+ * Épingler un produit en direct à l'écran chez tous les spectateurs (Supabase `public.live_sessions`)
  */
 export async function updatePinnedProduct(
   sessionId: string,
@@ -270,42 +393,53 @@ export async function updatePinnedProduct(
 ): Promise<void> {
   if (!sessionId) return;
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, {
-      pinnedProductId: product ? product.id : null,
-      pinnedProduct: product || null,
-      updatedAt: Date.now()
-    });
+    if (!isUuid(sessionId)) return;
+    const { data: existing } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const currentMeta = existing?.pinned_product_data?._meta || {};
+
+    await supabase
+      .from('live_sessions')
+      .update({
+        pinned_product_id: product ? product.id : null,
+        pinned_product_data: {
+          ...(product ? { product } : {}),
+          _meta: currentMeta
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
   } catch (err) {
-    console.warn('[liveSessionService] updatePinnedProduct warning (local sync):', err);
+    console.warn('[liveSessionService] updatePinnedProduct Supabase warning:', err);
   }
 }
 
 /**
- * Mettre à jour le statut du direct
+ * Mettre à jour le statut du direct dans Supabase (`public.live_sessions`)
  */
 export async function updateLiveSessionStatus(
   sessionId: string,
   status: LiveSessionStatus
 ): Promise<void> {
   if (!sessionId) return;
-  try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, {
-      status,
-      updatedAt: Date.now()
-    });
-  } catch (err) {
-    console.warn('[liveSessionService] updateLiveSessionStatus warning:', err);
-  }
+  const normalizedStatus = status === 'live' || status === 'ended' ? status : 'scheduled';
+  await updateSupabaseSessionMeta(
+    sessionId,
+    { status },
+    { status: normalizedStatus, is_live: normalizedStatus === 'live' }
+  );
 }
 
 /**
- * Crée ou met à jour une session Live
+ * Crée ou met à jour une session Live dans Supabase (`public.live_sessions`)
  */
 export async function createLiveSession(data: Partial<LiveSession>): Promise<LiveSession> {
-  const sessionId = data.id || `live_${Date.now()}`;
-  const slug = data.sessionSlug || data.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || `session-${Date.now()}`;
+  const sessionId = data.id && isUuid(data.id) ? data.id : generateUuid();
+  const slug = data.sessionSlug || sessionId;
 
   const sessionObj: LiveSession = {
     ...FALLBACK_LIVE_SESSION,
@@ -317,10 +451,35 @@ export async function createLiveSession(data: Partial<LiveSession>): Promise<Liv
   };
 
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await setDoc(docRef, sessionObj, { merge: true });
+    await supabase
+      .from('live_sessions')
+      .upsert({
+        id: sessionId,
+        tenant_id: sessionObj.storeId || 'default',
+        host_id: sessionObj.storeId || 'host',
+        title: sessionObj.title,
+        description: sessionObj.description,
+        is_live: sessionObj.status === 'live',
+        viewer_count: sessionObj.viewerCount || 1,
+        stream_url: sessionObj.streamUrl,
+        status: sessionObj.status === 'ended' ? 'ended' : sessionObj.status === 'live' ? 'live' : 'scheduled',
+        pinned_product_id: sessionObj.pinnedProductId || null,
+        pinned_product_data: {
+          ...(sessionObj.pinnedProduct ? { product: sessionObj.pinnedProduct } : {}),
+          _meta: {
+            sessionSlug: slug,
+            storeId: sessionObj.storeId,
+            storeName: sessionObj.storeName,
+            sessionMode: sessionObj.sessionMode,
+            streamUrl: sessionObj.streamUrl,
+            coachingRoomUrl: sessionObj.coachingRoomUrl,
+            aspectRatio: sessionObj.aspectRatio
+          }
+        },
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
   } catch (err) {
-    console.warn('[liveSessionService] createLiveSession warning (local only):', err);
+    console.warn('[liveSessionService] createLiveSession Supabase warning:', err);
   }
 
   return sessionObj;
@@ -352,10 +511,9 @@ export function generateLiveShareLinks(
 }
 
 // =========================================================================
-// 2. CHAT EN TEMPS RÉEL (live_sessions/{sessionId}/messages)
+// 2. CHAT EN TEMPS RÉEL (Supabase table `public.wameet_messages`)
 // =========================================================================
 
-// Mémoire locale de secours pour le chat en mode prévisualisation / hors-ligne
 const localChatMemory: Record<string, LiveChatMessage[]> = {
   'live-demo-session': [
     {
@@ -388,7 +546,7 @@ const localChatMemory: Record<string, LiveChatMessage[]> = {
 };
 
 /**
- * Envoie un message dans le chat du direct
+ * Envoie un message dans le chat du direct via Supabase (`public.wameet_messages`)
  */
 export async function sendLiveChatMessage(
   sessionId: string,
@@ -402,10 +560,10 @@ export async function sendLiveChatMessage(
   }
 ): Promise<LiveChatMessage> {
   const newMsg: LiveChatMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     sessionId,
     senderName: message.senderName || 'Participant',
-    senderId: message.senderId,
+    senderId: message.senderId || 'participant',
     senderRole: message.senderRole || 'student',
     text: message.text,
     isQuestion: !!message.isQuestion,
@@ -413,22 +571,29 @@ export async function sendLiveChatMessage(
     avatar: message.avatar
   };
 
-  // Ajout local immédiat
   if (!localChatMemory[sessionId]) localChatMemory[sessionId] = [];
   localChatMemory[sessionId].push(newMsg);
 
   try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'messages');
-    await addDoc(colRef, newMsg);
+    await supabase.from('wameet_messages').insert({
+      id: newMsg.id,
+      conversation_id: sessionId,
+      sender_id: newMsg.senderId || 'participant',
+      sender_name: newMsg.senderName,
+      recipient_id: newMsg.senderRole || 'student',
+      content: newMsg.text,
+      media_url: newMsg.avatar || null,
+      media_type: newMsg.isQuestion ? 'question' : 'chat'
+    });
   } catch (err) {
-    console.warn('[liveSessionService] sendLiveChatMessage firestore warning (saved locally):', err);
+    console.warn('[liveSessionService] sendLiveChatMessage Supabase warning (saved locally):', err);
   }
 
   return newMsg;
 }
 
 /**
- * Abonnement en temps réel aux messages du chat
+ * Abonnement en temps réel aux messages du chat via Supabase (`public.wameet_messages`)
  */
 export function subscribeLiveChatMessages(
   sessionId: string,
@@ -439,18 +604,31 @@ export function subscribeLiveChatMessages(
 
   const fetchMessages = async () => {
     try {
-      const colRef = collection(db, 'live_sessions', sessionId, 'messages');
-      const q = query(colRef, orderBy('createdAt', 'asc'), limit(150));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreMsgs: LiveChatMessage[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreMsgs.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        callback(firestoreMsgs);
+      const { data: rows, error } = await supabase
+        .from('wameet_messages')
+        .select('*')
+        .eq('conversation_id', sessionId)
+        .neq('media_type', 'submission')
+        .order('created_at', { ascending: true })
+        .limit(150);
+
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const supabaseMsgs: LiveChatMessage[] = rows.map((r: any) => ({
+          id: r.id,
+          sessionId: r.conversation_id,
+          senderName: r.sender_name || 'Participant',
+          senderId: r.sender_id,
+          senderRole: (r.recipient_id === 'host' || r.recipient_id === 'viewer' ? r.recipient_id : 'student'),
+          text: r.content,
+          isQuestion: r.media_type === 'question',
+          avatar: r.media_url || undefined,
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+        }));
+        localChatMemory[sessionId] = supabaseMsgs;
+        callback(supabaseMsgs);
       }
     } catch (err) {
-      console.warn('[liveSessionService] Lecture chat messages :', err);
+      console.warn('[liveSessionService] Lecture Supabase chat messages :', err);
     }
   };
 
@@ -465,7 +643,7 @@ export function subscribeLiveChatMessages(
         event: '*',
         schema: 'public',
         table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
+        filter: `conversation_id=eq.${sessionId}`,
       },
       () => {
         fetchMessages();
@@ -482,91 +660,67 @@ export function subscribeLiveChatMessages(
  * Épingle ou désépingle un message du formateur tout en haut du chat
  */
 export async function pinLiveChatMessage(sessionId: string, message: LiveChatMessage | null): Promise<void> {
-  try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, { pinnedMessage: message });
-  } catch (err) {
-    console.warn('[liveSessionService] pinLiveChatMessage warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, { pinnedMessage: message });
 }
 
 // =========================================================================
-// 3. LEVÉE DE MAIN EN DIRECT (HAND RAISING)
+// 3. LEVÉE DE MAIN EN DIRECT (HAND RAISING - Supabase `public.live_sessions`)
 // =========================================================================
 
-/**
- * Lever la main pour intervenir en direct
- */
 export async function raiseHandInSession(sessionId: string, user: HandRaisedUser): Promise<void> {
+  if (!sessionId || !isUuid(sessionId)) return;
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    const currentList: HandRaisedUser[] = snap.exists() ? (snap.data().handRaisedUsers || []) : [];
-    
-    // Éviter les doublons
+    const { data } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const currentList: HandRaisedUser[] = data?.pinned_product_data?._meta?.handRaisedUsers || [];
     const filtered = currentList.filter(u => u.id !== user.id);
-    const updated = [...filtered, user];
-    
-    await updateDoc(sessionDoc, { handRaisedUsers: updated });
+    await updateSupabaseSessionMeta(sessionId, { handRaisedUsers: [...filtered, user] });
   } catch (err) {
-    console.warn('[liveSessionService] raiseHandInSession warning:', err);
+    console.warn('[liveSessionService] raiseHandInSession Supabase warning:', err);
   }
 }
 
-/**
- * Baisser la main
- */
 export async function lowerHandInSession(sessionId: string, userId: string): Promise<void> {
+  if (!sessionId || !isUuid(sessionId)) return;
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    const currentList: HandRaisedUser[] = snap.exists() ? (snap.data().handRaisedUsers || []) : [];
+    const { data } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const currentList: HandRaisedUser[] = data?.pinned_product_data?._meta?.handRaisedUsers || [];
     const updated = currentList.filter(u => u.id !== userId);
-    await updateDoc(sessionDoc, { handRaisedUsers: updated });
+    await updateSupabaseSessionMeta(sessionId, { handRaisedUsers: updated });
   } catch (err) {
-    console.warn('[liveSessionService] lowerHandInSession warning:', err);
+    console.warn('[liveSessionService] lowerHandInSession Supabase warning:', err);
   }
 }
 
 // =========================================================================
-// 4. QUIZ EN DIRECT ÉPINGLÉ (PINNED LIVE QUIZ)
+// 4. QUIZ EN DIRECT ÉPINGLÉ (PINNED LIVE QUIZ - Supabase `public.live_sessions`)
 // =========================================================================
 
-/**
- * Épingle et lance un Quiz en direct chez tous les élèves
- */
 export async function pinLiveQuiz(sessionId: string, quiz: LiveQuizQuestion): Promise<void> {
-  try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, {
-      activeQuiz: {
-        ...quiz,
-        isActive: true,
-        startedAt: Date.now(),
-        totalVotes: 0,
-        votesBreakdown: {}
-      }
-    });
-  } catch (err) {
-    console.warn('[liveSessionService] pinLiveQuiz warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, {
+    activeQuiz: {
+      ...quiz,
+      isActive: true,
+      startedAt: Date.now(),
+      totalVotes: 0,
+      votesBreakdown: {}
+    }
+  });
 }
 
-/**
- * Clôture le Quiz en direct
- */
 export async function closeLiveQuiz(sessionId: string): Promise<void> {
-  try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeQuiz: null });
-  } catch (err) {
-    console.warn('[liveSessionService] closeLiveQuiz warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, { activeQuiz: null });
 }
 
-/**
- * Soumission de réponse élève au Quiz
- */
 export async function submitQuizAnswer(
   sessionId: string,
   quizId: string,
@@ -577,8 +731,9 @@ export async function submitQuizAnswer(
     isCorrect: boolean;
   }
 ): Promise<void> {
+  if (!sessionId || !isUuid(sessionId)) return;
   const respObj: LiveQuizResponse = {
-    id: `resp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     quizId,
     studentName: response.studentName,
     studentId: response.studentId || 'anon',
@@ -588,35 +743,38 @@ export async function submitQuizAnswer(
   };
 
   try {
-    // 1. Sauvegarder dans la sous-collection quiz_responses
-    const colRef = collection(db, 'live_sessions', sessionId, 'quiz_responses');
-    await addDoc(colRef, respObj);
+    const { data } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
 
-    // 2. Mettre à jour les stats du quiz dans le doc session
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    if (snap.exists()) {
-      const activeQuiz = snap.data().activeQuiz as LiveQuizQuestion;
-      if (activeQuiz && activeQuiz.id === quizId) {
-        const breakdown = activeQuiz.votesBreakdown || {};
-        breakdown[response.selectedOptionId] = (breakdown[response.selectedOptionId] || 0) + 1;
-        const totalVotes = (activeQuiz.totalVotes || 0) + 1;
-        await updateDoc(sessionDoc, {
-          'activeQuiz.votesBreakdown': breakdown,
-          'activeQuiz.totalVotes': totalVotes
-        });
-      }
+    const activeQuiz = data?.pinned_product_data?._meta?.activeQuiz as LiveQuizQuestion | undefined;
+    const quizResponses: LiveQuizResponse[] = data?.pinned_product_data?._meta?.quizResponses || [];
+
+    if (activeQuiz && activeQuiz.id === quizId) {
+      const breakdown = { ...(activeQuiz.votesBreakdown || {}) };
+      breakdown[response.selectedOptionId] = (breakdown[response.selectedOptionId] || 0) + 1;
+      const totalVotes = (activeQuiz.totalVotes || 0) + 1;
+
+      await updateSupabaseSessionMeta(sessionId, {
+        activeQuiz: {
+          ...activeQuiz,
+          votesBreakdown: breakdown,
+          totalVotes
+        },
+        quizResponses: [...quizResponses, respObj]
+      });
     }
   } catch (err) {
-    console.warn('[liveSessionService] submitQuizAnswer warning:', err);
+    console.warn('[liveSessionService] submitQuizAnswer Supabase warning:', err);
   }
 }
 
 // =========================================================================
-// 5. DEVOIR, SUPPORT PDF & SOUMISSIONS ÉLÈVES (ASSIGNMENTS & SUBMISSIONS)
+// 5. DEVOIR, SUPPORT PDF & SOUMISSIONS ÉLÈVES (Supabase)
 // =========================================================================
 
-// Mémoire locale de secours pour les devoirs soumis
 const localSubmissionsMemory: Record<string, LiveSubmission[]> = {
   'live-demo-session': [
     {
@@ -636,9 +794,6 @@ const localSubmissionsMemory: Record<string, LiveSubmission[]> = {
   ]
 };
 
-/**
- * Publie un devoir ou support PDF en direct
- */
 export async function publishLiveAssignment(
   sessionId: string,
   assignment: Omit<LiveAssignment, 'isActive' | 'createdAt' | 'submissionsCount'>
@@ -649,37 +804,20 @@ export async function publishLiveAssignment(
     createdAt: Date.now(),
     submissionsCount: 0
   };
-
-  try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeAssignment: assignmentObj });
-  } catch (err) {
-    console.warn('[liveSessionService] publishLiveAssignment warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, { activeAssignment: assignmentObj });
 }
 
-/**
- * Clôture le devoir actif
- */
 export async function closeLiveAssignment(sessionId: string): Promise<void> {
-  try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeAssignment: null });
-  } catch (err) {
-    console.warn('[liveSessionService] closeLiveAssignment warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, { activeAssignment: null });
 }
 
-/**
- * Soumission du devoir par l'élève (PDF ou texte)
- */
 export async function submitLiveAssignmentWork(
   sessionId: string,
   submission: Omit<LiveSubmission, 'id' | 'submittedAt' | 'status'>
 ): Promise<LiveSubmission> {
   const subObj: LiveSubmission = {
     ...submission,
-    id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     submittedAt: Date.now(),
     status: 'submitted'
   };
@@ -688,30 +826,41 @@ export async function submitLiveAssignmentWork(
   localSubmissionsMemory[sessionId].push(subObj);
 
   try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
-    await addDoc(colRef, subObj);
+    await supabase.from('wameet_messages').insert({
+      id: subObj.id,
+      conversation_id: sessionId,
+      sender_id: subObj.studentContact || 'student',
+      sender_name: subObj.studentName,
+      recipient_id: subObj.assignmentId,
+      content: JSON.stringify(subObj),
+      media_url: subObj.fileUrl || null,
+      media_type: 'submission'
+    });
 
-    // Incrémente le compteur dans la session
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    if (snap.exists()) {
-      const activeAssignment = snap.data().activeAssignment;
+    if (isUuid(sessionId)) {
+      const { data } = await supabase
+        .from('live_sessions')
+        .select('pinned_product_data')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      const activeAssignment = data?.pinned_product_data?._meta?.activeAssignment;
       if (activeAssignment) {
-        await updateDoc(sessionDoc, {
-          'activeAssignment.submissionsCount': (activeAssignment.submissionsCount || 0) + 1
+        await updateSupabaseSessionMeta(sessionId, {
+          activeAssignment: {
+            ...activeAssignment,
+            submissionsCount: (activeAssignment.submissionsCount || 0) + 1
+          }
         });
       }
     }
   } catch (err) {
-    console.warn('[liveSessionService] submitLiveAssignmentWork firestore warning (saved locally):', err);
+    console.warn('[liveSessionService] submitLiveAssignmentWork Supabase warning (saved locally):', err);
   }
 
   return subObj;
 }
 
-/**
- * Abonnement en temps réel aux devoirs soumis (côté formateur)
- */
 export function subscribeLiveSubmissions(
   sessionId: string,
   callback: (submissions: LiveSubmission[]) => void
@@ -721,18 +870,36 @@ export function subscribeLiveSubmissions(
 
   const fetchSubs = async () => {
     try {
-      const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
-      const q = query(colRef, orderBy('submittedAt', 'desc'), limit(100));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreSubs: LiveSubmission[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreSubs.push({ id: docSnap.id, ...(docSnap.data() as any) });
+      const { data: rows, error } = await supabase
+        .from('wameet_messages')
+        .select('*')
+        .eq('conversation_id', sessionId)
+        .eq('media_type', 'submission')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const subs: LiveSubmission[] = rows.map((r: any) => {
+          try {
+            return { ...JSON.parse(r.content), id: r.id };
+          } catch {
+            return {
+              id: r.id,
+              assignmentId: r.recipient_id || 'assign',
+              studentName: r.sender_name || 'Élève',
+              studentContact: r.sender_id || '',
+              fileUrl: r.media_url || undefined,
+              textContent: r.content,
+              submittedAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+              status: 'submitted'
+            } as LiveSubmission;
+          }
         });
-        callback(firestoreSubs);
+        localSubmissionsMemory[sessionId] = subs;
+        callback(subs);
       }
     } catch (err) {
-      console.warn('[liveSessionService] Lecture submissions :', err);
+      console.warn('[liveSessionService] Lecture Supabase submissions :', err);
     }
   };
 
@@ -747,7 +914,7 @@ export function subscribeLiveSubmissions(
         event: '*',
         schema: 'public',
         table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
+        filter: `conversation_id=eq.${sessionId}`,
       },
       () => {
         fetchSubs();
@@ -760,45 +927,35 @@ export function subscribeLiveSubmissions(
   };
 }
 
-/**
- * Noter / corriger un devoir soumis et envoyer feedback
- */
 export async function gradeLiveSubmission(
   sessionId: string,
   submissionId: string,
   grade: string,
   feedback?: string
 ): Promise<void> {
-  // Mise à jour locale
+  let updatedTarget: LiveSubmission | undefined;
   if (localSubmissionsMemory[sessionId]) {
     const target = localSubmissionsMemory[sessionId].find(s => s.id === submissionId);
     if (target) {
       target.grade = grade;
       target.feedback = feedback;
       target.status = 'graded';
+      updatedTarget = target;
     }
   }
 
   try {
-    const subDoc = doc(db, 'live_sessions', sessionId, 'submissions', submissionId);
-    await updateDoc(subDoc, {
-      grade,
-      feedback: feedback || '',
-      status: 'graded'
-    });
+    if (updatedTarget && isUuid(submissionId)) {
+      await supabase
+        .from('wameet_messages')
+        .update({ content: JSON.stringify(updatedTarget) })
+        .eq('id', submissionId);
+    }
   } catch (err) {
-    console.warn('[liveSessionService] gradeLiveSubmission warning:', err);
+    console.warn('[liveSessionService] gradeLiveSubmission Supabase warning:', err);
   }
 }
 
-/**
- * Mise à jour de l'URL de salle de Coaching 1-to-1
- */
 export async function updateCoachingRoom(sessionId: string, roomUrl: string): Promise<void> {
-  try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { coachingRoomUrl: roomUrl });
-  } catch (err) {
-    console.warn('[liveSessionService] updateCoachingRoom warning:', err);
-  }
+  await updateSupabaseSessionMeta(sessionId, { coachingRoomUrl: roomUrl });
 }
