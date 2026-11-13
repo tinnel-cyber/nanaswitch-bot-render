@@ -541,7 +541,7 @@ export default function App() {
           if (subMod === 'docusign-hub' || subMod === 'docusign') return 'DOCUSIGN';
           if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') return 'SETTINGS_EXTENSIONS';
           if (subMod === 'saas-admin' || subMod === 'admin') return 'SAAS_ADMIN';
-          return 'AI_STUDIO';
+          return 'STANDALONE_APP';
         }
         if (modName === 'nanagenerator' || modName === 'nanagenerateur') {
           return 'AI_STUDIO';
@@ -1362,32 +1362,37 @@ export default function App() {
         const subMod = segments[1]?.toLowerCase();
 
         if (modName === 'apps' && subMod) {
-          if (subMod === 'nanagenerator' || subMod === 'nanagenerateur' || subMod === 'studio-ia') return 'AI_STUDIO';
-          if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') return 'POS';
-          if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') return 'STUDIO';
-          if (subMod === 'nana-market' || subMod === 'market') return 'MARKET_DIRECTORY';
-          if (subMod === 'funnel-builder' || subMod === 'funnel') return 'MODULAR_FUNNEL';
-          if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') return 'INVENTORY';
-          if (subMod === 'orders-quotes' || subMod === 'commandes') return 'CUSTOMER_ORDERS';
-          if (subMod === 'reports-analytics' || subMod === 'rapports') return 'REPORTS';
-          if (subMod === 'debt-book' || subMod === 'dettes') return 'DEBT_BOOK';
-          if (subMod === 'partners-affiliate' || subMod === 'partenaire') return 'PARTNER';
-          if (subMod === 'ai-gemini' || subMod === 'gemini') return 'AI_ADVISOR';
-          if (subMod === 'cv-pro' || subMod === 'cv') return 'CV_CREATOR';
-          if (subMod === 'lms-academy' || subMod === 'campus') return 'CAMPUS';
-          if (subMod === 'lms-marketplace' || subMod === 'marketplace') return 'CATALOG';
-          if (subMod === 'instructor-hub' || subMod === 'formateur') return 'INSTRUCTOR';
-          if (subMod === 'certificate-hub' || subMod === 'certificats') return 'CERTIFICATE';
-          if (subMod === 'wameet-network' || subMod === 'wameet') return 'WAMEET';
-          if (subMod === 'salles-vip' || subMod === 'vip') return 'SALLES_VIP';
-          if (subMod === 'nana-switch-app' || subMod === 'nanaswitch' || subMod === 'nanaswitch-app' || subMod === 'switch' || subMod === 'nana-switch') return 'NANA_SWITCH_APP';
-          if (subMod === 'docusign-hub' || subMod === 'docusign') return 'DOCUSIGN';
-          if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') return 'SETTINGS_EXTENSIONS';
-          if (subMod === 'saas-admin' || subMod === 'admin') return 'SAAS_ADMIN';
-          return 'AI_STUDIO';
+          setShowWelcomeShowcase(false);
+          if (subMod === 'nanagenerator' || subMod === 'nanagenerateur' || subMod === 'studio-ia') { setCurrentView('AI_STUDIO'); return; }
+          if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') { setCurrentView('POS'); return; }
+          if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') { setCurrentView('STUDIO'); return; }
+          if (subMod === 'nana-market' || subMod === 'market') { setCurrentView('MARKET_DIRECTORY'); return; }
+          if (subMod === 'funnel-builder' || subMod === 'funnel') { setCurrentView('MODULAR_FUNNEL'); return; }
+          if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') { setCurrentView('INVENTORY'); return; }
+          if (subMod === 'orders-quotes' || subMod === 'commandes') { setCurrentView('CUSTOMER_ORDERS'); return; }
+          if (subMod === 'reports-analytics' || subMod === 'rapports') { setCurrentView('REPORTS'); return; }
+          if (subMod === 'debt-book' || subMod === 'dettes') { setCurrentView('DEBT_BOOK'); return; }
+          if (subMod === 'partners-affiliate' || subMod === 'partenaire') { setCurrentView('PARTNER'); return; }
+          if (subMod === 'ai-gemini' || subMod === 'gemini') { setCurrentView('AI_ADVISOR'); return; }
+          if (subMod === 'cv-pro' || subMod === 'cv') { setCurrentView('CV_CREATOR'); return; }
+          if (subMod === 'lms-academy' || subMod === 'campus') { setCurrentView('CAMPUS'); return; }
+          if (subMod === 'lms-marketplace' || subMod === 'marketplace') { setCurrentView('CATALOG'); return; }
+          if (subMod === 'instructor-hub' || subMod === 'formateur') { setCurrentView('INSTRUCTOR'); return; }
+          if (subMod === 'certificate-hub' || subMod === 'certificats') { setCurrentView('CERTIFICATE'); return; }
+          if (subMod === 'wameet-network' || subMod === 'wameet') { setCurrentView('WAMEET'); return; }
+          if (subMod === 'salles-vip' || subMod === 'vip') { setCurrentView('SALLES_VIP'); return; }
+          if (subMod === 'nana-switch-app' || subMod === 'nanaswitch' || subMod === 'nanaswitch-app' || subMod === 'switch' || subMod === 'nana-switch') { setCurrentView('NANA_SWITCH_APP'); return; }
+          if (subMod === 'docusign-hub' || subMod === 'docusign') { setCurrentView('DOCUSIGN'); return; }
+          if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') { setCurrentView('SETTINGS_EXTENSIONS'); return; }
+          if (subMod === 'saas-admin' || subMod === 'admin') { setCurrentView('SAAS_ADMIN'); return; }
+          setCurrentStandaloneAppId(subMod);
+          setCurrentView('STANDALONE_APP');
+          return;
         }
         if (modName === 'nanagenerator' || modName === 'nanagenerateur') {
-          return 'AI_STUDIO';
+          setShowWelcomeShowcase(false);
+          setCurrentView('AI_STUDIO');
+          return;
         }
         setShowWelcomeShowcase(false);
 
