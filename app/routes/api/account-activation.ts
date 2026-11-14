@@ -152,14 +152,18 @@ export async function action({ request }: ActionFunctionArgs) {
     // Branche Commission (KYC léger) vs Branche Abonnement (KYC entreprise)
     // =========================================================================
     if (intent === "submit_kyc" || intent === "open_account") {
-      const pricingModel = body.pricingModel || body.pricing_model;
+      let pricingModel = body.pricingModel || body.pricing_model;
+      const accountType = body.accountType || body.account_type;
+      if (!pricingModel && accountType) {
+        pricingModel = accountType === "entreprise" ? "subscription" : "commission";
+      }
       const subscriptionOption = body.subscriptionOption || body.subscription_option || null;
       const kycData = body.kycData || {};
       const organizationId = body.organizationId || body.organization_id || null;
 
       if (!pricingModel || !["commission", "subscription", "pay_per_use"].includes(pricingModel)) {
         return json(
-          { success: false, error: "Modèle de tarification invalide ('commission', 'subscription' ou 'pay_per_use')" },
+          { success: false, error: "Type de compte ou modèle invalide ('particulier', 'entreprise')" },
           { status: 400 }
         );
       }

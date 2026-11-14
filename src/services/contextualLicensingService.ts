@@ -20,6 +20,7 @@
  */
 
 export type KycStatusTier = 'none' | 'light' | 'full';
+export type AccountTypeTier = 'particulier' | 'entreprise';
 export type PricingModelTier = 'pay_per_use' | 'commission' | 'subscription';
 export type SubscriptionOptionTier = 'training' | 'caisse_vitrine' | 'all_inclusive';
 
@@ -27,6 +28,8 @@ export interface UserContextualLicense {
   userId: string;
   walletBalance: number;
   kycStatus: KycStatusTier;
+  accountType?: AccountTypeTier;
+  monthlyLimit?: number; // 1 000 000 FCFA pour Particulier, 5 000 000 FCFA pour Entreprise
   pricingModel: PricingModelTier;
   subscriptionOption?: SubscriptionOptionTier | null;
   enabledThemes: string[];
@@ -174,87 +177,30 @@ export function evaluateClientModuleAccess(
   }
 
   // 4. Utilisateur sans KYC / Sans compte validé (Accès Général)
-  // RÈGLE : Mode Lecture / Preview pour les Modules Métiers
-  if (!license.kycStatus || license.kycStatus === 'none' || license.pricingModel === 'pay_per_use') {
+  // RÈGLE : Mode Lecture / Preview pour les Modules Métiers jusqu'à identification légale
+  if (!license.kycStatus || license.kycStatus === 'none') {
     return {
       moduleKey: cleanKey,
       hasAccess: true,
       readOnly: true,
       requiresAccountOpening: true,
       isPayPerUse: false,
-      ctaMessage: 'Ouvrir mon compte pour utiliser ce module'
+      ctaMessage: 'Identification juridique requise pour encaisser avec ce module'
     };
   }
 
-  // 5. Branche Commission (KYC Léger validé)
-  if (license.pricingModel === 'commission') {
-    const isPhysical = PHYSICAL_COMMERCE_MODULES.some(k => cleanKey.includes(k) || k.includes(cleanKey));
-    if (isPhysical) {
-      return {
-        moduleKey: cleanKey,
-        hasAccess: true,
-        readOnly: true,
-        requiresAccountOpening: true,
-        isPayPerUse: false,
-        ctaMessage: 'Passez à l’Abonnement Caisse & Vitrine pour débloquer le commerce physique'
-      };
-    }
-    return {
-      moduleKey: cleanKey,
-      hasAccess: true,
-      readOnly: false,
-      requiresAccountOpening: false,
-      isPayPerUse: false
-    };
-  }
-
-  // 6. Branche Abonnement (KYC Entreprise)
-  if (license.pricingModel === 'subscription') {
-    // Option Formation : Désactive caisse physique & vitrine physique
-    if (license.subscriptionOption === 'training') {
-      const isPhysical = PHYSICAL_COMMERCE_MODULES.some(k => cleanKey.includes(k) || k.includes(cleanKey));
-      if (isPhysical) {
-        return {
-          moduleKey: cleanKey,
-          hasAccess: true,
-          readOnly: true,
-          requiresAccountOpening: true,
-          isPayPerUse: false,
-          ctaMessage: 'Option Caisse & Vitrine requise pour utiliser la caisse physique'
-        };
-      }
-    }
-
-    // Option Caisse & Vitrine : Active caisse physique, vitrines physiques & Live Shopping. Verrouille Thème Digital Pro.
-    if (license.subscriptionOption === 'caisse_vitrine') {
-      if (cleanKey.includes('cours-forge')) {
-        return {
-          moduleKey: cleanKey,
-          hasAccess: true,
-          readOnly: true,
-          requiresAccountOpening: true,
-          isPayPerUse: false,
-          ctaMessage: 'Option Formation requise pour la création de cours académiques'
-        };
-      }
-    }
-
-    return {
-      moduleKey: cleanKey,
-      hasAccess: true,
-      readOnly: false,
-      requiresAccountOpening: false,
-      isPayPerUse: false
-    };
-  }
-
+  // 5. Compte Particulier ou Entreprise validé :
+  // Le titulaire est juridiquement identifié et autorisé à opérer
+  // (commerce physique avec caisse POS et boutique, vente en ligne, académie et cours, etc.)
+  // dans la limite de son plafond mensuel d'encaissement (1 000 000 FCFA pour Particulier, 5 000 000 FCFA pour Entreprise).
+  // L'ouverture de compte n'étant pas une souscription tarifaire, elle ne restreint pas l'accès
+  // d'un particulier au commerce physique s'il choisit cette activité.
   return {
     moduleKey: cleanKey,
     hasAccess: true,
-    readOnly: true,
-    requiresAccountOpening: true,
-    isPayPerUse: false,
-    ctaMessage: 'Ouvrir mon compte pour utiliser ce module'
+    readOnly: false,
+    requiresAccountOpening: false,
+    isPayPerUse: false
   };
 }
 
@@ -263,7 +209,9 @@ export function evaluateClientModuleAccess(
  */
 export async function submitAccountOpeningTunnel(payload: {
   userId: string;
-  pricingModel: PricingModelTier;
+  accountType?: AccountTypeTier;
+  monthlyLimit?: number;
+  pricingModel?: PricingModelTier;
   subscriptionOption?: SubscriptionOptionTier | null;
   kycData: {
     fullName?: string;
@@ -279,12 +227,18 @@ export async function submitAccountOpeningTunnel(payload: {
   };
   organizationId?: string | null;
 }) {
+  const isParticulier = payload.accountType === 'particulier' || payload.pricingModel === 'commission';
+  const effectivePricingModel = payload.pricingModel || (isParticulier ? 'commission' : 'subscription');
+
   const response = await fetch('/api/account-activation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       intent: 'submit_kyc',
-      ...payload
+      ...payload,
+      accountType: isParticulier ? 'particulier' : 'entreprise',
+      monthlyLimit: isParticulier ? 1000000 : 5000000,
+      pricingModel: effectivePricingModel,
     })
   });
 
@@ -295,16 +249,12 @@ export async function submitAccountOpeningTunnel(payload: {
     const current = getLocalUserLicense(payload.userId);
     const updatedLicense: UserContextualLicense = {
       ...current,
-      pricingModel: payload.pricingModel,
+      accountType: isParticulier ? 'particulier' : 'entreprise',
+      monthlyLimit: isParticulier ? 1000000 : 5000000,
+      pricingModel: effectivePricingModel,
       subscriptionOption: payload.subscriptionOption || null,
-      kycStatus: payload.pricingModel === 'commission' ? 'light' : 'full',
-      enabledThemes: data.enabled_themes || (
-        payload.pricingModel === 'commission'
-          ? ['theme-digital-pro', 'theme-livestream-pro']
-          : payload.subscriptionOption === 'training'
-            ? ['theme-digital-pro', 'theme-livestream-pro']
-            : ['theme-default', 'theme-livestream-pro']
-      )
+      kycStatus: isParticulier ? 'light' : 'full',
+      enabledThemes: data.enabled_themes || ['theme-default', 'theme-electro-tech', 'theme-digital-pro', 'theme-livestream-pro']
     };
     saveLocalUserLicense(updatedLicense);
   }

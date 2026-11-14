@@ -151,137 +151,29 @@ export function evaluateModuleAccess(
     };
   }
 
-  // D. Branche COMMISSION (Pay-as-you-go) : KYC Léger validé
-  // Active uniquement le Thème Digital Pro et le Thème Live Webinaire.
-  // Verrouille les thèmes d'E-commerce physique.
-  if (pricingModel === 'commission') {
-    // Si c'est un module e-commerce physique (caisse, stock, scanner...) : Verrouillé / Read Only
-    if (isPhysicalCommerceModule(cleanKey)) {
-      return {
-        moduleKey: cleanKey,
-        hasAccess: true,
-        readOnly: true,
-        requiresAccountOpening: true,
-        isPayPerUse: false,
-        pricingModel,
-        kycStatus,
-        ctaMessage: 'Passez à l’Abonnement Caisse & Vitrine pour débloquer le commerce physique',
-        allowedThemes: ['theme-digital-pro', 'theme-livestream-pro']
-      };
-    }
-
-    // Sinon modules digitaux / webinaires : autorisés en écriture
-    return {
-      moduleKey: cleanKey,
-      hasAccess: true,
-      readOnly: false,
-      requiresAccountOpening: false,
-      isPayPerUse: false,
-      pricingModel,
-      kycStatus,
-      allowedThemes: ['theme-digital-pro', 'theme-livestream-pro']
-    };
-  }
-
-  // E. Branche ABONNEMENT (KYC Entreprise)
-  if (pricingModel === 'subscription') {
-    const subscriptionOption = (profile as any)?.subscription_option as SubscriptionOptionTier | undefined;
-
-    // Option Formation : Désactive la caisse physique et vitrine physique
-    if (subscriptionOption === 'training') {
-      if (isPhysicalCommerceModule(cleanKey)) {
-        return {
-          moduleKey: cleanKey,
-          hasAccess: true,
-          readOnly: true,
-          requiresAccountOpening: true,
-          isPayPerUse: false,
-          pricingModel,
-          kycStatus,
-          ctaMessage: 'Option Caisse & Vitrine requise pour utiliser la caisse physique',
-          allowedThemes: ['theme-digital-pro', 'theme-livestream-pro']
-        };
-      }
-      return {
-        moduleKey: cleanKey,
-        hasAccess: true,
-        readOnly: false,
-        requiresAccountOpening: false,
-        isPayPerUse: false,
-        pricingModel,
-        kycStatus,
-        allowedThemes: ['theme-digital-pro', 'theme-livestream-pro']
-      };
-    }
-
-    // Option Caisse & Vitrine : Active caisse physique, vitrines physiques et Live Shopping / Webinaire.
-    // Verrouille le Thème Digital Pro.
-    if (subscriptionOption === 'caisse_vitrine') {
-      if (isDigitalFormationModule(cleanKey) && cleanKey === 'cours-forge') {
-        return {
-          moduleKey: cleanKey,
-          hasAccess: true,
-          readOnly: true,
-          requiresAccountOpening: true,
-          isPayPerUse: false,
-          pricingModel,
-          kycStatus,
-          ctaMessage: 'Option Formation requise pour la création de cours académiques',
-          allowedThemes: [
-            'theme-default',
-            'theme-electro-tech',
-            'theme-electro-orange',
-            'theme-beauty-emerald',
-            'theme-megastore-pro',
-            'theme-blank-custom',
-            'theme-livestream-pro'
-          ]
-        };
-      }
-      return {
-        moduleKey: cleanKey,
-        hasAccess: true,
-        readOnly: false,
-        requiresAccountOpening: false,
-        isPayPerUse: false,
-        pricingModel,
-        kycStatus,
-        allowedThemes: [
-          'theme-default',
-          'theme-electro-tech',
-          'theme-electro-orange',
-          'theme-beauty-emerald',
-          'theme-megastore-pro',
-          'theme-blank-custom',
-          'theme-livestream-pro'
-        ]
-      };
-    }
-
-    // Par défaut pour abonnement : tout actif
-    return {
-      moduleKey: cleanKey,
-      hasAccess: true,
-      readOnly: false,
-      requiresAccountOpening: false,
-      isPayPerUse: false,
-      pricingModel,
-      kycStatus,
-      allowedThemes: enabledThemes
-    };
-  }
-
-  // Fallback sécurisé en mode lecture
+  // D. Utilisateur avec KYC validé (Compte Particulier ou Compte Entreprise)
+  // Le titulaire est juridiquement identifié et autorisé à opérer
+  // (commerce physique avec caisse POS et boutique, vente en ligne, académie et cours, etc.)
+  // dans la limite de son plafond mensuel d'encaissement (1 000 000 FCFA pour Particulier, 5 000 000 FCFA pour Entreprise).
+  // L'ouverture de compte n'étant pas une souscription tarifaire, elle ne restreint pas l'accès
+  // d'un particulier au commerce physique s'il choisit cette activité.
   return {
     moduleKey: cleanKey,
     hasAccess: true,
-    readOnly: true,
-    requiresAccountOpening: true,
+    readOnly: false,
+    requiresAccountOpening: false,
     isPayPerUse: false,
     pricingModel,
     kycStatus,
-    ctaMessage: 'Ouvrir mon compte pour utiliser ce module',
-    allowedThemes: enabledThemes
+    allowedThemes: [
+      'theme-default',
+      'theme-electro-tech',
+      'theme-electro-orange',
+      'theme-beauty-emerald',
+      'theme-megastore-pro',
+      'theme-digital-pro',
+      'theme-livestream-pro'
+    ]
   };
 }
 
