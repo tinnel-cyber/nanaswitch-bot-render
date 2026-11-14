@@ -43,7 +43,7 @@ async function deployHosting() {
   const token = await getAccessToken();
   console.log('1. Jeton d\'authentification Google Cloud valide.');
 
-  const siteId = 'pos-app-1759a';
+  const siteId = 'nanasore';
   const distDir = path.resolve('dist');
 
   if (!fs.existsSync(distDir)) {

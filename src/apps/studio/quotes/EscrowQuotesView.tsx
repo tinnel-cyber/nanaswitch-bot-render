@@ -58,7 +58,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
   subscription,
 }) => {
   const storeId = currentUser?.storeId || 'store-nana-1';
-  const storeName = currentUser?.storeName || 'Boutique Nana POS';
+  const storeName = currentUser?.storeName || 'Boutique Nanasore';
 
   const [projects, setProjects] = useState<EscrowProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<EscrowProject | null>(null);

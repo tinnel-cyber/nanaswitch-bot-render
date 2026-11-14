@@ -236,7 +236,7 @@ export const SmartTransactionBubble: React.FC<SmartTransactionBubbleProps> = ({
               title: data.title || "Gâteau d'anniversaire Signature",
               price: data.amount || 15000,
               currency: data.currency || 'FCFA',
-              merchantName: data.merchantName || 'NaNa POS',
+              merchantName: data.merchantName || 'Nanasore',
               imageUrl:
                 data.imageUrl ||
                 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop'

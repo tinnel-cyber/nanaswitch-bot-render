@@ -12,7 +12,7 @@ services:
       - key: PORT
         value: 10000
       - key: FIREBASE_PROJECT_ID
-        value: pos-app-1759a
+        value: nanasore
       # Proxies Fixie dédiés avec priorité & fallback
       - key: SEBPAY_FIXIE_URL
         sync: false

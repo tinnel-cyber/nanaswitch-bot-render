@@ -463,7 +463,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({
                         <span>{creator.followersCount.toLocaleString()} abonnés</span>
                         <span>•</span>
                         <span className="text-emerald-400">
-                          {creator.salesCount || 0} ventes NaNa POS
+                          {creator.salesCount || 0} ventes Nanasore
                         </span>
                       </div>
                     </div>

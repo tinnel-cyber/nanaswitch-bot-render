@@ -4,6 +4,8 @@
  * et le suivi de progression dans localStorage.
  */
 
+import { supabase } from '../lib/supabase';
+
 export type TutorialCategory = 
   | 'POS_STOCK'          // 🛒 Caisse & Gestion de Stock
   | 'STORE_ORDERS'       // 🏪 Boutique Vitrine & Commandes
@@ -370,7 +372,6 @@ export const DEFAULT_TUTORIALS: TutorialItem[] = [
   }
 ];
 
-const RTDB_TUTORIALS_URL = 'https://pos-app-1759a-default-rtdb.firebaseio.com/tutorials_config.json';
 const LOCAL_TUTORIALS_KEY = 'nana_tutorials_config';
 const LOCAL_COMPLETED_KEY = 'nana_completed_tutorials';
 
@@ -474,25 +475,27 @@ export function getTutorials(): TutorialItem[] {
 }
 
 /**
- * Synchronisation asynchrone publique avec Firebase RTDB (sans authentification requise)
+ * Synchronisation asynchrone publique avec Supabase (sans authentification requise)
  */
 export async function fetchTutorialsFromFirebase(): Promise<TutorialItem[]> {
   try {
-    const res = await fetch(RTDB_TUTORIALS_URL);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        const prioritized = prioritizeAccountCreationTutorial(data);
-        memoryCache = prioritized;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LOCAL_TUTORIALS_KEY, JSON.stringify(prioritized));
-          window.dispatchEvent(new Event('tutorialsUpdated'));
-        }
-        return prioritized;
+    const { data: row } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('key', 'tutorials_config')
+      .maybeSingle();
+
+    if (row?.config_json && Array.isArray(row.config_json) && row.config_json.length > 0) {
+      const prioritized = prioritizeAccountCreationTutorial(row.config_json as TutorialItem[]);
+      memoryCache = prioritized;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LOCAL_TUTORIALS_KEY, JSON.stringify(prioritized));
+        window.dispatchEvent(new Event('tutorialsUpdated'));
       }
+      return prioritized;
     }
   } catch (e) {
-    console.warn('[tutorialService] Erreur fetch RTDB:', e);
+    console.warn('[tutorialService] Erreur fetch Supabase:', e);
   }
   return getTutorials();
 }
@@ -510,14 +513,16 @@ export async function saveTutorialsEverywhere(tutorials: TutorialItem[]): Promis
   }
 
   try {
-    const res = await fetch(RTDB_TUTORIALS_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tutorials)
+    const { error } = await supabase.from('app_registry').upsert({
+      key: 'tutorials_config',
+      name: 'tutorials_config',
+      module_key: 'tutorials',
+      config_json: tutorials,
+      updated_at: new Date().toISOString()
     });
-    return res.ok;
+    return !error;
   } catch (e) {
-    console.warn('[tutorialService] Erreur écriture RTDB:', e);
+    console.warn('[tutorialService] Erreur écriture Supabase:', e);
     return false;
   }
 }

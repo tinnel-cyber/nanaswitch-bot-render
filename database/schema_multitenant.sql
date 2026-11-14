@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Schema Supabase : Architecture Multi-Tenant Hybride (Marque Blanche & Standard)
--- Module : NaNa POS & Académie (Courses, Lessons, Enrollments, Funnels)
+-- Module : Nanasore & Académie (Courses, Lessons, Enrollments, Funnels)
 -- Fichier : database/schema_multitenant.sql
 -- ==============================================================================
 

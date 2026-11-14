@@ -93,7 +93,7 @@ export const DEFAULT_VIP_ROOMS: VipRoom[] = [
       },
       {
         id: 'lesson-3',
-        title: 'Module 3 : Réconciliation automatique avec NaNa POS & Sebpay',
+        title: 'Module 3 : Réconciliation automatique avec Nanasore & Sebpay',
         duration: '31:20',
         videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         description: 'Automatisation des flux comptables et gestion des impayés avec clôture de caisse.',
@@ -160,7 +160,7 @@ export const DEFAULT_VIP_ROOMS: VipRoom[] = [
     lessons: [
       {
         id: 'ia-1',
-        title: 'Module 1 : Architecture des agents IA Gemini connectés au catalogue NaNa POS',
+        title: 'Module 1 : Architecture des agents IA Gemini connectés au catalogue Nanasore',
         duration: '20:15',
         videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
         description: 'Comment brancher le catalogue produits en temps réel pour des recommandations ultra-ciblées.',

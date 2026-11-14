@@ -159,7 +159,7 @@ export const DEFAULT_MASTERCLASS_COURSE: Course = {
         {
           id: 'les-2-1',
           moduleId: 'mod-2',
-          title: '2.1 Déploiement de NaNa POS : Caisse Tactile, Scanner Code-barres & Reçus Bluetooth',
+          title: '2.1 Déploiement de Nanasore : Caisse Tactile, Scanner Code-barres & Reçus Bluetooth',
           durationMinutes: 30,
           videoUrl: 'https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=0&controls=1',
           isFreePreview: true,

@@ -7,8 +7,6 @@
  * Logique de monétisation : Les marchands au Plan Pro apparaissent systématiquement en haut.
  */
 
-import { collection, query, where, getDocs, doc, setDoc, getDoc, limit as fsLimit } from 'firebase/firestore';
-import { db } from '../firebase';
 import { supabase } from '../lib/supabase';
 import { MarketDirectoryStore, DirectoryMerchantType } from '../types';
 
@@ -324,128 +322,70 @@ export async function getDirectoryStores(): Promise<MarketDirectoryStore[]> {
     console.warn('[NANA-MARKET] Erreur lecture cache local :', err);
   }
 
-  // 3. Récupération temps réel depuis Firestore
+  // 3. Récupération temps réel depuis Supabase SQL
   try {
-    // A. Interrogation de la collection 'tenants' (qui a un droit de lecture public ouvert)
+    // A. Interrogation des tenants depuis Supabase
     try {
-      const tenantsSnap = await getDocs(query(collection(db, 'tenants'), fsLimit(50)));
-      if (!tenantsSnap.empty) {
-        tenantsSnap.docs.forEach(docSnap => {
-          const tData = docSnap.data();
-          if (tData.isListedInDirectory !== false && (tData.storeName || tData.name)) {
-            const storeId = tData.storeId || docSnap.id;
-            mergedStoresMap.set(storeId, {
-              id: storeId,
-              storeId,
-              storeName: tData.storeName || tData.name || 'Boutique Partenaire',
-              logoUrl: tData.logoUrl || tData.avatarUrl || '',
-              bannerImage: tData.bannerImage || '',
-              category: tData.category || 'Commerce Général',
-              searchTags: Array.isArray(tData.searchTags) ? tData.searchTags : [],
-              city: tData.city || 'Abidjan',
-              quarter: tData.quarter || '',
-              country: tData.country || "Côte d'Ivoire",
-              isListedInDirectory: true,
-              plan: tData.plan || (tData.isPro ? 'pro' : 'starter'),
-              subscriptionPlan: tData.subscriptionPlan || tData.plan,
-              verified: Boolean(tData.verified || tData.isPro || String(tData.plan).toLowerCase() === 'pro'),
-              whatsappPhone: tData.whatsappPhone || tData.phone || '',
-              phone: tData.phone || '',
-              customDomain: tData.customDomain,
-              slug: tData.slug || tData.dealSlug || storeId,
-              rating: Number(tData.rating) || 4.8,
-              salesCount: Number(tData.salesCount) || 120,
-              description: tData.welcomeText || tData.description || 'Bienvenue sur notre boutique officielle.'
+      const { data: supaTenants } = await supabase
+        .from('tenants')
+        .select('*')
+        .limit(50);
+
+      if (supaTenants && supaTenants.length > 0) {
+        supaTenants.forEach((tData: any) => {
+          const storeId = tData.id || tData.slug;
+          mergedStoresMap.set(storeId, {
+            id: storeId,
+            storeId,
+            storeName: tData.name || 'Boutique Partenaire',
+            logoUrl: '',
+            bannerImage: '',
+            category: 'Commerce Général',
+            searchTags: [],
+            city: 'Abidjan',
+            quarter: '',
+            country: "Côte d'Ivoire",
+            isListedInDirectory: true,
+            plan: 'pro',
+            subscriptionPlan: 'pro',
+            verified: true,
+            whatsappPhone: '',
+            phone: '',
+            customDomain: tData.custom_domain,
+            slug: tData.slug || storeId,
+            rating: 4.8,
+            salesCount: 120,
+            description: 'Bienvenue sur notre boutique officielle.'
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('[NANA-MARKET] Notice requete tenants Supabase :', e);
+    }
+
+    // B. Interrogation des cartes nanamarket_cards depuis app_registry
+    try {
+      const { data: regCards } = await supabase
+        .from('app_registry')
+        .select('config_json, key')
+        .eq('module_key', 'market_cards')
+        .limit(100);
+
+      if (regCards && regCards.length > 0) {
+        regCards.forEach((row: any) => {
+          if (row.config_json) {
+            const cData = row.config_json as any;
+            const cardId = cData.id || row.key.replace(/^market_card_/, '');
+            mergedStoresMap.set(cardId, {
+              ...cData,
+              id: cardId,
+              storeId: cData.storeId || cardId
             });
           }
         });
       }
     } catch (e) {
-      console.warn('[NANA-MARKET] Notice requete tenants :', e);
-    }
-
-    // B. Interrogation de la collection 'stores' où isListedInDirectory == true
-    try {
-      const storesQuery = query(collection(db, 'stores'), where('isListedInDirectory', '==', true), fsLimit(50));
-      const storesSnap = await getDocs(storesQuery);
-      if (!storesSnap.empty) {
-        storesSnap.docs.forEach(docSnap => {
-          const sData = docSnap.data();
-          const storeId = docSnap.id;
-          const plan = sData.plan || sData.subscriptionPlan || sData.subscription?.plan || 'free';
-          mergedStoresMap.set(storeId, {
-            id: storeId,
-            storeId,
-            storeName: sData.storeName || sData.name || 'Boutique NaNa',
-            logoUrl: sData.logoUrl || sData.avatarUrl || '',
-            bannerImage: sData.bannerImage || '',
-            category: sData.category || 'Commerce & Épicerie',
-            searchTags: Array.isArray(sData.searchTags) ? sData.searchTags : [],
-            city: sData.city || 'Ouagadougou',
-            quarter: sData.quarter || '',
-            country: sData.country || 'Burkina Faso',
-            isListedInDirectory: true,
-            plan,
-            subscriptionPlan: plan,
-            verified: String(plan).toLowerCase().includes('pro') || Boolean(sData.verified),
-            whatsappPhone: sData.whatsappPhone || sData.phone || '',
-            phone: sData.phone || '',
-            customDomain: sData.customDomain,
-            slug: sData.slug || storeId,
-            rating: Number(sData.rating) || 4.85,
-            salesCount: Number(sData.salesCount) || 85,
-            description: sData.description || sData.welcomeText || 'Commandez en ligne avec livraison sécurisée.'
-          });
-        });
-      }
-    } catch (e) {
-      console.warn('[NANA-MARKET] Notice requete stores :', e);
-    }
-    // C. Interrogation prioritaire du nœud public officiel '/nanamarket_cards'
-    try {
-      const cardsQuery = query(collection(db, 'nanamarket_cards'), fsLimit(100));
-      const cardsSnap = await getDocs(cardsQuery);
-      if (!cardsSnap.empty) {
-        cardsSnap.docs.forEach(docSnap => {
-          const cData = docSnap.data();
-          const cardId = docSnap.id;
-          const plan = cData.plan || cData.subscriptionPlan || 'pro';
-          mergedStoresMap.set(cardId, {
-            id: cardId,
-            storeId: cData.storeId || cardId,
-            storeName: cData.storeName || cData.name || 'Carte NanaMarket',
-            logoUrl: cData.logoUrl || cData.avatarUrl || '',
-            bannerImage: cData.bannerImage || '',
-            avatarUrl: cData.avatarUrl || cData.logoUrl || '',
-            category: cData.category || 'Commerce Général',
-            searchTags: Array.isArray(cData.searchTags) ? cData.searchTags : [],
-            city: cData.city || 'Abidjan',
-            quarter: cData.quarter || '',
-            country: cData.country || "Côte d'Ivoire",
-            isListedInDirectory: true,
-            isPublic: true,
-            status: cData.status || 'published',
-            plan,
-            subscriptionPlan: plan,
-            verified: cData.verified !== false,
-            whatsappPhone: cData.whatsappPhone || cData.phone || '',
-            phone: cData.phone || '',
-            wameetHandle: cData.wameetHandle || '',
-            wameetUrl: cData.wameetUrl || (cData.wameetHandle ? `https://wameet.africa/@${cData.wameetHandle.replace(/^@/, '')}` : ''),
-            shopUrl: cData.shopUrl || cData.slug || '',
-            customDomain: cData.customDomain,
-            slug: cData.slug || cardId,
-            rating: Number(cData.rating) || 4.95,
-            reviewsCount: Number(cData.reviewsCount) || 28,
-            salesCount: Number(cData.salesCount) || 140,
-            description: cData.description || 'Bienvenue sur notre carte entreprise officielle NanaMarket.',
-            createdAt: cData.createdAt || Date.now(),
-            updatedAt: cData.updatedAt || Date.now()
-          });
-        });
-      }
-    } catch (e) {
-      console.warn('[NANA-MARKET] Notice requete nanamarket_cards :', e);
+      console.warn('[NANA-MARKET] Notice requete app_registry market_cards :', e);
     }
   } catch (err) {
     console.error('[NANA-MARKET] Erreur globale récupération boutiques :', err);
@@ -542,18 +482,34 @@ export async function publishNanaMarketCard(
     updatedAt: now
   };
 
-  // 1. Écriture immédiate dans le nœud public '/nanamarket_cards/$cardId'
+  // 1. Écriture immédiate dans Supabase app_registry (module_key: 'market_cards')
   try {
-    await setDoc(doc(db, 'nanamarket_cards', cardId), publishedCard, { merge: true });
-    console.log(`[NANA-MARKET] Carte publiée avec succès sur /nanamarket_cards/${cardId}`);
+    const { error: upsertErr } = await supabase.from('app_registry').upsert({
+      key: `market_card_${cardId}`,
+      name: cleanName || cardId,
+      module_key: 'market_cards',
+      config_json: publishedCard,
+      updated_at: new Date().toISOString()
+    });
+    if (upsertErr) {
+      console.warn(`[NANA-MARKET] Note upsert app_registry:`, upsertErr.message);
+    } else {
+      console.log(`[NANA-MARKET] Carte publiée avec succès sur Supabase app_registry/market_card_${cardId}`);
+    }
   } catch (err) {
-    console.error(`[NANA-MARKET] Erreur enregistrement /nanamarket_cards/${cardId} :`, err);
+    console.error(`[NANA-MARKET] Erreur enregistrement Supabase market_card_${cardId} :`, err);
     throw err;
   }
 
-  // 2. Synchronisation en miroir dans 'stores' pour interopérabilité globale
+  // 2. Synchronisation en miroir pour interopérabilité globale
   try {
-    await setDoc(doc(db, 'stores', cardId), publishedCard, { merge: true });
+    await supabase.from('app_registry').upsert({
+      key: `store_${cardId}`,
+      name: cleanName || cardId,
+      module_key: 'stores',
+      config_json: publishedCard,
+      updated_at: new Date().toISOString()
+    });
   } catch (e) {
     console.warn('[NANA-MARKET] Note sync stores :', e);
   }
@@ -573,7 +529,7 @@ export async function publishNanaMarketCard(
 }
 
 /**
- * Abonnement temps réel aux cartes NanaMarket publiées sur '/nanamarket_cards' via Supabase Realtime
+ * Abonnement temps réel aux cartes NanaMarket publiées via Supabase Realtime
  */
 export function subscribeToNanaMarketCards(
   onUpdate: (cards: MarketDirectoryStore[]) => void
@@ -581,16 +537,25 @@ export function subscribeToNanaMarketCards(
   try {
     const fetchCards = async () => {
       try {
-        const cardsCol = collection(db, 'nanamarket_cards');
-        const snapshot = await getDocs(cardsCol);
+        const { data: rows, error } = await supabase
+          .from('app_registry')
+          .select('*')
+          .eq('module_key', 'market_cards');
+
+        if (error) {
+          console.warn('[NANA-MARKET LISTENER WARNING]', error.message);
+          return;
+        }
+
         const realTimeCards: MarketDirectoryStore[] = [];
-        snapshot.forEach(docSnap => {
-          const cData = docSnap.data();
+        (rows || []).forEach(row => {
+          const cData = (row.config_json as any) || {};
           if (cData.isPublic !== false && cData.status !== 'draft') {
+            const cardId = cData.id || row.key.replace(/^market_card_/, '');
             realTimeCards.push({
-              id: docSnap.id,
-              storeId: cData.storeId || docSnap.id,
-              storeName: cData.storeName || 'Entreprise Partenaire',
+              id: cardId,
+              storeId: cData.storeId || cardId,
+              storeName: cData.storeName || row.name || 'Entreprise Partenaire',
               merchantType: cData.merchantType || 'physical_store',
               logoUrl: cData.logoUrl || '',
               bannerImage: cData.bannerImage || '',
@@ -610,7 +575,7 @@ export function subscribeToNanaMarketCards(
               wameetHandle: cData.wameetHandle || '',
               wameetUrl: cData.wameetUrl || '',
               shopUrl: cData.shopUrl || '',
-              slug: cData.slug || docSnap.id,
+              slug: cData.slug || cardId,
               rating: Number(cData.rating) || 4.95,
               reviewsCount: Number(cData.reviewsCount) || 12,
               salesCount: Number(cData.salesCount) || 45,
@@ -638,7 +603,7 @@ export function subscribeToNanaMarketCards(
         {
           event: '*',
           schema: 'public',
-          table: 'products',
+          table: 'app_registry',
         },
         () => {
           fetchCards();
@@ -656,7 +621,7 @@ export function subscribeToNanaMarketCards(
 }
 
 // ============================================================================
-// 5. MISE À JOUR DU STATUT ANNUAIRE DU MARCHAND DANS FIRESTORE
+// 5. MISE À JOUR DU STATUT ANNUAIRE DU MARCHAND DANS SUPABASE
 // ============================================================================
 
 export interface UpdateStoreDirectoryPayload {
@@ -669,8 +634,8 @@ export interface UpdateStoreDirectoryPayload {
 }
 
 /**
- * Enregistre les métadonnées d'annuaire d'une boutique dans Firestore
- * (au niveau de `stores/{storeId}`, `merchants/{userId}` et `tenants`).
+ * Enregistre les métadonnées d'annuaire d'une boutique dans Supabase
+ * (au niveau de `app_registry` sous `module_key: 'store_directory_settings'`).
  */
 export async function updateStoreDirectorySettings(
   storeId: string,
@@ -689,26 +654,35 @@ export async function updateStoreDirectorySettings(
     updatedAt: Date.now()
   };
 
-  // 1. Sauvegarde dans stores/{storeId}
+  // 1. Sauvegarde dans app_registry pour la boutique
   try {
-    await setDoc(doc(db, 'stores', storeId), payload, { merge: true });
-    console.log(`[NANA-MARKET] Annuaire synchronisé dans stores/${storeId}`);
+    await supabase.from('app_registry').upsert({
+      key: `store_dir_${storeId}`,
+      name: `store_dir_${storeId}`,
+      module_key: 'store_directory_settings',
+      config_json: payload,
+      updated_at: new Date().toISOString()
+    });
+    console.log(`[NANA-MARKET] Annuaire synchronisé dans Supabase app_registry/store_dir_${storeId}`);
   } catch (err) {
-    console.warn(`[NANA-MARKET] Échec partiel stores/${storeId} :`, err);
+    console.warn(`[NANA-MARKET] Échec partiel store_dir_${storeId} :`, err);
   }
 
-  // 2. Sauvegarde dans merchants/{userId} si présent
+  // 2. Sauvegarde pour le userId si présent
   const effectiveUserId = userId || storeId;
-  try {
-    await setDoc(doc(db, 'merchants', effectiveUserId), payload, { merge: true });
-  } catch {}
+  if (effectiveUserId !== storeId) {
+    try {
+      await supabase.from('app_registry').upsert({
+        key: `store_dir_${effectiveUserId}`,
+        name: `store_dir_${effectiveUserId}`,
+        module_key: 'store_directory_settings',
+        config_json: payload,
+        updated_at: new Date().toISOString()
+      });
+    } catch {}
+  }
 
-  // 3. Sauvegarde dans users/{userId} pour persistance profil
-  try {
-    await setDoc(doc(db, 'users', effectiveUserId), payload, { merge: true });
-  } catch {}
-
-  // 4. Invalidation / mise à jour du cache local
+  // 3. Invalidation / mise à jour du cache local
   try {
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem(CACHE_KEY);

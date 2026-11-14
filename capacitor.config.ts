@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.nanasore.pos',
-  appName: 'Nana POS',
+  appName: 'Nanasore',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {

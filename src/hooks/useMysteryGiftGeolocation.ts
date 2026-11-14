@@ -54,7 +54,7 @@ export function useMysteryGiftGeolocation(): UseMysteryGiftGeolocationReturn {
    */
   const simulateLocation = useCallback(
     (customCoords?: Partial<GeolocationCoordinatesData>): GeolocationCoordinatesData => {
-      // Coordonnées par défaut : Abidjan Plateau / Cocody (QG NaNa POS)
+      // Coordonnées par défaut : Abidjan Plateau / Cocody (QG Nanasore)
       const lat = customCoords?.latitude ?? 5.3484 + (Math.random() - 0.5) * 0.008;
       const lng = customCoords?.longitude ?? -4.0287 + (Math.random() - 0.5) * 0.008;
       const accuracy = customCoords?.accuracy ?? Math.round(8 + Math.random() * 12);

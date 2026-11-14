@@ -5,12 +5,11 @@
  * Ce fichier conserve les signatures TypeScript pour rétro-compatibilité sans émettre aucune requête réseau vers /sms_recus.
  */
 
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { addUserCredits } from '../utils/firestoreService';
 import { verifyPaymentTransaction } from './paymentApiService';
 
-export const RTDB_BASE_URL = "https://pos-app-1759a-default-rtdb.firebaseio.com";
+export const RTDB_BASE_URL = "https://nanasore.com";
 export const RTDB_SMS_BASE = `${RTDB_BASE_URL}/sms_recus`;
 export const RTDB_ARCHIVE_BASE = `${RTDB_BASE_URL}/transactions_validees`;
 export const RTDB_COMMANDES_ATTENTE_BASE = `${RTDB_BASE_URL}/commandes_attente`;
@@ -183,16 +182,11 @@ export async function verifyAndMatchClientPayment(criteria: {
     if (res.success) {
       if (criteria.storeId && criteria.storeId !== 'nanasore_central_hub') {
         try {
-          const storeRef = doc(db, 'stores', criteria.storeId);
-          await updateDoc(storeRef, {
-            'subscription.status': 'ACTIVE',
-            'subscription.lastPaymentMethod': 'RENDER_PAYMENT_API',
-            'subscription.lastAmountPaid': criteria.amount || 0,
-            'subscription.transactionRef': txId,
-            'subscription.datePaiement': Date.now(),
-            'subscription.updatedAt': Date.now()
-          }).catch(async () => {
-            await setDoc(storeRef, {
+          await supabase.from('app_registry').upsert({
+            key: `store_${criteria.storeId}`,
+            name: criteria.storeId,
+            module_key: 'stores',
+            config_json: {
               subscription: {
                 status: 'ACTIVE',
                 lastPaymentMethod: 'RENDER_PAYMENT_API',
@@ -201,7 +195,8 @@ export async function verifyAndMatchClientPayment(criteria: {
                 datePaiement: Date.now(),
                 updatedAt: Date.now()
               }
-            }, { merge: true });
+            },
+            updated_at: new Date().toISOString()
           });
         } catch {}
       }

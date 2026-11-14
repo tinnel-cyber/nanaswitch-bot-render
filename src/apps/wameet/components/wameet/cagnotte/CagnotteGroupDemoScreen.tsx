@@ -323,7 +323,7 @@ export const CagnotteGroupDemoScreen: React.FC<CagnotteGroupDemoScreenProps> = (
             }}
             className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer transition text-[11px]"
           >
-            Changer Cadeau NaNa POS
+            Changer Cadeau Nanasore
           </button>
         </div>
       </div>

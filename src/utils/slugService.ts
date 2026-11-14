@@ -2,23 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Service de Résolution Multi-Domaine & Gestion Intelligente des Slugs (Auto-Heal)
- * Gère l'accès direct aux boutiques par slug, la persistance Cloud Firestore autoritaire,
- * et la création automatique (Auto-Heal) des slugs pour les boutiques, produits et tunnels.
+ * Service de Résolution Multi-Domaine & Gestion Intelligente des Slugs (Supabase SQL Native)
+ * Gère l'accès direct aux boutiques par slug, la persistance Cloud Supabase SQL (tables app_registry, tenants, products),
+ * et la création automatique (Auto-Heal) des slugs pour les boutiques, produits et tunnels sans dépendance à Firebase.
  */
 
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  where, 
-  updateDoc, 
-  setDoc,
-  serverTimestamp 
-} from 'firebase/firestore';
-import { db, auth, rtdb } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { getSafeStoreSlug } from './slugEngine';
 import { getThemeRoutePrefix } from './themeRoutePrefix';
 import { buildPublicShopUrl } from '../config/domains';
@@ -41,10 +30,10 @@ export function slugify(text: string): string {
 }
 
 /**
- * Auto-Heal Store Slug avec Protection Anti-Collision Stricte (Respect de l'UID propriétaire) :
- * Si le slug existe déjà dans 'tenants' ou 'stores' avec un autre ownerId,
- * ne l'écrase jamais : ajoute un suffixe unique (-uid ou -2) pour préserver
- * à 100% l'intégrité et la propriété du premier compte.
+ * Auto-Heal Store Slug avec Protection Anti-Collision Stricte :
+ * Si le slug existe déjà dans Supabase avec un autre ownerId,
+ * ne l'écrase jamais : ajoute un suffixe unique pour préserver
+ * l'intégrité du premier compte.
  */
 export async function autoHealStoreSlug(storeId: string, storeData: any): Promise<string> {
   const existingSlug = storeData?.storeSlug || storeData?.slug;
@@ -69,52 +58,27 @@ export async function autoHealStoreSlug(storeId: string, storeData: any): Promis
   let resolvedSlug = baseSlug;
 
   try {
-    // 1. Vérification dans 'tenants/{slug}' : si déjà existant sous un AUTRE propriétaire
-    const tenantRef = doc(db, 'tenants', baseSlug);
-    const tenantSnap = await getDoc(tenantRef);
-    if (tenantSnap.exists()) {
-      const tData = tenantSnap.data();
-      const existingOwner = tData?.ownerId || tData?.userId || tData?.storeId;
-      if (existingOwner && existingOwner !== ownerId && existingOwner !== storeId) {
-        // Collision détectée : on applique le suffixe unique basé sur l'UID ou -2
-        const uidSuffix = ownerId ? ownerId.slice(0, 4).toLowerCase() : '2';
-        resolvedSlug = `${baseSlug}-${uidSuffix}`;
+    // Vérification anti-collision dans Supabase public.tenants
+    const { data: collisionData } = await supabase
+      .from('tenants')
+      .select('id, slug')
+      .eq('slug', baseSlug)
+      .limit(1)
+      .maybeSingle();
 
-        // Si le premier suffixe est aussi pris, fallback incrémental -2, -3...
-        const checkSuffix = await getDoc(doc(db, 'tenants', resolvedSlug));
-        if (checkSuffix.exists() && checkSuffix.data()?.ownerId !== ownerId) {
-          resolvedSlug = `${baseSlug}-2`;
-          const check2 = await getDoc(doc(db, 'tenants', resolvedSlug));
-          if (check2.exists() && check2.data()?.ownerId !== ownerId) {
-            resolvedSlug = `${baseSlug}-3`;
-          }
-        }
-      }
+    if (collisionData && collisionData.id !== storeId && collisionData.id !== ownerId) {
+      const uidSuffix = ownerId ? ownerId.slice(0, 4).toLowerCase() : '2';
+      resolvedSlug = `${baseSlug}-${uidSuffix}`;
     }
   } catch (collisionErr) {
-    console.warn('[SLUG ANTI-COLLISION] Vérification collision ignorée:', collisionErr);
-  }
-
-  // 2. Persistance sécurisée dans le document isolé stores/{storeId} du propriétaire
-  try {
-    const storeRef = doc(db, 'stores', storeId);
-    await setDoc(storeRef, {
-      storeSlug: resolvedSlug,
-      slug: resolvedSlug,
-      ownerId: ownerId,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-    console.log(`[SLUG AUTO-HEAL] Slug boutique sécurisé généré et sauvegardé : ${resolvedSlug} (${storeId})`);
-  } catch (err) {
-    console.warn('[SLUG AUTO-HEAL] Sauvegarde slug boutique différée :', err);
+    console.warn('[SLUG ANTI-COLLISION] Notice Supabase :', collisionErr);
   }
 
   return resolvedSlug;
 }
 
 /**
- * Auto-Heal Product Slug : Si le produit n'a pas encore de slug dans Firestore,
- * le génère à partir de son nom et le persiste immédiatement.
+ * Auto-Heal Product Slug : Génère un slug à partir du nom
  */
 export async function autoHealProductSlug(storeId: string, productId: string, productData: any): Promise<string> {
   const existingSlug = productData?.productSlug || productData?.slug;
@@ -123,28 +87,11 @@ export async function autoHealProductSlug(storeId: string, productId: string, pr
   }
 
   const baseName = productData?.name || productData?.title || productId.replace(/^prod-/, '');
-  const generatedSlug = slugify(baseName) || productId;
-
-  if (storeId) {
-    try {
-      const prodRef = doc(db, 'stores', storeId, 'products', productId);
-      await updateDoc(prodRef, {
-        productSlug: generatedSlug,
-        slug: generatedSlug,
-        updatedAt: serverTimestamp()
-      });
-      console.log(`[SLUG AUTO-HEAL] Slug produit généré et sauvegardé dans Firestore : ${generatedSlug} (${productId})`);
-    } catch (err) {
-      console.warn('[SLUG AUTO-HEAL] Sauvegarde slug produit différée :', err);
-    }
-  }
-
-  return generatedSlug;
+  return slugify(baseName) || productId;
 }
 
 /**
- * Auto-Heal Funnel Slug : Si le tunnel n'a pas encore de slug dans Firestore,
- * le génère à partir de son titre et le persiste immédiatement.
+ * Auto-Heal Funnel Slug : Génère un slug à partir du titre
  */
 export async function autoHealFunnelSlug(funnelId: string, funnelData: any): Promise<string> {
   const existingSlug = funnelData?.funnelSlug || funnelData?.slug;
@@ -153,258 +100,193 @@ export async function autoHealFunnelSlug(funnelId: string, funnelData: any): Pro
   }
 
   const baseName = funnelData?.name || funnelData?.title || funnelId.replace(/^funnel-/, '');
-  const generatedSlug = slugify(baseName) || funnelId;
-
-  try {
-    const funnelRef = doc(db, 'funnels', funnelId);
-    await updateDoc(funnelRef, {
-      funnelSlug: generatedSlug,
-      slug: generatedSlug,
-      updatedAt: serverTimestamp()
-    });
-    console.log(`[SLUG AUTO-HEAL] Slug tunnel généré et sauvegardé dans Firestore : ${generatedSlug} (${funnelId})`);
-  } catch (err) {
-    console.warn('[SLUG AUTO-HEAL] Sauvegarde slug tunnel différée :', err);
-  }
-
-  return generatedSlug;
+  return slugify(baseName) || funnelId;
 }
 
 /**
- * Résout une boutique publique depuis Firestore sans AUCUN recours au localStorage.
+ * Résout une boutique publique depuis Supabase SQL sans dépendance Firestore.
  * Supporte :
- * 1. L'ID direct ('store-konkobo-telecom' ou 'konkobo-telecom')
- * 2. Le slug nominatif ('storeSlug' == :storeSlug)
- * 3. Le slug alternatif ('slug' == :storeSlug)
- * 4. Fallback dans la collection 'tenants'
+ * 1. La table public.tenants (par slug, id ou custom_domain)
+ * 2. La table public.app_registry (par tenant_id ou config_json->>storeSlug)
  */
 export async function fetchPublicStoreBySlugOrId(storeSlugOrId: string): Promise<any | null> {
   if (!storeSlugOrId) return null;
   const cleanParam = decodeURIComponent(storeSlugOrId).trim();
+  const cleanSlugOnly = cleanParam.replace(/^store-/, '');
 
-  // 1. Essai direct par ID de document 'stores/{id}'
   try {
-    const directRef = doc(db, 'stores', cleanParam);
-    const directSnap = await getDoc(directRef);
-    if (directSnap.exists()) {
-      const data = directSnap.data();
-      const resolvedSlug = await autoHealStoreSlug(directSnap.id, data);
-      const themeId = data.activeThemeId || data.active_theme_id || 'theme-default';
-      const prefix = data.activeThemePrefix || getThemeRoutePrefix(themeId, data.blankThemeIndex || 1);
-      return { 
-        id: directSnap.id, 
-        ...data, 
-        storeSlug: resolvedSlug, 
+    const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanParam);
+    
+    // A. Recherche dans public.tenants
+    let tenantQuery = supabase.from('tenants').select('*');
+    if (isStoreUUID) {
+      tenantQuery = tenantQuery.or(`id.eq.${cleanParam},slug.eq.${cleanSlugOnly},custom_domain.eq.${cleanParam}`);
+    } else {
+      tenantQuery = tenantQuery.or(`slug.eq.${cleanSlugOnly},custom_domain.eq.${cleanParam}`);
+    }
+
+    const { data: tenantData } = await tenantQuery.limit(1).maybeSingle();
+
+    if (tenantData) {
+      const tenantId = tenantData.id;
+      const { data: appReg } = await supabase
+        .from('app_registry')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('module_key', 'theme_config')
+        .maybeSingle();
+
+      const themeCfg = (appReg?.config_json as any) || {};
+      const themeId = themeCfg.activeThemeId || themeCfg.active_theme_id || appReg?.theme_key || tenantData.settings?.themeId || 'theme-default';
+      const resolvedSlug = tenantData.slug || cleanSlugOnly;
+      const prefix = themeCfg.themePrefix || getThemeRoutePrefix(themeId, themeCfg.blankIndex || 1);
+      const publicShopUrl = themeCfg.publicShopUrl || buildPublicShopUrl(resolvedSlug, { themeId, blankIndex: themeCfg.blankIndex });
+
+      return {
+        id: tenantId,
+        storeName: tenantData.name,
+        name: tenantData.name,
+        storeSlug: resolvedSlug,
         slug: resolvedSlug,
         tenantSlug: resolvedSlug,
+        logoUrl: tenantData.logo_url,
+        primaryColor: tenantData.primary_color,
         activeThemeId: themeId,
         active_theme_id: themeId,
         activeThemePrefix: prefix,
-        publicShopUrl: data.publicShopUrl || buildPublicShopUrl(resolvedSlug, { themeId, blankIndex: data.blankThemeIndex })
+        publicShopUrl,
+        themeCustomization: themeCfg.customConfig || tenantData.settings?.customConfig,
+        customization: themeCfg.customConfig?.customization || tenantData.settings?.customConfig?.customization,
+        ...tenantData.settings
       };
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] Erreur lecture directe store par ID:', err);
-  }
 
-  // Si l'ID a un préfixe store- ou pas : tenter l'alternative avec/sans 'store-'
-  const altId = cleanParam.startsWith('store-') 
-    ? cleanParam.replace(/^store-/, '') 
-    : `store-${cleanParam}`;
-  try {
-    const altRef = doc(db, 'stores', altId);
-    const altSnap = await getDoc(altRef);
-    if (altSnap.exists()) {
-      const data = altSnap.data();
-      const resolvedSlug = await autoHealStoreSlug(altSnap.id, data);
-      const themeId = data.activeThemeId || data.active_theme_id || 'theme-default';
-      const prefix = data.activeThemePrefix || getThemeRoutePrefix(themeId, data.blankThemeIndex || 1);
-      return { 
-        id: altSnap.id, 
-        ...data, 
-        storeSlug: resolvedSlug, 
+    // B. Recherche dans app_registry par tenant_id ou storeSlug
+    const searchKeys = Array.from(new Set([cleanParam, cleanSlugOnly, `store-${cleanSlugOnly}`]));
+    const { data: regList } = await supabase
+      .from('app_registry')
+      .select('*')
+      .eq('module_key', 'theme_config')
+      .in('tenant_id', searchKeys)
+      .limit(1);
+
+    if (regList && regList.length > 0) {
+      const reg = regList[0];
+      const cfg = (reg.config_json as any) || {};
+      const themeId = cfg.activeThemeId || cfg.active_theme_id || reg.theme_key || 'theme-default';
+      const resolvedSlug = cfg.storeSlug || cleanSlugOnly;
+      const prefix = cfg.themePrefix || getThemeRoutePrefix(themeId, cfg.blankIndex || 1);
+      const publicShopUrl = cfg.publicShopUrl || buildPublicShopUrl(resolvedSlug, { themeId, blankIndex: cfg.blankIndex });
+
+      return {
+        id: reg.tenant_id || cleanParam,
+        storeName: cfg.customConfig?.storeName || resolvedSlug,
+        name: cfg.customConfig?.storeName || resolvedSlug,
+        storeSlug: resolvedSlug,
         slug: resolvedSlug,
         tenantSlug: resolvedSlug,
+        logoUrl: cfg.customConfig?.logoUrl,
+        primaryColor: cfg.colors?.primary || cfg.customConfig?.primaryAccentColor,
         activeThemeId: themeId,
         active_theme_id: themeId,
         activeThemePrefix: prefix,
-        publicShopUrl: data.publicShopUrl || buildPublicShopUrl(resolvedSlug, { themeId, blankIndex: data.blankThemeIndex })
+        publicShopUrl,
+        themeCustomization: cfg.customConfig,
+        customization: cfg.customConfig?.customization
       };
     }
-  } catch {}
-
-  // 2. Recherche par champ 'storeSlug' == cleanParam
-  try {
-    const q1 = query(collection(db, 'stores'), where('storeSlug', '==', cleanParam));
-    const snap1 = await getDocs(q1);
-    if (!snap1.empty) {
-      const docItem = snap1.docs[0];
-      const data = docItem.data();
-      const themeId = data.activeThemeId || data.active_theme_id || 'theme-default';
-      const prefix = data.activeThemePrefix || getThemeRoutePrefix(themeId, data.blankThemeIndex || 1);
-      return { 
-        id: docItem.id, 
-        ...data, 
-        storeSlug: cleanParam, 
-        slug: cleanParam,
-        tenantSlug: cleanParam,
-        activeThemeId: themeId,
-        active_theme_id: themeId,
-        activeThemePrefix: prefix,
-        publicShopUrl: data.publicShopUrl || buildPublicShopUrl(cleanParam, { themeId, blankIndex: data.blankThemeIndex })
-      };
-    }
-  } catch (err) {
-    console.warn('[FIRESTORE] Erreur query storeSlug:', err);
+  } catch (supaErr) {
+    console.warn('[SUPABASE STORE RESOLUTION] Notice :', supaErr);
   }
-
-  // 3. Recherche par champ 'slug' == cleanParam
-  try {
-    const q2 = query(collection(db, 'stores'), where('slug', '==', cleanParam));
-    const snap2 = await getDocs(q2);
-    if (!snap2.empty) {
-      const docItem = snap2.docs[0];
-      const data = docItem.data();
-      const themeId = data.activeThemeId || data.active_theme_id || 'theme-default';
-      const prefix = data.activeThemePrefix || getThemeRoutePrefix(themeId, data.blankThemeIndex || 1);
-      return { 
-        id: docItem.id, 
-        ...data, 
-        storeSlug: cleanParam, 
-        slug: cleanParam,
-        tenantSlug: cleanParam,
-        activeThemeId: themeId,
-        active_theme_id: themeId,
-        activeThemePrefix: prefix,
-        publicShopUrl: data.publicShopUrl || buildPublicShopUrl(cleanParam, { themeId, blankIndex: data.blankThemeIndex })
-      };
-    }
-  } catch (err) {
-    console.warn('[FIRESTORE] Erreur query slug:', err);
-  }
-
-  // 4. Recherche par storeName slugifié ou nom approchant
-  try {
-    const tenantRef = doc(db, 'tenants', cleanParam);
-    const tenantSnap = await getDoc(tenantRef);
-    if (tenantSnap.exists()) {
-      const tData = tenantSnap.data();
-      const themeId = tData.activeThemeId || tData.active_theme_id || 'theme-default';
-      const prefix = tData.activeThemePrefix || getThemeRoutePrefix(themeId, tData.blankThemeIndex || 1);
-      return { 
-        id: tenantSnap.id, 
-        ...tData, 
-        storeSlug: cleanParam,
-        slug: cleanParam,
-        tenantSlug: cleanParam,
-        activeThemeId: themeId,
-        active_theme_id: themeId,
-        activeThemePrefix: prefix,
-        publicShopUrl: tData.publicShopUrl || buildPublicShopUrl(cleanParam, { themeId, blankIndex: tData.blankThemeIndex })
-      };
-    }
-  } catch {}
 
   return null;
 }
 
 /**
- * Récupère tous les produits publics associés à une boutique dans Firestore.
- * Aucune lecture depuis le localStorage pour garantir l'isolation inter-domaines.
+ * Récupère tous les produits publics associés à une boutique depuis Supabase SQL.
  */
 export async function fetchPublicStoreProducts(storeId: string): Promise<any[]> {
   if (!storeId) return [];
+  const cleanId = storeId.trim();
+  const cleanSlug = cleanId.replace(/^store-/, '');
+  const searchIds = Array.from(new Set([cleanId, cleanSlug, `store-${cleanSlug}`]));
+
+  // 1. Chargement prioritaire depuis app_registry (module_key: products)
   try {
-    const colRef = collection(db, 'stores', storeId, 'products');
-    const snap = await getDocs(colRef);
-    if (snap.empty) return [];
+    const { data: regList } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .in('tenant_id', searchIds)
+      .eq('module_key', 'products');
 
-    const products: any[] = [];
-    snap.forEach((d) => {
-      const pData = d.data();
-      products.push({ id: d.id, ...pData, storeId });
-    });
-
-    // Auto-heal en arrière-plan des produits sans slug
-    products.forEach((p) => {
-      if (!p.productSlug && !p.slug) {
-        autoHealProductSlug(storeId, p.id, p).catch(() => {});
+    if (regList && regList.length > 0) {
+      for (const reg of regList) {
+        if (reg?.config_json?.products && Array.isArray(reg.config_json.products) && reg.config_json.products.length > 0) {
+          return reg.config_json.products;
+        }
       }
-    });
-
-    return products;
+    }
   } catch (err) {
-    console.warn('[FIRESTORE] Erreur lecture catalogue produits vitrine :', err);
-    return [];
+    console.warn('[SUPABASE] Erreur lecture catalogue app_registry :', err);
   }
+
+  // 2. Chargement depuis public.products
+  try {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    let prodQuery = supabase.from('products').select('*');
+    if (isUUID) {
+      prodQuery = prodQuery.or(`tenant_id.eq.${cleanId},organization_id.eq.${cleanId},vendor_id.eq.${cleanId}`);
+    } else {
+      prodQuery = prodQuery.in('vendor_id', searchIds);
+    }
+
+    const { data: supaProducts, error: supaErr } = await prodQuery.limit(60);
+
+    if (!supaErr && supaProducts && supaProducts.length > 0) {
+      return supaProducts.map((p: any) => ({
+        id: String(p.id),
+        name: p.title || p.name || 'Produit',
+        slug: p.slug || slugify(p.name || p.title || p.id),
+        productSlug: p.slug || slugify(p.name || p.title || p.id),
+        price: Number(p.price) || 0,
+        originalPrice: Number(p.originalPrice || p.original_price) || 0,
+        category: p.category || 'Tous les produits',
+        image: p.thumbnail_url || p.image_url || p.image || '',
+        stock: p.stock ?? 10,
+        description: p.richDescription || p.description || '',
+        storeId
+      }));
+    }
+  } catch (err) {
+    console.warn('[SUPABASE] Erreur lecture catalogue produits vitrine :', err);
+  }
+
+  return [];
 }
 
 /**
- * Récupère un produit public précis par son slug ou son ID
+ * Récupère un produit public précis par son slug ou son ID depuis Supabase SQL
  */
 export async function fetchPublicProductBySlugOrId(storeId: string, productSlugOrId: string): Promise<any | null> {
   if (!storeId || !productSlugOrId) return null;
-  const cleanParam = decodeURIComponent(productSlugOrId).trim();
+  const cleanParam = decodeURIComponent(productSlugOrId).trim().toLowerCase();
 
-  // 1. Par ID direct
-  try {
-    const directRef = doc(db, 'stores', storeId, 'products', cleanParam);
-    const snap = await getDoc(directRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      const resolvedSlug = await autoHealProductSlug(storeId, snap.id, data);
-      return { id: snap.id, ...data, productSlug: resolvedSlug, slug: resolvedSlug };
-    }
-  } catch {}
-
-  // 2. Par productSlug
-  try {
-    const q1 = query(collection(db, 'stores', storeId, 'products'), where('productSlug', '==', cleanParam));
-    const snap1 = await getDocs(q1);
-    if (!snap1.empty) {
-      const docItem = snap1.docs[0];
-      return { id: docItem.id, ...docItem.data() };
-    }
-  } catch {}
-
-  // 3. Par slug
-  try {
-    const q2 = query(collection(db, 'stores', storeId, 'products'), where('slug', '==', cleanParam));
-    const snap2 = await getDocs(q2);
-    if (!snap2.empty) {
-      const docItem = snap2.docs[0];
-      return { id: docItem.id, ...docItem.data() };
-    }
-  } catch {}
-
-  return null;
+  const prods = await fetchPublicStoreProducts(storeId);
+  return prods.find((p: any) => 
+    p.id === cleanParam ||
+    (p.slug && p.slug.toLowerCase() === cleanParam) ||
+    (p.productSlug && p.productSlug.toLowerCase() === cleanParam)
+  ) || null;
 }
 
-/**
- * Structure des métadonnées de routage et thème persistées dans Firestore
- */
 export interface PersistTenantSlugResult {
-  storeSlug: string;
   slug: string;
-  tenantSlug: string;
-  activeThemeId: string;
-  activeThemePrefix: string;
-  blankThemeIndex: number;
   publicShopUrl: string;
-  themeRoutePattern: string;
-  productRoutePattern: string;
-  funnelRoutePattern: string;
+  themePrefix: string;
 }
 
 /**
- * Génère et enregistre de manière stable et autoritaire dans Cloud Firestore :
- * 1. Le slug de l'entreprise (storeSlug, slug, tenantSlug)
- * 2. Le thème actif (activeThemeId, active_theme_id)
- * 3. Le préfixe court de routage public (activeThemePrefix : se, dp, et... ou romain i, ii, v, x)
- * 4. L'URL publique officielle sur nsore.shop (publicShopUrl)
- * 5. Les modèles d'arborescence (themeRoutePattern, productRoutePattern, funnelRoutePattern)
- *
- * Écrit à la fois dans 'stores/{storeId}', 'tenants/{storeSlug}' et 'tenants/{storeId}'.
+ * Persiste la configuration de slug et de thème pour un tenant dans Supabase SQL
  */
 export async function ensureAndPersistTenantSlug(
   storeId: string,
@@ -413,19 +295,15 @@ export async function ensureAndPersistTenantSlug(
   options?: { themeId?: string; blankIndex?: number }
 ): Promise<string> {
   if (!storeId && !ownerId && !storeData) return 'ma-boutique';
-  const authUid = auth?.currentUser?.uid;
-  const effectiveStoreId = storeId || authUid || ownerId || 'boutique';
-  const effectiveOwnerId = ownerId || storeData?.ownerId || storeData?.userId || storeData?.uid || authUid || effectiveStoreId;
+  const effectiveStoreId = storeId || ownerId || 'boutique';
   const storeName = storeData?.storeName || storeData?.displayName || storeData?.name || '';
 
-  // 1. Détermination du slug officiel sécurisé anti-collision
   const resolvedSlug = await autoHealStoreSlug(effectiveStoreId, {
     ...storeData,
     storeId: effectiveStoreId,
-    ownerId: effectiveOwnerId,
+    ownerId: ownerId || effectiveStoreId,
   });
 
-  // 2. Détermination du thème actif et préfixe de route officiel
   let activeThemeId = options?.themeId || 
     storeData?.activeThemeId || 
     storeData?.active_theme_id || 
@@ -434,31 +312,9 @@ export async function ensureAndPersistTenantSlug(
   if (!activeThemeId && typeof window !== 'undefined') {
     try {
       activeThemeId = localStorage.getItem('nana_active_theme_id') || 
-        (authUid ? localStorage.getItem(`nana_boutique_theme_id_${authUid}`) : null) ||
         localStorage.getItem(`nana_boutique_theme_id_${effectiveStoreId}`) || 
         localStorage.getItem('nana_boutique_theme_id');
     } catch {}
-  }
-
-  // Si toujours non déterminé, interroger Firestore pour préserver le thème déjà actif et ne JAMAIS écraser par défaut
-  if (!activeThemeId) {
-    try {
-      const docToProbe = authUid ? doc(db, 'stores', authUid) : doc(db, 'stores', effectiveStoreId);
-      const snap = await getDoc(docToProbe);
-      if (snap.exists()) {
-        const d = snap.data();
-        activeThemeId = d?.activeThemeId || d?.active_theme_id || d?.themeId;
-      }
-      if (!activeThemeId) {
-        const tSnap = await getDoc(doc(db, 'tenants', resolvedSlug));
-        if (tSnap.exists()) {
-          const td = tSnap.data();
-          activeThemeId = td?.activeThemeId || td?.active_theme_id || td?.themeId;
-        }
-      }
-    } catch (e) {
-      console.warn('[SLUG PROBE] Impossible de vérifier le thème existant :', e);
-    }
   }
 
   activeThemeId = activeThemeId || 'theme-default';
@@ -474,10 +330,6 @@ export async function ensureAndPersistTenantSlug(
     blankIndex: blankThemeIndex 
   });
 
-  const themeRoutePattern = `https://nsore.shop/{themePrefix}/{storeSlug}`;
-  const productRoutePattern = `https://nsore.shop/{themePrefix}/{storeSlug}/p/{productSlug}`;
-  const funnelRoutePattern = `https://nsore.shop/{themePrefix}/{storeSlug}/f/{funnelSlug}`;
-
   if (typeof window !== 'undefined') {
     (window as any).storeSlug = resolvedSlug;
     (window as any).activeThemeId = activeThemeId;
@@ -486,135 +338,73 @@ export async function ensureAndPersistTenantSlug(
     try {
       localStorage.setItem('nana_tenant_slug', resolvedSlug);
       localStorage.setItem('nana_active_theme_id', activeThemeId);
-      if (effectiveStoreId) {
-        localStorage.setItem(`nana_boutique_theme_id_${effectiveStoreId}`, activeThemeId);
-      }
-      if (authUid) {
-        localStorage.setItem(`nana_boutique_theme_id_${authUid}`, activeThemeId);
-      }
       localStorage.setItem('nana_boutique_theme_id', activeThemeId);
       localStorage.setItem('nana_active_theme_prefix', activeThemePrefix);
       localStorage.setItem('nana_public_shop_url', publicShopUrl);
     } catch {}
   }
 
-  const firestorePayload: Record<string, any> = {
-    storeSlug: resolvedSlug,
-    slug: resolvedSlug,
-    tenantSlug: resolvedSlug,
-    activeThemeId: activeThemeId,
-    active_theme_id: activeThemeId,
-    themeId: activeThemeId,
-    activeThemePrefix: activeThemePrefix,
-    blankThemeIndex: blankThemeIndex,
-    publicShopUrl: publicShopUrl,
-    themeRoutePattern: themeRoutePattern,
-    productRoutePattern: productRoutePattern,
-    funnelRoutePattern: funnelRoutePattern,
-    ownerId: effectiveOwnerId,
-    ...(storeName ? { storeName } : {}),
-    updatedAt: serverTimestamp()
-  };
-
-  let firestoreError: any = null;
-
-  // 3. Persistance dans stores/{authUid} (autorisé par les règles isOwner(userId))
-  if (authUid) {
-    try {
-      const userStoreRef = doc(db, 'stores', authUid);
-      await setDoc(userStoreRef, firestorePayload, { merge: true });
-      console.log(`[THEMES FIRESTORE] activeThemeId sauvegardé dans stores/${authUid}: ${activeThemeId}`);
-    } catch (err) {
-      console.error('[THEMES FIRESTORE ERROR] Erreur sauvegarde stores/{authUid}:', err);
-      firestoreError = err;
-    }
-  }
-
-  // 4. Persistance dans stores/{effectiveStoreId} si distinct de authUid
-  if (effectiveStoreId && effectiveStoreId !== authUid) {
-    try {
-      const storeRef = doc(db, 'stores', effectiveStoreId);
-      await setDoc(storeRef, firestorePayload, { merge: true });
-      console.log(`[THEMES FIRESTORE] activeThemeId sauvegardé dans stores/${effectiveStoreId}: ${activeThemeId}`);
-    } catch (err) {
-      console.error(`[THEMES FIRESTORE ERROR] Erreur sauvegarde stores/${effectiveStoreId}:`, err);
-      firestoreError = err;
-    }
-  }
-
-  // 5. Persistance stable dans Firestore : 'tenants/{resolvedSlug}'
+  // Persistance Supabase SQL dans public.app_registry
   try {
-    const tenantSlugRef = doc(db, 'tenants', resolvedSlug);
-    await setDoc(tenantSlugRef, {
-      ...firestorePayload,
-      tenantId: effectiveStoreId || authUid || resolvedSlug,
-      storeId: authUid || effectiveStoreId || resolvedSlug,
-      name: storeName || resolvedSlug
-    }, { merge: true });
-    console.log(`[THEMES FIRESTORE] activeThemeId sauvegardé dans tenants/${resolvedSlug}: ${activeThemeId}`);
-  } catch (err) {
-    console.error(`[THEMES FIRESTORE ERROR] Erreur sauvegarde tenants/${resolvedSlug}:`, err);
-    firestoreError = err;
-  }
+    const primaryTenantKey = effectiveStoreId;
+    await supabase
+      .from('app_registry')
+      .upsert({
+        key: `theme_config_${primaryTenantKey}`,
+        name: 'theme_config',
+        tenant_id: primaryTenantKey,
+        module_key: 'theme_config',
+        theme_key: activeThemeId,
+        config_json: {
+          activeThemeId,
+          active_theme_id: activeThemeId,
+          themePrefix: activeThemePrefix,
+          publicShopUrl,
+          storeSlug: resolvedSlug,
+          customConfig: storeData?.themeCustomization || storeData?.customConfig,
+          updated_at: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' });
 
-  // 6. Liaison dans 'tenants/{effectiveStoreId}' si différent du slug résolu
-  if (effectiveStoreId && effectiveStoreId !== resolvedSlug) {
-    try {
-      const tenantIdRef = doc(db, 'tenants', effectiveStoreId);
-      await setDoc(tenantIdRef, {
-        ...firestorePayload,
-        tenantId: effectiveStoreId,
-        storeId: authUid || effectiveStoreId
-      }, { merge: true });
-    } catch (err) {
-      console.error(`[THEMES FIRESTORE ERROR] Erreur sauvegarde tenants/${effectiveStoreId}:`, err);
+    // Enregistrement miroir sur le slug épuré si différent
+    const cleanSlug = resolvedSlug.replace(/^store-/, '');
+    if (cleanSlug && cleanSlug !== primaryTenantKey) {
+      await supabase
+        .from('app_registry')
+        .upsert({
+          key: `theme_config_${cleanSlug}`,
+          name: 'theme_config',
+          tenant_id: cleanSlug,
+          module_key: 'theme_config',
+          theme_key: activeThemeId,
+          config_json: {
+            activeThemeId,
+            active_theme_id: activeThemeId,
+            themePrefix: activeThemePrefix,
+            publicShopUrl,
+            storeSlug: resolvedSlug,
+            customConfig: storeData?.themeCustomization || storeData?.customConfig,
+            updated_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
     }
-  }
 
-  // 7. Liaison dans 'tenants/{authUid}' si distinct
-  if (authUid && authUid !== resolvedSlug && authUid !== effectiveStoreId) {
-    try {
-      const tenantAuthRef = doc(db, 'tenants', authUid);
-      await setDoc(tenantAuthRef, {
-        ...firestorePayload,
-        tenantId: authUid,
-        storeId: authUid
-      }, { merge: true });
-    } catch (err) {
-      console.error(`[THEMES FIRESTORE ERROR] Erreur sauvegarde tenants/${authUid}:`, err);
+    const isTenantUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(primaryTenantKey);
+    if (isTenantUUID) {
+      await supabase
+        .from('tenants')
+        .upsert({
+          id: primaryTenantKey,
+          name: storeName || resolvedSlug,
+          slug: resolvedSlug,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' }).catch(() => {});
     }
-  }
-
-  // 8. Synchronisation Firebase Realtime Database (RTDB) : /tenants/{tenantId}/activeThemeId
-  if (rtdb) {
-    try {
-      const { ref: rtdbRef, update: rtdbUpdate } = await import('firebase/database');
-      const rtdbPayload = {
-        activeThemeId: activeThemeId,
-        active_theme_id: activeThemeId,
-        themeId: activeThemeId,
-        activeThemePrefix: activeThemePrefix,
-        publicShopUrl: publicShopUrl,
-        updatedAt: Date.now()
-      };
-      const primaryTenantKey = effectiveStoreId || authUid || resolvedSlug;
-      await rtdbUpdate(rtdbRef(rtdb, `tenants/${primaryTenantKey}`), rtdbPayload);
-      if (resolvedSlug && resolvedSlug !== primaryTenantKey) {
-        await rtdbUpdate(rtdbRef(rtdb, `tenants/${resolvedSlug}`), rtdbPayload);
-      }
-      if (authUid && authUid !== primaryTenantKey && authUid !== resolvedSlug) {
-        await rtdbUpdate(rtdbRef(rtdb, `tenants/${authUid}`), rtdbPayload);
-      }
-      console.log(`[THEMES RTDB] activeThemeId persisté dans Firebase RTDB /tenants/${primaryTenantKey}/activeThemeId = ${activeThemeId}`);
-    } catch (rtdbErr) {
-      console.error('[THEMES RTDB ERROR] Échec de synchronisation RTDB tenants/activeThemeId:', rtdbErr);
-    }
-  }
-
-  if (firestoreError) {
-    throw firestoreError;
+  } catch (supaErr) {
+    console.warn('[THEMES SUPABASE ERROR] Notice sauvegarde Supabase :', supaErr);
   }
 
   return resolvedSlug;
 }
-

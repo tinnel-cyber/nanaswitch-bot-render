@@ -2333,7 +2333,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
                         title: "Gâteau d'anniversaire Signature",
                         price: 15000,
                         currency: 'FCFA',
-                        merchantName: 'Pâtisserie Douceur Divine • NaNa POS',
+                        merchantName: 'Pâtisserie Douceur Divine • Nanasore',
                         imageUrl:
                           'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop'
                       }

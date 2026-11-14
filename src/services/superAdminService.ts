@@ -1,7 +1,6 @@
 /**
  * Service Central Super Admin
- * Gère la persistance synchrone et asynchrone absolue dans Firebase Realtime Database
- * (https://pos-app-1759a-default-rtdb.firebaseio.com/super_admin_settings.json)
+ * Gère la persistance synchrone et asynchrone absolue dans Supabase SQL et app_registry
  * ainsi que dans le localStorage et le bus d'événements de l'application (superAdminUpdated).
  */
 
@@ -16,6 +15,7 @@ import {
 } from '../types';
 import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
+import { supabase } from '../lib/supabase';
 import { auth, db, RTDB_DEFAULT_URL } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';

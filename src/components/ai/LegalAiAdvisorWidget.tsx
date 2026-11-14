@@ -387,7 +387,7 @@ export const LegalAiAdvisorWidget: React.FC<LegalAiAdvisorWidgetProps> = ({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>⚖️ Expert Juridique & Financier OHADA - Nana POS</title>
+        <title>⚖️ Expert Juridique & Financier OHADA - Nanasore</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
           body { background: #0b0f19; color: #f1f5f9; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -828,7 +828,7 @@ export const LegalAiAdvisorWidget: React.FC<LegalAiAdvisorWidgetProps> = ({
                 </button>
               </div>
               <p className="text-[10px] text-slate-400">
-                Modèle gratuit : <code>gemini-2.5-flash</code> (15 req/min). Si aucune clé n'est saisie, l'appel transitera par le serveur Nana POS ou le moteur local.
+                Modèle gratuit : <code>gemini-2.5-flash</code> (15 req/min). Si aucune clé n'est saisie, l'appel transitera par le serveur Nanasore ou le moteur local.
               </p>
               <div className="flex gap-1.5">
                 <input

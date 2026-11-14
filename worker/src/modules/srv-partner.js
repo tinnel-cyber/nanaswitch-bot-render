@@ -7,7 +7,7 @@
 export async function handlePartnerModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.pages.dev");
 
   // 1. Interception du code d'affiliation (ex: ?ref=PARTNER123 ou /ref/PARTNER123)
   const refCode = url.searchParams.get("ref") || (path.startsWith("/ref/") ? path.split("/")[2] : null);

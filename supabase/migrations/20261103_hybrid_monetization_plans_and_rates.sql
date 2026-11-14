@@ -4,7 +4,7 @@
 --   1. public.plans (Mise à jour & Upsert des plans marchands standard et nouveaux modes)
 --   2. public.service_commission_rules (Règles de séquestre & commissions Créateur)
 --   3. public.usage_service_rates (Tarification à l'acte Pay-As-You-Go & CV Pro)
--- Écosystème : Nanasore / NaNa POS / Cloudflare / Supabase
+-- Écosystème : Nanasore / Nanasore / Cloudflare / Supabase
 -- Date : 2026-11-03
 -- =======================================================================
 
@@ -339,7 +339,7 @@ INSERT INTO public.plans (
 ) VALUES (
     'plan-pro',
     'Plan Pro / Commerçant',
-    'Solution complète de caisse tactile NaNa POS, gestion de stocks avancée, 10 caissiers, rapports financiers et CV Pro inclus.',
+    'Solution complète de caisse tactile Nanasore, gestion de stocks avancée, 10 caissiers, rapports financiers et CV Pro inclus.',
     'SUBSCRIPTION',
     0.00,
     15000.00,
@@ -349,7 +349,7 @@ INSERT INTO public.plans (
     true,
     'Plus Populaire',
     '[
-        "Caisse enregistreuse tactile NaNa POS illimitée",
+        "Caisse enregistreuse tactile Nanasore illimitée",
         "Gestion jusqu''à 10 caissiers avec codes PIN individuels",
         "Catalogue et stocks en temps réel sans limitation",
         "Module CV Pro & Lettres de motivation inclus en illimité",

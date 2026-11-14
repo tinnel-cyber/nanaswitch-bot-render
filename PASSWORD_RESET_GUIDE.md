@@ -79,15 +79,15 @@ Ajoutez ces variables dans votre fichier `.env` :
 ```bash
 # Firebase Admin SDK (obligatoire pour la réinitialisation de mot de passe)
 FIREBASE_TYPE="service_account"
-FIREBASE_PROJECT_ID="pos-app-1759a"
+FIREBASE_PROJECT_ID="nanasore"
 FIREBASE_PRIVATE_KEY_ID="your_private_key_id"
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xxxxx@pos-app-1759a.iam.gserviceaccount.com"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xxxxx@nanasore.iam.gserviceaccount.com"
 FIREBASE_CLIENT_ID="your_client_id"
 FIREBASE_AUTH_URI="https://accounts.google.com/o/oauth2/auth"
 FIREBASE_TOKEN_URI="https://oauth2.googleapis.com/token"
 FIREBASE_AUTH_PROVIDER_X509_CERT_URL="https://www.googleapis.com/oauth2/v1/certs"
-FIREBASE_CLIENT_X509_CERT_URL="https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-xxxxx%40pos-app-1759a.iam.gserviceaccount.com"
+FIREBASE_CLIENT_X509_CERT_URL="https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-xxxxx%40nanasore.iam.gserviceaccount.com"
 
 # Brevo Email API
 BREVO_API_KEY="your_brevo_api_key"

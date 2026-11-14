@@ -30,6 +30,7 @@ export const PREFIX_TO_THEME_ID: Record<string, string> = {
   dp: 'theme-digital-pro',
   et: 'theme-electro-tech',
   ms: 'theme-mega-store-pro',
+  mp: 'theme-mega-store-pro',
   eo: 'theme-electro-orange',
   ep: 'theme-beauty-emerald',
   be: 'theme-beauty-emerald',
@@ -132,6 +133,16 @@ export function resolveThemeFromPrefix(prefix: string): { themeId: string; isBla
     };
   }
 
+  // 1-bis. Support alias b1, b2, b3... pour les Blank Themes
+  const bMatch = clean.match(/^b(\d+)$/);
+  if (bMatch) {
+    return {
+      themeId: 'theme-blank-custom',
+      isBlank: true,
+      blankIndex: parseInt(bMatch[1], 10)
+    };
+  }
+
   // 2. Chiffre romain (Blank Theme) ?
   const romanNum = fromRomanNumeral(clean);
   if (romanNum !== null) {
@@ -147,10 +158,10 @@ export function resolveThemeFromPrefix(prefix: string): { themeId: string; isBla
 
 /**
  * Expression régulière pour identifier les préfixes de thèmes publics valides :
- * - Thèmes présents : se|dp|et|ms|eo|ep|be|lp|sl|mc|gs
- * - Chiffres romains pour blank themes : i|l|ii|ll|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx
+ * - Thèmes présents : se|dp|et|ms|mp|eo|ep|be|lp|sl|mc|gs
+ * - Alias thèmes blank : b1, b2, b3... ou chiffres romains i|l|ii|ll|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx
  */
-export const THEME_PREFIX_REGEX = /^(?:se|dp|et|ms|eo|ep|be|lp|sl|mc|gs|[ivxlcdm]+|l{1,3})$/i;
+export const THEME_PREFIX_REGEX = /^(?:se|dp|et|ms|mp|eo|ep|be|lp|sl|mc|gs|b\d+|[ivxlcdm]+|l{1,3})$/i;
 
 export interface PublicStoreRouteParams {
   storeIdFromPath: string | null;

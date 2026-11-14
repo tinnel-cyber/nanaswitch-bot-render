@@ -44,6 +44,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   },
   className = ''
 }) => {
+  const cleanSlug = (slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
   const [funnel, setFunnel] = useState<PhysicalFunnelConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
@@ -752,9 +753,35 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
                 orderBump={activeFunnel.orderBump}
                 orderBumpEnabled={activeFunnel.orderBumpEnabled}
                 acceptedProviders={activeFunnel.paymentMethods}
-                onPaymentCompleted={(txData) => {
+                merchantWhatsapp={activeFunnel.merchantWhatsapp}
+                merchantPhone={activeFunnel.merchantWhatsapp}
+                merchantId={activeFunnel.storeId}
+                onPaymentCompleted={async (txData) => {
                   setCompletedOrder(txData);
                   playCashChime();
+                  try {
+                    await supabase.from('orders').insert({
+                      id: txData.transactionId,
+                      funnel_slug: cleanSlug,
+                      customer_name: txData.customerName,
+                      customer_phone: txData.phoneNumber,
+                      total_amount: txData.totalAmount,
+                      currency: 'FCFA',
+                      status: 'pending',
+                      payment_status: txData.isCashOnDelivery ? 'pending_on_delivery' : 'pending',
+                      payment_provider: txData.provider,
+                      delivery_option: txData.delivery,
+                      items: txData.composedItems || [],
+                      metadata: {
+                        productName: activeFunnel.title,
+                        orderBumpAccepted: txData.orderBumpAccepted,
+                        createdAt: Date.now()
+                      },
+                      created_at: new Date().toISOString()
+                    });
+                  } catch (e) {
+                    console.warn('[PublicPhysicalFunnelView] Commande Supabase notice:', e);
+                  }
                 }}
               />
             );

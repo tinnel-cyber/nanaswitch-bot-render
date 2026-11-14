@@ -1,17 +1,3 @@
-import {
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  limit
-} from 'firebase/firestore';
-import { db, auth } from '../firebase';
 import { supabase } from '../lib/supabase';
 
 export interface LiveEventProduct {
@@ -58,35 +44,23 @@ export const PRESET_LIVE_PRODUCTS: Record<string, LiveEventProduct> = {
   'prod-karite-royal': {
     id: 'prod-karite-royal',
     title: 'Coffret Karité Royal Or 100% Bio',
-    shortTitle: 'Coffret Karité Royal',
-    price: 18500,
-    originalPrice: 28000,
+    shortTitle: 'Karité Royal Or Bio',
+    price: 12500,
+    originalPrice: 20000,
     imageUrl: 'https://images.unsplash.com/photo-1608248597359-0e6d526a6c58?w=500&auto=format&fit=crop&q=80',
-    badge: '🔥 -34% EN DIRECT',
-    stockLeft: 7,
-    description: 'Soin complet corporel karité précieux pressé à froid.',
-    category: 'Beauté & Cosmétique'
-  },
-  'prod-masterclass-ia': {
-    id: 'prod-masterclass-ia',
-    title: 'Masterclass Tunnels & IA Afrique (12 Blocs)',
-    shortTitle: 'Masterclass IA Afrique',
-    price: 25000,
-    originalPrice: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&auto=format&fit=crop&q=80',
-    badge: '⚡ OFFRE FLASH LIVE',
-    stockLeft: 12,
-    description: 'Accès à vie à la formation certifiante et aux templates de vente.',
-    category: 'Formation Digitale'
+    badge: '👑 VEDETTE LIVE (-37%)',
+    stockLeft: 14,
+    description: 'Soin nourrissant corps et cheveux pressé à froid de Bobo-Dioulasso.',
+    category: 'Cosmétique Bio'
   },
   'prod-ringlight-pro': {
     id: 'prod-ringlight-pro',
-    title: 'Kit Studio Ring Light Pro 18" + Trépied 2m',
-    shortTitle: 'Kit Ring Light Pro',
-    price: 22000,
+    title: 'Ring Light Supra RGB 18" + Trépied Pro 2m10',
+    shortTitle: 'Ring Light Supra RGB 18"',
+    price: 24000,
     originalPrice: 35000,
-    imageUrl: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&auto=format&fit=crop&q=80',
-    badge: '📦 LIVRAISON OFFERTE',
+    imageUrl: 'https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?w=500&auto=format&fit=crop&q=80',
+    badge: '⚡ FLASH STREAMING',
     stockLeft: 4,
     description: 'Éclairage haute fidélité pour vos Lives Wameet et TikTok.',
     category: 'Équipement Créateur'
@@ -94,8 +68,7 @@ export const PRESET_LIVE_PRODUCTS: Record<string, LiveEventProduct> = {
 };
 
 /**
- * 1. Écouteur temps réel (onSnapshot) sur la collection /live_events/{liveId}/
- * Détecte les changements de activeProductId et résout automatiquement le produit
+ * 1. Écouteur temps réel (Supabase Realtime) sur le live event
  */
 export function subscribeToLiveEvent(
   liveId: string,
@@ -104,9 +77,13 @@ export function subscribeToLiveEvent(
 ): () => void {
   const fetchEvent = async () => {
     try {
-      const eventDocRef = doc(db, 'live_events', liveId);
-      const snapshot = await getDoc(eventDocRef);
-      if (!snapshot.exists()) {
+      const { data: row } = await supabase
+        .from('app_registry')
+        .select('*')
+        .eq('key', `live_event_${liveId}`)
+        .maybeSingle();
+
+      if (!row || !row.config_json) {
         const fallbackDoc: LiveEventDocument = {
           id: liveId,
           title: 'Vente Flash & Live Shopping Nanasore',
@@ -120,7 +97,7 @@ export function subscribeToLiveEvent(
         return;
       }
 
-      const eventData = { id: snapshot.id, ...(snapshot.data() as any) } as LiveEventDocument;
+      const eventData = { id: liveId, ...(row.config_json as any) } as LiveEventDocument;
       const activeId = eventData.activeProductId;
 
       if (!activeId) {
@@ -131,18 +108,6 @@ export function subscribeToLiveEvent(
       if (eventData.activeProduct && eventData.activeProduct.id === activeId) {
         onUpdate(eventData, eventData.activeProduct);
         return;
-      }
-
-      try {
-        const prodDocRef = doc(db, 'live_events', liveId, 'products', activeId);
-        const prodSnap = await getDoc(prodDocRef);
-        if (prodSnap.exists()) {
-          const fetchedProduct = { id: prodSnap.id, ...(prodSnap.data() as any) } as LiveEventProduct;
-          onUpdate(eventData, fetchedProduct);
-          return;
-        }
-      } catch (prodErr) {
-        console.warn('[NANASORE LIVE SYNC] Erreur lecture sous-collection produit :', prodErr);
       }
 
       const preset = PRESET_LIVE_PRODUCTS[activeId] || {
@@ -172,8 +137,8 @@ export function subscribeToLiveEvent(
       {
         event: '*',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${liveId}`,
+        table: 'app_registry',
+        filter: `key=eq.live_event_${liveId}`,
       },
       () => {
         fetchEvent();
@@ -194,25 +159,19 @@ export async function pushLiveActiveProduct(
   productId: string | null,
   productData?: LiveEventProduct
 ): Promise<void> {
-  const eventDocRef = doc(db, 'live_events', liveId);
-
   const payload: any = {
+    id: liveId,
     activeProductId: productId,
     activeProduct: productData || (productId ? PRESET_LIVE_PRODUCTS[productId] || null : null),
-    updatedAt: serverTimestamp()
+    updatedAt: new Date().toISOString()
   };
 
-  await setDoc(eventDocRef, payload, { merge: true });
-
-  // Si des données de produit complètes sont fournies, les archiver dans la sous-collection
-  if (productId && productData) {
-    try {
-      const prodDocRef = doc(db, 'live_events', liveId, 'products', productId);
-      await setDoc(prodDocRef, productData, { merge: true });
-    } catch (subErr) {
-      console.warn('[NANASORE LIVE SYNC] Erreur sauvegarde sous-collection :', subErr);
-    }
-  }
+  await supabase.from('app_registry').upsert({
+    key: `live_event_${liveId}`,
+    tenant_id: 'default',
+    module_key: 'live_events',
+    config_json: payload
+  }, { onConflict: 'key' });
 }
 
 /**
@@ -222,79 +181,79 @@ export async function recordLiveOrder(payload: LiveOrderPayload): Promise<{ orde
   const orderId = `live_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const orderDocData = {
     id: orderId,
-    liveId: payload.liveId,
-    productId: payload.productId,
-    productTitle: payload.productTitle,
-    amountFcfa: payload.amountFcfa,
-    paymentMethod: payload.paymentMethod,
-    customerPhone: payload.customerPhone,
-    customerName: payload.customerName || 'Acheteur Live',
-    status: 'PAID',
-    createdAt: serverTimestamp(),
-    source: 'nanasore_live_bottom_sheet'
+    order_number: orderId,
+    live_id: payload.liveId,
+    product_id: payload.productId,
+    customer_name: payload.customerName || 'Acheteur Live',
+    customer_phone: payload.customerPhone,
+    total_amount: payload.amountFcfa,
+    payment_method: payload.paymentMethod,
+    payment_status: 'PAID',
+    fulfillment_status: 'EN_ATTENTE_LIVRAISON',
+    metadata: {
+      productTitle: payload.productTitle,
+      source: 'nanasore_live_bottom_sheet'
+    }
   };
 
-  // Sous-collection des commandes du Live
   try {
-    const liveOrdersCol = collection(db, 'live_events', payload.liveId, 'orders');
-    await addDoc(liveOrdersCol, orderDocData);
+    await supabase.from('orders').upsert(orderDocData, { onConflict: 'order_number' });
+    await supabase.from('app_registry').upsert({
+      key: `order_${orderId}`,
+      tenant_id: 'default',
+      module_key: 'orders',
+      config_json: orderDocData
+    }, { onConflict: 'key' });
   } catch (err) {
-    console.warn('[NANASORE LIVE ORDER] Erreur enregistrement sous-collection :', err);
-  }
-
-  // Collection globale des commandes
-  try {
-    const globalOrderDocRef = doc(db, 'orders', orderId);
-    await setDoc(globalOrderDocRef, orderDocData, { merge: true });
-  } catch (err) {
-    console.warn('[NANASORE LIVE ORDER] Erreur enregistrement commande globale :', err);
+    console.warn('[NANASORE LIVE ORDER] Erreur Supabase SQL :', err);
   }
 
   return { orderId };
 }
 
 // =========================================================================
-// 4. CHAT FIREBASE EN TEMPS RÉEL ABSOLU (ZÉRO DÉLAI / INSTANTANÉ)
+// 4. CHAT EN TEMPS RÉEL
 // =========================================================================
 
 export interface LiveEventChatMessage {
   id: string;
   liveId: string;
   senderName: string;
-  senderId?: string;
+  senderId: string;
   senderAvatar?: string;
   senderRole?: 'host' | 'viewer';
   text: string;
   createdAt: number;
 }
 
-// Messages de démonstration par défaut pour un chat vivant dès le premier chargement
-const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
+export const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
   default: [
     {
-      id: 'demo-msg-1',
+      id: 'msg-init-1',
       liveId: 'default',
-      senderName: 'Salif Tech (Host)',
+      senderName: 'Fatou Ouédraogo',
+      senderId: 'demo-u1',
+      senderRole: 'viewer',
+      text: 'Bonsoir ! La livraison à Ouaga 2000 est gratuite ? 🙏',
+      createdAt: Date.now() - 1000 * 60 * 3
+    },
+    {
+      id: 'msg-init-2',
+      liveId: 'default',
+      senderName: 'Ibrahim Pousbila Konkobo',
+      senderId: 'host-1',
       senderRole: 'host',
-      senderAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
-      text: 'Bienvenue sur le Live Wameet ! Les stocks partent très vite en direct 🔥',
-      createdAt: Date.now() - 45000
+      text: 'Oui Fatou ! Livraison offerte dès 2 coffrets commandés en direct ! 👑',
+      createdAt: Date.now() - 1000 * 60 * 2
     },
     {
-      id: 'demo-msg-2',
+      id: 'msg-init-3',
       liveId: 'default',
-      senderName: 'Aïcha (Abidjan)',
+      senderName: 'Moussa Sanogo (Abidjan)',
+      senderId: 'demo-u2',
       senderRole: 'viewer',
-      text: 'La qualité vidéo est incroyable ! Est-ce que Wave est accepté ?',
-      createdAt: Date.now() - 30000
-    },
-    {
-      id: 'demo-msg-3',
-      liveId: 'default',
-      senderName: 'Moussa K.',
-      senderRole: 'viewer',
-      text: 'Oui Wave et Orange Money passent en 1 clic sans quitter le live 👏',
-      createdAt: Date.now() - 15000
+      text: 'Je viens de valider 1 coffret par Wave ! Reçu direct ! 🚀',
+      createdAt: Date.now() - 1000 * 30
     }
   ]
 };
@@ -303,7 +262,7 @@ const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
 const localLiveChatCache: Record<string, LiveEventChatMessage[]> = {};
 
 /**
- * Abonnement au Chat Firebase Firestore (Temps Réel Absolu - Zéro Délai)
+ * Abonnement au Chat Supabase
  */
 export function subscribeToLiveChat(
   liveId: string,
@@ -314,19 +273,24 @@ export function subscribeToLiveChat(
 
   const fetchChat = async () => {
     try {
-      const colRef = collection(db, 'live_events', liveId, 'messages');
-      const q = query(colRef, orderBy('createdAt', 'asc'), limit(80));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const msgs: LiveEventChatMessage[] = [];
-        snapshot.forEach((d) => {
-          msgs.push({ id: d.id, ...(d.data() as any) });
-        });
+      const { data: rows } = await supabase
+        .from('app_registry')
+        .select('config_json')
+        .eq('tenant_id', liveId)
+        .eq('module_key', 'live_chat')
+        .limit(80);
+
+      if (rows && rows.length > 0) {
+        const msgs: LiveEventChatMessage[] = rows
+          .map(r => r.config_json as LiveEventChatMessage)
+          .filter(Boolean)
+          .sort((a, b) => a.createdAt - b.createdAt);
+
         localLiveChatCache[liveId] = msgs;
         onMessages(msgs);
       }
     } catch (err) {
-      console.warn('[NANASORE LIVE CHAT] Lecture chat :', err);
+      console.warn('[NANASORE LIVE CHAT] Lecture chat Supabase :', err);
     }
   };
 
@@ -340,8 +304,8 @@ export function subscribeToLiveChat(
       {
         event: '*',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${liveId}`,
+        table: 'app_registry',
+        filter: `tenant_id=eq.${liveId}`,
       },
       () => {
         fetchChat();
@@ -355,7 +319,7 @@ export function subscribeToLiveChat(
 }
 
 /**
- * Envoi d'un message texte instantané dans Firestore (Temps Réel Absolu - Zéro Délai)
+ * Envoi d'un message texte instantané
  */
 export async function sendLiveChatMessage(
   liveId: string,
@@ -371,25 +335,27 @@ export async function sendLiveChatMessage(
     id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     liveId,
     senderName: message.senderName.trim() || 'Spectateur Wameet',
-    senderId: message.senderId || auth.currentUser?.uid || 'anon',
+    senderId: message.senderId || 'anon',
     senderAvatar: message.senderAvatar,
     senderRole: message.senderRole || 'viewer',
     text: message.text.trim(),
     createdAt: Date.now()
   };
 
-  // 1. Mise à jour locale immédiate (0 milliseconde de latence perçue)
   if (!localLiveChatCache[liveId]) {
     localLiveChatCache[liveId] = [...DEFAULT_DEMO_CHAT_MESSAGES.default];
   }
   localLiveChatCache[liveId].push(newMsg);
 
-  // 2. Écriture immédiate dans Firestore (sans aucun délai ni tampon)
   try {
-    const colRef = collection(db, 'live_events', liveId, 'messages');
-    await addDoc(colRef, newMsg);
+    await supabase.from('app_registry').upsert({
+      key: `live_msg_${newMsg.id}`,
+      tenant_id: liveId,
+      module_key: 'live_chat',
+      config_json: newMsg
+    }, { onConflict: 'key' });
   } catch (err) {
-    console.warn('[NANASORE LIVE CHAT] Écriture Firestore warning (préservé en mémoire) :', err);
+    console.warn('[NANASORE LIVE CHAT] Écriture Supabase (préservé en mémoire) :', err);
   }
 
   return newMsg;

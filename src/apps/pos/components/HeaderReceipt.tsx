@@ -355,7 +355,7 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
           type="button"
           onClick={() => handleGuardedNav(onOpenPaywall, 'Tarifs & Abonnements', 'Tarifs')}
           className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-amber-600/25 hover:from-amber-500/40 hover:to-amber-600/40 text-amber-300 border border-amber-400/60 shadow-sm shadow-amber-500/20 active:scale-95 transition-all text-[11px] font-extrabold cursor-pointer shrink-0"
-          title="Tarifs & Abonnements NaNa POS (Paiement Mobile Money, CB, Licences)"
+          title="Tarifs & Abonnements Nanasore (Paiement Mobile Money, CB, Licences)"
         >
           <CreditCard className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
           <span>Tarifs</span>

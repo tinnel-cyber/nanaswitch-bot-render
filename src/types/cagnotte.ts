@@ -1,7 +1,7 @@
 /**
  * @file cagnotte.ts
  * @description Types et Modèle de Données pour la "Cagnotte Phygitale Automatisée" Wameet
- * Intégrée à l'inventaire des marchands NaNa POS avec exécution par Contrat Intelligent.
+ * Intégrée à l'inventaire des marchands Nanasore avec exécution par Contrat Intelligent.
  */
 
 export interface NaNaPosGiftItem {
@@ -17,7 +17,7 @@ export interface NaNaPosGiftItem {
   merchantName: string; // Ex: "iStore Ouaga 2000", "Sahel Voyages", "Sublime Parfumerie"
   merchantLocation: string; // Ex: "Avenue Pascal Zagre, Ouaga 2000"
   merchantPhone: string;
-  merchantWalletId: string; // Wallet interne Wameet du marchand NaNa POS
+  merchantWalletId: string; // Wallet interne Wameet du marchand Nanasore
   estimatedDeliveryMinutes: number;
   badge?: string;
 }
@@ -59,7 +59,7 @@ export interface CagnotteSmartContract {
 export interface CagnotteSession {
   id: string;
   groupId: string;
-  productId: string; // lié à l'inventaire NaNa POS
+  productId: string; // lié à l'inventaire Nanasore
   targetAmount: number;
   currentAmount: number; // défaut 0
   status: 'funding' | 'completed';

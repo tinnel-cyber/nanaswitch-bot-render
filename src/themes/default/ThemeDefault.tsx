@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ShoppingBag, Search, X, ChevronLeft, ChevronRight, Upload, Plus, 
   Edit3, Trash2, Zap, Star, PhoneCall, Truck, CreditCard, ShieldCheck, 
@@ -11,6 +11,9 @@ import { formatCFA, playTapBeep } from '../../utils/audio';
 import { buildPublicShopUrl } from '../../config/domains';
 import { AdminSectionEditTrigger } from '../../components/storeBuilder/AdminSectionEditTrigger';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
+import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/AdaptiveHeaderEngine';
+import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 
 
 const DEFAULT_PAYMENT_TICKER = "⚡ PROMO FLASH : LIVRAISON OFFERTE DÈS 10 000 F CFA AUJOURD'HUI ! • PAIEMENT À LA RÉCEPTION (WAVE / ORANGE MONEY / CASH) • COMMANDE RAPIDE EN 1 CLIC SUR WHATSAPP • SERVICE CLIENT 7J/7";
@@ -115,24 +118,60 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
     setTimeout(() => setCopiedFunnelProdId(null), 2500);
   };
 
+  // Produit Vedette / Offre Flash Épinglée (customConfig.specialOfferProductId)
+  const specialOfferProduct = useMemo(() => {
+    if (customConfig?.specialOfferProductId) {
+      const picked = (allProducts || []).find(p => p.id === customConfig.specialOfferProductId);
+      if (picked) return picked;
+    }
+    return (allProducts || []).find(p => p.originalPrice && p.originalPrice > p.price) || null;
+  }, [allProducts, customConfig?.specialOfferProductId]);
+
   return (
     <main className="flex-1 max-w-3xl w-full mx-auto p-2 sm:p-4 space-y-4">
       {/* -----------------------------------------------------------------------
-          EN-TÊTE DU THÈME STANDARD ÉLITE (Complet & Isolé)
+          EN-TÊTE DU THÈME STANDARD ÉLITE (Complet, Isolé ou Adaptatif)
          ----------------------------------------------------------------------- */}
-      <div className="relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier l'En-Tête & Logo ⚡"
-          targetAccordion={1}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        <header
-          className="sticky top-0 z-30 bg-card/95 border border-theme text-body shadow-md backdrop-blur-md px-3 sm:px-4 py-2.5 rounded-2xl flex items-center justify-between gap-2 transition-colors duration-200"
-          style={customConfig?.headerBgColor ? { backgroundColor: customConfig.headerBgColor } : undefined}
-        >
+      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Logo ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveHeaderEngine
+            config={customConfig}
+            products={allProducts}
+            categories={categories}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            onOpenFunnel={onOpenFunnel || onOpenTunnel}
+            onSelectProduct={onSelectProduct}
+            onResetToHome={() => {
+              if (onSelectCategory) onSelectCategory('Tous');
+            }}
+            onSelectCategory={onSelectCategory}
+            onSearch={onSearchChange}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Logo ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <header
+            className="sticky top-0 z-30 bg-card/95 border border-theme text-body shadow-md backdrop-blur-md px-3 sm:px-4 py-2.5 rounded-2xl flex items-center justify-between gap-2 transition-colors duration-200"
+            style={customConfig?.headerBgColor ? { backgroundColor: customConfig.headerBgColor } : undefined}
+          >
         <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
           {(customConfig?.logoUrl || storeConfig.logoUrl) ? (
             <img 
@@ -194,6 +233,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
         </div>
       </header>
       </div>
+      )}
 
       {/* -----------------------------------------------------------------------
           SECTION 1 : VRAI CARROUSEL DÉFILANT D'AFFICHES & PROMOTIONS (SNAP-X)
@@ -247,15 +287,41 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
 
                 {/* Contenu textuel avec badge et boutons d'action rapide */}
                 <div className="relative z-10 space-y-1.5 max-w-md">
-                  <span className="inline-block bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md">
-                    {effectiveBadge}
-                  </span>
-                  <h2 className="text-xl sm:text-2xl font-black text-white leading-tight drop-shadow-md">
-                    {effectiveTitle}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 drop-shadow">
-                    {effectiveSubtitle}
-                  </p>
+                  <LiveEditable
+                    label="Badge Bannière Hero"
+                    field="heroSubtitle"
+                    value={effectiveBadge}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
+                  >
+                    <span className="inline-block bg-emerald-500 text-slate-950 text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-md">
+                      {effectiveBadge}
+                    </span>
+                  </LiveEditable>
+                  <LiveEditable
+                    label="Titre Bannière Hero"
+                    field="heroTitle"
+                    value={effectiveTitle}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    <h2 className="text-xl sm:text-2xl font-black text-white leading-tight drop-shadow-md">
+                      {effectiveTitle}
+                    </h2>
+                  </LiveEditable>
+                  <LiveEditable
+                    label="Description Bannière Hero"
+                    field="heroDescription"
+                    value={effectiveSubtitle}
+                    type="textarea"
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 drop-shadow">
+                      {effectiveSubtitle}
+                    </p>
+                  </LiveEditable>
                 </div>
               </div>
             );
@@ -375,6 +441,152 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
                 <span className="hidden sm:inline">Modifier</span>
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* SOUS-BANNIÈRES SECONDAIRES EMPILÉES (subBanner1 & subBanner2) */}
+      {(customConfig?.subBanner1Title || customConfig?.subBanner1Image || customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          {(customConfig?.subBanner1Title || customConfig?.subBanner1Image) && (
+            <div
+              onClick={() => {
+                playTapBeep();
+                const gridEl = document.getElementById('standard-catalog-grid');
+                if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 sm:p-5 flex items-center justify-between gap-3 cursor-pointer hover:shadow-lg transition-all group border border-emerald-500/30"
+            >
+              <div className="space-y-1 z-10">
+                {customConfig?.subBanner1Badge && (
+                  <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white text-emerald-800 inline-block">
+                    {customConfig.subBanner1Badge}
+                  </span>
+                )}
+                <h4 className="text-base font-black leading-tight text-white group-hover:text-amber-200 transition-colors">
+                  {customConfig.subBanner1Title}
+                </h4>
+                {customConfig?.subBanner1Subtitle && (
+                  <p className="text-[11px] text-emerald-100 max-w-xs">{customConfig.subBanner1Subtitle}</p>
+                )}
+                {customConfig?.subBanner1CtaText && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-200 pt-1">
+                    <span>{customConfig.subBanner1CtaText}</span>
+                    <span className="group-hover:translate-x-1 transition-transform">›</span>
+                  </span>
+                )}
+              </div>
+              {customConfig?.subBanner1Image && (
+                <img
+                  src={customConfig.subBanner1Image}
+                  alt={customConfig.subBanner1Title || 'Bannière'}
+                  className="w-20 sm:w-24 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                />
+              )}
+            </div>
+          )}
+          {(customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+            <div
+              onClick={() => {
+                playTapBeep();
+                const gridEl = document.getElementById('standard-catalog-grid');
+                if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 sm:p-5 flex items-center justify-between gap-3 cursor-pointer hover:shadow-lg transition-all group border border-slate-700"
+            >
+              <div className="space-y-1 z-10">
+                {customConfig?.subBanner2Badge && (
+                  <span className="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 inline-block">
+                    {customConfig.subBanner2Badge}
+                  </span>
+                )}
+                <h4 className="text-base font-black leading-tight text-white group-hover:text-amber-300 transition-colors">
+                  {customConfig.subBanner2Title}
+                </h4>
+                {customConfig?.subBanner2Subtitle && (
+                  <p className="text-[11px] text-slate-300 max-w-xs">{customConfig.subBanner2Subtitle}</p>
+                )}
+                {customConfig?.subBanner2CtaText && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 pt-1">
+                    <span>{customConfig.subBanner2CtaText}</span>
+                    <span className="group-hover:translate-x-1 transition-transform">›</span>
+                  </span>
+                )}
+              </div>
+              {customConfig?.subBanner2Image && (
+                <img
+                  src={customConfig.subBanner2Image}
+                  alt={customConfig.subBanner2Title || 'Bannière'}
+                  className="w-20 sm:w-24 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* OFFRE VEDETTE / PROMO FLASH (specialOfferProductId) */}
+      {specialOfferProduct && (
+        <div className="pt-2">
+          <div className="rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-r from-emerald-50/50 via-card to-teal-50/30 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-xl bg-card border border-theme p-1.5 flex items-center justify-center shrink-0">
+                <img
+                  src={specialOfferProduct.image}
+                  alt={specialOfferProduct.name}
+                  className="w-full h-full object-contain rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[9.5px] uppercase tracking-wider flex items-center gap-1">
+                    <Flame className="w-3 h-3 fill-amber-300 text-amber-300" />
+                    <span>Offre Vedette</span>
+                  </span>
+                  {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white font-black text-[9.5px]">
+                      -{Math.round(((specialOfferProduct.originalPrice - specialOfferProduct.price) / specialOfferProduct.originalPrice) * 100)}%
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm font-black text-body tracking-tight line-clamp-1">
+                  {specialOfferProduct.name}
+                </h3>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-black text-emerald-600">
+                    {formatCFA(specialOfferProduct.price)}
+                  </span>
+                  {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                    <span className="text-xs text-muted line-through">
+                      {formatCFA(specialOfferProduct.originalPrice)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => onSelectProduct?.(specialOfferProduct)}
+                className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-secondary hover:bg-card-hover text-body font-bold text-xs border border-theme transition cursor-pointer"
+              >
+                Détails
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  if (onBuyNow) {
+                    onBuyNow(specialOfferProduct, 1);
+                  } else {
+                    onAddToCart?.(specialOfferProduct, 1);
+                  }
+                }}
+                className="flex-1 sm:flex-initial px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-md"
+              >
+                Commander
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1079,35 +1291,62 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
         </div>
       </section>
 
-      {/* Pied de page Marque Blanche (White Label) */}
-      <footer className="mt-10 mb-20 pt-6 pb-4 border-t border-theme text-center text-xs text-muted space-y-2 relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier le Footer & Coordonnées ⚡"
-          targetAccordion={5}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        {customConfig?.footerAboutText && (
-          <p className="text-xs text-muted max-w-xl mx-auto">
-            {customConfig.footerAboutText}
+      {/* Pied de page Adaptatif ou Marque Blanche (White Label) */}
+      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+        <div className="mt-10 mb-20 relative group/footer-section">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveFooterEngine
+            config={customConfig}
+            products={allProducts}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            categories={categories}
+            onOpenFunnel={onOpenFunnel || onOpenTunnel}
+            onSelectProduct={onSelectProduct}
+            onResetToHome={() => {
+              if (onSelectCategory) onSelectCategory('Tous');
+            }}
+            onSelectCategory={onSelectCategory}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <footer className="mt-10 mb-20 pt-6 pb-4 border-t border-theme text-center text-xs text-muted space-y-2 relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          {customConfig?.footerAboutText && (
+            <p className="text-xs text-muted max-w-xl mx-auto">
+              {customConfig.footerAboutText}
+            </p>
+          )}
+          {customConfig?.footerAddress && (
+            <p className="text-[11px] font-medium text-body">
+              📍 {customConfig.footerAddress}
+            </p>
+          )}
+          <p className="font-semibold text-body">
+            {customConfig?.copyrightText || whiteLabelConfig?.customFooterText || `© ${new Date().getFullYear()} ${customConfig?.storeName || storeConfig.storeName || 'Boutique en ligne'}. Tous droits réservés.`}
           </p>
-        )}
-        {customConfig?.footerAddress && (
-          <p className="text-[11px] font-medium text-body">
-            📍 {customConfig.footerAddress}
-          </p>
-        )}
-        <p className="font-semibold text-body">
-          {customConfig?.copyrightText || whiteLabelConfig?.customFooterText || `© ${new Date().getFullYear()} ${customConfig?.storeName || storeConfig.storeName || 'Boutique en ligne'}. Tous droits réservés.`}
-        </p>
-        {!whiteLabelConfig?.hidePoweredBy && (
-          <p className="text-[10px] text-muted mt-1.5 font-medium">
-            Propulsé par <span className="text-body font-bold">Nanasore</span>
-          </p>
-        )}
-      </footer>
+          {!whiteLabelConfig?.hidePoweredBy && (
+            <p className="text-[10px] text-muted mt-1.5 font-medium">
+              Propulsé par <span className="text-body font-bold">Nanasore</span>
+            </p>
+          )}
+        </footer>
+      )}
     </main>
   );
 };

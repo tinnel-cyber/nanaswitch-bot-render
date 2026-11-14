@@ -7,7 +7,7 @@
 export async function handleWameetMediaModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.pages.dev");
 
   // 1. Accélération Edge pour le Feed Reels & Métadonnées de Live (GET)
   if (request.method === "GET" && (path.includes("/reels/feed") || path.includes("/live/active-rooms") || path.includes("/manifest.m3u8"))) {

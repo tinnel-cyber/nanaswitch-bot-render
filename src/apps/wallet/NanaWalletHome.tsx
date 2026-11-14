@@ -39,8 +39,7 @@ import NanaWalletRecharge from './NanaWalletRecharge';
 import NanaWalletCryptoComingSoon from './NanaWalletCryptoComingSoon';
 import NanaWalletCheckout from './NanaWalletCheckout';
 import { playTapBeep, playValidationBeep, playCashChime, formatCFA } from '../../utils/audio';
-import { auth, db } from '../../firebase';
-import { doc, getDoc, setDoc, increment } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 
 export interface WalletTransaction {
   id: string;
@@ -248,15 +247,24 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         localStorage.setItem('nana_user_wallet_balance', String(newBal));
       } catch {}
 
-      // Mise à jour Firestore si utilisateur connecté
-      if (auth.currentUser && db) {
+      // Mise à jour Supabase si utilisateur connecté
+      (async () => {
         try {
-          const uRef = doc(db, 'users', auth.currentUser.uid);
-          await setDoc(uRef, { credits: increment(rechargeAmount), updatedAt: new Date().toISOString() }, { merge: true });
+          const { data: authData } = await supabase.auth.getUser();
+          const uid = authData?.user?.id;
+          if (uid) {
+            await supabase.from('app_registry').upsert({
+              key: `wallet_${uid}`,
+              name: `wallet_${uid}`,
+              module_key: 'user_wallet',
+              config_json: { balance: newBal, updatedAt: new Date().toISOString() },
+              updated_at: new Date().toISOString()
+            });
+          }
         } catch (e) {
-          console.warn('[WALLET] Synchro Firestore ignorée :', e);
+          console.warn('[WALLET] Synchro Supabase ignorée :', e);
         }
-      }
+      })();
 
       setIsProcessingRecharge(false);
       setIsRechargeModalOpen(false);

@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
 import { supabase } from '@/lib/supabase';
-import { db } from '../../../firebase';
 import { 
   initiateSPayment, 
   verifySPayment,

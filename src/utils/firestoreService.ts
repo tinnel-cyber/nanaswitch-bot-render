@@ -272,18 +272,8 @@ export function subscribeToStoreCollection<T extends { id: string; storeId: stri
 
   const fetchCollection = async () => {
     try {
-      const snapshot = await getDocs(colRef);
+      const items = await fetchStoreCollection<T>(collectionName, tenantId);
       if (isCancelled) return;
-      const items: T[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as any;
-        if (collectionName === 'sales') {
-          if (data.orderNumber && !data.paymentMethod) return;
-        } else if (collectionName === 'orders') {
-          if (data.paymentMethod && !data.orderNumber) return;
-        }
-        items.push({ ...data, id: docSnap.id, storeId: tenantId } as T);
-      });
 
       if (items.length > 0) {
         try {
@@ -356,6 +346,55 @@ export async function fetchStoreCollection<T extends { id: string; storeId: stri
   const colRef = collection(db, 'stores', tenantId, subcollection);
   const pathForError = `stores/${tenantId}/${subcollection}`;
 
+  // 1. Priorité Supabase SQL (Lecture ultra-rapide)
+  try {
+    const isProdCol = collectionName === 'inventory' || collectionName === 'products';
+    if (isProdCol) {
+      // Lecture depuis public.products
+      const { data: supaProds } = await supabase
+        .from('products')
+        .select('*')
+        .or(`vendor_id.eq.${tenantId}`);
+
+      if (supaProds && supaProds.length > 0) {
+        return supaProds.map(p => ({
+          id: p.id,
+          storeId: tenantId,
+          name: p.name,
+          price: Number(p.price) || 0,
+          description: p.description || '',
+          category: p.category || '',
+          image: p.image_url || '',
+          imageUrl: p.image_url || '',
+          stock: p.stock || 0,
+          sku: p.sku || p.id,
+          isActive: p.is_active,
+          createdAt: p.created_at
+        })) as unknown as T[];
+      }
+    }
+
+    // Lecture depuis public.app_registry
+    const { data: regDocs } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('tenant_id', tenantId)
+      .eq('module_key', subcollection);
+
+    if (regDocs && regDocs.length > 0) {
+      const results: T[] = [];
+      regDocs.forEach(row => {
+        if (row.config_json) {
+          results.push({ ...(row.config_json as any), storeId: tenantId } as T);
+        }
+      });
+      return results;
+    }
+  } catch (sbFetchErr) {
+    console.warn(`[SUPABASE FETCH] ${pathForError} :`, sbFetchErr);
+  }
+
+  // 2. Fallback de secours Firestore si présent
   try {
     const snapshot = await getDocs(colRef);
     const results: T[] = [];
@@ -520,7 +559,50 @@ export async function saveStoreDocument<T extends { id: string }>(
     };
   }
 
-  // 2. Sauvegarde dans l'arborescence étanche du tenant dans Firestore
+  // 2. Sauvegarde prioritaire dans Supabase SQL
+  try {
+    const isProdCol = collectionName === 'inventory' || collectionName === 'products';
+    if (isProdCol) {
+      const priceNum = Number((securedPayload as any).price) || 0;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(docId);
+      const prodUuid = isUUID ? docId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+      if (prodUuid) {
+        supabase.from('products').upsert({
+          id: prodUuid,
+          name: (securedPayload as any).name || 'Produit Sans Nom',
+          price: priceNum,
+          description: (securedPayload as any).description || '',
+          vendor_id: tenantId,
+          sku: (securedPayload as any).sku || docId,
+          stock: Number((securedPayload as any).stock) || 0,
+          category: (securedPayload as any).category || 'Général',
+          image_url: (securedPayload as any).image || (securedPayload as any).imageUrl || '',
+          is_active: (securedPayload as any).status !== 'archived' && (securedPayload as any).isActive !== false,
+          created_at: new Date().toISOString()
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+    } else if (collectionName === 'sales') {
+      supabase.from('sales').insert({
+        total_amount: Number((securedPayload as any).total) || 0,
+        payment_method: (securedPayload as any).paymentMethod || 'CASH_ON_DELIVERY',
+        status: (securedPayload as any).status || 'completed',
+        is_paid: true
+      }).catch(() => {});
+    }
+
+    // Sauvegarde unifiée dans app_registry avec contrainte not-null 'name'
+    supabase.from('app_registry').upsert({
+      key: `doc_${tenantId}_${subcollection}_${docId}`,
+      name: `${subcollection}_${docId}`,
+      tenant_id: tenantId,
+      module_key: subcollection,
+      config_json: securedPayload
+    }, { onConflict: 'key' }).catch(() => {});
+  } catch (sbErr) {
+    console.warn('[SUPABASE SYNC] Erreur sync saveStoreDocument :', sbErr);
+  }
+
+  // 3. Sauvegarde miroir Firestore de secours si disponible
   try {
     await setDoc(doc(db, 'stores', tenantId, subcollection, docId), securedPayload, { merge: true });
     console.log(`[FIRESTORE WRITE] Enregistré dans /${pathForWrite}`);
@@ -828,6 +910,51 @@ export async function persistInventoryProduct(
   };
 
   const res = await saveStoreDocument('inventory', safeProduct, tenantId);
+
+  // Synchronisation prioritaire Supabase SQL (table public.app_registry & public.products)
+  try {
+    const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+    const isProdUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(safeProduct.id);
+    const prodUuidToUse = isProdUUID ? safeProduct.id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+
+    if (prodUuidToUse) {
+      supabase.from('products').upsert({
+        id: prodUuidToUse,
+        name: safeProduct.name,
+        price: Number(safeProduct.sellingPrice || safeProduct.price || 0),
+        stock: Number(safeProduct.stock ?? 10),
+        image_url: safeProduct.photoUrl || (safeProduct as any).image || '',
+        vendor_id: tenantId,
+        slug: finalSlug,
+        ...(isStoreUUID ? { tenant_id: tenantId } : {})
+      }, { onConflict: 'id' }).catch(() => {});
+    }
+
+    // Synchronisation Cloud Supabase app_registry
+    try {
+      const customKey = `nana_tenant_${tenantId}_custom_store_products`;
+      const existingRaw = typeof window !== 'undefined' ? localStorage.getItem(customKey) : null;
+      const existing: InventoryProduct[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const updatedCustom = [safeProduct, ...existing.filter((p) => p.id !== safeProduct.id)];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(customKey, JSON.stringify(updatedCustom));
+      }
+
+      await supabase
+        .from('app_registry')
+        .upsert({
+          key: `products_${tenantId}`,
+          name: 'store_products',
+          tenant_id: tenantId,
+          module_key: 'products',
+          config_json: {
+            products: updatedCustom,
+            updated_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' }).catch(() => {});
+    } catch {}
+  } catch {}
 
   // Écriture miroir sécurisée unifiée dans :
   // 1. tenants/{tenantId}/products/{id} (Unification Thème <-> Caisse POS)
@@ -1519,7 +1646,7 @@ Pour garantir que votre boutique continue à vendre sans interruption même en c
 - Aucune donnée de carte bancaire ni de code confidentiel Mobile Money n'est jamais stockée sur nos serveurs.
 
 ### 3. Propriété Exclusif de Vos Données
-Vos données commerciales et vos bilans de ventes restent la propriété pleine et exclusive de votre établissement. Nana POS ne commercialise ni ne loue jamais les données de ses clients à des tiers à des fins publicitaires.
+Vos données commerciales et vos bilans de ventes restent la propriété pleine et exclusive de votre établissement. Nanasore ne commercialise ni ne loue jamais les données de ses clients à des tiers à des fins publicitaires.
 
 ### 4. Vos Droits et Contact
 Conformément aux réglementations applicables en matière de protection des données personnelles, vous disposez d'un droit permanent d'accès, de rectification et d'exportation complète de vos données (au format PDF ou Excel/JSON).
@@ -3235,14 +3362,42 @@ export async function recordUnifiedOrder(payload: UnifiedOrderPayload): Promise<
     timestamp: now
   });
 
-  // 1. Écriture miroir globale dans `orders/{orderDocId}`
+  // 1. Enregistrement prioritaire Supabase SQL (public.orders)
+  try {
+    const isOrderUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderDocId);
+    const orderUuidToUse = isOrderUUID ? orderDocId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+    if (orderUuidToUse) {
+      supabase.from('orders').upsert({
+        id: orderUuidToUse,
+        order_number: orderNum,
+        customer_name: payload.customerName || 'Client Estimé',
+        customer_phone: payload.customerPhone || '',
+        total: Number(payload.total) || 0,
+        status: payload.status || 'pending',
+        items: cleanItems,
+        notes: payload.notes || '',
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' }).catch(() => {});
+
+      supabase.from('app_registry').upsert({
+        key: `order_${orderDocId}`,
+        tenant_id: cleanStoreId,
+        module_key: 'orders',
+        config_json: recordData
+      }, { onConflict: 'key' }).catch(() => {});
+    }
+  } catch (sbErr) {
+    console.warn('[SUPABASE] Orders upsert notice:', sbErr);
+  }
+
+  // 2. Écriture miroir globale dans `orders/{orderDocId}`
   try {
     await setDoc(doc(db, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
     console.warn('[FIRESTORE] Global order save note :', err);
   }
 
-  // 2. Écriture sous `stores/{cleanStoreId}/orders/{orderDocId}`
+  // 3. Écriture sous `stores/{cleanStoreId}/orders/{orderDocId}`
   try {
     await setDoc(doc(db, 'stores', cleanStoreId, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
@@ -3326,13 +3481,32 @@ export function recordWLeadOrder(payload: {
         timestamp: now
       });
 
-      // Écriture miroir
-      await Promise.allSettled([
-        setDoc(doc(db, 'orders', orderDocId), recordData, { merge: true }),
-        setDoc(doc(db, 'stores', cleanStoreId, 'orders', orderDocId), recordData, { merge: true })
-      ]);
+      // Écriture Supabase SQL
+      try {
+        await supabase.from('orders').upsert({
+          order_number: orderNum,
+          customer_name: 'Prospect Wameet',
+          customer_phone: payload.customerPhone || '',
+          delivery_address: 'Wameet Direct',
+          total_amount: total,
+          currency: 'XOF',
+          payment_method: 'Discussion Wameet Direct',
+          payment_status: 'UNPAID',
+          fulfillment_status: 'w_initiated',
+          metadata: recordData
+        }, { onConflict: 'order_number' });
+
+        await supabase.from('app_registry').upsert({
+          key: `order_${orderDocId}`,
+          tenant_id: cleanStoreId,
+          module_key: 'orders',
+          config_json: recordData
+        }, { onConflict: 'key' });
+      } catch (sbErr) {
+        console.warn('[SUPABASE] W lead tracking notice :', sbErr);
+      }
     } catch (err) {
-      console.warn('[FIRESTORE] W lead tracking background note :', err);
+      console.warn('[WAMEET] W lead tracking background note :', err);
     }
   });
 }

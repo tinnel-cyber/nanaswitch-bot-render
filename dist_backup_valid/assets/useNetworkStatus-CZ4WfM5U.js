@@ -1,1 +1,0 @@
-import{r as i}from"./react-core-DqeaXjTS.js";function s(){const[o,e]=i.useState(()=>typeof navigator<"u"?navigator.onLine:!0);return i.useEffect(()=>{const n=()=>e(!0),t=()=>e(!1);return window.addEventListener("online",n),window.addEventListener("offline",t),()=>{window.removeEventListener("online",n),window.removeEventListener("offline",t)}},[]),{isOnline:o}}export{s as u};

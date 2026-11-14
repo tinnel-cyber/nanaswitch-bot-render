@@ -1,8 +1,8 @@
 /**
  * @file wameetSyncService.ts
- * @description Client SDK et Service de Synchronisation NaNa POS vers Wameet VIP (Prompt 30)
+ * @description Client SDK et Service de Synchronisation Nanasore vers Wameet VIP (Prompt 30)
  * 
- * Permet au studio d'administration NaNa POS de publier et mettre à jour des Espaces VIP dans Wameet,
+ * Permet au studio d'administration Nanasore de publier et mettre à jour des Espaces VIP dans Wameet,
  * et permet au frontend Wameet de s'abonner aux diffusions en temps réel via WebSockets.
  */
 
@@ -16,7 +16,7 @@ const API_BASE_URL = typeof window !== 'undefined' ? '' : 'http://localhost:3000
 const M2M_SYNC_TOKEN = 'nana_pos_studio_m2m_key_prod_v1';
 
 /**
- * Publie une nouvelle Salle ou Salon VIP depuis le Back-Office NaNa POS.
+ * Publie une nouvelle Salle ou Salon VIP depuis le Back-Office Nanasore.
  */
 export async function publishRoomFromNanaPos(
   payload: PublishRoomRequestPayload,
@@ -106,7 +106,7 @@ export async function updateRoomContentFromNanaPos(
 }
 
 /**
- * Récupère la liste des salles et salons synchronisés depuis NaNa POS.
+ * Récupère la liste des salles et salons synchronisés depuis Nanasore.
  */
 export async function fetchSyncedVipRooms(): Promise<SyncedVipRoomRecord[]> {
   try {

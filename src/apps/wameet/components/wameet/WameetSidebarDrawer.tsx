@@ -37,7 +37,7 @@ export interface WameetSidebarDrawerProps {
  * - Overlay : bg-black/50 backdrop-blur-sm fixed inset-0 z-50
  * - Tiroir : w-4/5 max-w-sm h-full bg-white shadow-2xl transition-transform fixed inset-y-0 left-0 z-50
  * - Section 1 : Raccourcis Fonctionnels : "🛒 Live Shopping (Studio)", "💸 Farotage & Cagnottes", "📍 Swarm Delivery (Livreurs)"
- * - Section 2 : Page Promotionnelle NaNa POS : Gros bouton distinct "🚀 Passer Pro avec NaNa POS"
+ * - Section 2 : Page Promotionnelle Nanasore : Gros bouton distinct "🚀 Passer Pro avec Nanasore"
  * - Section 3 : Paramètres et Compte : "⚙️ Paramètres de confidentialité", "Mon Wallet Wameet"
  */
 export const WameetSidebarDrawer: React.FC<WameetSidebarDrawerProps> = ({
@@ -247,8 +247,8 @@ export const WameetSidebarDrawer: React.FC<WameetSidebarDrawerProps> = ({
           </div>
 
           {/* -----------------------------------------------------------------
-              SECTION 2 : LA PAGE PROMOTIONNELLE NANA POS (Isolée)
-              Gros bouton distinct : "🚀 Passer Pro avec NaNa POS"
+              SECTION 2 : LA PAGE PROMOTIONNELLE NANASORE (Isolée)
+              Gros bouton distinct : "🚀 Passer Pro avec Nanasore"
              ----------------------------------------------------------------- */}
           <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 text-white shadow-xl border border-blue-500/30 space-y-3 relative overflow-hidden group">
             <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-[#2563EB]/20 rounded-full blur-xl pointer-events-none" />
@@ -268,7 +268,7 @@ export const WameetSidebarDrawer: React.FC<WameetSidebarDrawerProps> = ({
                 Vous possédez aussi une boutique physique ?
               </h4>
               <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
-                Reliez vos Reels Wameet à la caisse enregistreuse NaNa POS : encaissement comptoir, scanner & stock synchronisé.
+                Reliez vos Reels Wameet à la caisse enregistreuse Nanasore : encaissement comptoir, scanner & stock synchronisé.
               </p>
             </div>
 
@@ -283,7 +283,7 @@ export const WameetSidebarDrawer: React.FC<WameetSidebarDrawerProps> = ({
               className="w-full py-3 px-4 rounded-2xl bg-[#2563EB] hover:bg-blue-600 active:scale-95 text-white text-xs font-black shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Rocket className="w-4 h-4 text-amber-300 animate-bounce" />
-              <span>🚀 Passer Pro avec NaNa POS</span>
+              <span>🚀 Passer Pro avec Nanasore</span>
               <ArrowRight className="w-3.5 h-3.5 text-white" />
             </button>
           </div>

@@ -73,11 +73,12 @@ export const AdminProductQuickBar: React.FC<AdminProductQuickBarProps> = ({
 
     const cleanSlug = storeSlug.trim().replace(/^store-/, '');
     const funnelId = product.linkedFunnelId || (product as any).funnelConfig?.slug;
+    const prodSlug = product.slug || (product as any).productSlug || product.id;
     
     // Construction de l'URL publicitaire ciblée
     const targetUrl = buildPublicShopUrl(cleanSlug, {
-      productSlug: product.id,
-      funnelSlug: funnelId || undefined
+      productSlug: prodSlug,
+      funnelSlugOrId: funnelId || undefined
     });
 
     try {

@@ -308,7 +308,7 @@ const generateStampDataUrl = ({
     ctx.fillText(`LE ${dateStr}`, cx, cy + 18);
 
     ctx.font = '10px sans-serif';
-    ctx.fillText('SCEAU OFFICIEL • NaNa POS', cx, cy + 50);
+    ctx.fillText('SCEAU OFFICIEL • Nanasore', cx, cy + 50);
     ctx.restore();
   } else {
     // Tampon Rectangulaire
@@ -524,7 +524,7 @@ export default function DocuSignHub({
   useEffect(() => {
     if (isSignatureModalOpen && signatureModalMode === 'TAMPON') {
       const url = generateStampDataUrl({
-        companyName: stampCompanyName || 'NaNa POS',
+        companyName: stampCompanyName || 'Nanasore',
         mention: stampMention || 'LU ET APPROUVÉ',
         cityAndContact: stampContact || 'Abidjan',
         stampShape,
@@ -887,7 +887,7 @@ export default function DocuSignHub({
   // Option B : Sauvegarder et apposer le tampon commercial personnalisé
   const saveCommercialStamp = () => {
     const stampDataUrl = generateStampDataUrl({
-      companyName: stampCompanyName || 'NaNa POS',
+      companyName: stampCompanyName || 'Nanasore',
       mention: stampMention || 'LU ET APPROUVÉ',
       cityAndContact: stampContact || 'Abidjan',
       stampShape,
@@ -998,7 +998,7 @@ export default function DocuSignHub({
   // Ajouter un tampon d'entreprise rapide
   const addStamp = () => {
     const stampDataUrl = generateStampDataUrl({
-      companyName: stampCompanyName || 'NaNa POS PRO',
+      companyName: stampCompanyName || 'Nanasore Pro',
       mention: 'CERTIFIÉ CONFORME',
       cityAndContact: stampContact || 'Abidjan',
       stampShape: 'RECTANGULAR',
@@ -1110,7 +1110,7 @@ export default function DocuSignHub({
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('NaNa POS PRO • SUITE JURIDIQUE & COMMERCIALE', 40, 45);
+    ctx.fillText('Nanasore Pro • SUITE JURIDIQUE & COMMERCIALE', 40, 45);
 
     ctx.font = '11px sans-serif';
     ctx.fillStyle = '#94a3b8';
@@ -1120,7 +1120,7 @@ export default function DocuSignHub({
 
     const dateStr = new Date().toLocaleDateString('fr-FR');
     const docNum = `DOC-${Math.floor(100000 + Math.random() * 900000)}`;
-    const storeName = currentUser?.storeName || 'Nana POS Commerce';
+    const storeName = currentUser?.storeName || 'Nanasore Commerce';
 
     ctx.fillStyle = '#1e293b';
     ctx.font = 'bold 17px sans-serif';
@@ -1264,7 +1264,7 @@ export default function DocuSignHub({
       ctx.fillText('ARTICLE 4 - VALIDITÉ PROBANTE DE LA SIGNATURE ÉLECTRONIQUE', 40, 460);
       ctx.fillStyle = '#334155';
       ctx.font = '11px sans-serif';
-      ctx.fillText('L\'émargement tactile horodaté certifié par Nana POS Pro vaut preuve littérale pleine et entière au sens légal.', 40, 480);
+      ctx.fillText('L\'émargement tactile horodaté certifié par Nanasore Pro vaut preuve littérale pleine et entière au sens légal.', 40, 480);
       ctx.fillText('Le document est scellé numériquement et horodaté de manière infalsifiable.', 40, 497);
 
     } else {
@@ -1320,7 +1320,7 @@ export default function DocuSignHub({
     ctx.fillStyle = '#64748b';
     ctx.font = '10px sans-serif';
     ctx.fillText('MENTIONS LÉGALES & FORCE PROBANTE :', 55, 553);
-    ctx.fillText('Document numérique horodaté émis via la Suite Commerciale Nana POS Pro. La signature apposée engage irrévocablement les signataires.', 55, 570);
+    ctx.fillText('Document numérique horodaté émis via la Suite Commerciale Nanasore Pro. La signature apposée engage irrévocablement les signataires.', 55, 570);
 
     // Cadres de signature bilatérale
     // Cadre Gauche (Émetteur / Prestataire / Bailleur)
@@ -1369,7 +1369,7 @@ export default function DocuSignHub({
     // Pied de page
     ctx.font = '9.5px sans-serif';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Document numérique certifié généré par Nana POS Pro SaaS • Tél : +226 70 00 00 00 / +225 07 00 00 00', 40, 1090);
+    ctx.fillText('Document numérique certifié généré par Nanasore Pro SaaS • Tél : +226 70 00 00 00 / +225 07 00 00 00', 40, 1090);
 
     const docUrl = canvas.toDataURL('image/png');
     setUploadedDocs([{
@@ -1412,7 +1412,7 @@ export default function DocuSignHub({
     ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
     const mainFontSize = Math.max(22, Math.round(width / 22));
     ctx.font = `bold ${mainFontSize}px sans-serif`;
-    ctx.fillText('GÉNÉRÉ VIA NaNa POS - VERSION GRATUITE', 0, 0);
+    ctx.fillText('GÉNÉRÉ VIA Nanasore - VERSION GRATUITE', 0, 0);
 
     // Lignes d'encadrement en pointillés subtiles
     ctx.strokeStyle = 'rgba(15, 23, 42, 0.15)';
@@ -1612,7 +1612,7 @@ export default function DocuSignHub({
                   ${!isPremium ? `
                   @media print {
                     body::after {
-                      content: "GÉNÉRÉ VIA NaNa POS - VERSION GRATUITE";
+                      content: "GÉNÉRÉ VIA Nanasore - VERSION GRATUITE";
                       position: fixed;
                       top: 50%;
                       left: 50%;
@@ -1650,12 +1650,12 @@ export default function DocuSignHub({
   const shareViaWhatsApp = () => {
     const dateStr = new Date().toLocaleDateString('fr-FR');
     const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const editionLabel = isPremium ? "Version Pro Officielle (Sans filigrane)" : "Version Gratuite (Filigrane Nana POS inclus)";
+    const editionLabel = isPremium ? "Version Pro Officielle (Sans filigrane)" : "Version Gratuite (Filigrane Nanasore inclus)";
     const text = `Bonjour,\n\nVeuillez trouver la confirmation de signature certifiée du document : *${initialDocTitle}*.\n\n` +
       `📅 Date : ${dateStr} à ${timeStr}\n` +
       `✍️ Statut : Signé manuellement & certifié conforme\n` +
       `🏷️ Édition : ${editionLabel}\n` +
-      `🔒 Sécurité : Empreinte numérique Nana POS Pro\n\n` +
+      `🔒 Sécurité : Empreinte numérique Nanasore Pro\n\n` +
       `Ce document fait foi d'accord et de décharge légale.`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -1665,8 +1665,8 @@ export default function DocuSignHub({
     const timeStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const subject = `[${isPremium ? 'Officiel' : 'Gratuit'}] ${initialDocTitle} - Confirmation & Mentions Légales`;
     const legalNotice = isPremium
-      ? "Document officiel certifié sans filigrane tiers - Licence Nana POS Pro active."
-      : "Ce document a été certifié sous la version gratuite Nana POS avec filigrane d'authenticité. Pour générer des documents officiels vierges de filigrane, activez le forfait Nana Pro.";
+      ? "Document officiel certifié sans filigrane tiers - Licence Nanasore Pro active."
+      : "Ce document a été certifié sous la version gratuite Nanasore avec filigrane d'authenticité. Pour générer des documents officiels vierges de filigrane, activez le forfait Nana Pro.";
     const body = `Madame, Monsieur,\n\n` +
       `Nous vous confirmons la signature électronique certifiée du document suivant :\n` +
       `• Document : ${initialDocTitle}\n` +
@@ -1678,7 +1678,7 @@ export default function DocuSignHub({
       `Conformément à la réglementation sur les transactions électroniques et la preuve numérique, ` +
       `cette signature atteste du consentement plein et entier des parties et vaut décharge contractuelle.\n\n` +
       `${legalNotice}\n\n` +
-      `Nana POS Pro - Service Commercial`;
+      `Nanasore Pro - Service Commercial`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -2295,7 +2295,7 @@ export default function DocuSignHub({
                   >
                     <div className="transform -rotate-45 text-center px-4 py-2 border border-dashed border-slate-900/20 bg-slate-900/5 rounded-xl max-w-[90%]">
                       <p className="text-slate-900/20 text-xs sm:text-sm md:text-base font-black tracking-wider uppercase">
-                        GÉNÉRÉ VIA NaNa POS - VERSION GRATUITE
+                        GÉNÉRÉ VIA Nanasore - VERSION GRATUITE
                       </p>
                       <p className="text-slate-800/15 text-[8px] sm:text-[9px] font-semibold tracking-wide uppercase">
                         PASSEZ AU FORFAIT PRO POUR RETIRER CE FILIGRANE

@@ -23,8 +23,8 @@ export interface NanaPosProShowcaseModalProps {
 }
 
 /**
- * Page Promotionnelle Dédiée NaNa POS (Prompt 43 - Section 2)
- * Présente de manière prestigieuse et isolée la valeur ajoutée de NaNa POS
+ * Page Promotionnelle Dédiée Nanasore (Prompt 43 - Section 2)
+ * Présente de manière prestigieuse et isolée la valeur ajoutée de Nanasore
  * pour les créateurs et commerçants Wameet souhaitant passer Pro.
  */
 export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = ({
@@ -76,7 +76,7 @@ export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = (
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200 select-none">
       <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
-        {/* Header avec gradient prestige NaNa POS */}
+        {/* Header avec gradient prestige Nanasore */}
         <div className="relative p-6 sm:p-8 bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 text-white overflow-hidden shrink-0">
           <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-60 h-60 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -97,11 +97,11 @@ export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = (
           <div className="relative z-10 space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-200 text-xs font-black uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-              <span>Écosystème Pro NaNa POS</span>
+              <span>Écosystème Pro Nanasore</span>
             </div>
 
             <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">
-              Passez de simple créateur Wameet à commerçant d'élite avec NaNa POS 🚀
+              Passez de simple créateur Wameet à commerçant d'élite avec Nanasore 🚀
             </h2>
 
             <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-xl">
@@ -131,7 +131,7 @@ export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = (
           {/* Grille des fonctionnalités */}
           <div className="space-y-3">
             <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider px-1">
-              Tout ce que NaNa POS apporte à votre activité :
+              Tout ce que Nanasore apporte à votre activité :
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -164,7 +164,7 @@ export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = (
             <span className="text-2xl shrink-0">💬</span>
             <div className="text-xs leading-relaxed text-slate-700 font-medium">
               <strong className="text-blue-900 font-bold block mb-0.5">
-                « Depuis que nous avons couplé nos Reels Wameet avec la caisse NaNa POS : »
+                « Depuis que nous avons couplé nos Reels Wameet avec la caisse Nanasore : »
               </strong>
               Nos clients commandent sur Wameet et viennent récupérer leurs colis au magasin. La caisse déduit le stock automatiquement et le reçu thermique sort en 1 clic !
             </div>
@@ -198,7 +198,7 @@ export const NanaPosProShowcaseModal: React.FC<NanaPosProShowcaseModalProps> = (
               }}
               className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-black shadow-md shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
             >
-              <span>🚀 Activer mon Espace NaNa POS</span>
+              <span>🚀 Activer mon Espace Nanasore</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

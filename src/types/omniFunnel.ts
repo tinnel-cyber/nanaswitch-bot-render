@@ -178,7 +178,7 @@ export const DEFAULT_DELIVERY_OPTIONS: DeliveryOption[] = [
     name: 'Retrait Immédiat en Boutique NaNa',
     price: 0,
     estimatedTime: 'Immédiat aux heures d\'ouverture',
-    description: 'Boutique NaNa POS Pro - Espace Konkobo Pousbila Telecom',
+    description: 'Boutique Nanasore Pro - Espace Konkobo Pousbila Telecom',
     supportedCities: ['Bobo-Dioulasso', 'Ouagadougou']
   }
 ];

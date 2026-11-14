@@ -4,6 +4,7 @@ import { CustomSectionInstance } from '../../../types';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { MoodStyleConfig } from '../moodStyles';
 import { AdminProductQuickBar } from '../../../components/storeBuilder/AdminProductQuickBar';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 import { triggerOpenFunnel } from '../../themeUtils';
 import { playTapBeep } from '../../../utils/audio';
 
@@ -110,12 +111,21 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
             <div className={`lg:col-span-8 relative rounded-3xl overflow-hidden p-6 sm:p-10 lg:p-12 shadow-2xl flex flex-col justify-between min-h-[440px] sm:min-h-[500px] border border-black/10 group ${moodStyle.cardBg}`}>
               {/* Image de fond avec overlay dégradé */}
               <div className="absolute inset-0 z-0">
-                <img
-                  src={heroImageUrl}
-                  alt={title}
-                  className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-950/30 backdrop-blur-[0.5px]" />
+                <LiveEditable
+                  label="Image Fond Bento"
+                  sectionId={section.id}
+                  sectionField="imageUrl"
+                  value={heroImageUrl}
+                  type="image"
+                  isAdminPreview={isAdminPreview}
+                >
+                  <img
+                    src={heroImageUrl}
+                    alt={title}
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
+                  />
+                </LiveEditable>
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-950/30 backdrop-blur-[0.5px] pointer-events-none" />
               </div>
 
               {/* Barre admin si produit principal lié */}
@@ -134,10 +144,19 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
 
               {/* Haut : Badges de Réassurance Animés */}
               <div className="relative z-10 flex flex-wrap items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-md flex items-center gap-1.5 animate-pulse">
-                  <Flame className="w-3.5 h-3.5 text-amber-300" />
-                  <span>{subtitle}</span>
-                </span>
+                <LiveEditable
+                  label="Badge Hero Bento"
+                  sectionId={section.id}
+                  sectionField="subtitle"
+                  value={subtitle}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-md flex items-center gap-1.5 animate-pulse">
+                    <Flame className="w-3.5 h-3.5 text-amber-300" />
+                    <span>{subtitle}</span>
+                  </span>
+                </LiveEditable>
                 <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-white/20 backdrop-blur-md text-white border border-white/20 hidden sm:inline-flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Paiement à la livraison</span>
@@ -146,30 +165,65 @@ const DEMO_BENTO_SIDE2: StoreProductItem = {
 
               {/* Bas : Titre H1, Description, Prix & CTA */}
               <div className="relative z-10 space-y-4 pt-12 text-white">
-                <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15] text-white drop-shadow-md">
-                  {title}
-                </h1>
+                <LiveEditable
+                  label="Titre Principal Bento"
+                  sectionId={section.id}
+                  sectionField="title"
+                  value={title}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15] text-white drop-shadow-md">
+                    {title}
+                  </h1>
+                </LiveEditable>
 
-                <p className="text-xs sm:text-base text-slate-200 max-w-xl leading-relaxed drop-shadow-xs">
-                  {description}
-                </p>
+                <LiveEditable
+                  label="Description Bento"
+                  sectionId={section.id}
+                  sectionField="description"
+                  value={description}
+                  type="textarea"
+                  isAdminPreview={isAdminPreview}
+                >
+                  <p className="text-xs sm:text-base text-slate-200 max-w-xl leading-relaxed drop-shadow-xs">
+                    {description}
+                  </p>
+                </LiveEditable>
 
                 <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
-                  <button
-                    type="button"
-                    onClick={() => handleProductClick(mainProduct)}
-                    className={`px-8 py-4 ${moodStyle.accentButton} ${buttonRadiusClass} font-black text-sm sm:text-base flex items-center justify-center gap-2.5 cursor-pointer shadow-xl active:scale-95 transition-transform`}
+                  <LiveEditable
+                    label="Bouton CTA Bento"
+                    sectionId={section.id}
+                    sectionField="ctaText"
+                    value={ctaText}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
                   >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>{ctaText}</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleProductClick(mainProduct)}
+                      className={`px-8 py-4 ${moodStyle.accentButton} ${buttonRadiusClass} font-black text-sm sm:text-base flex items-center justify-center gap-2.5 cursor-pointer shadow-xl active:scale-95 transition-transform`}
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>{ctaText}</span>
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </button>
+                  </LiveEditable>
 
                   {priceHighlight && (
-                    <div className="px-4 py-3.5 rounded-2xl bg-black/50 backdrop-blur-md border border-white/20 text-xs sm:text-sm font-black text-amber-300 flex items-center justify-center gap-1.5">
-                      <span>🏷️</span>
-                      <span>{priceHighlight}</span>
-                    </div>
+                    <LiveEditable
+                      label="Prix Mis en Avant"
+                      sectionId={section.id}
+                      sectionField="priceHighlight"
+                      value={priceHighlight}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
+                    >
+                      <div className="px-4 py-3.5 rounded-2xl bg-black/50 backdrop-blur-md border border-white/20 text-xs sm:text-sm font-black text-amber-300 flex items-center justify-center gap-1.5">
+                        <span>🏷️</span>
+                        <span>{priceHighlight}</span>
+                      </div>
+                    </LiveEditable>
                   )}
                 </div>
               </div>

@@ -83,7 +83,7 @@ const {
 
 const app = express();
 const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'konkobo_telecom_webhook_secret_key_2026';
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'pos-app-1759a';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'nanasore';
 
 // 1. Initialisation résiliente de Firebase Admin SDK
 let isFirebaseInitialized = false;
@@ -130,7 +130,7 @@ if (db) {
 let wssInstance = null;
 const chatRooms = new Map(); // Map<chatId, Set<WebSocketClient>>
 
-// Moteur Live Commerce Wameet x NaNa POS
+// Moteur Live Commerce Wameet x Nanasore
 const liveCommerceEngine = new LiveCommerceEngine({ db, fetchViaFixie });
 
 function initWebSocketServer(httpServer) {
@@ -506,7 +506,7 @@ app.use('/api/chat-finance', createChatFinanceRouter({
 
 // ============================================================================
 // ROUTEUR MOTEUR LIVE COMMERCE & SYNCHRONISATION PHYGITALE (WAMEET LIVE)
-// POST /api/live/stock-update (Webhook Caisse NaNa POS -> phygital_scarcity_alert)
+// POST /api/live/stock-update (Webhook Caisse Nanasore -> phygital_scarcity_alert)
 // POST /api/live/push-product (Pousse un produit en direct)
 // POST /api/live/buy-fast     (Achat rapide Smart Escrow 1-clic)
 // GET  /api/live/rooms/:roomId

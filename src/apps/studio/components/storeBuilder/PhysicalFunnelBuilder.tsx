@@ -598,7 +598,7 @@ export const PhysicalFunnelBuilder: React.FC<{
       await registerSubdomainInFirebase(updated.slug, updated.title, updated);
       await saveFunnelConfig(updated);
     } catch (e) {
-      console.warn('[PhysicalFunnelBuilder] Erreur Firestore:', e);
+      console.warn('[PhysicalFunnelBuilder] Erreur enregistrement:', e);
     }
 
     if (onSave) onSave(updated);
@@ -2622,6 +2622,8 @@ export const PhysicalFunnelBuilder: React.FC<{
                       orderBump={funnelConfig.orderBump}
                       orderBumpEnabled={funnelConfig.orderBumpEnabled}
                       acceptedProviders={funnelConfig.paymentMethods}
+                      merchantWhatsapp={funnelConfig.merchantWhatsapp}
+                      merchantPhone={funnelConfig.merchantWhatsapp}
                     />
                   );
                 }

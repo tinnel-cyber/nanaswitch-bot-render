@@ -485,7 +485,7 @@ export const WameetSupraApp: React.FC<WameetSupraAppProps> = ({
   const [isDeliveryHeatmapOpen, setIsDeliveryHeatmapOpen] = useState(false);
   const [isCagnotteOpen, setIsCagnotteOpen] = useState(false);
 
-  // Modales et sous-écrans Prompt 43 (Tiroir des 3 points & NaNa POS)
+  // Modales et sous-écrans Prompt 43 (Tiroir des 3 points & Nanasore)
   const [isNanaPosPromoOpen, setIsNanaPosPromoOpen] = useState(false);
   const [isPrivacySecurityOpen, setIsPrivacySecurityOpen] = useState(false);
   const [isWalletFinanceOpen, setIsWalletFinanceOpen] = useState(false);
@@ -1473,7 +1473,7 @@ function sanitizeForFirestore(obj: any): any {
       />
 
       {/* =====================================================================
-          PAGE PROMOTIONNELLE DÉDIÉE NANA POS (PROMPT 43 - SECTION 2)
+          PAGE PROMOTIONNELLE DÉDIÉE NANASORE (PROMPT 43 - SECTION 2)
          ===================================================================== */}
       {isNanaPosPromoOpen && (
         <NanaPosProShowcaseModal
@@ -1523,7 +1523,7 @@ function sanitizeForFirestore(obj: any): any {
             showToast(`🔍 Recherche pour "${q}"`);
             setIsSearchOpen(false);
           }}
-          searchHistory={['Chaussures Ouaga', 'Concert Live', 'Vente Flash NaNa POS', 'Afterwork Tech']}
+          searchHistory={['Chaussures Ouaga', 'Concert Live', 'Vente Flash Nanasore', 'Afterwork Tech']}
           onRemoveHistoryItem={() => {}}
           onClearHistory={() => {}}
           hasSubmittedSearch={false}

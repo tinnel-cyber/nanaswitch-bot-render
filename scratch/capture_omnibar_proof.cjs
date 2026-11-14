@@ -94,8 +94,8 @@ async function main() {
     `
   });
 
-  console.log('[PROOF] Navigation vers https://pos-app-1759a.web.app/?view=dashboard ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/?view=dashboard' });
+  console.log('[PROOF] Navigation vers https://nanasore.web.app/?view=dashboard ...');
+  await send('Page.navigate', { url: 'https://nanasore.web.app/?view=dashboard' });
   await sleep(6000);
 
   // Déverrouillage PIN

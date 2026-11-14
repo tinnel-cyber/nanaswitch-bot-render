@@ -1,6 +1,6 @@
 /**
  * Contrôleur & Moteur Backend Live-Shopping Wameet ("Live Commerce")
- * Connecte les diffusions en direct aux stocks réels du logiciel NaNa POS
+ * Connecte les diffusions en direct aux stocks réels du logiciel Nanasore
  * 
  * - Gestion des Salons WebSockets isolés : socket.join('live_room_ID')
  * - Événement Push Product : seller_push_product -> show_product_toast (< 100ms)
@@ -249,7 +249,7 @@ class LiveCommerceEngine {
   async handlePhygitalStockUpdate(params) {
     const {
       storeId,
-      storeName = 'Boutique physique NaNa POS',
+      storeName = 'Boutique physique Nanasore',
       productId,
       quantitySold = 1,
       newStockCount,
@@ -449,7 +449,7 @@ function createLiveCommerceRouter({ engine }) {
 
   // --------------------------------------------------------------------------
   // WEBHOOK "PHYGITAL SYNC" : POST /api/live/stock-update
-  // Déclenché par une caisse physique NaNa POS lorsqu'un article est vendu
+  // Déclenché par une caisse physique Nanasore lorsqu'un article est vendu
   // --------------------------------------------------------------------------
   router.post('/stock-update', async (req, res) => {
     try {

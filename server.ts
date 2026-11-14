@@ -954,7 +954,7 @@ async function startServer() {
   // Moteur Financier "Tontine Flash" & Escrow S-Pay
   attachTontineRoutes(app);
 
-  // Moteur de Synchronisation Phygitale NaNa POS > Wameet
+  // Moteur de Synchronisation Phygitale Nanasore > Wameet
   attachPosSyncRoutes(app);
 
   // Moteur d'Affiliation "Micro-Relais" et Split de Paiement S-Pay (Prompt 15)
@@ -966,7 +966,7 @@ async function startServer() {
   // Moteur Financier "Farotage Digital" & WebSockets (Prompt 19)
   attachFarotageRoutes(app);
 
-  // Moteur de "Cagnotte Phygitale Automatisée" & Contrat Intelligent NaNa POS (Anniversaires)
+  // Moteur de "Cagnotte Phygitale Automatisée" & Contrat Intelligent Nanasore (Anniversaires)
   attachCagnotteRoutes(app);
 
   // Moteur de Recherche "Discovery" & Historique Utilisateur Wameet (Prompt 25)
@@ -978,7 +978,7 @@ async function startServer() {
   // Moteur de Souscription VIP & Péage Wameet (Prompt 27)
   attachVipSubscriptionRoutes(app);
 
-  // Le Pont Backend NaNa POS vers Wameet VIP (Prompt 30)
+  // Le Pont Backend Nanasore vers Wameet VIP (Prompt 30)
   attachWameetSyncRoutes(app);
 
   // Moteur de Routage Pulse & Notifications Temps Réel Wameet (Prompt 2 Backend)
@@ -1758,7 +1758,7 @@ Formatte le script avec les indications visuelles [Visuel] et paroles [Voix off]
               break;
           }
 
-          const systemInstruction = `Tu es l'Expert en Copywriting et Stratégie Marketing E-commerce de Nana POS.
+          const systemInstruction = `Tu es l'Expert en Copywriting et Stratégie Marketing E-commerce de Nanasore.
 Tu es spécialisé dans la vente au détail et en ligne pour les commerçants en Afrique francophone (monnaie : Franc CFA / F CFA).
 Règles :
 - Ton style est dynamique, vendeur, engageant et professionnel.
@@ -2001,7 +2001,7 @@ ${candidateName || 'Le Candidat'}`;
 
       const ai = getGenAI();
 
-      const systemInstruction = `Tu es l'Expert Juriste d'Affaires & Spécialiste en Droit Commercial et Financier International de Nana POS.
+      const systemInstruction = `Tu es l'Expert Juriste d'Affaires & Spécialiste en Droit Commercial et Financier International de Nanasore.
 Tu es un avocat d'affaires et juriste d'entreprise chevronné avec plus de 20 ans d'expérience en Afrique de l'Ouest, Afrique Centrale et Commerce International.
 
 Tes domaines de maîtrise absolue :
@@ -2143,7 +2143,7 @@ Selon l'**Acte Uniforme relatif aux Sociétés Commerciales et GIE (AUSCGIE rév
       } else {
         fallbackReply = `### ⚖️ Conseil Juridique & Financier OHADA / International
 
-En tant qu'expert juridique de Nana POS spécialisé en droit des affaires africain (**OHADA**, **UEMOA**, **CEMAC**) et **Commerce International**, voici les principes clés à appliquer :
+En tant qu'expert juridique de Nanasore spécialisé en droit des affaires africain (**OHADA**, **UEMOA**, **CEMAC**) et **Commerce International**, voici les principes clés à appliquer :
 
 1. **Sécurisation des Contrats Commerciaux (AUDCG)** :
    - Mentionnez toujours avec précision l'identité des parties (RCCM, NIF/IFU, adresse du siège social).
@@ -2883,7 +2883,10 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        allowedHosts: true
+      },
       appType: 'custom',
     });
     app.use(vite.middlewares);

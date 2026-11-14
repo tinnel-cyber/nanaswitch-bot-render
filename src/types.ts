@@ -700,7 +700,7 @@ export interface OrangeMoneyBurkinaConfig {
 
 export interface InternationalRecipientConfig {
   phone: string; // e.g. "+226 65 56 58 05"
-  name: string; // e.g. "Nana POS Trésorerie"
+  name: string; // e.g. "Nanasore Trésorerie"
   country: string; // e.g. "Burkina Faso"
 }
 

@@ -80,7 +80,7 @@ class SaspayAdapter extends PaymentGatewayAdapter {
       otp: params.otp || params.otpCode || params.otp_code,
       otpCode: params.otp || params.otpCode || params.otp_code,
       description: description.substring(0, 120),
-      returnUrl: returnUrl || 'https://pos-app-1759a.web.app/orders',
+      returnUrl: returnUrl || 'https://nanasore.pages.dev/orders',
       callbackUrl: callbackUrl || process.env.PAYMENT_CALLBACK_URL || 'https://nana-payment-api.onrender.com/webhook/saspay',
       customCredentials: params.customCredentials,
       customPayload: {

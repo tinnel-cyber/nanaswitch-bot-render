@@ -88,7 +88,7 @@ const DEFAULT_GIFT_PRODUCT: MysteryGiftProduct = {
   currency: 'FCFA',
   imageUrl:
     'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop',
-  merchantName: 'NaNa POS',
+  merchantName: 'Nanasore',
   category: 'Pâtisserie Prestige',
   deliveryEta: '18 - 25 min',
   description: 'Chocolat noir intense, crème veloutée & fraises fraîches de saison.'
@@ -138,7 +138,7 @@ function triggerGiftConfetti() {
  *    gros bouton rouge "Révéler & Accepter le cadeau".
  * 2. Demande GPS : Modale ultra-clean "Pour recevoir ce cadeau physique, le livreur a besoin de votre position. [Partager ma position]".
  * 3. État Déverrouillé : Flip card 3D rotate-y-180 CSS3, photo du produit réel (ex: Gâteau d'anniversaire),
- *    nom de la boutique NaNa POS, statut "Livreur en route vers vous 🛵".
+ *    nom de la boutique Nanasore, statut "Livreur en route vers vous 🛵".
  */
 export const LockedGiftBubble: React.FC<LockedGiftBubbleProps> = ({
   senderName = 'Ibrahim',
@@ -318,7 +318,7 @@ export const LockedGiftBubble: React.FC<LockedGiftBubbleProps> = ({
             {/* ---------------------------------------------------------------
                 2. FACE ARRIÈRE : ÉTAT DÉVERROUILLÉ (L'OUVERTURE)
                 Directive : Bulle retournée (rotate-y-180 CSS3), photo du produit
-                réel (ex: Gâteau d'anniversaire), nom de la boutique NaNa POS,
+                réel (ex: Gâteau d'anniversaire), nom de la boutique Nanasore,
                 statut de livraison "Livreur en route vers vous 🛵".
                --------------------------------------------------------------- */}
             <div
@@ -367,7 +367,7 @@ export const LockedGiftBubble: React.FC<LockedGiftBubbleProps> = ({
                 </div>
               </div>
 
-              {/* INFORMATIONS : NOM DE LA BOUTIQUE NANA POS & PRIX */}
+              {/* INFORMATIONS : NOM DE LA BOUTIQUE NANASORE & PRIX */}
               <div className="mt-2 space-y-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">

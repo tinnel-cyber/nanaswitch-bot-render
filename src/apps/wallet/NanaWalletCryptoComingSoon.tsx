@@ -23,8 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
-import { auth, db } from '../../firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 
 export interface NanaWalletCryptoComingSoonProps {
   onBack?: () => void;
@@ -63,19 +62,23 @@ export default function NanaWalletCryptoComingSoon({
       localStorage.setItem('nana_crypto_waitlist_registered', 'true');
       localStorage.setItem('nana_crypto_waitlist_contact', contactInput.trim());
 
-      // 2. Sauvegarde Firestore si en ligne
-      if (db) {
-        try {
-          await addDoc(collection(db, 'crypto_waitlist'), {
+      // 2. Sauvegarde Supabase
+      try {
+        const cleanContact = contactInput.trim().replace(/[^a-zA-Z0-9]/g, '_');
+        await supabase.from('app_registry').upsert({
+          key: `crypto_waitlist_${cleanContact}`,
+          name: contactInput.trim(),
+          module_key: 'crypto_waitlist',
+          config_json: {
             contact: contactInput.trim(),
             contactType,
-            uid: auth.currentUser?.uid || null,
             createdAt: new Date().toISOString(),
             source: 'nanawallet_crypto_coming_soon'
-          });
-        } catch (err) {
-          console.warn('[CRYPTO WAITLIST] Erreur Firestore ignorée :', err);
-        }
+          },
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('[CRYPTO WAITLIST] Erreur Supabase ignorée :', err);
       }
 
       setIsSubmitting(false);

@@ -1,7 +1,7 @@
 {
   "name": "nana-payment-service",
   "version": "1.0.0",
-  "description": "Micro-service de transactions financières & webhooks avec IP statique Fixie pour NaNa POS",
+  "description": "Micro-service de transactions financières & webhooks avec IP statique Fixie pour Nanasore",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

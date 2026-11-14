@@ -1,4 +1,4 @@
-# Intégration Android App Links & Authentification par Lien Email - Nana POS
+# Intégration Android App Links & Authentification par Lien Email - Nanasore
 
 ## 📋 Résumé de l'implémentation
 

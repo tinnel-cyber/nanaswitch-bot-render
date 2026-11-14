@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Liste des domaines systèmes réservés à la plateforme principale NaNa POS & Académie.
+ * Liste des domaines systèmes réservés à la plateforme principale Nanasore & Académie.
  * Ces domaines ne subissent pas de réécriture vers `/_tenants/[domain]`.
  */
 const SYSTEM_DOMAINS = new Set([

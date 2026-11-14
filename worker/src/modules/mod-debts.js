@@ -7,7 +7,7 @@
 export async function handleDebtsModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.pages.dev");
 
   // 1. Contrôle rapide du plafond de dette client via KV Edge (ex: /api/debts/check-limit)
   if (path.includes("/check-limit") && env.PRODUCT_STOCK_KV) {

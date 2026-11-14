@@ -33,7 +33,7 @@ export const ImmersiveVideoSearchShowcase: React.FC = () => {
       creator: 'Awa Ouédraogo (@awa.empire.bf)',
       posterUrl:
         'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&auto=format&fit=crop&q=80',
-      badge: '🛍️ Shopping Live NaNa POS'
+      badge: '🛍️ Shopping Live Nanasore'
     },
     {
       id: 'demo-reel-2',

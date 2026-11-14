@@ -1,5 +1,4 @@
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { supabase } from '../lib/supabase';
 
 export interface WameetBridgeUpgradeParams {
   uid?: string;
@@ -51,58 +50,45 @@ export async function checkUserHasNanasoreStore(explicitUid?: string): Promise<{
   shopId?: string;
   shopData?: NanasoreShopDocument;
 }> {
-  const uid = explicitUid || auth.currentUser?.uid;
+  const uid = explicitUid || (typeof window !== 'undefined' ? localStorage.getItem('wameet_phone_auth_uid') : null);
   if (!uid) {
-    const cachedHasStore = localStorage.getItem(LOCAL_STORAGE_KEY_HAS_STORE) === 'true';
-    const cachedStoreId = localStorage.getItem(LOCAL_STORAGE_KEY_STORE_ID) || undefined;
+    const cachedHasStore = typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_HAS_STORE) === 'true';
+    const cachedStoreId = typeof window !== 'undefined' ? (localStorage.getItem(LOCAL_STORAGE_KEY_STORE_ID) || undefined) : undefined;
     return { hasStore: cachedHasStore, shopId: cachedStoreId };
   }
 
   try {
-    // 1. Vérification dans /users/{uid}
-    const userDocRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userDocRef);
-    if (userSnap.exists()) {
-      const userData = userSnap.data();
-      if (userData.hasNanasoreStore === true) {
+    const { data: rows } = await supabase
+      .from('app_registry')
+      .select('*')
+      .in('key', [`user_${uid}`, `store_${uid}`]);
+
+    if (rows && rows.length > 0) {
+      if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_STORAGE_KEY_HAS_STORE, 'true');
         localStorage.setItem(LOCAL_STORAGE_KEY_STORE_ID, uid);
-        return { hasStore: true, shopId: uid };
       }
-    }
-
-    // 2. Vérification dans /nanasore_shops/{uid}
-    const shopDocRef = doc(db, 'nanasore_shops', uid);
-    const shopSnap = await getDoc(shopDocRef);
-    if (shopSnap.exists()) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_HAS_STORE, 'true');
-      localStorage.setItem(LOCAL_STORAGE_KEY_STORE_ID, uid);
-      return {
-        hasStore: true,
-        shopId: uid,
-        shopData: shopSnap.data() as NanasoreShopDocument
-      };
+      return { hasStore: true, shopId: uid };
     }
   } catch (err) {
-    console.warn('[WAMEET BRIDGE] Erreur vérification boutique Nanasore :', err);
+    console.warn('[WAMEET BRIDGE] Erreur vérification boutique Supabase :', err);
   }
 
-  const cachedHasStore = localStorage.getItem(LOCAL_STORAGE_KEY_HAS_STORE) === 'true';
-  const cachedStoreId = localStorage.getItem(LOCAL_STORAGE_KEY_STORE_ID) || undefined;
+  const cachedHasStore = typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_HAS_STORE) === 'true';
+  const cachedStoreId = typeof window !== 'undefined' ? (localStorage.getItem(LOCAL_STORAGE_KEY_STORE_ID) || undefined) : undefined;
   return { hasStore: cachedHasStore, shopId: cachedStoreId };
 }
 
 /**
  * Passerelle de Monétisation Zéro-Friction (Bridge 1-Clic Wameet -> Nanasore)
- * Débloque le statut Vendeur/Formateur sans re-login grâce à l'UID Firebase partagé.
+ * Débloque le statut Vendeur/Formateur sans re-login.
  */
 export async function upgradeWameetUserToNanasore(
   params: WameetBridgeUpgradeParams
 ): Promise<BridgeUpgradeResult> {
   const effectiveUid =
     params.uid ||
-    auth.currentUser?.uid ||
-    localStorage.getItem('wameet_phone_auth_uid') ||
+    (typeof window !== 'undefined' ? localStorage.getItem('wameet_phone_auth_uid') : null) ||
     `wuser_${Date.now()}`;
 
   const cleanHandle = (params.handle || '@createur').trim();
@@ -115,36 +101,9 @@ export async function upgradeWameetUserToNanasore(
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '') || `shop-${effectiveUid.substring(0, 6)}`;
 
-  // 1. Mise à jour du profil utilisateur dans /users/{effectiveUid}
-  // Drapeau hasNanasoreStore: true et rôle hybride [user, seller]
-  const userDocRef = doc(db, 'users', effectiveUid);
-  try {
-    await setDoc(
-      userDocRef,
-      {
-        id: effectiveUid,
-        uid: effectiveUid,
-        name: rawDisplayName,
-        storeId: effectiveUid,
-        storeName: storeName,
-        hasNanasoreStore: true,
-        role: ['user', 'seller'],
-        roles: ['user', 'seller'],
-        sellerMode: 'hybrid_all',
-        vendorType: 'hybrid',
-        phone: params.phone || auth.currentUser?.phoneNumber || '',
-        avatarUrl: params.avatarUrl || auth.currentUser?.photoURL || '',
-        wameetHandle: cleanHandle,
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    );
-  } catch (userErr) {
-    console.warn('[WAMEET BRIDGE] Erreur update /users/ :', userErr);
-  }
+  const nowIso = new Date().toISOString();
 
-  // 2. Initialisation automatique de la collection /nanasore_shops/{effectiveUid}
-  const shopDocRef = doc(db, 'nanasore_shops', effectiveUid);
+  // 1. Initialisation de la boutique
   const shopData: NanasoreShopDocument = {
     id: effectiveUid,
     ownerId: effectiveUid,
@@ -155,11 +114,11 @@ export async function upgradeWameetUserToNanasore(
     ownerAvatar:
       params.avatarUrl ||
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
-    ownerPhone: params.phone || auth.currentUser?.phoneNumber || '',
+    ownerPhone: params.phone || '',
     status: 'active',
     currency: 'XOF',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    createdAt: nowIso,
+    updatedAt: nowIso,
     productsCount: 0,
     categories: ['E-Commerce', 'Formations Vidéo', 'Produits Physiques', 'Téléchargements'],
     description: `Espace Vendeur & Formateur officiel créé en 1-Clic depuis Wameet pour ${rawDisplayName}.`,
@@ -171,36 +130,34 @@ export async function upgradeWameetUserToNanasore(
   };
 
   try {
-    await setDoc(shopDocRef, shopData, { merge: true });
-  } catch (shopErr) {
-    console.warn('[WAMEET BRIDGE] Erreur création /nanasore_shops/ :', shopErr);
-  }
+    await supabase.from('app_registry').upsert({
+      key: `store_${effectiveUid}`,
+      tenant_id: effectiveUid,
+      module_key: 'store_profile',
+      config_json: shopData
+    }, { onConflict: 'key' });
 
-  // 3. Initialisation de la vitrine /stores/{effectiveUid} (utilisée par le Theme Builder & Master Hub)
-  const storeDocRef = doc(db, 'stores', effectiveUid);
-  try {
-    await setDoc(
-      storeDocRef,
-      {
+    await supabase.from('app_registry').upsert({
+      key: `store_theme_${effectiveUid}`,
+      tenant_id: effectiveUid,
+      module_key: 'theme_config',
+      config_json: {
         id: effectiveUid,
-        userId: effectiveUid,
         storeName,
+        slug,
         activeThemeId: 'theme-neo-afro-noir',
-        currency: 'XOF',
-        phone: shopData.ownerPhone,
-        isListedInDirectory: true,
-        source: 'wameet_bridge',
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    );
-  } catch (storeErr) {
-    console.warn('[WAMEET BRIDGE] Erreur synchronisation /stores/ :', storeErr);
+        currency: 'XOF'
+      }
+    }, { onConflict: 'key' });
+  } catch (err) {
+    console.warn('[WAMEET BRIDGE] Erreur synchronisation Supabase :', err);
   }
 
-  // 4. Persistance locale rapide pour réactivité instantanée de l'UI
-  localStorage.setItem(LOCAL_STORAGE_KEY_HAS_STORE, 'true');
-  localStorage.setItem(LOCAL_STORAGE_KEY_STORE_ID, effectiveUid);
+  // 2. Persistance locale rapide pour réactivité instantanée de l'UI
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_STORAGE_KEY_HAS_STORE, 'true');
+    localStorage.setItem(LOCAL_STORAGE_KEY_STORE_ID, effectiveUid);
+  }
 
   return {
     success: true,

@@ -20,6 +20,7 @@ export interface BuildPublicShopUrlOptions {
   blankIndex?: number;
   productSlug?: string;
   funnelSlugOrId?: string;
+  funnelSlug?: string;
   previewTheme?: string;
 }
 
@@ -57,8 +58,9 @@ export function buildPublicShopUrl(
     const cleanProdSlug = options.productSlug.trim().replace(/^prod-/, '');
     path += `/p/${encodeURIComponent(cleanProdSlug)}`;
   }
-  if (options?.funnelSlugOrId) {
-    const cleanFunnel = options.funnelSlugOrId.trim().replace(/^funnel-/, '');
+  const resolvedFunnel = options?.funnelSlugOrId || options?.funnelSlug;
+  if (resolvedFunnel) {
+    const cleanFunnel = resolvedFunnel.trim().replace(/^funnel-/, '');
     path += `/f/${encodeURIComponent(cleanFunnel)}`;
   }
 

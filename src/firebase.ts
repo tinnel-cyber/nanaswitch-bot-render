@@ -35,15 +35,15 @@ import {
 import { getDatabase, Database } from 'firebase/database';
 import { compressImageFile } from './utils/imageCompressor';
 
-export const RTDB_DEFAULT_URL = "https://pos-app-1759a-default-rtdb.firebaseio.com";
+export const RTDB_DEFAULT_URL = "https://nanasore-default-rtdb.firebaseio.com";
 
-// Configuration Firebase avec les clés réelles du projet Nana POS Pro (pos-app-1759a)
+// Configuration Firebase avec les clés réelles du projet Nanasore (nanasore)
 export const firebaseConfig = {
   apiKey: "AIzaSyAds0VCLfekX8qQw-ya8ATlUbSyrG4Y6Zk",
-  authDomain: "pos-app-1759a.firebaseapp.com",
+  authDomain: "nanasore.firebaseapp.com",
   databaseURL: RTDB_DEFAULT_URL,
-  projectId: "pos-app-1759a",
-  storageBucket: "pos-app-1759a.firebasestorage.app",
+  projectId: "nanasore",
+  storageBucket: "nanasore.firebasestorage.app",
   messagingSenderId: "60089897725",
   appId: "1:60089897725:web:0c675e63e72040dea56494",
   measurementId: "G-W8N6127LE5"
@@ -252,13 +252,13 @@ export async function uploadMediaToStorage(file: File, path: string): Promise<st
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('[FIRESTORE] Connexion au serveur pos-app-1759a établie avec succès');
+    console.log('[FIRESTORE] Connexion au serveur nanasore établie avec succès');
     return true;
   } catch (error: any) {
     if (error?.message?.includes('the client is offline')) {
       console.warn('[FIRESTORE] Mode hors-ligne actif (cache local)');
     } else {
-      console.info('[FIRESTORE] Service Firestore prêt sur pos-app-1759a');
+      console.info('[FIRESTORE] Service Firestore prêt sur nanasore');
     }
     return false;
   }

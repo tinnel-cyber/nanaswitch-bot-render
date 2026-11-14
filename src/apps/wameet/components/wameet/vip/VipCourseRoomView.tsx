@@ -36,7 +36,7 @@ type CourseRoomTab = 'MODULES' | 'QUIZ' | 'QNA';
 /**
  * PROMPT 28 : L'Intérieur de la "Salle VIP" (Éducation & Cours)
  * Mission : UI/UX Premium - Intérieur de la "Salle VIP" (LMS & Cours Wameet)
- * Espace fermé dédié à l'apprentissage (LMS), créé depuis NaNa POS.
+ * Espace fermé dédié à l'apprentissage (LMS), créé depuis Nanasore.
  * 
  * Directives UI/UX au millimètre :
  * - Layout Principal : Épuré, favorisant la concentration (bg-slate-50 text-slate-900).
@@ -129,7 +129,7 @@ export const VipCourseRoomView: React.FC<VipCourseRoomViewProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Salle VIP • NaNa POS LMS</span>
+                  <span>Salle VIP • Nanasore LMS</span>
                 </span>
                 <span className="text-[10px] text-slate-400 hidden sm:inline">• Espace Sécurisé</span>
               </div>

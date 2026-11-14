@@ -819,7 +819,7 @@ let cachedIndexTemplate = null;
 async function getIndexHtmlTemplate() {
   if (cachedIndexTemplate) return cachedIndexTemplate;
   try {
-    const response = await fetch('https://pos-app-1759a.web.app/index.html');
+    const response = await fetch('https://nanasore.pages.dev/index.html');
     if (response.ok) {
       cachedIndexTemplate = await response.text();
       return cachedIndexTemplate;
@@ -1167,7 +1167,7 @@ async function linkSubdomainToHosting(slug, options = {}) {
   }
 
   const customDomainId = `${cleanSlug}.nanasore.com`;
-  const projectId = process.env.GCLOUD_PROJECT || (admin.apps[0]?.options?.projectId) || 'pos-app-1759a';
+  const projectId = process.env.GCLOUD_PROJECT || (admin.apps[0]?.options?.projectId) || 'nanasore';
   const siteId = options.siteId || process.env.FIREBASE_HOSTING_SITE || projectId;
   const parent = `projects/${projectId}/sites/${siteId}`;
 
@@ -1400,7 +1400,7 @@ async function loadReactIndexHtml() {
 
   // 2. Fetch HTTP distant sur le domaine Firebase Hosting déployé
   try {
-    const response = await fetch('https://pos-app-1759a.web.app/index.html');
+    const response = await fetch('https://nanasore.pages.dev/index.html');
     if (response.ok) {
       cachedIndexHtmlTemplate = await response.text();
       lastIndexHtmlFetch = now;

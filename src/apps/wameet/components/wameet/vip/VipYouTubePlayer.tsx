@@ -93,7 +93,7 @@ const INITIAL_VIP_MESSAGES: VipChatMessage[] = [
     id: 'm-1',
     senderName: 'Prof. Amadou Diallo',
     senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-    senderRole: 'Formateur Certifié NaNa POS',
+    senderRole: 'Formateur Certifié Nanasore',
     isInstructor: true,
     text: 'Bienvenue dans notre Salon Privé ! Posez vos questions dans l’onglet Q&A, nous ferons une session de réponses en direct dans 20 minutes.',
     createdAt: '19:02'

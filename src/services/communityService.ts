@@ -120,9 +120,9 @@ const SEED_PROFILES: Record<string, LearnerProfile> = {
   'usr-ibrahim': {
     userId: 'usr-ibrahim',
     name: 'Ibrahim Pousbila Konkobo',
-    email: 'ibrahim.konkobo@nana-pos.com',
+    email: 'ibrahim.konkobo@nanasore.com',
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    bio: 'Architecte Logiciel Senior & Fondateur de NaNa POS Pro. Plus de 12 ans d\'expérience dans l\'intégration de systèmes transactionnels haute disponibilité.',
+    bio: 'Architecte Logiciel Senior & Fondateur de Nanasore Pro. Plus de 12 ans d\'expérience dans l\'intégration de systèmes transactionnels haute disponibilité.',
     role: 'INSTRUCTOR',
     title: 'Instructeur Principal & CTO',
     location: 'Ouagadougou • Dakar',

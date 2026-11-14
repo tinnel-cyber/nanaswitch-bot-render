@@ -143,7 +143,7 @@ export const CagnotteCelebrationOverlay: React.FC<CagnotteCelebrationOverlayProp
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <strong>Sécurité absolue :</strong> Les {fmt(targetAmount)} FCFA ont été virés
-                directement sur le compte du marchand NaNa POS.
+                directement sur le compte du marchand Nanasore.
                 <div className="text-slate-400 text-[10px] mt-0.5">
                   0 FCFA n'a transité par un compte individuel.
                 </div>

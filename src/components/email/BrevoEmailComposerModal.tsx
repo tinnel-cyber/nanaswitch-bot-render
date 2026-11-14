@@ -39,20 +39,20 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
 }) => {
   // États de saisie
   const [recipientInput, setRecipientInput] = useState<string>(defaultRecipient);
-  const [subject, setSubject] = useState<string>(defaultSubject || 'Notification Officielle — NaNa POS');
+  const [subject, setSubject] = useState<string>(defaultSubject || 'Notification Officielle — Nanasore');
   const [senderName, setSenderName] = useState<string>('Nanasore Team');
   const [senderEmail, setSenderEmail] = useState<string>('admin@nanasore.com');
   
   // Contenu du message (HTML)
   const [htmlContent, setHtmlContent] = useState<string>(`<p>Bonjour,</p>
-<p>Nous vous informons d'une mise à jour importante concernant vos opérations et encaissements sur votre plateforme <strong>NaNa POS</strong>.</p>
+<p>Nous vous informons d'une mise à jour importante concernant vos opérations et encaissements sur votre plateforme <strong>Nanasore</strong>.</p>
 <p>Vous pouvez consulter les détails complets de vos transactions directement depuis votre Tableau de Bord Central.</p>
 <br/>
 <p style="text-align:center;">
   <a href="https://nanasore.com" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Accéder au Central Master Hub</a>
 </p>
 <br/>
-<p style="font-size:12px;color:#64748b;">Cordialement,<br/><strong>L'équipe NaNa POS & Nanasore</strong><br/>Support : admin@nanasore.com</p>`);
+<p style="font-size:12px;color:#64748b;">Cordialement,<br/><strong>L'équipe Nanasore & Nanasore</strong><br/>Support : admin@nanasore.com</p>`);
 
   // Modes d'affichage
   const [viewMode, setViewMode] = useState<'EDIT' | 'PREVIEW'>('EDIT');
@@ -90,7 +90,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
 
   // Suggestions de Sujets Rapides
   const QUICK_SUBJECTS = [
-    '🔔 [Notification Officielle] Mise à jour critique de votre compte NaNa POS',
+    '🔔 [Notification Officielle] Mise à jour critique de votre compte Nanasore',
     '🧾 [Reçu de Vente] Confirmation de votre encaissement et justificatif',
     '💳 [Alerte Trésorerie] Point sur vos règlements et créances en cours',
     '⚡ [Offre Exclusive] Nouveautés et opportunités sur votre plateforme NaNa'
@@ -161,7 +161,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
     
     <!-- Header Officiel Nanasore -->
     <div style="background:linear-gradient(135deg,#0B1E48 0%,#1E3A8A 100%);padding:28px 24px;text-align:center;color:#FFFFFF;">
-      <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;">NaNa POS & Commerce</h1>
+      <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;">Nanasore & Commerce</h1>
       <p style="margin:6px 0 0 0;font-size:11px;color:#93C5FD;text-transform:uppercase;letter-spacing:1px;font-weight:bold;">Expédié via Brevo API v3 • admin@nanasore.com</p>
     </div>
 
@@ -491,7 +491,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 max-h-[350px] overflow-y-auto">
                 <div className="max-w-lg mx-auto bg-white text-slate-900 rounded-xl p-5 shadow-lg">
                   <div className="bg-[#0B1E48] text-white p-3 rounded-lg text-center mb-4">
-                    <h4 className="text-sm font-black m-0">NaNa POS & Commerce</h4>
+                    <h4 className="text-sm font-black m-0">Nanasore & Commerce</h4>
                     <p className="text-[10px] text-blue-300 m-0">Expédié via Brevo API v3</p>
                   </div>
                   <div 

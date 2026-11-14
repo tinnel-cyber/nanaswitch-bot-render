@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "pos-app-1759a",
+    "site": "nanasore",
     "public": "dist",
     "ignore": [
       "firebase.json",

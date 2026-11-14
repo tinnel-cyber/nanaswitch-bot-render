@@ -33,7 +33,7 @@ export const GEMINI_API_KEY_STORAGE_KEY = 'nana_gemini_api_key';
 /**
  * System Instruction stricte de l'Expert Juridique & Financier OHADA
  */
-export const OHADA_LEGAL_SYSTEM_INSTRUCTION = `Tu es l'Expert Juriste d'Affaires & Spécialiste en Droit Commercial et Financier International de Nana POS.
+export const OHADA_LEGAL_SYSTEM_INSTRUCTION = `Tu es l'Expert Juriste d'Affaires & Spécialiste en Droit Commercial et Financier International de Nanasore.
 Tu es un avocat d'affaires et juriste d'entreprise chevronné avec plus de 20 ans d'expérience en Afrique de l'Ouest, Afrique Centrale et Commerce International.
 
 Tes domaines de maîtrise absolue :
@@ -253,7 +253,7 @@ Pour éviter les lenteurs et blocages des juridictions locales, l'insertion d'un
   }
 
   // Réponse juridique générale d'accueil
-  return `### ⚖️ Conseil Juridique & Financier OHADA / International Nana POS
+  return `### ⚖️ Conseil Juridique & Financier OHADA / International Nanasore
 
 Bonjour. En tant qu'expert en droit des affaires de l'espace **OHADA** (17 États membres) et en **Commerce International**, je vous accompagne dans la sécurisation de vos opérations :
 
@@ -357,7 +357,7 @@ async function callDirectGoogleAIStudio(params: {
 }
 
 /**
- * Interroge l'Assistant IA Juridique via Google AI Studio ou via l'API Nana POS (avec repli gracieux local instantané)
+ * Interroge l'Assistant IA Juridique via Google AI Studio ou via l'API Nanasore (avec repli gracieux local instantané)
  */
 export async function askLegalAdvisor(params: {
   message: string;
@@ -381,7 +381,7 @@ export async function askLegalAdvisor(params: {
     }
   }
 
-  // 2. Sinon, interroger l'endpoint du serveur local Nana POS (/api/ai/legal)
+  // 2. Sinon, interroger l'endpoint du serveur local Nanasore (/api/ai/legal)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 secondes timeout

@@ -171,7 +171,7 @@ async function refreshAccessToken(refreshToken) {
 }
 
 /**
- * 4. Sauvegarde sécurisée des tokens YouTube dans Firestore (pos-app-1759a)
+ * 4. Sauvegarde sécurisée des tokens YouTube dans Firestore (nanasore)
  */
 async function saveYouTubeTokensToFirestore(db, { userId = 'pousbila04', tokens }) {
   if (!db) return;

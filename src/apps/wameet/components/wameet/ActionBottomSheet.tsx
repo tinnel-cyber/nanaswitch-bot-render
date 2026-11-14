@@ -113,7 +113,7 @@ export const ActionBottomSheet: React.FC<ActionBottomSheetProps> = ({
 
 // ===========================================================================
 // 2. SAS "LANCER UN LIVE SHOPPING" : LiveShoppingGatewayBottomSheet
-//    Demande : Titre du Live, Catégorie, boutons de permission ("Autoriser Caméra", "Lier le catalogue NaNa POS")
+//    Demande : Titre du Live, Catégorie, boutons de permission ("Autoriser Caméra", "Lier le catalogue Nanasore")
 //    Gros bouton : "Démarrer le Live"
 // ===========================================================================
 
@@ -248,7 +248,7 @@ export const LiveShoppingGatewayBottomSheet: React.FC<LiveShoppingGatewayBottomS
               </div>
             </button>
 
-            {/* Bouton Permission 2 : Lier le catalogue NaNa POS */}
+            {/* Bouton Permission 2 : Lier le catalogue Nanasore */}
             <button
               type="button"
               onClick={() => {
@@ -270,7 +270,7 @@ export const LiveShoppingGatewayBottomSheet: React.FC<LiveShoppingGatewayBottomS
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold flex items-center gap-1">
-                  <span>Lier NaNa POS</span>
+                  <span>Lier Nanasore</span>
                   {nanaPosLinked && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">

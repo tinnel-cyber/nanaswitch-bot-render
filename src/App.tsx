@@ -527,7 +527,7 @@ export default function App() {
           if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') return 'POS';
           if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') return 'STUDIO';
           if (subMod === 'nana-market' || subMod === 'market') return 'MARKET_DIRECTORY';
-          if (subMod === 'funnel-builder' || subMod === 'funnel') return 'MODULAR_FUNNEL';
+          if (subMod === 'funnel-builder' || subMod === 'funnel' || subMod === 'tunnels') return 'PHYSICAL_FUNNEL';
           if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') return 'INVENTORY';
           if (subMod === 'orders-quotes' || subMod === 'commandes') return 'CUSTOMER_ORDERS';
           if (subMod === 'reports-analytics' || subMod === 'rapports') return 'REPORTS';
@@ -562,9 +562,7 @@ export default function App() {
           return 'STUDIO';
         }
         if (modName === 'funnel' || modName === 'funnels' || modName === 'tunnels' || modName === 'tunnel') {
-          if (subMod === 'physical' || subMod === 'checkout') return 'PHYSICAL_FUNNEL';
-          if (subMod === 'ultimate') return 'ULTIMATE_FUNNEL';
-          return 'MODULAR_FUNNEL';
+          return 'PHYSICAL_FUNNEL';
         }
         if (modName === 'inventaire' || modName === 'stock' || modName === 'excel') {
           return 'INVENTORY';
@@ -6871,10 +6869,10 @@ export default function App() {
             </ModuleErrorBoundary>
           )}
 
-          {/* VIEW 2 : Caisse Express 1-Clic (Produits Physiques) */}
-          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel') && (
+          {/* VIEW 2 & 3 : Constructeur Officiel Unifié - Caisse Express 1-Clic & Tunnels Physiques */}
+          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel' || currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
             <ModuleErrorBoundary moduleName="Tunnels - Caisse Express 1-Clic">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement de Caisse Express..." />}>
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Constructeur de Tunnels..." />}>
                 <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden flex flex-col p-2 sm:p-4">
                   <PhysicalFunnelBuilder
                     className="h-full"
@@ -6894,40 +6892,6 @@ export default function App() {
                       if (typeof window !== 'undefined') {
                         window.open(`/c/${slug}`, '_blank');
                       }
-                    }}
-                  />
-                </div>
-              </React.Suspense>
-            </ModuleErrorBoundary>
-          )}
-
-          {/* VIEW 3 : NaNa Studio 3.0 (Tunnel Modulaire Divi) */}
-          {(currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
-            <ModuleErrorBoundary moduleName="Tunnels - Studio Modulaire Divi">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement de NaNa Funnel Studio 3.0..." />}>
-                <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden">
-                  <FunnelBuilder
-                    isOpen={true}
-                    isPublicView={false}
-                    product={inventory[0] ? {
-                      id: inventory[0].id || 'prod-nana-1',
-                      name: inventory[0].name || (currentUser?.storeName ? `Offre ${currentUser.storeName}` : 'Produit Phare NaNa Store'),
-                      price: inventory[0].sellingPrice || 25000,
-                      originalPrice: Math.round((inventory[0].sellingPrice || 25000) * 1.4),
-                      image: inventory[0].photoUrl || (inventory[0] as any)?.image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
-                      description: inventory[0].description || 'Tunnel de vente modulaire haute conversion avec sections Divi et Toolbox Pro.'
-                    } : null}
-                    onClose={() => {
-                      setCurrentView('NANA_SWITCH_APP');
-                      if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/dashboard');
-                      }
-                    }}
-                    onSave={(savedPayload: any) => {
-                      if (savedPayload) {
-                        saveFunnelConfig(savedPayload);
-                      }
-                      playValidationBeep();
                     }}
                   />
                 </div>

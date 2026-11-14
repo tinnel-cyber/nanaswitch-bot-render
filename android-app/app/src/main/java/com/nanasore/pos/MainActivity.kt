@@ -11,7 +11,7 @@ import com.google.firebase.ktx.Firebase
 
 /**
  * MainActivity gère l'authentification par lien e-mail (Email Link Authentication)
- * et les Android App Links pour Nana POS.
+ * et les Android App Links pour Nanasore.
  *
  * Fonctionnalités :
  * - Interception des liens HTTPS de nanasore.com

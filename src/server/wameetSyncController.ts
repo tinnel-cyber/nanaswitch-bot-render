@@ -1,16 +1,16 @@
 /**
  * @file wameetSyncController.ts
- * @description Le Pont Backend (De NaNa POS vers Wameet VIP) - Synchronisation "Studio Créateur" (Prompt 30)
+ * @description Le Pont Backend (De Nanasore vers Wameet VIP) - Synchronisation "Studio Créateur" (Prompt 30)
  * 
  * Architecture et Logique Métier :
  * 1. Sécurité : Authentification Machine-to-Machine (M2M) stricte avec tokens et signatures HMAC-SHA256,
  *    protection anti-rejeu par timestamp, et vérification du statut "Pro Subscriber" du créateur.
  * 2. Publication (POST /api/wameet-sync/publish-room) :
- *    - Reçoit le payload depuis NaNa POS (creatorId, roomType, title, description, subscriptionPrice, contentPayload).
+ *    - Reçoit le payload depuis Nanasore (creatorId, roomType, title, description, subscriptionPrice, contentPayload).
  *    - Crée la Room dans le store Wameet, génère la room WebSocket et diffuse l'événement instantanément
  *      pour faire apparaître la room dans les carrousels de VipDiscoveryScreen.
  * 3. Mise à jour temps réel (PUT /api/wameet-sync/update-content) :
- *    - Reçoit les modifications de quiz, vidéos ou posts faites depuis NaNa POS.
+ *    - Reçoit les modifications de quiz, vidéos ou posts faites depuis Nanasore.
  *    - Met à jour le store Wameet et diffuse la mise à jour aux abonnés connectés via WebSockets.
  * 4. Consultation (GET /api/wameet-sync/rooms & GET /api/wameet-sync/rooms/:roomId) :
  *    - Permet au frontend Wameet de récupérer les espaces synchronisés.
@@ -35,7 +35,7 @@ export const NANA_M2M_API_KEY =
 const MAX_REQUEST_AGE_MS = 5 * 60 * 1000;
 
 // ============================================================================
-// 2. TYPES ET STRUCTURES DE DONNÉES DU PONT NANA POS -> WAMEET
+// 2. TYPES ET STRUCTURES DE DONNÉES DU PONT NANASORE -> WAMEET
 // ============================================================================
 
 export type SyncedRoomType = 'COURSE_ROOM' | 'BUSINESS_LOUNGE';
@@ -186,7 +186,7 @@ export interface WebSocketRoomEmitter {
 const WAMEET_SYNCED_ROOMS = new Map<string, SyncedVipRoomRecord>();
 const CREATOR_ROOMS_INDEX = new Map<string, Set<string>>(); // creatorId -> Set<roomId>
 
-// Set des créateurs autorisés Pro Subscribers NaNa POS (pour vérification stricte)
+// Set des créateurs autorisés Pro Subscribers Nanasore (pour vérification stricte)
 const NANA_PRO_SUBSCRIBERS = new Set<string>([
   'creator_ibrahim_traore',
   'creator_marcelle_gnakpa',
@@ -328,7 +328,7 @@ export function getVipRoomClientCount(roomId: string): number {
 // ============================================================================
 
 /**
- * Valide l'authenticité de la requête en provenance du serveur NaNa POS.
+ * Valide l'authenticité de la requête en provenance du serveur Nanasore.
  * Vérifie le token M2M statique OU la signature HMAC SHA-256 avec contrôle de timestamp anti-rejeu.
  */
 export function verifyNanaM2MAuth(req: Request, res: Response, next: NextFunction) {
@@ -378,7 +378,7 @@ export function verifyNanaM2MAuth(req: Request, res: Response, next: NextFunctio
     success: false,
     error: 'M2M_UNAUTHORIZED',
     message:
-      'Accès refusé : Authentification Machine-to-Machine invalide entre NaNa POS et Wameet. Fournissez x-nana-m2m-token ou x-nana-signature.',
+      'Accès refusé : Authentification Machine-to-Machine invalide entre Nanasore et Wameet. Fournissez x-nana-m2m-token ou x-nana-signature.',
     hint: 'Utilisez la clé secrète configurée dans NANA_WAMEET_M2M_SECRET.'
   });
 }
@@ -388,7 +388,7 @@ export function verifyNanaM2MAuth(req: Request, res: Response, next: NextFunctio
 // ============================================================================
 
 /**
- * Crée et publie un Espace VIP (Salle de cours ou Salon d'affaires) ordonné depuis NaNa POS.
+ * Crée et publie un Espace VIP (Salle de cours ou Salon d'affaires) ordonné depuis Nanasore.
  */
 export async function handlePublishRoom(req: Request, res: Response) {
   try {
@@ -421,14 +421,14 @@ export async function handlePublishRoom(req: Request, res: Response) {
       });
     }
 
-    // 2. Vérification stricte du Statut "Pro Subscriber" du Créateur NaNa POS
+    // 2. Vérification stricte du Statut "Pro Subscriber" du Créateur Nanasore
     const isPro = creatorIsPro || NANA_PRO_SUBSCRIBERS.has(creatorId);
     if (!isPro) {
       return res.status(403).json({
         success: false,
         error: 'FORBIDDEN_PRO_REQUIRED',
         message:
-          'Seuls les créateurs abonnés au statut Pro Subscriber dans NaNa POS sont autorisés à publier des espaces VIP Wameet.',
+          'Seuls les créateurs abonnés au statut Pro Subscriber dans Nanasore sont autorisés à publier des espaces VIP Wameet.',
         creatorId
       });
     }
@@ -528,7 +528,7 @@ export async function handlePublishRoom(req: Request, res: Response) {
     // 7. Réponse Succès 201 Created
     return res.status(201).json({
       success: true,
-      message: 'Espace VIP Wameet créé et synchronisé avec succès depuis NaNa POS.',
+      message: 'Espace VIP Wameet créé et synchronisé avec succès depuis Nanasore.',
       data: newRoom
     });
   } catch (error: any) {
@@ -704,7 +704,7 @@ export async function handleUpdateContent(req: Request, res: Response) {
 
 /**
  * GET /api/wameet-sync/rooms
- * Renvoie toutes les salles et salons VIP synchronisés depuis NaNa POS.
+ * Renvoie toutes les salles et salons VIP synchronisés depuis Nanasore.
  */
 export function handleGetSyncedRooms(req: Request, res: Response) {
   const rooms = Array.from(WAMEET_SYNCED_ROOMS.values()).filter(
@@ -739,7 +739,7 @@ export function handleGetRoomById(req: Request, res: Response) {
 
 /**
  * DELETE /api/wameet-sync/rooms/:roomId
- * Permet d'archiver une salle VIP depuis le back-office NaNa POS.
+ * Permet d'archiver une salle VIP depuis le back-office Nanasore.
  */
 export function handleDeleteRoom(req: Request, res: Response) {
   const { roomId } = req.params;
@@ -760,7 +760,7 @@ export function handleDeleteRoom(req: Request, res: Response) {
   if (wsEmitter) {
     wsEmitter.to(room.webSocketChannel).emit('room_closed', {
       roomId,
-      reason: 'Archivé par le créateur depuis NaNa POS',
+      reason: 'Archivé par le créateur depuis Nanasore',
       timestamp: Date.now()
     });
   }
@@ -780,12 +780,12 @@ export function attachWameetSyncRoutes(app: Express) {
   app.get('/api/wameet-sync/rooms', handleGetSyncedRooms);
   app.get('/api/wameet-sync/rooms/:roomId', handleGetRoomById);
 
-  // Routes protégées Machine-to-Machine (NaNa POS vers Wameet VIP)
+  // Routes protégées Machine-to-Machine (Nanasore vers Wameet VIP)
   app.post('/api/wameet-sync/publish-room', verifyNanaM2MAuth, handlePublishRoom);
   app.put('/api/wameet-sync/update-content', verifyNanaM2MAuth, handleUpdateContent);
   app.delete('/api/wameet-sync/rooms/:roomId', verifyNanaM2MAuth, handleDeleteRoom);
 
-  console.log('[WAMEET SYNC] 🌉 Routes du Pont Backend NaNa POS -> Wameet VIP attachées avec succès.');
+  console.log('[WAMEET SYNC] 🌉 Routes du Pont Backend Nanasore -> Wameet VIP attachées avec succès.');
 }
 
 export default {

@@ -23,8 +23,6 @@ import {
 import { StoreProductItem } from './types';
 import { triggerOpenFunnel } from '../../../../themes/themeUtils';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { db } from '../../../../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
 import { recordUnifiedOrder } from '../../../../utils/firestoreService';
 

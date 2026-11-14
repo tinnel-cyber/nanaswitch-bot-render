@@ -1,8 +1,8 @@
-# Guide Android App Links & Authentification par Lien Email - Nana POS
+# Guide Android App Links & Authentification par Lien Email - Nanasore
 
 ## Vue d'ensemble
 
-Ce guide explique comment configurer les Android App Links et l'authentification par lien email (Email Link Authentication) pour l'application mobile Nana POS, en remplaçant les Firebase Dynamic Links dépréciés.
+Ce guide explique comment configurer les Android App Links et l'authentification par lien email (Email Link Authentication) pour l'application mobile Nanasore, en remplaçant les Firebase Dynamic Links dépréciés.
 
 ## Architecture
 
@@ -121,7 +121,7 @@ PluginLoader.loadPlugin(this, EmailLinkPlugin::class.java)
 ### 2.1 Activer l'authentification par lien email
 
 1. Allez sur [Firebase Console](https://console.firebase.google.com/)
-2. Sélectionnez votre projet `pos-app-1759a`
+2. Sélectionnez votre projet `nanasore`
 3. Navigation > **Authentication** > **Sign-in method**
 4. Activez **Email/Password**
 5. Activez **Email link (passwordless sign-in)**

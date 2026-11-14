@@ -17,7 +17,7 @@ async function main() {
     '--disable-web-security',
     '--no-first-run',
     '--no-default-browser-check',
-    'https://pos-app-1759a.web.app/'
+    'https://nanasore.web.app/'
   ]);
 
   let targets = null;
@@ -88,7 +88,7 @@ async function main() {
   });
 
   console.log('Navigating to Central Hub...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/' });
   await new Promise(r => setTimeout(r, 4500));
 
   // If PIN keypad is visible, click 1, 2, 3, 4 with a delay between digits to unlock

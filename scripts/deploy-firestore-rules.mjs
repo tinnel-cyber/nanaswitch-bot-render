@@ -29,7 +29,7 @@ async function deployRules() {
   const rulesContent = fs.readFileSync('firestore.rules', 'utf8');
 
   console.log('3. Creating new ruleset on Google Cloud...');
-  const createRulesetRes = await fetch('https://firebaserules.googleapis.com/v1/projects/pos-app-1759a/rulesets', {
+  const createRulesetRes = await fetch('https://firebaserules.googleapis.com/v1/projects/nanasore/rulesets', {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + token,
@@ -54,7 +54,7 @@ async function deployRules() {
   console.log('Ruleset created:', rulesetData.name);
 
   console.log('4. Releasing ruleset to cloud.firestore...');
-  const releaseRes = await fetch('https://firebaserules.googleapis.com/v1/projects/pos-app-1759a/releases/cloud.firestore', {
+  const releaseRes = await fetch('https://firebaserules.googleapis.com/v1/projects/nanasore/releases/cloud.firestore', {
     method: 'PATCH',
     headers: {
       Authorization: 'Bearer ' + token,
@@ -62,7 +62,7 @@ async function deployRules() {
     },
     body: JSON.stringify({
       release: {
-        name: 'projects/pos-app-1759a/releases/cloud.firestore',
+        name: 'projects/nanasore/releases/cloud.firestore',
         rulesetName: rulesetData.name
       }
     })

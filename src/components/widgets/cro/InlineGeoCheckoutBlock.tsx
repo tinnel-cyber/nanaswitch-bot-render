@@ -23,6 +23,8 @@ interface InlineGeoCheckoutBlockProps {
   };
   ctaText?: string;
   merchantId?: string;
+  merchantPhone?: string;
+  merchantWhatsapp?: string;
   onPaymentCompleted?: (transactionData: any) => void;
   className?: string;
 }
@@ -46,6 +48,8 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
   },
   ctaText,
   merchantId,
+  merchantPhone,
+  merchantWhatsapp,
   onPaymentCompleted,
   className = ''
 }) => {
@@ -56,8 +60,8 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
   const activeBump: OrderBumpConfig = orderBump || DEFAULT_ORDER_BUMP;
 
   const [provider, setProvider] = useState<'WAVE' | 'ORANGE_MONEY' | 'MOOV_MONEY' | 'MTN_MOMO' | 'CASH_ON_DELIVERY'>('WAVE');
-  const [customerName, setCustomerName] = useState('Salif Ouédraogo');
-  const [phoneNumber, setPhoneNumber] = useState('+226 70 00 00 00');
+  const [customerName, setCustomerName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOption>(activeDeliveryList[0]);
   const [includeOrderBump, setIncludeOrderBump] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -100,11 +104,17 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
 
   const handlePay = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!customerName.trim() || !phoneNumber.trim()) {
+      return;
+    }
     playValidationBeep();
     setIsProcessing(true);
 
+    const cleanMerchantNum = (merchantPhone || merchantWhatsapp || '').replace(/\D/g, '') || '0700000000';
+    const isBurkina = phoneNumber.startsWith('+226') || phoneNumber.startsWith('226');
+
     const generatedUssd = provider === 'ORANGE_MONEY'
-      ? `*144*10*65565805*${totalAmount}#`
+      ? (isBurkina ? `*144*10*${cleanMerchantNum}*${totalAmount}#` : `*144*4*${cleanMerchantNum}*${totalAmount}#`)
       : provider === 'MOOV_MONEY'
       ? `*555*2*1*${totalAmount}#`
       : provider === 'MTN_MOMO'
@@ -122,7 +132,7 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
       // Notification Push au Marchand (Exclusivité Plan PRO)
       notifyMerchantNewOrder({
         merchantId,
-        customerName,
+        customerName: customerName.trim(),
         orderTotal: totalAmount,
         productName,
         orderId: `tx_inline_${Date.now()}`
@@ -131,16 +141,17 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
       if (onPaymentCompleted) {
         onPaymentCompleted({
           transactionId: `tx_inline_${Date.now()}`,
-          customerName,
-          phoneNumber,
+          customerName: customerName.trim(),
+          phoneNumber: phoneNumber.trim(),
           totalAmount,
           provider,
           delivery: selectedDelivery,
           orderBumpAccepted: includeOrderBump,
-          composedItems: miniMarketItems
+          composedItems: miniMarketItems,
+          isCashOnDelivery: provider === 'CASH_ON_DELIVERY'
         });
       }
-    }, 1800);
+    }, 1200);
   };
 
   const availableProviders = [
@@ -221,7 +232,7 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
               onChange={(e) => setCustomerName(e.target.value)}
               required
               className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-emerald-500 transition"
-              placeholder="Ex: Salif Ouédraogo"
+              placeholder="Ex: Amadou Koné"
             />
           </div>
 

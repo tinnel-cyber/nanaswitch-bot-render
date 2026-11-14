@@ -2375,7 +2375,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
               </div>
             )}
 
-            {/* Panneau 'Kit de Montage IA' (côté NaNa POS) dès l'ouverture */}
+            {/* Panneau 'Kit de Montage IA' (côté Nanasore) dès l'ouverture */}
             {showMontageKit && renderMontageKit()}
 
           </div>

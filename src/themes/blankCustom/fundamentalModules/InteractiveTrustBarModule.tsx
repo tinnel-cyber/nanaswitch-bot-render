@@ -2,18 +2,21 @@ import React, { useState } from 'react';
 import { Truck, ShieldCheck, MessageCircle, RotateCcw, CheckCircle2, ChevronDown, Info } from 'lucide-react';
 import { CustomSectionInstance } from '../../../types';
 import { MoodStyleConfig } from '../moodStyles';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 import { playTapBeep } from '../../../utils/audio';
 
 export interface InteractiveTrustBarModuleProps {
   section: CustomSectionInstance;
   moodStyle: MoodStyleConfig;
   buttonRadiusClass: string;
+  isAdminPreview?: boolean;
 }
 
 export const InteractiveTrustBarModule: React.FC<InteractiveTrustBarModuleProps> = ({
   section,
   moodStyle,
-  buttonRadiusClass
+  buttonRadiusClass,
+  isAdminPreview
 }) => {
   const cfg = section.settings || section.config || {};
   const title = section.title || cfg.title || "Pourquoi Commander Chez Nous ?";
@@ -75,13 +78,29 @@ export const InteractiveTrustBarModule: React.FC<InteractiveTrustBarModuleProps>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {title && (
           <div className="text-center max-w-xl mx-auto mb-8 sm:mb-12 space-y-1">
-            <h2 className={`text-xl sm:text-2xl font-black ${moodStyle.textPrimary}`}>
-              {title}
-            </h2>
+            <LiveEditable
+              label="Titre Barre de Confiance"
+              sectionId={section.id}
+              sectionField="title"
+              value={title}
+              isAdminPreview={isAdminPreview}
+            >
+              <h2 className={`text-xl sm:text-2xl font-black ${moodStyle.textPrimary}`}>
+                {title}
+              </h2>
+            </LiveEditable>
             {subtitle && (
-              <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
-                {subtitle}
-              </p>
+              <LiveEditable
+                label="Sous-titre Barre de Confiance"
+                sectionId={section.id}
+                sectionField="subtitle"
+                value={subtitle}
+                isAdminPreview={isAdminPreview}
+              >
+                <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
+                  {subtitle}
+                </p>
+              </LiveEditable>
             )}
           </div>
         )}

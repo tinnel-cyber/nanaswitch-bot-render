@@ -92,7 +92,7 @@ export const UpsellOpportunitiesWidget: React.FC<UpsellOpportunitiesWidgetProps>
     setSelectedCandidate(candidate);
 
     const is100 = candidate.criticalQuota.percentage >= 100;
-    const subject = `[NaNa POS Pro] Débloquez vos plafonds et passez au Plan Pro sur ${candidate.storeName}`;
+    const subject = `[Nanasore Pro] Débloquez vos plafonds et passez au Plan Pro sur ${candidate.storeName}`;
     const body = `Bonjour ${candidate.managerName},
 
 Nous remarquons que votre boutique "${candidate.storeName}" a atteint ${candidate.criticalQuota.formatted} (${candidate.criticalQuota.percentage}% de votre quota mensuel) sur votre formule ${candidate.currentPlan}.
@@ -100,14 +100,14 @@ Nous remarquons que votre boutique "${candidate.storeName}" a atteint ${candidat
 ${is100 ? "Vos diffusions en direct ou ajouts de produits sont temporairement bloqués par la limite Starter." : "Vous approchez rapidement de votre limite mensuelle."}
 
 Pour éviter tout ralentissement de vos ventes et débloquer les fonctionnalités illimitées (Lives Flash illimités, catalogue infini, IA marketing avancée) :
-👉 Passez directement au Plan Pro NaNa POS pour seulement 12 000 F CFA/mois.
+👉 Passez directement au Plan Pro Nanasore pour seulement 12 000 F CFA/mois.
 
 En tant que client prioritaire, nous vous offrons 15% de réduction sur votre premier trimestre avec le code VIPPRO15.
 
 Puis-je vous activer l'accès Pro dès aujourd'hui ?
 
 Bien cordialement,
-L'équipe Commerciale NaNa POS
+L'équipe Commerciale Nanasore
 Contact direct : +226 70 00 00 00`;
 
     setEmailSubject(subject);

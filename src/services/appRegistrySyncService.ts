@@ -4,9 +4,7 @@
  * Source unique : ALL_OFFICIAL_CATALOG dans appRegistry.ts (11 apps + 7 services + 6 modules + 3 outils).
  */
 
-import { doc, getDocs, collection, setDoc, serverTimestamp } from 'firebase/firestore';
-import { ref as rtdbRef, set as rtdbSet } from 'firebase/database';
-import { db, rtdb } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { ALL_OFFICIAL_CATALOG, type TaxonomyType } from '../appRegistry';
 
 export interface AppRegistryModule {
@@ -173,29 +171,27 @@ export async function loadAppRegistryModules(): Promise<{
   }
 
   try {
-    const querySnapshot = await getDocs(collection(db, 'app_registry'));
-    if (!querySnapshot.empty) {
-      querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const key = docSnap.id || data.key;
+    const { data: regRows } = await supabase.from('app_registry').select('*');
+    if (regRows && regRows.length > 0) {
+      regRows.forEach((row: any) => {
+        const key = row.key;
+        const data = (row.config_json || row) as any;
         if (key && !FICTIONAL_MODULE_KEYS.has(key)) {
           mergedMap.set(key, {
             ...mergedMap.get(key),
-            name: data.name,
+            name: data.name || key,
             description: data.description,
             category: data.category,
             is_active: data.is_active ?? true,
             is_public: data.is_public ?? true,
-            updated_at: data.updatedAt || data.updated_at,
+            updated_at: row.updated_at || data.updatedAt,
           });
         }
       });
-      firebaseOnline = true;
-    } else {
-      firebaseOnline = true;
+      supabaseOnline = true;
     }
   } catch (err) {
-    console.warn('[AppRegistry] Firestore injoignable :', err);
+    console.warn('[AppRegistry] Supabase app_registry note :', err);
   }
 
   const finalModules = DEFAULT_27_MODULES.map((base) => {
@@ -213,9 +209,9 @@ export async function loadAppRegistryModules(): Promise<{
 
   return {
     modules: finalModules,
-    source: supabaseOnline ? 'SUPABASE' : firebaseOnline ? 'FIREBASE' : 'LOCAL',
+    source: supabaseOnline ? 'SUPABASE' : 'LOCAL',
     supabaseOnline,
-    firebaseOnline,
+    firebaseOnline: false,
   };
 }
 
@@ -226,46 +222,37 @@ export async function syncAppRegistryModule(mod: AppRegistryModule): Promise<{
   error?: string;
 }> {
   let supabaseSynced = false;
-  let firebaseSynced = false;
+  const firebaseSynced = false;
   const nowIso = new Date().toISOString();
 
   try {
-    const docRef = doc(db, 'app_registry', mod.key);
-    await setDoc(
-      docRef,
+    const { error: sbErr } = await supabase.from('app_registry').upsert(
       {
         key: mod.key,
-        name: mod.name,
-        description: mod.description,
-        category: mod.category,
-        num: mod.num,
-        section: mod.section,
-        edgeFile: mod.edgeFile,
-        routes: mod.routes,
-        is_active: mod.is_active,
-        is_public: mod.is_public,
-        updatedAt: nowIso,
-        serverTimestamp: serverTimestamp(),
+        tenant_id: 'default',
+        module_key: mod.category || 'official_module',
+        config_json: {
+          key: mod.key,
+          name: mod.name,
+          description: mod.description,
+          category: mod.category,
+          num: mod.num,
+          section: mod.section,
+          edgeFile: mod.edgeFile,
+          routes: mod.routes,
+          is_active: mod.is_active,
+          is_public: mod.is_public,
+          updatedAt: nowIso,
+        },
       },
-      { merge: true }
+      { onConflict: 'key' }
     );
 
-    try {
-      const rtdbNode = rtdbRef(rtdb, `app_registry/${mod.key}`);
-      await rtdbSet(rtdbNode, {
-        key: mod.key,
-        name: mod.name,
-        description: mod.description,
-        category: mod.category,
-        updatedAt: nowIso,
-      });
-    } catch (rtdbErr) {
-      console.warn('[AppRegistry RTDB Sync Warning]', rtdbErr);
+    if (!sbErr) {
+      supabaseSynced = true;
     }
-
-    firebaseSynced = true;
-  } catch (fbErr: any) {
-    console.error('[AppRegistry Firebase Error]', fbErr);
+  } catch (sbErr: any) {
+    console.error('[AppRegistry Supabase Error]', sbErr);
   }
 
   try {

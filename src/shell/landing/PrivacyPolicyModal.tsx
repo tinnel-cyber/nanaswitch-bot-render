@@ -77,7 +77,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
                 Politique de Confidentialité & Mentions Légales
               </h3>
               <p className="text-[11px] text-slate-400">
-                Nana POS • Protection des Données & Conformité RGPD / OHADA
+                Nanasore • Protection des Données & Conformité RGPD / OHADA
               </p>
             </div>
           </div>

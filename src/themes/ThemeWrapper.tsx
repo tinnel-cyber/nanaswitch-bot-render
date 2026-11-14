@@ -389,6 +389,84 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
     return props.displayBanners || [];
   }, [props.displayBanners, effectiveCustomConfig, effectiveStoreConfig.storeName]);
 
+  // Calcul dynamique de la couleur d'accentuation et injection des règles CSS temps-réel (0ms)
+  const dynamicAccentColor = useMemo(() => {
+    return effectiveCustomConfig?.primaryAccentColor || 
+      (resolvedThemeId === 'theme-electro-orange' ? '#FF6A00' :
+       resolvedThemeId === 'theme-beauty-emerald' ? '#0F4C3A' :
+       resolvedThemeId === 'theme-electro-tech' ? '#0056D2' :
+       '#2563EB');
+  }, [effectiveCustomConfig?.primaryAccentColor, resolvedThemeId]);
+
+  const dynamicThemeStyles = useMemo(() => {
+    if (!dynamicAccentColor || !resolvedThemeId) return '';
+    const activeId = normalizeThemeId(resolvedThemeId);
+    return `
+      .storefront-theme-container[data-theme-id="${activeId}"] {
+        --theme-primary: ${dynamicAccentColor};
+        --theme-primary-hover: ${dynamicAccentColor}ee;
+        --primary-color: ${dynamicAccentColor};
+        --primary-accent: ${dynamicAccentColor};
+      }
+      /* Electro Orange & Blanc : Répercussion temps-réel */
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] .electro-search-pill {
+        border-color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] .electro-search-btn,
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] .electro-logo-dot,
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="bg-[#FF6A00]"],
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="bg-orange-500"] {
+        background-color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="text-[#FF6A00]"],
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="text-orange-500"] {
+        color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="border-[#FF6A00]"],
+      .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="border-orange-500"] {
+        border-color: ${dynamicAccentColor} !important;
+      }
+
+      /* Émeraude Prestige : Répercussion temps-réel */
+      .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="bg-[#0F4C3A]"] {
+        background-color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="text-[#0F4C3A]"] {
+        color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="border-[#0F4C3A]"] {
+        border-color: ${dynamicAccentColor} !important;
+      }
+
+      /* Electro Tech / Pro : Répercussion temps-réel */
+      .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="bg-[#0056D2]"],
+      .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="bg-blue-600"] {
+        background-color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="text-[#0056D2]"],
+      .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="text-blue-600"] {
+        color: ${dynamicAccentColor} !important;
+      }
+
+      /* Standard Élite : Répercussion temps-réel */
+      .storefront-theme-container[data-theme-id="theme-default"] [class*="bg-blue-600"] {
+        background-color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-default"] [class*="text-blue-600"] {
+        color: ${dynamicAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-default"] [class*="border-blue-600"] {
+        border-color: ${dynamicAccentColor} !important;
+      }
+
+      /* Digital Pro : Répercussion temps-réel */
+      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="bg-[#0056D2]"],
+      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="bg-blue-600"] {
+        background-color: ${dynamicAccentColor} !important;
+      }
+    `;
+  }, [dynamicAccentColor, resolvedThemeId]);
+
   // =========================================================================
   // 2. VERROU DE RENDU : Tant que Firestore n'a pas répondu, affiche le Loader neutre.
   // STRICT RULES OF HOOKS : ABSOLUMENT TOUS LES HOOKS SONT EXÉCUTÉS AU-DESSUS !
@@ -414,7 +492,17 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
       data-theme-id={themeDefinition.id}
       data-theme-name={themeDefinition.name}
       data-preview-mode={Boolean(previewThemeId)}
+      style={{
+        '--theme-primary': dynamicAccentColor,
+        '--theme-primary-hover': `${dynamicAccentColor}ee`,
+        '--primary-color': dynamicAccentColor,
+        '--primary-accent': dynamicAccentColor
+      } as React.CSSProperties}
     >
+      {/* Injection temps-réel des règles CSS pour répercussion immédiate (0ms) des couleurs */}
+      {dynamicThemeStyles && (
+        <style dangerouslySetInnerHTML={{ __html: dynamicThemeStyles }} />
+      )}
       {/* Barre flottante d'indication Mode Prévisualisation (Shopify-Style) */}
       {previewThemeId && (
         <aside 

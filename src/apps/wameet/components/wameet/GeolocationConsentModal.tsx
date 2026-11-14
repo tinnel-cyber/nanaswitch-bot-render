@@ -36,7 +36,7 @@ export const GeolocationConsentModal: React.FC<GeolocationConsentModalProps> = (
   onClose,
   onConsentGranted,
   senderName = 'Ibrahim',
-  merchantName = 'NaNa POS',
+  merchantName = 'Nanasore',
   className = ''
 }) => {
   const {
@@ -155,7 +155,7 @@ export const GeolocationConsentModal: React.FC<GeolocationConsentModalProps> = (
         </h3>
 
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-5 px-2">
-          {senderName} vous a commandé une surprise réelle. Votre position est transmise uniquement au coursier NaNa POS en route.
+          {senderName} vous a commandé une surprise réelle. Votre position est transmise uniquement au coursier Nanasore en route.
         </p>
 
         {/* 4. GESTION DES ERREURS & MESSAGES D'ALERTE */}

@@ -154,7 +154,7 @@ export const StorePendingApprovalScreen: React.FC<StorePendingApprovalScreenProp
   };
 
   const whatsappMessage = encodeURIComponent(
-    `Bonjour Support Nana POS,\nJe viens de créer la boutique "${safeStoreName}" (ID: ${safeStoreId}) et je souhaite faire valider mon compte pour commencer à encaisser.\nPropriétaire : ${safeOwnerName} (${safePhone}).`
+    `Bonjour Support Nanasore,\nJe viens de créer la boutique "${safeStoreName}" (ID: ${safeStoreId}) et je souhaite faire valider mon compte pour commencer à encaisser.\nPropriétaire : ${safeOwnerName} (${safePhone}).`
   );
 
   return (

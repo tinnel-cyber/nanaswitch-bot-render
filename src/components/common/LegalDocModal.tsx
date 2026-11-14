@@ -72,7 +72,7 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
                   {docTitle}
                 </h3>
                 <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  <span>NaNa POS</span>
+                  <span>Nanasore</span>
                   <span>•</span>
                   <span className="flex items-center gap-1 text-slate-500">
                     <Calendar className="w-3 h-3" />

@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { db } from '../firebaseConfig';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
-import { auth } from '../firebase';
 import { MobileMoneyProvider } from '../components/lms/marketplace/types';
 
 export interface CheckoutTransaction {
@@ -70,7 +67,7 @@ export function useCheckout(onPaymentCompleted?: (tx: CheckoutTransaction) => vo
       setError(null);
 
       // Résolution de l'identité de l'utilisateur (authentifié ou session anonyme d'achat)
-      const currentUid = (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('nana_store_auth_user') || '{}')?.id : null) || auth.currentUser?.uid || `guest_${Date.now().toString(36)}`;
+      const currentUid = (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('nana_store_auth_user') || '{}')?.id : null) || `guest_${Date.now().toString(36)}`;
       const txId = `tx_${params.provider.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       const transactionPayload: CheckoutTransaction = {
@@ -89,12 +86,13 @@ export function useCheckout(onPaymentCompleted?: (tx: CheckoutTransaction) => vo
       };
 
       try {
-        // Écriture du document 'pending' dans Firestore
-        const txRef = doc(db, 'transactions', txId);
-        await setDoc(txRef, {
-          ...transactionPayload,
-          createdAt: serverTimestamp()
-        });
+        // Écriture de la transaction dans Supabase SQL
+        await supabase.from('app_registry').upsert({
+          key: `tx_${txId}`,
+          tenant_id: currentUid,
+          module_key: 'transactions',
+          config_json: transactionPayload
+        }, { onConflict: 'key' });
 
         setActiveTransaction(transactionPayload);
 

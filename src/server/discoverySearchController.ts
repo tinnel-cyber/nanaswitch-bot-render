@@ -88,7 +88,7 @@ export interface DiscoveryUserItem {
   verified: boolean;
   followersCount: number;
   likesCount: number;
-  salesCount: number; // Ventes NaNa POS
+  salesCount: number; // Ventes Nanasore
   isLiveNow: boolean;
   bio: string;
   category: string;
@@ -129,7 +129,7 @@ const USER_SEARCH_HISTORY_DB = new Map<string, SearchHistoryItem[]>();
 USER_SEARCH_HISTORY_DB.set('usr_default', [
   { id: 'h-1', userId: 'usr_default', query: 'Chaussures Ouaga', searchedAt: Date.now() - 1000 * 60 * 15, count: 4 },
   { id: 'h-2', userId: 'usr_default', query: 'Concert Live', searchedAt: Date.now() - 1000 * 60 * 60, count: 3 },
-  { id: 'h-3', userId: 'usr_default', query: "Gâteau d'anniversaire NaNa POS", searchedAt: Date.now() - 1000 * 3600 * 3, count: 2 },
+  { id: 'h-3', userId: 'usr_default', query: "Gâteau d'anniversaire Nanasore", searchedAt: Date.now() - 1000 * 3600 * 3, count: 2 },
   { id: 'h-4', userId: 'usr_default', query: 'Masterclass Vente 1-Clic', searchedAt: Date.now() - 1000 * 3600 * 12, count: 1 }
 ]);
 
@@ -148,7 +148,7 @@ const WAMEET_USERS_TABLE: DiscoveryUserItem[] = [
     likesCount: 1200000,
     salesCount: 4280,
     isLiveNow: true,
-    bio: 'Boutique officielle Chaussures & Sacs en cuir à Ouagadougou et Abidjan. Livraison physique express NaNa POS.',
+    bio: 'Boutique officielle Chaussures & Sacs en cuir à Ouagadougou et Abidjan. Livraison physique express Nanasore.',
     category: 'Mode & E-Commerce',
     createdAtTimestamp: Date.now() - 180 * 86400 * 1000
   },
@@ -273,7 +273,7 @@ const WAMEET_VIDEOS_TABLE: DiscoveryVideoItem[] = [
   },
   {
     id: 'vid-4',
-    title: 'Masterclass Complète : Bâtir son Empire de Vente 1-Clic Wameet Direct & NaNa POS',
+    title: 'Masterclass Complète : Bâtir son Empire de Vente 1-Clic Wameet Direct & Nanasore',
     category: 'longs',
     creatorId: 'u-idriss',
     creatorName: 'Dr. Idriss Kaboré',

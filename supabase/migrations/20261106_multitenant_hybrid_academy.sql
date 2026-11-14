@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- MIGRATION SUPABASE : Système Multi-Tenant Hybride (Marque Blanche & Standard)
--- Module : NaNa POS & Académie (LMS, Formations & Tunnels de Vente)
+-- Module : Nanasore & Académie (LMS, Formations & Tunnels de Vente)
 -- Date : 2026-11-06
 -- ==============================================================================
 
