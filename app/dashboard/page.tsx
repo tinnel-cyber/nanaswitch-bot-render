@@ -5,8 +5,8 @@ import dynamicImport from 'next/dynamic';
 
 export const dynamic = 'force-dynamic';
 
-const NanaSwitchApp = dynamicImport(
-  () => import('../../src/services/nana-switch/components/NanaSwitchApp').then((mod) => mod.NanaSwitchApp),
+const NewDashboardApp = dynamicImport(
+  () => import('../../src/components/dashboard/NewDashboardApp').then((mod) => mod.NewDashboardApp || mod.default),
   {
     ssr: false,
     loading: () => (
@@ -18,8 +18,8 @@ const NanaSwitchApp = dynamicImport(
   }
 );
 
-export { NanaSwitchApp };
+export { NewDashboardApp, NewDashboardApp as NanaSwitchApp };
 
 export default function DashboardPage(props: { onBack?: () => void }) {
-  return <NanaSwitchApp {...props} />;
+  return <NewDashboardApp {...props} />;
 }

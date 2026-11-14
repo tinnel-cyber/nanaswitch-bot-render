@@ -124,6 +124,7 @@ const NaNaSwitchAppPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitch
 const NaNaSwitchDocsPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchDocsPage').then(m => ({ default: m.NaNaSwitchDocsPage || m.default })));
 const NaNaSwitchLandingPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchLandingPage').then(m => ({ default: m.NaNaSwitchLandingPage || m.default })));
 const NanaSwitchApp = React.lazy(() => import('./components/nanaSwitch/NanaSwitchApp').then(m => ({ default: m.NanaSwitchApp || m.default })));
+const NewDashboardApp = React.lazy(() => import('./components/dashboard/NewDashboardApp').then(m => ({ default: m.NewDashboardApp || m.default })));
 const NanaWalletHome = React.lazy(() => import('./apps/wallet/NanaWalletHome'));
 const WameetSupraApp = React.lazy(() => import('./pages/wameet/WameetSupraApp').then(m => ({ default: m.WameetSupraApp || m.default })));
 const SallesVipDiscoveryScreen = React.lazy(() => import('./components/vip/SallesVipDiscoveryScreen').then(m => ({ default: m.SallesVipDiscoveryScreen || m.default })));
@@ -7043,7 +7044,7 @@ export default function App() {
             /* View: Nouveau Tableau de Bord Général Unifié (/dashboard) connecté à AppRegistry */
             <ModuleErrorBoundary moduleName="Nouveau Tableau de Bord - NanaSwitch & AppRegistry">
               <React.Suspense fallback={<LazyModuleFallback label="Chargement du Nouveau Tableau de Bord..." />}>
-                <NanaSwitchApp
+                <NewDashboardApp
                   onBack={() => {
                     setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
