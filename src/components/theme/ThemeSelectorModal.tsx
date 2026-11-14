@@ -45,8 +45,10 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
     playTapBeep();
     if (typeof window === 'undefined') return;
 
-    const storeSlug = (targetStoreId || 'boutique').replace(/^store-/, '');
-    const previewUrl = buildPublicShopUrl(storeSlug, { previewTheme: theme.id });
+    const cleanStoreSlug = (typeof window !== 'undefined' && (window as any).storeSlug)
+      ? (window as any).storeSlug
+      : (targetStoreId || 'boutique').replace(/^store-/, '');
+    const previewUrl = buildPublicShopUrl(cleanStoreSlug, { previewTheme: theme.id });
 
     window.open(previewUrl, '_blank', 'noopener,noreferrer');
   };

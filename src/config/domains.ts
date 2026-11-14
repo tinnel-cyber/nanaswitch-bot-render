@@ -67,6 +67,7 @@ export function buildPublicShopUrl(
   const params = new URLSearchParams();
   if (options?.previewTheme) {
     params.set('preview_theme', options.previewTheme);
+    params.set('previewTheme', options.previewTheme);
   }
   
   const query = params.toString();

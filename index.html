@@ -35,6 +35,30 @@
             }
           });
 
+          // Protection anti-crash de chargement de chunk (module Vite stale après déploiement)
+          window.addEventListener('error', function(errEvt) {
+            if (errEvt && errEvt.target && errEvt.target.tagName === 'SCRIPT') {
+              var sUrl = errEvt.target.src || '';
+              if (sUrl.indexOf('/assets/') !== -1) {
+                var rKey = 'nana_stale_chunk_reload';
+                if (!sessionStorage.getItem(rKey)) {
+                  sessionStorage.setItem(rKey, '1');
+                  if ('caches' in window) {
+                    caches.keys().then(function(kList) {
+                      return Promise.all(kList.map(function(k) { return caches.delete(k); }));
+                    }).then(function() {
+                      window.location.reload();
+                    }).catch(function() {
+                      window.location.reload();
+                    });
+                  } else {
+                    window.location.reload();
+                  }
+                }
+              }
+            }
+          }, true);
+
           var match = document.cookie.match(/(?:^|;\s*)nana_theme=([^;]+)/);
           var theme = match ? decodeURIComponent(match[1]) : null;
           if (!theme || ['dark', 'light', 'blue'].indexOf(theme) === -1) {

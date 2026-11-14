@@ -1,7 +1,7 @@
-const CACHE_NAME = 'nanasore-v9-supabase-live';
-const WASM_CACHE_NAME = 'nanasore-v7-wasm';
-const IMAGE_CACHE_NAME = 'nanasore-v7-images';
-const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v3';
+const CACHE_NAME = 'nanasore-v14-unified-dashboard-appregistry';
+const WASM_CACHE_NAME = 'nanasore-v8-wasm';
+const IMAGE_CACHE_NAME = 'nanasore-v8-images';
+const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
 
 // URLs de l'App Shell indispensables pour le démarrage hors-ligne immédiat
 const STATIC_PRECACHE_URLS = [
@@ -174,46 +174,61 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin) {
     event.respondWith(
       (async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedRes = await cache.match(req);
-
-        // Si présent dans le cache et valide (non corrompu par un fallback HTML 404)
-        if (cachedRes) {
-          const cachedType = cachedRes.headers.get('content-type') || '';
-          if (url.pathname.endsWith('.js') && cachedType.includes('text/html')) {
-            // Le cache contient un faux fichier JS (HTML SPA rewrite), on le purge immédiatement
-            await cache.delete(req);
-          } else {
-            // Revalidation discrète en tâche de fond si le réseau est disponible
-            fetch(req)
-              .then((networkRes) => {
-                if (networkRes && networkRes.status === 200) {
-                  const netType = networkRes.headers.get('content-type') || '';
-                  if (!(url.pathname.endsWith('.js') && netType.includes('text/html'))) {
-                    cache.put(req, networkRes.clone());
-                  }
-                }
-              })
-              .catch(() => {});
-            return cachedRes;
-          }
-        }
-
-        // Sinon, tentative réseau et enregistrement dans le cache pour les futures utilisations hors-ligne
         try {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedRes = await cache.match(req);
+
+          // Si présent dans le cache et valide (non corrompu par un fallback HTML 404)
+          if (cachedRes) {
+            const cachedType = cachedRes.headers.get('content-type') || '';
+            if (url.pathname.endsWith('.js') && cachedType.includes('text/html')) {
+              await cache.delete(req).catch(() => {});
+            } else {
+              // Revalidation asynchrone non-bloquante
+              fetch(req)
+                .then((networkRes) => {
+                  if (networkRes && networkRes.status === 200) {
+                    const netType = networkRes.headers.get('content-type') || '';
+                    if (!(url.pathname.endsWith('.js') && netType.includes('text/html'))) {
+                      try { cache.put(req, networkRes.clone()); } catch (e) {}
+                    }
+                  }
+                })
+                .catch(() => {});
+              return cachedRes;
+            }
+          }
+
+          // Tentative réseau
           const networkRes = await fetch(req);
           if (networkRes && networkRes.status === 200) {
             const netType = networkRes.headers.get('content-type') || '';
-            // Sécurité anti-crash Vite : ne JAMAIS cacher un index.html réécrit comme un module JS
+            // Si le serveur SPA renvoie index.html pour un chunk JS manquant (404 réécrit)
             if (url.pathname.endsWith('.js') && netType.includes('text/html')) {
+              // Purge immédiate de l'ancien index.html pour forcer la mise à jour des chunks
+              await cache.delete('/').catch(() => {});
+              await cache.delete('/index.html').catch(() => {});
               return new Response('/* Chunk superseded */', { status: 404, statusText: 'Chunk Superseded' });
             }
-            cache.put(req, networkRes.clone());
+            try { cache.put(req, networkRes.clone()); } catch (e) {}
+            return networkRes;
           }
+
+          // Si le chunk n'existe plus sur le serveur (404 réel suite à un nouveau déploiement)
+          if (networkRes && (networkRes.status === 404 || networkRes.status === 410)) {
+            await cache.delete('/').catch(() => {});
+            await cache.delete('/index.html').catch(() => {});
+          }
+
           return networkRes;
         } catch (err) {
-          // Fallback gracieux : ne JAMAIS résoudre undefined sous peine de plantage du navigateur
-          return new Response('', { status: 503, statusText: 'Offline Asset' });
+          // Fallback gracieux en cas de coupure réseau ou exception interne
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            const fallbackRes = await cache.match(req);
+            if (fallbackRes) return fallbackRes;
+          } catch (e) {}
+          return new Response('/* Asset offline or superseded */', { status: 503, statusText: 'Offline Asset' });
         }
       })()
     );
