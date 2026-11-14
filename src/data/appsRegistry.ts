@@ -57,21 +57,21 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     iconName: "Mail"
   },
 
-  // Module Espace Upload Académique (Professeurs & Étudiants)
+  // Module Espace Upload Académique & Vendeur (Professeurs, Étudiants & Marchands)
   {
     id: "vendor-upload",
-    appName: "Espace Upload Académique",
+    appName: "Espace Upload Académique & Vendeur",
     appLogo: "/assets/icons/apps/vault.svg",
-    shortDescription: "Upload unifié de cours, devoirs et rendus (Compression ZIP & R2)",
-    category: "academic",
-    keywords: ["upload", "cours", "devoir", "remise", "professeur", "etudiant", "étudiant", "devoirs", "r2", "zip", "rendu", "campus"],
+    shortDescription: "Upload unifié de cours, devoirs, rendus et fichiers numériques vendeurs (Compression ZIP & R2)",
+    category: "Éducation",
+    keywords: ["upload", "academy", "academie", "cours", "devoir", "remise", "professeur", "etudiant", "étudiant", "devoirs", "r2", "zip", "rendu", "campus", "vendor", "vendeur", "upload academy", "upload vendor", "documents"],
     route: "/academic/upload",
     installationType: "instant",
     trialType: "freemium",
     priceMonthly: 0,
-    palmares: "🎓 Cloudflare Academic Vault",
+    palmares: "🎓 Cloudflare Academic & Vendor Vault",
     badgePalmares: "⚡ Compression ZIP Maximale",
-    trialLabel: "Professeurs & Étudiants",
+    trialLabel: "Académique & Marchand",
     isPopular: true,
     targetView: "ACADEMIC_UPLOAD",
     badge: "Académique R2",

@@ -138,6 +138,7 @@ const CheckoutReturnView = React.lazy(() => import('./components/payment/Checkou
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
 const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
+const AcademicUploadView = React.lazy(() => import('./components/upload/AcademicUploadView').then(m => ({ default: m.AcademicUploadView || m.default })));
 import { getMarketplaceCourseById } from './services/marketplaceService';
 import { AuthProvider } from './context/AuthContext';
 import { useTenant } from './context/TenantContext';
@@ -2928,7 +2929,7 @@ export default function App() {
       }
 
       // 3. Vues Plein Écran & Applications
-      if (keyUpper === 'ACADEMIC_UPLOAD' || modId === 'vendor-upload' || rawPath === '/academic/upload') {
+      if (keyUpper === 'ACADEMIC_UPLOAD' || modId === 'vendor-upload' || modId === 'academic-upload' || modId === 'upload-academy' || modId === 'academy-upload' || rawPath === '/academic/upload' || rawPath === '/vendor/upload') {
         setCurrentView('ACADEMIC_UPLOAD');
         return;
       }

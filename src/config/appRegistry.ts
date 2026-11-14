@@ -246,10 +246,10 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   {
     id: 'vendor-upload',
     slug: 'academic-upload',
-    name: 'Espace Upload Académique',
+    name: 'Espace Upload Académique & Vendeur',
     route: '/academic/upload',
-    category: 'academic',
-    description: 'Module d\'upload unifié de cours, devoirs et rendus (Compression ZIP & R2)',
+    category: 'Éducation',
+    description: "Module d'upload unifié de cours, devoirs et produits numériques marchands (Compression ZIP & R2)",
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: true,
@@ -257,8 +257,8 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     permissions: ['vendor', 'admin', 'professeur', 'etudiant'],
     view: 'ACADEMIC_UPLOAD',
     icon: 'UploadCloud',
-    keywords: ['upload', 'cours', 'devoir', 'remise', 'professeur', 'etudiant', 'étudiant', 'devoirs', 'r2', 'zip', 'rendu', 'campus'],
-    aliases: ['vendor-upload', 'academic-upload', 'studio-upload', 'upload-vendeur', 'upload-academique']
+    keywords: ['upload', 'academy', 'academie', 'academique', 'cours', 'devoir', 'remise', 'professeur', 'etudiant', 'étudiant', 'devoirs', 'r2', 'zip', 'rendu', 'campus', 'vendor', 'vendeur', 'upload academy', 'upload vendor', 'documents'],
+    aliases: ['vendor-upload', 'academic-upload', 'upload-academy', 'upload-academie', 'academy-upload', 'studio-upload', 'upload-vendeur', 'upload-academique']
   },
   {
     id: 'cvpro',
