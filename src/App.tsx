@@ -2918,7 +2918,7 @@ export default function App() {
         setCurrentView('POS');
         return;
       }
-      if (keyUpper === 'STUDIO' || keyUpper === 'BOUTIQUE' || modId === 'studio' || modId === 'vitrine-eshop' || modId === 'theme-builder-studio') {
+      if (keyUpper === 'STUDIO' || keyUpper === 'BOUTIQUE' || modId === 'studio' || modId === 'theme-builder' || modId === 'vitrine-eshop' || modId === 'theme-builder-studio') {
         setCurrentView('STUDIO');
         return;
       }
@@ -2930,7 +2930,7 @@ export default function App() {
         setCurrentView('AI_ADVISOR');
         return;
       }
-      if (keyUpper === 'ULTIMATE_FUNNEL' || modId === 'funnel-builder' || modId === 'ultimate-funnel-builder') {
+      if (keyUpper === 'ULTIMATE_FUNNEL' || modId === 'ultimate-funnel' || modId === 'funnel-builder' || modId === 'ultimate-funnel-builder') {
         setCurrentView('ULTIMATE_FUNNEL');
         return;
       }
@@ -2938,21 +2938,21 @@ export default function App() {
         setCurrentView('MODULAR_FUNNEL');
         return;
       }
-      if (keyUpper === 'PHYSICAL_FUNNEL' || modId === 'physical-funnel' || modId === 'public-deal-builder') {
+      if (keyUpper === 'PHYSICAL_FUNNEL' || modId === 'deal-builder' || modId === 'physical-funnel' || modId === 'public-deal-builder') {
         setCurrentView('PHYSICAL_FUNNEL');
         return;
       }
-      if (keyUpper === 'COURSE_CREATE' || modId === 'course-create') {
+      if (keyUpper === 'COURSE_CREATE' || modId === 'cours-forge' || modId === 'course-forge') {
         setIsInstructorView(true);
         setCurrentView('COURSE_CREATE');
         return;
       }
-      if (keyUpper === 'INSTRUCTOR' || modId === 'instructor' || modId === 'instructor-hub') {
+      if (keyUpper === 'INSTRUCTOR' || modId === 'course-create' || modId === 'instructor' || modId === 'instructor-hub') {
         setIsInstructorView(true);
         setCurrentView('teacher_dashboard');
         return;
       }
-      if (keyUpper === 'CAMPUS' || modId === 'academy-support' || modId === 'lms-academy') {
+      if (keyUpper === 'CAMPUS' || modId === 'academy-support' || modId === 'campus' || modId === 'lms-academy') {
         setIsStudentDashboardView(true);
         setCurrentView('CAMPUS');
         return;
@@ -2995,7 +2995,7 @@ export default function App() {
         setCurrentView('REPORTS');
         return;
       }
-      if (keyUpper === 'CUSTOMER_ORDERS' || keyUpper === 'DELIVERY' || modId === 'orders-quotes' || modId === 'delivery-heatmap') {
+      if (keyUpper === 'CUSTOMER_ORDERS' || keyUpper === 'DELIVERY' || modId === 'customer-orders' || modId === 'orders-quotes' || modId === 'delivery-heatmap' || rawPath === '/dashboard/commandes') {
         setCurrentView('CUSTOMER_ORDERS');
         return;
       }

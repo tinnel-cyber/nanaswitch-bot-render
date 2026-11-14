@@ -293,8 +293,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const [proFeatureModalTab, setProFeatureModalTab] = useState<ProFeatureTab | null>(null);
-  const [registryFilterType, setRegistryFilterType] = useState<'ALL' | ModuleType>('ALL');
-  const { modules: omnibarModules, activeModules: activeOmnibarModules, isModuleActive, toggleModule } = useActiveOmnibarApps();
+  const { activeModules: activeOmnibarModules, isModuleActive, toggleModule } = useActiveOmnibarApps();
 
   const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ message, type });
@@ -369,6 +368,10 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
     if (viewUpper === 'TRACKING_PIXELS_CRM' || viewUpper === 'TRACKING_CRM' || official?.id === 'pixels-crm') {
       setProFeatureModalTab('TRACKING_PIXELS_CRM');
+      return;
+    }
+    if (viewUpper === 'KYC_VERIFICATION' || official?.id === 'kyc') {
+      setIsKycModalOpen(true);
       return;
     }
 
@@ -1315,113 +1318,6 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                 </p>
               </div>
 
-            </div>
-          </div>
-
-          {/* CATALOGUE OFFICIEL APPREGISTRY CONNECTÉ AU NOUVEAU DASHBOARD (27 MODULES) */}
-          <div className="mt-12 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold mb-1.5">
-                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>AppRegistry Unifié • Supabase Realtime</span>
-                </div>
-                <h2 className="text-lg font-extrabold text-slate-900">
-                  Modules, Applications, Services & Outils ({omnibarModules.length})
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  Tous vos modules de l'Omnibar sont directement connectés à ce tableau de bord. Cliquez sur « Ouvrir » pour lancer un module ou activez-le en un clic.
-                </p>
-              </div>
-
-              {/* Filter Tabs by ModuleType */}
-              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
-                {[
-                  { key: 'ALL', label: `Tous (${omnibarModules.length})` },
-                  { key: 'APPLICATION', label: 'Applications' },
-                  { key: 'SERVICE', label: 'Services' },
-                  { key: 'MODULE', label: 'Modules' },
-                  { key: 'OUTIL', label: 'Outils' },
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setRegistryFilterType(tab.key as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                      registryFilterType === tab.key
-                        ? 'bg-[#1E40AF] text-white shadow-xs'
-                        : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {omnibarModules
-                .filter((m) => registryFilterType === 'ALL' || m.type === registryFilterType)
-                .map((mod) => {
-                  const isUnderConstruction = mod.status === 'UNDER_CONSTRUCTION';
-                  return (
-                    <div
-                      key={mod.id}
-                      className={`bg-white rounded-2xl p-5 border transition flex flex-col justify-between gap-4 shadow-xs ${
-                        isUnderConstruction
-                          ? 'border-amber-200/80 bg-amber-50/10'
-                          : mod.enabled
-                          ? 'border-slate-200/90 hover:border-blue-400 hover:shadow-md'
-                          : 'border-slate-200/60 opacity-85 hover:opacity-100'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-start justify-between gap-2 mb-2.5">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#1E40AF] border border-blue-200">
-                            {mod.type} • {mod.category}
-                          </span>
-                          {isUnderConstruction ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                              🚧 En chantier
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => toggleModule(mod.id, !mod.enabled)}
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
-                                mod.enabled
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                              }`}
-                              title={mod.enabled ? 'Module actif (cliquer pour désactiver)' : 'Cliquer pour activer'}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${mod.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                              {mod.enabled ? 'Actif' : 'Inactif'}
-                            </button>
-                          )}
-                        </div>
-                        <h3 className="text-sm font-extrabold text-slate-900 mb-1">{mod.name}</h3>
-                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{mod.description}</p>
-                      </div>
-
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] text-slate-400 truncate">{mod.route}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenRegistryModule(mod)}
-                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                            isUnderConstruction
-                              ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
-                              : 'bg-[#1E40AF] hover:bg-[#1E3A8A] text-white shadow-xs'
-                          }`}
-                        >
-                          <span>{isUnderConstruction ? 'Infos' : 'Ouvrir'}</span>
-                          <ArrowUpRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
             </div>
           </div>
         </main>
