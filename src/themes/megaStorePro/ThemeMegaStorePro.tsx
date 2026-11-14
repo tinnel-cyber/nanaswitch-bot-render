@@ -15,8 +15,11 @@ import { MegaStoreProductCard, MegaProductExtended } from './MegaStoreProductCar
 import { MegaStorePDP } from './MegaStorePDP';
 import { MegaStoreFilters, FilterState } from './MegaStoreFilters';
 import { MegaStoreFooter } from './MegaStoreFooter';
+import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/AdaptiveHeaderEngine';
+import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
 import { MEGA_CATEGORIES, MegaMenuCategory } from './megaStoreCategoriesData';
 import { AdminSectionEditTrigger } from '../../components/storeBuilder/AdminSectionEditTrigger';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 import { 
   MEGA_MODEL_HERO_SVG, 
   MEGA_GROCERY_DRINKS_SVG, 
@@ -337,6 +340,15 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
   // Catégorie active au survol pour le méga-menu
   const activeMegaCategory = hoveredCategory;
 
+  // Produit Vedette / Offre Spéciale (customConfig.specialOfferProductId)
+  const specialOfferProduct = useMemo(() => {
+    if (customConfig?.specialOfferProductId) {
+      const picked = displayProducts.find(p => p.id === customConfig.specialOfferProductId);
+      if (picked) return picked;
+    }
+    return displayProducts.find(p => p.originalPrice && p.originalPrice > p.price) || null;
+  }, [displayProducts, customConfig?.specialOfferProductId]);
+
   const handleFocusSearch = () => {
     playTapBeep();
     if (searchInputRef.current) searchInputRef.current.focus();
@@ -346,20 +358,49 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
     <div className="mega-store-root min-h-screen w-full bg-[#FFFFFF] text-[#1E293B] flex flex-col selection:bg-[#0056D2] selection:text-white">
       
       {/* =========================================================================
-          1. LE HEADER À 3 NIVEAUX (TRÈS IMPORTANT)
+          1. LE HEADER ADAPTATIF OU NATIVE À 3 NIVEAUX
          ========================================================================= */}
-      
-      {/* NIVEAU 1 : TOP BAR (Bandeau Sombre Retail) */}
-      <div className="relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier l'En-Tête & Navigation ⚡"
-          targetAccordion={1}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        {(customConfig?.announcementBarEnabled ?? true) && (
+      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Navigation ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveHeaderEngine
+            config={customConfig}
+            products={displayProducts}
+            categories={categories}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={(p) => {
+              setActiveProduct(p);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onResetToHome={() => {
+              setActiveProduct(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSelectCategory={onSelectCategory}
+            onSearch={onSearchChange}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Navigation ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          {(customConfig?.announcementBarEnabled ?? true) && (
         <div className="w-full bg-[#0B132A] text-slate-300 text-[11px] font-semibold py-2 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4">
           
@@ -675,9 +716,10 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
             <Palette className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Changer de thème</span>
           </button>
+          </div>
         </div>
       </div>
-      </div>
+      )}
 
       {/* =========================================================================
           CONTENU PRINCIPAL : FICHE PRODUIT PDP OU PAGE D'ACCUEIL / CATALOGUE
@@ -854,72 +896,116 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
                 {/* Textes promotionnels massifs */}
                 <div className="space-y-4 max-w-md z-10">
                   <div className="space-y-1">
-                    <div className="text-2xl sm:text-4xl font-black uppercase tracking-tight text-white drop-shadow-sm mega-outline-text">
-                      {customConfig?.heroSubtitle || 'GRAND DÉSTOCKAGE'}
-                    </div>
-                    {customConfig?.heroTitle ? (
-                      <div className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-purple-950 leading-tight">
-                        {customConfig.heroTitle}
+                    <LiveEditable
+                      label="Sous-titre / Badge Hero"
+                      field="heroSubtitle"
+                      value={customConfig?.heroSubtitle || 'GRAND DÉSTOCKAGE'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
+                    >
+                      <div className="text-2xl sm:text-4xl font-black uppercase tracking-tight text-white drop-shadow-sm mega-outline-text">
+                        {customConfig?.heroSubtitle || 'GRAND DÉSTOCKAGE'}
                       </div>
-                    ) : (
-                      <>
-                        <div className="text-5xl sm:text-6xl lg:text-7xl font-black uppercase tracking-tight text-purple-950 leading-none">
-                          -20% <span className="text-3xl sm:text-4xl">SUR</span>
+                    </LiveEditable>
+                    <LiveEditable
+                      label="Titre Principal Hero"
+                      field="heroTitle"
+                      value={customConfig?.heroTitle || "-20% SUR TOUT LE RAYON !"}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      {customConfig?.heroTitle ? (
+                        <div className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-purple-950 leading-tight">
+                          {customConfig.heroTitle}
                         </div>
-                        <div className="text-xl sm:text-2xl font-black uppercase tracking-wide text-purple-900">
-                          TOUT LE RAYON !
-                        </div>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <div className="text-5xl sm:text-6xl lg:text-7xl font-black uppercase tracking-tight text-purple-950 leading-none">
+                            -20% <span className="text-3xl sm:text-4xl">SUR</span>
+                          </div>
+                          <div className="text-xl sm:text-2xl font-black uppercase tracking-wide text-purple-900">
+                            TOUT LE RAYON !
+                          </div>
+                        </>
+                      )}
+                    </LiveEditable>
                   </div>
 
-                  <p className="text-xs sm:text-sm text-purple-800 font-medium max-w-sm">
-                    {customConfig?.heroDescription || "Profitez dès maintenant de nos réductions exclusives sur l'ensemble des rayons de la boutique."}
-                  </p>
+                  <LiveEditable
+                    label="Description Hero"
+                    field="heroDescription"
+                    value={customConfig?.heroDescription || "Profitez dès maintenant de nos réductions exclusives sur l'ensemble des rayons de la boutique."}
+                    type="textarea"
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    <p className="text-xs sm:text-sm text-purple-800 font-medium max-w-sm">
+                      {customConfig?.heroDescription || "Profitez dès maintenant de nos réductions exclusives sur l'ensemble des rayons de la boutique."}
+                    </p>
+                  </LiveEditable>
 
                   <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        if (customConfig?.heroLinkedProductId) {
-                          const targetProd = displayProducts.find(p => p.id === customConfig.heroLinkedProductId);
-                          if (targetProd) {
-                            setActiveProduct(targetProd);
-                            onSelectProduct(targetProd);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            return;
-                          }
-                        }
-                        const gridEl = document.getElementById('mega-products-catalog');
-                        if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="mega-btn-sharp px-8 py-3 bg-white hover:bg-slate-900 text-slate-900 hover:text-white text-xs sm:text-sm font-extrabold uppercase tracking-widest shadow-md transition cursor-pointer"
+                    <LiveEditable
+                      label="Bouton CTA Hero"
+                      field="heroCtaText"
+                      value={customConfig?.heroCtaText || "PROFITER DE L'OFFRE"}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
                     >
-                      {customConfig?.heroCtaText || "PROFITER DE L'OFFRE"}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          if (customConfig?.heroLinkedProductId) {
+                            const targetProd = displayProducts.find(p => p.id === customConfig.heroLinkedProductId);
+                            if (targetProd) {
+                              setActiveProduct(targetProd);
+                              onSelectProduct(targetProd);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                              return;
+                            }
+                          }
+                          const gridEl = document.getElementById('mega-products-catalog');
+                          if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="mega-btn-sharp px-8 py-3 bg-white hover:bg-slate-900 text-slate-900 hover:text-white text-xs sm:text-sm font-extrabold uppercase tracking-widest shadow-md transition cursor-pointer"
+                      >
+                        {customConfig?.heroCtaText || "PROFITER DE L'OFFRE"}
+                      </button>
+                    </LiveEditable>
                   </div>
                 </div>
 
                 {/* Visuel Haute Définition de l'Égérie avec Cosmétique */}
                 <div className="hidden sm:flex items-center justify-center flex-1 max-w-[380px] -mr-6">
-                  {customConfig?.heroVideoUrl ? (
-                    <video
-                      src={customConfig.heroVideoUrl}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      poster={customConfig?.heroBannerImageUrl || MEGA_MODEL_HERO_SVG}
-                      className="w-full h-auto rounded-xl object-cover"
-                    />
-                  ) : (
-                    <img 
-                      src={customConfig?.heroBannerImageUrl || MEGA_MODEL_HERO_SVG} 
-                      alt={customConfig?.heroTitle || "Mannequin Cosmétique Beauté"} 
-                      className="w-full h-auto object-contain transform scale-110"
-                    />
-                  )}
+                  <LiveEditable
+                    label="Visuel Image / Vidéo Hero"
+                    field="heroBannerImageUrl"
+                    value={customConfig?.heroBannerImageUrl || MEGA_MODEL_HERO_SVG}
+                    type="image"
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    {customConfig?.heroVideoUrl ? (
+                      <video
+                        src={customConfig.heroVideoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        poster={customConfig?.heroBannerImageUrl || MEGA_MODEL_HERO_SVG}
+                        className="w-full h-auto rounded-xl object-cover"
+                      />
+                    ) : (
+                      <img 
+                        src={customConfig?.heroBannerImageUrl || MEGA_MODEL_HERO_SVG} 
+                        alt={customConfig?.heroTitle || "Mannequin Cosmétique Beauté"} 
+                        className="w-full h-auto object-contain transform scale-110"
+                      />
+                    )}
+                  </LiveEditable>
                 </div>
               </div>
 
@@ -937,23 +1023,57 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
                   className="mega-sub-banner cursor-pointer group"
                 >
                   <div className="space-y-1.5 z-10 max-w-[130px]">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-blue-200 block">
-                      {customConfig?.subBanner1Badge || 'ÉPICERIE FINE'}
-                    </span>
-                    <h3 className="text-2xl font-black text-amber-300 leading-none">
-                      {customConfig?.subBanner1Title || 'NOUVEAU !'}
-                    </h3>
-                    <p className="text-[10px] text-blue-100 font-medium">
-                      {customConfig?.subBanner1Subtitle || 'Boissons fraîches & épicerie livrées en 24h'}
-                    </p>
+                    <LiveEditable
+                      label="Badge Bannière 1"
+                      field="subBanner1Badge"
+                      value={customConfig?.subBanner1Badge || 'ÉPICERIE FINE'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
+                    >
+                      <span className="text-[11px] font-black uppercase tracking-wider text-blue-200 block">
+                        {customConfig?.subBanner1Badge || 'ÉPICERIE FINE'}
+                      </span>
+                    </LiveEditable>
+                    <LiveEditable
+                      label="Titre Bannière 1"
+                      field="subBanner1Title"
+                      value={customConfig?.subBanner1Title || 'NOUVEAU !'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <h3 className="text-2xl font-black text-amber-300 leading-none">
+                        {customConfig?.subBanner1Title || 'NOUVEAU !'}
+                      </h3>
+                    </LiveEditable>
+                    <LiveEditable
+                      label="Sous-titre Bannière 1"
+                      field="subBanner1Subtitle"
+                      value={customConfig?.subBanner1Subtitle || 'Boissons fraîches & épicerie livrées en 24h'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <p className="text-[10px] text-blue-100 font-medium">
+                        {customConfig?.subBanner1Subtitle || 'Boissons fraîches & épicerie livrées en 24h'}
+                      </p>
+                    </LiveEditable>
                   </div>
 
                   <div className="flex-1 flex items-center justify-end -mr-2">
-                    <img 
-                      src={customConfig?.subBanner1Image || MEGA_GROCERY_DRINKS_SVG} 
-                      alt={customConfig?.subBanner1Title || "Boissons & Épicerie Fraîche"} 
-                      className="w-full max-w-[170px] h-auto object-contain group-hover:scale-105 transition-transform"
-                    />
+                    <LiveEditable
+                      label="Image Bannière 1"
+                      field="subBanner1Image"
+                      value={customConfig?.subBanner1Image || MEGA_GROCERY_DRINKS_SVG}
+                      type="image"
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <img 
+                        src={customConfig?.subBanner1Image || MEGA_GROCERY_DRINKS_SVG} 
+                        alt={customConfig?.subBanner1Title || "Boissons & Épicerie Fraîche"} 
+                        className="w-full max-w-[170px] h-auto object-contain group-hover:scale-105 transition-transform"
+                      />
+                    </LiveEditable>
                   </div>
                 </div>
 
@@ -968,23 +1088,57 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
                   className="mega-sub-banner cursor-pointer group"
                 >
                   <div className="space-y-1.5 z-10 max-w-[130px]">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-blue-200 block">
-                      {customConfig?.subBanner2Badge || 'TV & HIGH-TECH'}
-                    </span>
-                    <h3 className="text-2xl font-black text-amber-300 leading-none">
-                      {customConfig?.subBanner2Title || 'PROMO'}
-                    </h3>
-                    <p className="text-[10px] text-blue-100 font-medium">
-                      {customConfig?.subBanner2Subtitle || 'Smart TV OLED 65" à prix défiant toute concurrence'}
-                    </p>
+                    <LiveEditable
+                      label="Badge Bannière 2"
+                      field="subBanner2Badge"
+                      value={customConfig?.subBanner2Badge || 'TV & HIGH-TECH'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
+                    >
+                      <span className="text-[11px] font-black uppercase tracking-wider text-blue-200 block">
+                        {customConfig?.subBanner2Badge || 'TV & HIGH-TECH'}
+                      </span>
+                    </LiveEditable>
+                    <LiveEditable
+                      label="Titre Bannière 2"
+                      field="subBanner2Title"
+                      value={customConfig?.subBanner2Title || 'PROMO'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <h3 className="text-2xl font-black text-amber-300 leading-none">
+                        {customConfig?.subBanner2Title || 'PROMO'}
+                      </h3>
+                    </LiveEditable>
+                    <LiveEditable
+                      label="Sous-titre Bannière 2"
+                      field="subBanner2Subtitle"
+                      value={customConfig?.subBanner2Subtitle || 'Smart TV OLED 65" à prix défiant toute concurrence'}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <p className="text-[10px] text-blue-100 font-medium">
+                        {customConfig?.subBanner2Subtitle || 'Smart TV OLED 65" à prix défiant toute concurrence'}
+                      </p>
+                    </LiveEditable>
                   </div>
 
                   <div className="flex-1 flex items-center justify-end -mr-2">
-                    <img 
-                      src={customConfig?.subBanner2Image || MEGA_OLED_TV_SVG} 
-                      alt={customConfig?.subBanner2Title || "Smart TV 65 pouces OLED"} 
-                      className="w-full max-w-[170px] h-auto object-contain group-hover:scale-105 transition-transform"
-                    />
+                    <LiveEditable
+                      label="Image Bannière 2"
+                      field="subBanner2Image"
+                      value={customConfig?.subBanner2Image || MEGA_OLED_TV_SVG}
+                      type="image"
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                    >
+                      <img 
+                        src={customConfig?.subBanner2Image || MEGA_OLED_TV_SVG} 
+                        alt={customConfig?.subBanner2Title || "Smart TV 65 pouces OLED"} 
+                        className="w-full max-w-[170px] h-auto object-contain group-hover:scale-105 transition-transform"
+                      />
+                    </LiveEditable>
                   </div>
                 </div>
               </div>
@@ -1040,6 +1194,73 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
           </div>
         </div>
       </div>
+
+      {/* OFFRE SPÉCIALE VEDETTE / TOP DEAL (specialOfferProductId) */}
+      {specialOfferProduct && (
+        <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="rounded-xl border-2 border-amber-400 bg-gradient-to-r from-blue-950 via-[#0056D2] to-indigo-950 text-white p-5 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="flex items-center gap-5">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg bg-white p-2 flex items-center justify-center shrink-0">
+                <img
+                  src={specialOfferProduct.image}
+                  alt={specialOfferProduct.name}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider flex items-center gap-1">
+                    <Flame className="w-3 h-3 fill-slate-950" />
+                    <span>Offre Vedette Méga-Store</span>
+                  </span>
+                  {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                    <span className="px-2 py-0.5 rounded bg-red-500 text-white font-black text-[10px]">
+                      -{Math.round(((specialOfferProduct.originalPrice - specialOfferProduct.price) / specialOfferProduct.originalPrice) * 100)}%
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                  {specialOfferProduct.name}
+                </h3>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-2xl font-black text-amber-300">
+                    {formatCFA(specialOfferProduct.price)}
+                  </span>
+                  {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                    <span className="text-xs text-blue-200 line-through">
+                      {formatCFA(specialOfferProduct.originalPrice)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setActiveProduct(specialOfferProduct);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex-1 md:flex-initial px-5 py-3 rounded bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer border border-white/20"
+              >
+                Détails du produit
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playValidationBeep();
+                  setCartCount(prev => prev + 1);
+                  if (onBuyNow) onBuyNow(specialOfferProduct, 1);
+                }}
+                className="flex-1 md:flex-initial px-6 py-3 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-lg"
+              >
+                Acheter maintenant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           4b. SECTION VENTES FLASH (CRÉNEAUX HORAIRES, COMPTE À REBOURS & CARROUSEL)
@@ -1644,23 +1865,54 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
       )}
 
       {/* =========================================================================
-          8. GRAND FOOTER RETAIL HAUTE CONVERSION (CONFORME À L'IMAGE 5)
+          8. GRAND FOOTER RETAIL HAUTE CONVERSION OU ADAPTATIF
          ========================================================================= */}
-      <div className="relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier le Footer & Coordonnées ⚡"
-          targetAccordion={5}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        <MegaStoreFooter 
-          storeName={customConfig?.storeName || storeConfig.storeName || 'You&Me Shop'}
-          whatsappPhone={customConfig?.whatsappNumber || storeConfig.whatsappNumber || storeConfig.phone}
-          customConfig={customConfig}
-        />
-      </div>
+      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+        <div className="relative group/footer-section">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveFooterEngine
+            config={customConfig}
+            products={displayProducts}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            categories={categories}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={(p) => {
+              setActiveProduct(p);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onResetToHome={() => {
+              setActiveProduct(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSelectCategory={onSelectCategory}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <MegaStoreFooter 
+            storeName={customConfig?.storeName || storeConfig.storeName || 'You&Me Shop'}
+            whatsappPhone={customConfig?.whatsappNumber || storeConfig.whatsappNumber || storeConfig.phone}
+            customConfig={customConfig}
+          />
+        </div>
+      )}
     </div>
   );
 };

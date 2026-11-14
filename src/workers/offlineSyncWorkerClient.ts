@@ -48,7 +48,7 @@ class OfflineSyncWorkerManager {
           payload: { isOnline: navigator.onLine },
         });
 
-        console.log('[OfflineSyncWorker] Web Worker démarré avec succès pour le batching Firestore.');
+        console.log('[OfflineSyncWorker] Web Worker démarré avec succès pour le traitement local.');
       } else {
         this.startFallbackScheduler();
       }

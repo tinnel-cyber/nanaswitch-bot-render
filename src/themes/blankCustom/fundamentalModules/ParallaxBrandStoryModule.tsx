@@ -2,19 +2,22 @@ import React from 'react';
 import { Award, ShieldCheck, Heart, Sparkles, CheckCircle2 } from 'lucide-react';
 import { CustomSectionInstance } from '../../../types';
 import { MoodStyleConfig } from '../moodStyles';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 
 export interface ParallaxBrandStoryModuleProps {
   section: CustomSectionInstance;
   moodStyle: MoodStyleConfig;
   buttonRadiusClass: string;
   storeName?: string;
+  isAdminPreview?: boolean;
 }
 
 export const ParallaxBrandStoryModule: React.FC<ParallaxBrandStoryModuleProps> = ({
   section,
   moodStyle,
   buttonRadiusClass,
-  storeName = "Notre Boutique"
+  storeName = "Notre Boutique",
+  isAdminPreview
 }) => {
   const cfg = section.settings || section.config || {};
   const title = section.title || cfg.title || "Notre Histoire & Nos Engagements";
@@ -38,12 +41,21 @@ export const ParallaxBrandStoryModule: React.FC<ParallaxBrandStoryModuleProps> =
           {/* Colonne Gauche : Image Encadrée & Sceau de Garantie */}
           <div className="lg:col-span-5 relative">
             <div className="relative rounded-3xl overflow-hidden shadow-2xl aspect-[4/3] sm:aspect-square border border-black/10 group">
-              <img
-                src={imageUrl}
-                alt={title}
-                className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80" />
+              <LiveEditable
+                label="Image Histoire"
+                sectionId={section.id}
+                sectionField="imageUrl"
+                value={imageUrl}
+                type="image"
+                isAdminPreview={isAdminPreview}
+              >
+                <img
+                  src={imageUrl}
+                  alt={title}
+                  className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
+                />
+              </LiveEditable>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80 pointer-events-none" />
 
               {/* Sceau de Garantie Flottant */}
               <div className="absolute bottom-5 left-5 right-5 p-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-white/20 shadow-2xl space-y-1">
@@ -63,26 +75,70 @@ export const ParallaxBrandStoryModule: React.FC<ParallaxBrandStoryModuleProps> =
           {/* Colonne Droite : Titre Éditorial, Citation & 3 Chiffres Clés */}
           <div className="lg:col-span-7 space-y-6 text-left">
             <div className="space-y-2">
-              <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-                {subtitle}
-              </span>
-              <h2 className={`text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight ${moodStyle.textPrimary}`}>
-                {title}
-              </h2>
+              <LiveEditable
+                label="Sous-titre Histoire"
+                sectionId={section.id}
+                sectionField="subtitle"
+                value={subtitle}
+                isAdminPreview={isAdminPreview}
+                isInline={true}
+              >
+                <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
+                  {subtitle}
+                </span>
+              </LiveEditable>
+              <LiveEditable
+                label="Titre Histoire"
+                sectionId={section.id}
+                sectionField="title"
+                value={title}
+                isAdminPreview={isAdminPreview}
+              >
+                <h2 className={`text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight ${moodStyle.textPrimary}`}>
+                  {title}
+                </h2>
+              </LiveEditable>
             </div>
 
-            <p className={`text-sm sm:text-base leading-relaxed ${moodStyle.textSecondary}`}>
-              {content}
-            </p>
+            <LiveEditable
+              label="Contenu Histoire"
+              sectionId={section.id}
+              sectionField="content"
+              value={content}
+              type="textarea"
+              isAdminPreview={isAdminPreview}
+            >
+              <p className={`text-sm sm:text-base leading-relaxed ${moodStyle.textSecondary}`}>
+                {content}
+              </p>
+            </LiveEditable>
 
             {/* Citation Stylisée */}
             <div className={`p-5 rounded-2xl border-l-4 border-blue-600 bg-blue-50/50 dark:bg-slate-900/50 space-y-2`}>
-              <p className={`text-xs sm:text-sm font-semibold italic ${moodStyle.textPrimary}`}>
-                {quote}
-              </p>
-              <span className="text-[11px] font-bold text-blue-600 block">
-                — {founderName}
-              </span>
+              <LiveEditable
+                label="Citation"
+                sectionId={section.id}
+                sectionField="quote"
+                value={quote}
+                type="textarea"
+                isAdminPreview={isAdminPreview}
+              >
+                <p className={`text-xs sm:text-sm font-semibold italic ${moodStyle.textPrimary}`}>
+                  {quote}
+                </p>
+              </LiveEditable>
+              <LiveEditable
+                label="Signature Citation"
+                sectionId={section.id}
+                sectionField="founderName"
+                value={founderName}
+                isAdminPreview={isAdminPreview}
+                isInline={true}
+              >
+                <span className="text-[11px] font-bold text-blue-600 block">
+                  — {founderName}
+                </span>
+              </LiveEditable>
             </div>
 
             {/* 3 Chiffres Clés Personnalisables */}

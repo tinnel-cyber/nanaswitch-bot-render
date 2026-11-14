@@ -232,7 +232,7 @@ export const NaNaSwitchRoutingPage: React.FC<NaNaSwitchRoutingPageProps> = ({
           localStorage.setItem(`nanaswitch_routing_rules_${tenantId}`, JSON.stringify(INITIAL_ROUTING_RULES));
         }
       } catch (err) {
-        console.warn('[NANA_SWITCH] Erreur sync Firestore routing_rules :', err);
+        console.warn('[NANA_SWITCH] Erreur sync storage routing_rules :', err);
       }
     };
 

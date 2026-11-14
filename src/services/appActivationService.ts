@@ -3,8 +3,6 @@
  * Gère le nœud : /tenants/{tenantId}/installedApps/{appId}
  */
 
-import { rtdb } from '../firebase';
-import { ref, set, update, get } from 'firebase/database';
 import { supabase } from '../lib/supabase';
 import { APPS_REGISTRY, AppRegistryItem } from '../data/appsRegistry';
 
@@ -168,19 +166,25 @@ export async function activateApp(
     window.dispatchEvent(new CustomEvent(ACTIVATION_EVENT, { detail: { appId, tenantId: tId, data: appData } }));
   }
 
-  // 2. Persistance dans Firebase Realtime Database (/tenants/{tenantId}/installedApps/{appId})
+  // 2. Persistance dans Supabase app_registry
   try {
-    const appRef = ref(rtdb, `tenants/${tId}/installedApps/${appId}`);
-    await set(appRef, appData);
+    await supabase.from('app_registry').upsert({
+      key: `installed_app_${tId}_${appId}`,
+      name: appId,
+      tenant_id: tId,
+      module_key: 'installed_apps',
+      config_json: appData,
+      updated_at: new Date().toISOString()
+    });
   } catch (err) {
-    console.warn(`[RTDB] Sauvegarde hors-ligne/différée pour app ${appId} sur tenant ${tId}:`, err);
+    console.warn(`[SUPABASE] Sauvegarde app ${appId} sur tenant ${tId}:`, err);
   }
 
   return appData;
 }
 
 /**
- * Épingler / Désépingler une application de la Sidebar avec synchronisation RTDB
+ * Épingler / Désépingler une application de la Sidebar avec synchronisation Supabase
  */
 export async function togglePinApp(
   appId: string, 
@@ -205,12 +209,18 @@ export async function togglePinApp(
     window.dispatchEvent(new CustomEvent(PIN_CHANGED_EVENT, { detail: { appId, pinned: newPinnedStatus, tenantId: tId } }));
   }
 
-  // Synchronisation Firebase RTDB
+  // Synchronisation Supabase app_registry
   try {
-    const pinRef = ref(rtdb, `tenants/${tId}/installedApps/${appId}/pinnedToSidebar`);
-    await set(pinRef, newPinnedStatus);
+    await supabase.from('app_registry').upsert({
+      key: `installed_app_${tId}_${appId}`,
+      name: appId,
+      tenant_id: tId,
+      module_key: 'installed_apps',
+      config_json: appData,
+      updated_at: new Date().toISOString()
+    });
   } catch (err) {
-    console.warn(`[RTDB] Mise à jour pin hors-ligne pour ${appId}:`, err);
+    console.warn(`[SUPABASE] Mise à jour pin pour ${appId}:`, err);
   }
 
   return newPinnedStatus;
@@ -230,10 +240,9 @@ export async function deactivateApp(appId: string, tenantId?: string): Promise<v
   }
 
   try {
-    const appRef = ref(rtdb, `tenants/${tId}/installedApps/${appId}`);
-    await set(appRef, null);
+    await supabase.from('app_registry').delete().eq('key', `installed_app_${tId}_${appId}`);
   } catch (err) {
-    console.warn(`[RTDB] Suppression app hors-ligne pour ${appId}:`, err);
+    console.warn(`[SUPABASE] Suppression app pour ${appId}:`, err);
   }
 }
 

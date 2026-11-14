@@ -238,7 +238,7 @@ export interface LiveEventChatMessage {
   id: string;
   liveId: string;
   senderName: string;
-  senderId?: string;
+  senderId: string;
   senderAvatar?: string;
   senderRole?: 'host' | 'viewer';
   text: string;
@@ -249,29 +249,31 @@ export interface LiveEventChatMessage {
 const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
   default: [
     {
-      id: 'demo-msg-1',
+      id: 'msg-init-1',
       liveId: 'default',
-      senderName: 'Salif Tech (Host)',
+      senderName: 'Fatou Ouédraogo',
+      senderId: 'demo-u1',
+      senderRole: 'viewer',
+      text: 'Bonsoir ! La livraison à Ouaga 2000 est gratuite ? 🙏',
+      createdAt: Date.now() - 1000 * 60 * 3
+    },
+    {
+      id: 'msg-init-2',
+      liveId: 'default',
+      senderName: 'Ibrahim Pousbila Konkobo',
+      senderId: 'host-1',
       senderRole: 'host',
-      senderAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
-      text: 'Bienvenue sur le Live Wameet ! Les stocks partent très vite en direct 🔥',
-      createdAt: Date.now() - 45000
+      text: 'Oui Fatou ! Livraison offerte dès 2 coffrets commandés en direct ! 👑',
+      createdAt: Date.now() - 1000 * 60 * 2
     },
     {
-      id: 'demo-msg-2',
+      id: 'msg-init-3',
       liveId: 'default',
-      senderName: 'Aïcha (Abidjan)',
+      senderName: 'Moussa Sanogo (Abidjan)',
+      senderId: 'demo-u2',
       senderRole: 'viewer',
-      text: 'La qualité vidéo est incroyable ! Est-ce que Wave est accepté ?',
-      createdAt: Date.now() - 30000
-    },
-    {
-      id: 'demo-msg-3',
-      liveId: 'default',
-      senderName: 'Moussa K.',
-      senderRole: 'viewer',
-      text: 'Oui Wave et Orange Money passent en 1 clic sans quitter le live 👏',
-      createdAt: Date.now() - 15000
+      text: 'Je viens de valider 1 coffret par Wave ! Reçu direct ! 🚀',
+      createdAt: Date.now() - 1000 * 30
     }
   ]
 };

@@ -9,7 +9,8 @@
  * ==============================================================================
  */
 
-import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import { 
   SaasStore, 
   SaasActionTask, 
@@ -27,27 +28,10 @@ import { isDemoStore } from './superAdminService';
 import { DEFAULT_PLATFORM_SUBSCRIPTIONS } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 
-// Récupération sécurisée des clés Supabase (Vite browser + fallback production)
-const SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) 
-  || 'https://wsxnznobeefrsoicjqte.supabase.co';
-
-const SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY)
-  || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
-
 /**
- * Instance Supabase Client unique pour le Super Admin
+ * Client Supabase partagé (singleton unique évitant les alertes GoTrueClient multiples)
  */
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export { supabase };
 
 const LOCAL_STORAGE_SUPERADMIN_CACHE = 'nana_superadmin_supabase_cache';
 

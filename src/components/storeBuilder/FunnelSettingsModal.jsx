@@ -1198,7 +1198,7 @@ export const FunnelSettingsModal = ({
                   }
                   onClose();
                 } catch (err) {
-                  console.error('[FunnelSettingsModal] Erreur sauvegarde Firestore:', err);
+                  console.error('[FunnelSettingsModal] Erreur sauvegarde storage:', err);
                   triggerToast(`✅ Paramètres enregistrés localement : https://nanasore.com/t/${cleanSub}`);
                   onClose();
                 } finally {

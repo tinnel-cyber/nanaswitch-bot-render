@@ -85,7 +85,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     shortDescription: "Générez des vidéos & visuels produits haute conversion par IA.",
     category: "Marketing & Studio",
     keywords: ["video", "image", "ia", "pub", "studio", "nanagenerateur", "replicate", "avatar"],
-    route: "/dashboard/apps/nanagenerator",
+    route: "/dashboard/ai-studio",
     installationType: "pwa_ready",
     trialType: "credits",
     priceMonthly: 1500,
@@ -202,7 +202,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     shortDescription: "Rédacteur IA d'annonces, relances WhatsApp et campagnes SMS directes.",
     category: "Marketing & Studio",
     keywords: ["marketing", "campagne", "sms", "whatsapp", "promo", "copywriting"],
-    route: "/dashboard/marketing",
+    route: "/dashboard/marketing/emailing",
     installationType: "pwa_ready",
     trialType: "credits",
     priceMonthly: 1200,
@@ -210,7 +210,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "📈 +40% de réachat",
     trialLabel: "50 SMS offerts",
     isNew: true,
-    targetView: "BOUTIQUE",
+    targetView: "EMAILING",
     rating: 4.7
   },
   {
@@ -228,7 +228,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "🔥 Taux d'engagement x5",
     trialLabel: "Gratuit à vie",
     isNew: true,
-    targetView: "BOUTIQUE",
+    targetView: "WEBINAR",
     taxonomyType: "Application",
     badge: "Application",
     rating: 4.8
@@ -248,7 +248,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "⭐ 97% ROI positif",
     trialLabel: "7 jours offerts",
     isNew: true,
-    targetView: "TRACKING_CRM",
+    targetView: "TRACKING_PIXELS_CRM",
     isPro: true,
     proKey: "TRACKING_PIXELS_CRM",
     rating: 4.7
@@ -541,7 +541,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "🚀 Gain de temps x10",
     trialLabel: "Gratuit à vie",
     isPopular: true,
-    targetView: "INVENTORY",
+    targetView: "EXCEL_IMPORT",
     rating: 4.8
   },
   {
@@ -569,7 +569,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     shortDescription: "Calcul des frais par quartier, assignation des coursiers et carte des colis.",
     category: "Gestion & Stock",
     keywords: ["livraison", "coursier", "carte", "heatmap", "quartier", "logistique", "colis"],
-    route: "/dashboard/livraisons",
+    route: "/dashboard/commandes",
     installationType: "pwa_ready",
     trialType: "freemium",
     priceMonthly: 0,
@@ -577,7 +577,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "🚀 Livraisons +40% rapides",
     trialLabel: "Gratuit à vie",
     isNew: true,
-    targetView: "DELIVERY",
+    targetView: "CUSTOMER_ORDERS",
     rating: 4.7
   },
 
@@ -796,7 +796,7 @@ export const APPS_REGISTRY: AppRegistryItem[] = [
     badgePalmares: "⭐ Conformité UEMOA 100%",
     trialLabel: "Gratuit à vie",
     isPopular: true,
-    targetView: "SETTINGS_KYC",
+    targetView: "KYC_VERIFICATION",
     badge: "UEMOA",
     rating: 5.0
   },

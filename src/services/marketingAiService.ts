@@ -1,5 +1,4 @@
-import { db, auth } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import { StoreSubscription } from '../types';
 
 export type MarketingChannel = 'DESCRIPTION' | 'WAMEET_REELS' | 'SOCIAL_FEED' | 'WAMEET_CLOSING';
@@ -75,7 +74,15 @@ export async function getMarketingQuota(
     };
   }
 
-  const effectiveUid = userId || auth.currentUser?.uid || 'guest-merchant';
+  let effectiveUid = userId;
+  if (!effectiveUid) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      effectiveUid = data.user?.id || 'guest-merchant';
+    } catch {
+      effectiveUid = 'guest-merchant';
+    }
+  }
   const localKey = `nana_ai_marketing_quota_${effectiveUid}`;
 
   let used = 0;
@@ -90,17 +97,18 @@ export async function getMarketingQuota(
     // Ignorer
   }
 
-  // 2. Synchroniser avec Firestore si l'utilisateur est connecté
-  if (auth.currentUser?.uid && effectiveUid === auth.currentUser.uid) {
+  // 2. Synchroniser avec Supabase app_registry
+  if (effectiveUid && effectiveUid !== 'guest-merchant') {
     try {
-      const quotaRef = doc(db, 'merchants', effectiveUid, 'ai_marketing', 'quota');
-      const snap = await getDoc(quotaRef);
-      if (snap.exists()) {
-        const data = snap.data();
-        if (typeof data.usedCount === 'number') {
-          used = Math.max(used, data.usedCount);
-          localStorage.setItem(localKey, String(used));
-        }
+      const { data: row } = await supabase
+        .from('app_registry')
+        .select('config_json')
+        .eq('key', `ai_quota_${effectiveUid}`)
+        .maybeSingle();
+
+      if (row?.config_json && typeof (row.config_json as any).usedCount === 'number') {
+        used = Math.max(used, (row.config_json as any).usedCount);
+        localStorage.setItem(localKey, String(used));
       }
     } catch {
       // Tolérance hors-ligne
@@ -134,7 +142,15 @@ export async function consumeMarketingQuota(
     };
   }
 
-  const effectiveUid = userId || auth.currentUser?.uid || 'guest-merchant';
+  let effectiveUid = userId;
+  if (!effectiveUid) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      effectiveUid = data.user?.id || 'guest-merchant';
+    } catch {
+      effectiveUid = 'guest-merchant';
+    }
+  }
   const localKey = `nana_ai_marketing_quota_${effectiveUid}`;
 
   let currentUsed = 0;
@@ -153,18 +169,19 @@ export async function consumeMarketingQuota(
     // Ignorer
   }
 
-  if (auth.currentUser?.uid && effectiveUid === auth.currentUser.uid) {
+  if (effectiveUid && effectiveUid !== 'guest-merchant') {
     try {
-      const quotaRef = doc(db, 'merchants', effectiveUid, 'ai_marketing', 'quota');
-      await setDoc(
-        quotaRef,
-        {
+      await supabase.from('app_registry').upsert({
+        key: `ai_quota_${effectiveUid}`,
+        name: `ai_quota_${effectiveUid}`,
+        module_key: 'ai_marketing',
+        config_json: {
           usedCount: newUsed,
           lastGeneratedAt: Date.now(),
           limit: FREE_MARKETING_QUOTA_LIMIT,
         },
-        { merge: true }
-      );
+        updated_at: new Date().toISOString()
+      });
     } catch {
       // Tolérance hors-ligne
     }

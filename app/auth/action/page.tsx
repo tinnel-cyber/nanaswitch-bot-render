@@ -3,8 +3,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { applyActionCode } from "firebase/auth";
-import { auth } from "@/lib/firebase-client";
 import { supabase } from "@/lib/supabase";
 import {
   CheckCircle2,
@@ -95,24 +93,20 @@ function AuthActionHandler() {
     if (mode === "verifyEmail") {
       let isMounted = true;
 
-      applyActionCode(auth, oobCode)
-        .then(() => {
+      supabase.auth.verifyOtp({ token_hash: oobCode, type: 'email' })
+        .then(({ error }) => {
           if (!isMounted) return;
-          setStatus("success");
-          console.log("[FIREBASE_AUTH] E-mail vérifié avec succès via oobCode.");
+          if (error) {
+            setStatus("error");
+            setErrorMessage(error.message || "Impossible de valider ce compte.");
+          } else {
+            setStatus("success");
+          }
         })
         .catch((err: any) => {
           if (!isMounted) return;
           setStatus("error");
-          console.error("[FIREBASE_AUTH_ACTION_ERROR]", err);
-
-          if (err.code === "auth/invalid-action-code") {
-            setErrorMessage("Ce lien de confirmation a déjà été utilisé ou n'est plus valide.");
-          } else if (err.code === "auth/expired-action-code") {
-            setErrorMessage("Ce lien de confirmation a expiré. Veuillez demander un nouvel envoi.");
-          } else {
-            setErrorMessage(err.message || "Impossible de valider ce compte.");
-          }
+          setErrorMessage(err.message || "Impossible de valider ce compte.");
         });
 
       return () => {

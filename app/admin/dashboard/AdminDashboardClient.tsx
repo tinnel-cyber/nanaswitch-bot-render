@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase, KNOWN_SUPERADMIN_EMAILS } from "@/lib/supabase";
 import {
   Crown,
   ShieldCheck,
@@ -58,8 +59,34 @@ export default function AdminDashboardClient({
   const [selectedTab, setSelectedTab] = useState<"overview" | "affiliates" | "security">("overview");
   const [affiliatesList, setAffiliatesList] = useState<PendingAffiliate[]>(pendingAffiliates);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [authorized, setAuthorized] = useState<boolean>(isSuperAdmin);
+  const [displayEmail, setDisplayEmail] = useState<string | undefined>(userEmail);
 
-  if (!isSuperAdmin) {
+  useEffect(() => {
+    if (isSuperAdmin) {
+      setAuthorized(true);
+      return;
+    }
+
+    // Vérification côté client si le cookie SSR n'était pas encore synchronisé
+    async function verifyClientSideSession() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          setDisplayEmail(user.email);
+          if (KNOWN_SUPERADMIN_EMAILS.includes(user.email.toLowerCase())) {
+            setAuthorized(true);
+          }
+        }
+      } catch (err) {
+        console.warn("[AdminDashboardClient] Vérification client-side non bloquante:", err);
+      }
+    }
+
+    verifyClientSideSession();
+  }, [isSuperAdmin]);
+
+  if (!authorized) {
     return (
       <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-6 font-sans">
         <div className="max-w-md w-full bg-slate-900 border border-red-500/30 rounded-3xl p-8 text-center shadow-2xl">
@@ -71,7 +98,7 @@ export default function AdminDashboardClient({
           </span>
           <h2 className="text-xl font-bold mt-4 mb-2">Accès Super Admin Restreint</h2>
           <p className="text-xs text-slate-400 leading-relaxed mb-6">
-            Votre compte ({userEmail || "Non identifié"}) ne figure pas dans la table Supabase <code className="text-red-400 font-mono">super_admins</code> ni dans la liste des administrateurs autorisés.
+            Votre compte ({displayEmail || userEmail || "Non identifié"}) ne figure pas dans la table Supabase <code className="text-red-400 font-mono">super_admins</code> ni dans la liste des administrateurs autorisés.
           </p>
           <Link
             href="/"
@@ -167,9 +194,10 @@ export default function AdminDashboardClient({
               <Link
                 href="/dashboard"
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition active:scale-95 flex items-center gap-2 shadow-lg shadow-blue-900/30"
+                title="Accéder au Nouveau Tableau de Bord Marchand Univers (avec Omnibar Universel & Analytics TradingView)"
               >
                 <LayoutDashboard className="w-4 h-4" />
-                <span>Tableau de Bord Marchand (/dashboard)</span>
+                <span>Nouveau Tableau de Bord Univers (/dashboard)</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <Link

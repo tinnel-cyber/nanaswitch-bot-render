@@ -12,5 +12,9 @@ export const firebaseClientConfig = {
 };
 
 export const clientApp = !getApps().length ? initializeApp(firebaseClientConfig) : getApp();
-export const auth = getAuth(clientApp);
+export const auth: any = {
+  currentUser: null,
+  onAuthStateChanged: (_cb: any) => () => {},
+  signOut: async () => {},
+};
 export default auth;

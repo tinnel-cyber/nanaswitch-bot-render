@@ -23,8 +23,6 @@ import {
 import { StoreProductItem } from './types';
 import { triggerOpenFunnel } from '../../../../themes/themeUtils';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { db } from '../../../../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
 import { recordUnifiedOrder } from '../../../../utils/firestoreService';
 
@@ -383,7 +381,7 @@ export const SmartSlideOutCartDrawer: React.FC<SmartSlideOutCartDrawerProps> = (
         total: finalTotal
       });
     } catch (err) {
-      console.error('Erreur sauvegarde commande Firestore :', err);
+      console.error('Erreur sauvegarde commande storage :', err);
       // Fallback gracieux si hors-ligne
       const orderNum = `CMD-${Date.now().toString().slice(-6)}`;
       setOrderSuccessData({

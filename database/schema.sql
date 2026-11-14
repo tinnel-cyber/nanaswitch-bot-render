@@ -118,3 +118,70 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user();
+
+-- ==============================================================================
+-- 7. Table public.universes (Multi-Univers Marchand selon Appellation)
+-- ==============================================================================
+create table if not exists public.universes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  slug text not null,
+  appellation text not null default 'E-commerce & Vente en ligne',
+  sector text,
+  type text not null default 'entreprise' check (type in ('entreprise', 'particulier')),
+  status text not null default 'VERIFIED' check (status in ('VERIFIED', 'PENDING_KYC', 'REJECTED', 'ACTIVE', 'INACTIVE')),
+  balances jsonb not null default '{"XOF": 0, "USD": 0, "XAF": 0, "GNF": 0, "GHS": 0}'::jsonb,
+  keys jsonb not null default '{}'::jsonb,
+  webhook_config jsonb not null default '{"url": null, "secret_key": "", "is_active": false}'::jsonb,
+  kyc_data jsonb not null default '{}'::jsonb,
+  integration_mode text not null default 'AGREGATED' check (integration_mode in ('AGREGATED', 'BYOK')),
+  integration_config jsonb not null default '{}'::jsonb,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_user_universe_slug unique (user_id, slug)
+);
+
+create index if not exists idx_universes_user_id on public.universes (user_id);
+create index if not exists idx_universes_slug on public.universes (slug);
+create index if not exists idx_universes_status on public.universes (status);
+create index if not exists idx_universes_appellation on public.universes (appellation);
+
+alter table public.universes enable row level security;
+
+drop policy if exists "Les marchands voient leurs propres univers" on public.universes;
+create policy "Les marchands voient leurs propres univers"
+  on public.universes for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Les marchands créent leurs propres univers" on public.universes;
+create policy "Les marchands créent leurs propres univers"
+  on public.universes for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Les marchands modifient leurs propres univers" on public.universes;
+create policy "Les marchands modifient leurs propres univers"
+  on public.universes for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Les marchands suppriment leurs propres univers" on public.universes;
+create policy "Les marchands suppriment leurs propres univers"
+  on public.universes for delete
+  using (auth.uid() = user_id);
+
+create or replace function public.handle_universes_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists set_universes_updated_at on public.universes;
+create trigger set_universes_updated_at
+  before update on public.universes
+  for each row
+  execute function public.handle_universes_updated_at();
+

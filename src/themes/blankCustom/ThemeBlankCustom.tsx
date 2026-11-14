@@ -1012,6 +1012,7 @@ const RenderArchitectSection: React.FC<RenderArchitectSectionProps> = ({
           moodStyle={moodStyle}
           buttonRadiusClass={buttonRadiusClass}
           storeName={storeName}
+          isAdminPreview={isAdminPreview}
         />
       );
 
@@ -1023,6 +1024,7 @@ const RenderArchitectSection: React.FC<RenderArchitectSectionProps> = ({
           section={section}
           moodStyle={moodStyle}
           buttonRadiusClass={buttonRadiusClass}
+          isAdminPreview={isAdminPreview}
         />
       );
 
@@ -1036,6 +1038,7 @@ const RenderArchitectSection: React.FC<RenderArchitectSectionProps> = ({
           buttonRadiusClass={buttonRadiusClass}
           whatsappPhone={whatsappPhone}
           storeName={storeName}
+          isAdminPreview={isAdminPreview}
         />
       );
 

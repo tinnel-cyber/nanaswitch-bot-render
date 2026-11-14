@@ -74,14 +74,14 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'AI_ADVISOR',
     icon: 'Award',
     keywords: ['nsore', 'agent-nsore', 'directeur', 'croissance', 'strategie', 'ia', 'conseil', 'monetisation', 'commission', 'abonnement', 'roi'],
-    aliases: ['app-ai-advisor', 'growth-director', 'directeur-croissance', 'agent-nsore', 'conseiller-ia']
+    aliases: ['app-ai-advisor', 'growth-director', 'directeur-croissance', 'agent-nsore', 'conseiller-ia', 'ai-gemini']
   },
 
   {
     id: 'pos',
     slug: 'pos',
     name: 'Caisse Tactile Magasin (POS)',
-    route: '/pos',
+    route: '/dashboard/pos',
     category: 'Commerce & Vente',
     description: 'Encaissement express au comptoir, tickets & paiements.',
     type: 'APPLICATION',
@@ -90,13 +90,13 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'POS',
     icon: 'ShoppingCart',
     keywords: ['caisse', 'pos', 'vente', 'encaissement', 'ticket', 'comptoir', 'magasin'],
-    aliases: ['app-pos', 'caisse-pos', 'mod-pos', 'cash_register', 'pos-caisse-core']
+    aliases: ['app-pos', 'caisse-pos', 'mod-pos', 'cash_register', 'pos-caisse-core', '/pos', '/dashboard/caisse']
   },
   {
     id: 'studio',
     slug: 'studio',
     name: 'Vitrine en Ligne (E-Shop)',
-    route: '/shop',
+    route: '/dashboard/vitrine',
     category: 'Commerce & Vente',
     description: 'Boutique connectée, panier client & commande WhatsApp.',
     type: 'APPLICATION',
@@ -105,7 +105,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'STUDIO',
     icon: 'Store',
     keywords: ['boutique', 'eshop', 'vitrine', 'ecommerce', 'web', 'online', 'store'],
-    aliases: ['app-studio', 'online_store', 'vitrine-eshop', 'mod-vitrine', 'eshop', 'vitrine']
+    aliases: ['app-studio', 'online_store', 'vitrine-eshop', 'mod-vitrine', 'eshop', 'vitrine', 'studio-vitrine', '/shop']
   },
   {
     id: 'wameet',
@@ -121,22 +121,22 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'WAMEET',
     icon: 'MessageSquare',
     keywords: ['wameet', 'social', 'reseau', 'messagerie', 'stories'],
-    aliases: ['app-wameet']
+    aliases: ['app-wameet', 'wameet-network']
   },
   {
     id: 'nanagenerator',
     slug: 'nanagenerator',
     name: 'Nanagénérateur AI',
-    route: '/dashboard/apps/nanagenerator',
+    route: '/dashboard/ai-studio',
     category: 'Studio IA',
     description: 'Création de vidéos et visuels publicitaires par intelligence artificielle.',
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: true,
-    view: 'APPS_NANAGENERATOR',
+    view: 'AI_STUDIO',
     icon: 'Sparkles',
     keywords: ['nanagenerator', 'video', 'image', 'ia', 'pub', 'studio', 'nanagenerateur'],
-    aliases: ['app-nanagenerator', 'ai-generator', 'nanagenerateur']
+    aliases: ['app-nanagenerator', 'ai-generator', 'nanagenerateur', 'studio-ia', 'APPS_NANAGENERATOR', '/dashboard/apps/nanagenerator']
   },
   {
     id: 'ultimate-funnel',
@@ -151,7 +151,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'ULTIMATE_FUNNEL',
     icon: 'TrendingUp',
     keywords: ['ultimate', 'funnel', 'builder', 'conversion', 'upsell', 'tunnel'],
-    aliases: ['app-ultimate-funnel', 'sales_funnels', 'ultimate-funnel-builder', 'funnel-builder']
+    aliases: ['app-ultimate-funnel', 'sales_funnels', 'ultimate-funnel-builder', 'funnel-builder', 'tunnels-vente']
   },
   {
     id: 'modular-funnel',
@@ -211,13 +211,13 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'MARKET_DIRECTORY',
     icon: 'Globe',
     keywords: ['market', 'marketplace', 'annuaire', 'b2b2c'],
-    aliases: ['app-nanamarket', 'mod-market-directory']
+    aliases: ['app-nanamarket', 'mod-market-directory', 'nana-market']
   },
   {
     id: 'webinar',
     slug: 'webinar',
     name: 'Studio de Génération de Live et Webinaire',
-    route: '/webinar',
+    route: '/dashboard/lives',
     category: 'Direct Live',
     description: 'Diffusion vidéo en direct avec vente de produits en temps réel.',
     type: 'APPLICATION',
@@ -226,13 +226,13 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'WEBINAR',
     icon: 'Video',
     keywords: ['live', 'webinaire', 'streaming', 'video', 'shopping', 'direct'],
-    aliases: ['app-webinar', 'webinars_live', 'live-webinar', 'lives']
+    aliases: ['app-webinar', 'webinars_live', 'live-webinar', 'lives', '/webinar']
   },
   {
     id: 'docusign',
     slug: 'docusign',
     name: 'DocuSign Hub & Contrats Signés',
-    route: '/docusign',
+    route: '/dashboard/docusign',
     category: 'Juridique',
     description: 'Signature électronique légale de contrats de vente et partenariats.',
     type: 'APPLICATION',
@@ -241,7 +241,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'DOCUSIGN',
     icon: 'FileCheck',
     keywords: ['docusign', 'contrats', 'signature', 'juridique', 'legal'],
-    aliases: ['app-docusign', 'digital_signature', 'contrats']
+    aliases: ['app-docusign', 'digital_signature', 'contrats', 'docusign-hub', '/docusign']
   },
   {
     id: 'vendor-upload',
@@ -273,7 +273,7 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     view: 'CV_CREATOR',
     icon: 'FileText',
     keywords: ['cvpro', 'cv', 'attestations', 'documents', 'curriculum', 'carriere', 'emploi', 'recrutement'],
-    aliases: ['app-cvpro', 'mod-cvpro']
+    aliases: ['app-cvpro', 'mod-cvpro', 'cv-pro']
   }
 ];
 
@@ -297,7 +297,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     view: 'SETTINGS_EXTENSIONS',
     icon: 'Cpu',
     keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'sms-otp', 'superadmin'],
-    aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs']
+    aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs', 'connectors-webhooks']
   },
   {
     id: 'theme-builder',
@@ -312,13 +312,13 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     view: 'STUDIO',
     icon: 'Palette',
     keywords: ['theme', 'builder', 'design', 'vitrine', 'studio'],
-    aliases: ['srv-theme-builder']
+    aliases: ['srv-theme-builder', 'theme-builder-studio']
   },
   {
     id: 'partner',
     slug: 'partner',
     name: 'Espace Partenaire & Affiliation',
-    route: '/partner',
+    route: '/dashboard/partenaire',
     category: 'Croissance',
     description: "Programme d'affiliation avec commissions automatiques et liens parrainage.",
     type: 'SERVICE',
@@ -327,7 +327,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     view: 'PARTNER',
     icon: 'Award',
     keywords: ['affiliation', 'partenaire', 'parrainage', 'commissions'],
-    aliases: ['srv-partner', 'partner-program']
+    aliases: ['srv-partner', 'partner-program', 'partners-affiliate', '/partner']
   },
   {
     id: 'course-create',
@@ -348,16 +348,16 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     id: 'academy-support',
     slug: 'academy-support',
     name: "Centre de Formation et D'Accompagnement",
-    route: '/academy',
+    route: '/dashboard/campus',
     category: 'Éducation',
     description: 'Espace cours, leçons vidéo et accompagnement des apprenants.',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
     defaultActive: false,
-    view: 'ACADEMY',
+    view: 'CAMPUS',
     icon: 'Compass',
-    keywords: ['academie', 'formation', 'accompagnement', 'cours-video'],
-    aliases: ['srv-academy-support']
+    keywords: ['academie', 'formation', 'accompagnement', 'cours-video', 'campus'],
+    aliases: ['srv-academy-support', 'lms-academy', 'nana-academy', '/academy']
   },
   {
     id: 'nana-switch',
@@ -379,7 +379,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     id: 'kyc',
     slug: 'kyc',
     name: "Chaîne d'Identification KYC & Sécurité",
-    route: '/kyc',
+    route: '/dashboard/kyc',
     category: 'Conformité',
     description: "Vérification des pièces d'identité et conformité juridique des marchands.",
     type: 'SERVICE',
@@ -388,7 +388,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     view: 'KYC_VERIFICATION',
     icon: 'ShieldCheck',
     keywords: ['kyc', 'identification', 'securite', 'conformite'],
-    aliases: ['srv-kyc', 'kyc-verification']
+    aliases: ['srv-kyc', 'kyc-verification', 'kyc-chain', 'SETTINGS_KYC', '/kyc']
   }
 ];
 
@@ -400,7 +400,7 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     id: 'inventory',
     slug: 'inventory',
     name: 'Stock & Inventaire Intelligent',
-    route: '/inventory',
+    route: '/dashboard/inventaire',
     category: 'Gestion',
     description: 'Suivi en temps réel des quantités, alertes de rupture et codes-barres.',
     type: 'MODULE',
@@ -409,7 +409,7 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     view: 'INVENTORY',
     icon: 'Boxes',
     keywords: ['stock', 'inventaire', 'produits', 'rupture', 'codes-barres'],
-    aliases: ['mod-inventory', 'catalog', 'inventory_suppliers', 'mod_stock']
+    aliases: ['mod-inventory', 'catalog', 'inventory_suppliers', 'mod_stock', 'inventory-stock', '/inventory']
   },
   {
     id: 'debts',
@@ -424,7 +424,7 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     view: 'DEBT_BOOK',
     icon: 'BookMarked',
     keywords: ['dettes', 'ardoises', 'credit-client', 'creances', 'relances'],
-    aliases: ['mod-debts', 'crm_customers', 'mod_credit_book', 'credit-book']
+    aliases: ['mod-debts', 'crm_customers', 'mod_credit_book', 'credit-book', 'debt-book', 'debts-credit']
   },
   {
     id: 'analytics',
@@ -439,7 +439,7 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     view: 'REPORTS',
     icon: 'BarChart2',
     keywords: ['analytique', 'gains', 'statistiques', 'courbe', 'chiffre-affaires'],
-    aliases: ['mod-analytics', 'analytics_reports']
+    aliases: ['mod-analytics', 'analytics_reports', 'reports-analytics']
   },
   {
     id: 'team-employees',
@@ -451,10 +451,11 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     type: 'MODULE',
     taxonomy: 'MODULE',
     defaultActive: true,
+    view: 'EMPLOYEE_MANAGEMENT',
     actionId: 'EMPLOYEE_MANAGEMENT',
     icon: 'Users',
     keywords: ['employes', 'caissiers', 'equipe', 'droits', 'shifts', 'pin'],
-    aliases: ['mod-team-employees', 'team_staff', 'cashier-sessions']
+    aliases: ['mod-team-employees', 'team_staff', 'cashier-sessions', 'EMPLOYEE_MANAGEMENT', '/dashboard/equipe']
   },
   {
     id: 'pixels-crm',
@@ -466,10 +467,11 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     type: 'MODULE',
     taxonomy: 'MODULE',
     defaultActive: false,
+    view: 'TRACKING_PIXELS_CRM',
     actionId: 'TRACKING_PIXELS_CRM',
     icon: 'Activity',
     keywords: ['pixels', 'tracking', 'meta', 'tiktok', 'analytics'],
-    aliases: ['mod-pixels-crm', 'tracking-pixels']
+    aliases: ['mod-pixels-crm', 'tracking-pixels', 'TRACKING_PIXELS_CRM', 'TRACKING_CRM']
   }
 ];
 
@@ -481,7 +483,7 @@ export const OUTILS_BLOCK: CanonicalModule[] = [
     id: 'scanner',
     slug: 'scanner',
     name: 'Scanner Code-Barres & Douchette USB/Caméra',
-    route: '/scanner',
+    route: '/dashboard/scanner',
     category: 'Matériel POS',
     description: 'Détection instantanée via douchette physique laser ou caméra mobile.',
     type: 'OUTIL',
@@ -490,13 +492,13 @@ export const OUTILS_BLOCK: CanonicalModule[] = [
     view: 'BARCODE_SCANNER',
     icon: 'QrCode',
     keywords: ['scanner', 'douchette', 'codes-barres', 'camera', 'laser'],
-    aliases: ['tool-scanner', 'mod_barcode_scanner', 'barcode-scanner']
+    aliases: ['tool-scanner', 'mod_barcode_scanner', 'barcode-scanner', '/scanner']
   },
   {
     id: 'excel',
     slug: 'excel',
     name: 'Import & Export de Fichiers Excel / CSV',
-    route: '/excel',
+    route: '/dashboard/inventaire/excel',
     category: 'Données',
     description: 'Importation en masse de catalogues produits et export comptable.',
     type: 'OUTIL',
@@ -505,7 +507,7 @@ export const OUTILS_BLOCK: CanonicalModule[] = [
     view: 'EXCEL_IMPORT',
     icon: 'FileSpreadsheet',
     keywords: ['excel', 'csv', 'import', 'export', 'donnees'],
-    aliases: ['tool-excel', 'excel-import']
+    aliases: ['tool-excel', 'excel-import', 'excel-importer', '/excel']
   },
   {
     id: 'gateway',
@@ -517,10 +519,11 @@ export const OUTILS_BLOCK: CanonicalModule[] = [
     type: 'OUTIL',
     taxonomy: 'OUTIL',
     defaultActive: false,
+    view: 'SOVEREIGN_GATEWAY',
     actionId: 'SOVEREIGN_GATEWAY',
     icon: 'Key',
     keywords: ['passerelle', 'api', 'webhooks', 'souveraine', 'connecteur'],
-    aliases: ['tool-gateway', 'sovereign-gateway']
+    aliases: ['tool-gateway', 'sovereign-gateway', 'SOVEREIGN_GATEWAY', '/dashboard/passerelle-souveraine']
   }
 ];
 

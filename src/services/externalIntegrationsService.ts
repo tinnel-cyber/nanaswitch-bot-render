@@ -67,7 +67,7 @@ export async function getInstructorIntegrations(
       return { ...DEFAULT_INTEGRATIONS, ...data };
     }
   } catch (err) {
-    console.warn('[IntegrationsService] Lecture Firestore indisponible, utilisation du cache local :', err);
+    console.warn('[IntegrationsService] Lecture storage indisponible, utilisation du cache local :', err);
   }
 
   // 2. Repli sur le stockage local
@@ -110,7 +110,7 @@ export async function saveInstructorIntegration(
     const ref = doc(db, 'instructors', instructorId, 'settings', 'external_integrations');
     await setDoc(ref, updated, { merge: true });
   } catch (err) {
-    console.error('[IntegrationsService] Erreur lors de la sauvegarde Firestore :', err);
+    console.error('[IntegrationsService] Erreur lors de la sauvegarde storage :', err);
   }
 }
 
@@ -139,7 +139,7 @@ export async function disconnectInstructorIntegration(
       [`${provider}.lastSyncAt`]: new Date().toISOString()
     });
   } catch (err) {
-    console.warn('[IntegrationsService] Erreur déconnexion Firestore :', err);
+    console.warn('[IntegrationsService] Erreur déconnexion storage :', err);
   }
 }
 

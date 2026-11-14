@@ -25,7 +25,8 @@ export interface QuickCatalogDrawerProps {
   onEditProduct: (product: StoreProductItem, options?: { initialCard?: number }) => void;
   onPreviewFunnel?: (product: StoreProductItem) => void;
   onDeleteProduct?: (productId: string, productName: string) => void;
-  onOpenAddProduct: () => void;
+  onOpenAddProduct?: () => void;
+  onAddNew?: () => void;
   onToast?: (message: string) => void;
 }
 
@@ -38,6 +39,7 @@ export const QuickCatalogDrawer: React.FC<QuickCatalogDrawerProps> = ({
   onPreviewFunnel,
   onDeleteProduct,
   onOpenAddProduct,
+  onAddNew,
   onToast
 }) => {
   const [search, setSearch] = useState('');
@@ -58,9 +60,10 @@ export const QuickCatalogDrawer: React.FC<QuickCatalogDrawerProps> = ({
     playTapBeep();
     const cleanSlug = storeSlug.trim().replace(/^store-/, '');
     const funnelId = p.linkedFunnelId || (p as any).funnelConfig?.slug;
+    const prodSlug = p.slug || (p as any).productSlug || p.id;
     const url = buildPublicShopUrl(cleanSlug, {
-      productSlug: p.id,
-      funnelSlug: funnelId || undefined
+      productSlug: prodSlug,
+      funnelSlugOrId: funnelId || undefined
     });
 
     try {
@@ -275,7 +278,11 @@ export const QuickCatalogDrawer: React.FC<QuickCatalogDrawerProps> = ({
             type="button"
             onClick={() => {
               playTapBeep();
-              onOpenAddProduct();
+              if (onOpenAddProduct) {
+                onOpenAddProduct();
+              } else if (onAddNew) {
+                onAddNew();
+              }
             }}
             className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-black text-xs shadow-md shadow-blue-900/20 flex items-center justify-center gap-2 transition cursor-pointer"
           >

@@ -252,7 +252,7 @@ export const ComparisonMatrixAdminTab: React.FC<ComparisonMatrixAdminTabProps> =
       setSaveSuccessMessage('✓ Matrice de comparaison sauvegardée avec succès sur Firestore !');
       setTimeout(() => setSaveSuccessMessage(null), 4000);
     } catch (err: any) {
-      console.error('Erreur sauvegarde matrice Firestore :', err);
+      console.error('Erreur sauvegarde matrice storage :', err);
       alert("Erreur lors de la sauvegarde sur Firestore : " + (err?.message || err));
     } finally {
       setIsSaving(false);

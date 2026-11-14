@@ -1,5 +1,5 @@
 /**
- * Service Client Frontend pour l'API de Paiement NaNa POS (Hébergée sur Render avec IP Statique Fixie)
+ * Service Client Frontend pour l'API de Paiement Nanasore (Hébergée sur Render avec IP Statique Fixie)
  * Permet au frontend Firebase Hosting de communiquer avec le micro-service de transactions bancaires.
  */
 
@@ -377,7 +377,7 @@ export async function initiateSPayment(params: SCollectionRequest): Promise<SCol
       await setDoc(doc(db, 'payment_intents', externalReference), intentPayload, { merge: true });
     }
   } catch (err: any) {
-    console.warn('[FIRESTORE INTENT INIT]', err.message);
+    console.warn('[storage INTENT INIT]', err.message);
   }
 
   // 2. Appel direct vers le micro-service Render (Passerelle SasPay / NaNaSwitch Live)

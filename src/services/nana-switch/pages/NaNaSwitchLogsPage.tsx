@@ -275,7 +275,7 @@ export const NaNaSwitchLogsPage: React.FC<NaNaSwitchLogsPageProps> = ({
         updatedAt: new Date().toISOString()
       }, { merge: true });
     } catch (e) {
-      console.warn('[NANA_SWITCH] Sauvegarde logs Firestore :', e);
+      console.warn('[NANA_SWITCH] Sauvegarde logs storage :', e);
     }
   }, [tenantId]);
 

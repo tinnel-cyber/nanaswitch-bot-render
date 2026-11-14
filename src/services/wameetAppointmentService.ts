@@ -106,9 +106,9 @@ export async function createWameetAppointment(
         ...appointment,
         serverTimestamp: serverTimestamp()
       });
-      console.log(`[wameetAppointmentService] Rendez-vous ${appointmentId} enregistré sur Firestore.`);
+      console.log(`[wameetAppointmentService] Rendez-vous ${appointmentId} enregistré sur storage.`);
     } catch (err) {
-      console.warn('[wameetAppointmentService] Erreur Firestore, utilisation du fallback local :', err);
+      console.warn('[wameetAppointmentService] Erreur storage, utilisation du fallback local :', err);
     }
   }
 
@@ -144,7 +144,7 @@ export async function getWameetAppointments(userId: string): Promise<WameetAppoi
         return combined;
       }
     } catch (e) {
-      console.warn('[wameetAppointmentService] Récupération Firestore en échec, retour local :', e);
+      console.warn('[wameetAppointmentService] Récupération storage en échec, retour local :', e);
     }
   }
 

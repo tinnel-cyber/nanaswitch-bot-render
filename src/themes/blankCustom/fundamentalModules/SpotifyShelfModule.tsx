@@ -4,6 +4,7 @@ import { CustomSectionInstance } from '../../../types';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { MoodStyleConfig } from '../moodStyles';
 import { AdminProductQuickBar } from '../../../components/storeBuilder/AdminProductQuickBar';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 import { triggerOpenFunnel } from '../../themeUtils';
 import { playTapBeep } from '../../../utils/audio';
 
@@ -139,12 +140,28 @@ const DEMO_SHELF_PRODUCTS: StoreProductItem[] = [
                 PLAYLIST ÉPINGLÉE • SPOTIFY STYLE
               </span>
             </div>
-            <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${moodStyle.textPrimary}`}>
-              {title}
-            </h2>
-            <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
-              {subtitle}
-            </p>
+            <LiveEditable
+              label="Titre Rayon Spotify"
+              sectionId={section.id}
+              sectionField="title"
+              value={title}
+              isAdminPreview={isAdminPreview}
+            >
+              <h2 className={`text-2xl sm:text-3xl font-black tracking-tight ${moodStyle.textPrimary}`}>
+                {title}
+              </h2>
+            </LiveEditable>
+            <LiveEditable
+              label="Sous-titre Rayon Spotify"
+              sectionId={section.id}
+              sectionField="subtitle"
+              value={subtitle}
+              isAdminPreview={isAdminPreview}
+            >
+              <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
+                {subtitle}
+              </p>
+            </LiveEditable>
           </div>
 
           {/* Pilules de Catégories Rapides & Flèches en verre dépoli */}

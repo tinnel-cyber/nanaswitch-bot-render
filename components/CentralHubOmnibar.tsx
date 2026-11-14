@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ref, onValue } from 'firebase/database';
-import { doc, getDoc } from 'firebase/firestore';
-import { rtdb, db } from '../src/firebase';
+import { supabase } from '../src/lib/supabase';
 import { APPS_REGISTRY, searchAppsRegistry, AppRegistryItem } from '../src/data/appsRegistry';
 import { useActiveOmnibarApps } from '../src/hooks/useActiveOmnibarApps';
 import { toggleModuleStatus } from '../src/services/moduleActivationService';
-import { OFFICIAL_MODULES, getOfficialModuleById, AppModule } from '../src/appRegistry';
+import { OFFICIAL_MODULES, getOfficialModuleById, getModuleByRoute, AppModule } from '../src/config/appRegistry';
 import { 
   Search, 
   X, 
@@ -1213,40 +1211,42 @@ export function getSuccessionSuggestions(
   primaryModule: any,
   allAvailableCards: any[]
 ): any[] {
-  if (!primaryModule) return [];
+  if (!primaryModule || !Array.isArray(allAvailableCards)) return [];
 
   const excludedIds = new Set<string>([
-    primaryModule.id,
-    (primaryModule.title || '').toLowerCase()
+    String(primaryModule.id || '').toLowerCase(),
+    String(primaryModule.title || primaryModule.appName || '').toLowerCase()
   ]);
 
   const candidates: any[] = [];
 
   const addCandidate = (item: any) => {
     if (!item) return;
-    const id = item.id;
-    const title = (item.title || item.appName || '').toLowerCase();
-    if (!excludedIds.has(id) && !excludedIds.has(title)) {
-      excludedIds.add(id);
-      excludedIds.add(title);
+    const id = String(item.id || `mod-${candidates.length}`);
+    const idLower = id.toLowerCase();
+    const resolvedTitle = String(item.title || item.appName || item.name || 'Module Nanasore');
+    const titleLower = resolvedTitle.toLowerCase();
+    if (!excludedIds.has(idLower) && !excludedIds.has(titleLower)) {
+      excludedIds.add(idLower);
+      excludedIds.add(titleLower);
       candidates.push({
-        id: item.id,
-        title: item.title || item.appName,
+        id,
+        title: resolvedTitle,
         subtitle: item.subtitle || item.category || '',
         description: item.description || item.shortDescription || '',
         palmares: item.palmares || item.badgePalmares || '⭐ 98% de satisfaction',
         trialBadge: item.trialBadge || item.trialLabel || 'Essai disponible',
         mediaUrl: item.mediaUrl || item.appLogo || '',
         mediaType: 'image' as const,
-        routeUrl: item.routeUrl || item.route || `/dashboard/apps/${item.id}`,
+        routeUrl: item.routeUrl || item.route || `/dashboard/apps/${id}`,
         targetView: item.targetView,
         tutorialUrl: item.tutorialUrl || ''
       });
     }
   };
 
-  const primaryTitle = (primaryModule.title || '').toLowerCase();
-  const primaryCategory = (primaryModule.subtitle || primaryModule.category || primaryModule.rowTitle || '').toLowerCase();
+  const primaryTitle = String(primaryModule.title || '').toLowerCase();
+  const primaryCategory = String(primaryModule.subtitle || primaryModule.category || primaryModule.rowTitle || '').toLowerCase();
 
   // A. Paires de workflow métier stratégiques (succession naturelle)
   const WORKFLOW_PAIRS: Record<string, string[]> = {
@@ -1265,15 +1265,16 @@ export function getSuccessionSuggestions(
     dette: ['pos', 'invoices', 'accounting', 'whatsapp-crm']
   };
 
-  const matchedKey = Object.keys(WORKFLOW_PAIRS).find((k) => primaryTitle.includes(k) || (primaryModule.id || '').includes(k));
+  const matchedKey = Object.keys(WORKFLOW_PAIRS).find((k) => primaryTitle.includes(k) || String(primaryModule.id || '').toLowerCase().includes(k));
   if (matchedKey) {
     const desiredIds = WORKFLOW_PAIRS[matchedKey];
     for (const dId of desiredIds) {
       const match = allAvailableCards.find(
         (c) =>
-          c.id === dId ||
-          c.id.includes(dId) ||
-          (c.title || '').toLowerCase().includes(dId)
+          c &&
+          (String(c.id || '').toLowerCase() === dId ||
+            String(c.id || '').toLowerCase().includes(dId) ||
+            String(c.title || '').toLowerCase().includes(dId))
       );
       if (match) addCandidate(match);
       if (candidates.length >= 4) break;
@@ -1283,8 +1284,9 @@ export function getSuccessionSuggestions(
   // B. Suggestions complémentaires dans la MÊME catégorie
   if (candidates.length < 4) {
     const sameCatMatches = allAvailableCards.filter((c) => {
-      const s = (c.subtitle || c.category || c.rowTitle || '').toLowerCase();
-      return primaryCategory && (s.includes(primaryCategory) || primaryCategory.includes(s));
+      if (!c) return false;
+      const s = String(c.subtitle || c.category || c.rowTitle || '').toLowerCase();
+      return Boolean(primaryCategory && s && (s.includes(primaryCategory) || primaryCategory.includes(s)));
     });
     for (const item of sameCatMatches) {
       addCandidate(item);
@@ -1296,7 +1298,7 @@ export function getSuccessionSuggestions(
   if (candidates.length < 4) {
     const flagshipKeywords = ['caisse', 'nanagénérateur', 'whatsapp', 'tunnels', 'stock', 'factures'];
     for (const fKey of flagshipKeywords) {
-      const match = allAvailableCards.find((c) => (c.title || '').toLowerCase().includes(fKey));
+      const match = allAvailableCards.find((c) => c && String(c.title || '').toLowerCase().includes(fKey));
       if (match) addCandidate(match);
       if (candidates.length >= 4) break;
     }
@@ -1459,169 +1461,96 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
   const [blocks, setBlocks] = useState<any[]>(() => {
     try {
-      const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
-      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
-      let combined: any[] = [];
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
-        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
-        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
+      if (typeof window !== 'undefined') {
+        // Purge de l'ancien cache Central Hub conflictuel
+        localStorage.removeItem('central_hub_config');
+        const cachedRegistry = localStorage.getItem('app_registry_cache');
+        if (cachedRegistry) {
+          const regParsed = JSON.parse(cachedRegistry);
+          return Object.values(regParsed).filter(Boolean);
+        }
       }
-      if (cachedRegistry) {
-        const regParsed = JSON.parse(cachedRegistry);
-        const regValues = Object.values(regParsed).filter(Boolean);
-        regValues.forEach((rb: any) => {
-          if (!combined.some(c => c.id === rb.id)) {
-            combined.push(rb);
-          }
-        });
-      }
-      return combined;
     } catch (_) {}
     return [];
   });
 
   const [configRows, setConfigRows] = useState<HubRowItem[]>(() => {
     try {
-      const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
-      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
-      let combined: any[] = [];
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
-        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
-        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
+      if (typeof window !== 'undefined') {
+        const cachedRegistry = localStorage.getItem('app_registry_cache');
+        if (cachedRegistry) {
+          const regParsed = JSON.parse(cachedRegistry);
+          const combined = Object.values(regParsed).filter(Boolean);
+          const normalized = normalizeHubData(combined);
+          if (normalized.length > 0) return normalized;
+        }
       }
-      if (cachedRegistry) {
-        const regParsed = JSON.parse(cachedRegistry);
-        const regValues = Object.values(regParsed).filter(Boolean);
-        regValues.forEach((rb: any) => {
-          if (!combined.some(c => c.id === rb.id)) {
-            combined.push(rb);
-          }
-        });
-      }
-      const normalized = normalizeHubData(combined);
-      if (normalized.length > 0) return normalized;
     } catch (_) {}
     return [];
   });
 
-  // 1. Synchronisation temps-réel avec Firebase RTDB (/central_hub_config) et Local Registry (app_registry_cache)
+  // 1. Synchronisation 100% Supabase (public.app_registry) et Registre Canonique (appRegistry.ts)
   useEffect(() => {
-    const hubConfigRef = ref(rtdb, 'central_hub_config');
+    let isMounted = true;
 
-    const unsubscribe = onValue(hubConfigRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const rawData = snapshot.val();
-        console.log("🔥 [OMNIBAR RTDB RAW DATA]:", rawData);
-
-        let parsedBlocks: any[] = [];
-
-        // 1. Si c'est déjà un tableau
-        if (Array.isArray(rawData)) {
-          parsedBlocks = rawData.filter(Boolean);
-        } 
-        // 2. Si RTDB l'a converti en objet indexé { "0": {...}, "1": {...} } ou avec clés ID personnalisées
-        else if (typeof rawData === 'object' && rawData !== null) {
-          if (rawData.blocks && Array.isArray(rawData.blocks)) {
-            parsedBlocks = rawData.blocks;
-          } else {
-            parsedBlocks = Object.values(rawData).filter(Boolean);
-          }
-        }
-
-        // Fusionner avec le cache local app_registry_cache si existant
-        try {
-          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-          if (cachedRegistryRaw) {
-            const cachedRegistry = JSON.parse(cachedRegistryRaw);
-            const cachedList = Object.values(cachedRegistry).filter(Boolean);
-            cachedList.forEach((cItem: any) => {
-              const existingIdx = parsedBlocks.findIndex(p => p.id === cItem.id);
-              if (existingIdx >= 0) {
-                parsedBlocks[existingIdx] = { ...parsedBlocks[existingIdx], ...cItem };
-              } else {
-                parsedBlocks.push(cItem);
-              }
-            });
-          }
-        } catch (_) {}
-
-        console.log("✅ [OMNIBAR PARSED BLOCKS]:", parsedBlocks);
-        setBlocks(parsedBlocks);
-        const normalized = normalizeHubData(parsedBlocks);
-        setConfigRows(normalized);
-        try {
-          localStorage.setItem('central_hub_config', JSON.stringify(parsedBlocks));
-        } catch (_) {}
-      } else {
-        console.warn("⚠️ [OMNIBAR]: Aucun bloc trouvé sous /central_hub_config");
-        // Vérifier si des éléments existent dans app_registry_cache
-        try {
-          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-          if (cachedRegistryRaw) {
-            const cachedRegistry = JSON.parse(cachedRegistryRaw);
-            const cachedList = Object.values(cachedRegistry).filter(Boolean);
-            if (cachedList.length > 0) {
-              setBlocks(cachedList);
-              setConfigRows(normalizeHubData(cachedList));
-              return;
-            }
-          }
-        } catch (_) {}
-        setBlocks([]);
-      }
-    }, (error) => {
-      console.error("❌ [OMNIBAR RTDB ERROR]:", error);
-    });
-
-    const handleLocalUpdate = () => {
+    const loadFromLocalCache = () => {
       try {
-        const local = localStorage.getItem('central_hub_config');
-        const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-        let combined: any[] = [];
-
-        if (local) {
-          const parsed = JSON.parse(local);
-          if (Array.isArray(parsed)) {
-            combined = parsed.filter(Boolean);
-          } else if (typeof parsed === 'object' && parsed !== null) {
-            if (parsed.blocks && Array.isArray(parsed.blocks)) {
-              combined = parsed.blocks;
-            } else {
-              combined = Object.values(parsed).filter(Boolean);
-            }
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('central_hub_config');
+          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
+          let combined: any[] = [];
+          if (cachedRegistryRaw) {
+            const regParsed = JSON.parse(cachedRegistryRaw);
+            combined = Object.values(regParsed).filter(Boolean);
+          }
+          if (isMounted) {
+            setBlocks(combined);
+            setConfigRows(normalizeHubData(combined));
           }
         }
-
-        if (cachedRegistryRaw) {
-          const regParsed = JSON.parse(cachedRegistryRaw);
-          const regValues = Object.values(regParsed).filter(Boolean);
-          regValues.forEach((rb: any) => {
-            const existingIdx = combined.findIndex((c: any) => c.id === rb.id);
-            if (existingIdx >= 0) {
-              combined[existingIdx] = { ...combined[existingIdx], ...rb };
-            } else {
-              combined.push(rb);
-            }
-          });
-        }
-
-        setBlocks(combined);
-        const normalized = normalizeHubData(combined);
-        setConfigRows(normalized);
       } catch (_) {}
     };
 
-    const handleRegistryUpdate = (event?: any) => {
-      console.log('🔄 [OMNIBAR] Événement hub_registry_updated capté avec succès :', event?.detail);
-      handleLocalUpdate();
+    const syncFromSupabaseRegistry = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('app_registry')
+          .select('*')
+          .order('updated_at', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const registryMap: Record<string, any> = {};
+          const activeList: any[] = [];
+          data.forEach((row: any) => {
+            if (row && row.id && row.is_active !== false) {
+              registryMap[row.id] = row;
+              activeList.push(row);
+            }
+          });
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('app_registry_cache', JSON.stringify(registryMap));
+            }
+          } catch (_) {}
+          if (isMounted) {
+            setBlocks(activeList);
+            setConfigRows(normalizeHubData(activeList));
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('[OMNIBAR SUPABASE REGISTRY FALLBACK]:', err);
+      }
+      loadFromLocalCache();
     };
 
-    window.addEventListener('storage', handleLocalUpdate);
-    window.addEventListener('central_hub_config_updated', handleLocalUpdate);
+    syncFromSupabaseRegistry();
+
+    const handleRegistryUpdate = () => {
+      loadFromLocalCache();
+    };
+
+    window.addEventListener('storage', handleRegistryUpdate);
     window.addEventListener('hub_registry_updated', handleRegistryUpdate);
     const handleOpenOmnibar = () => {
       setIsOpen(true);
@@ -1630,9 +1559,8 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     window.addEventListener('nanasore_open_omnibar', handleOpenOmnibar);
 
     return () => {
-      unsubscribe();
-      window.removeEventListener('storage', handleLocalUpdate);
-      window.removeEventListener('central_hub_config_updated', handleLocalUpdate);
+      isMounted = false;
+      window.removeEventListener('storage', handleRegistryUpdate);
       window.removeEventListener('hub_registry_updated', handleRegistryUpdate);
       window.removeEventListener('nanasore_open_omnibar', handleOpenOmnibar);
     };
@@ -1669,10 +1597,10 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
   // Extraction sécurisée des propriétés d'une carte (qu'elle soit au format blocs modulaire ou plate)
   const getCardDetails = (card: any): HubCardItem => {
-    if (!card) {
+    if (!card || typeof card !== 'object') {
       return {
         id: `card-${Math.random()}`,
-        title: 'Module',
+        title: 'Module Nanasore',
         routeUrl: '',
         subtitle: '',
         palmares: '',
@@ -1685,241 +1613,345 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         linkedModuleIds: []
       };
     }
-    const linkedModuleIds = card.linkedModuleIds || (card.blocks && Array.isArray(card.blocks) && card.blocks.find((b: any) => b?.linkedModuleIds)?.linkedModuleIds) || [];
-    const isRootApp = Boolean(card.isRootApp || (linkedModuleIds && linkedModuleIds.length > 0));
-    const fallbackRoute = card.routeUrl || card.routeOrAction || (card.id === 'card-3' ? '/dashboard/apps/pos' : card.id === 'card-1' ? '/dashboard/apps/ai-generator' : card.id === 'card-2' ? '/dashboard/apps/wameet' : '');
-    const resolvedMediaUrl = card.mediaUrl || card.imageUrl || '';
-    const resolvedKeywords = Array.isArray(card.keywords) ? card.keywords : [];
 
-    if (card.blocks && Array.isArray(card.blocks)) {
-      const h = card.blocks.find((b: any) => b?.type === 'header');
-      const d = card.blocks.find((b: any) => b?.type === 'description');
-      const m = card.blocks.find((b: any) => b?.type === 'image' || b?.type === 'video');
-      const c = card.blocks.find((b: any) => b?.type === 'cta');
-      const slider = card.blocks.find((b: any) => b?.type === 'image_slider');
-      const sliderImg = slider?.slides?.[0]?.imageUrl;
+    const safeBlocks = Array.isArray(card.blocks)
+      ? card.blocks.filter((b: any) => b && typeof b === 'object')
+      : card.blocks && typeof card.blocks === 'object'
+      ? Object.values(card.blocks).filter((b: any) => b && typeof b === 'object')
+      : [];
+
+    const rawLinked =
+      card.linkedModuleIds ||
+      safeBlocks.find((b: any) => b?.linkedModuleIds)?.linkedModuleIds ||
+      [];
+    const linkedModuleIds: string[] = Array.isArray(rawLinked)
+      ? rawLinked.filter(Boolean).map(String)
+      : rawLinked && typeof rawLinked === 'object'
+      ? Object.values(rawLinked).filter(Boolean).map(String)
+      : [];
+
+    const isRootApp = Boolean(card.isRootApp || linkedModuleIds.length > 0);
+    const fallbackRoute =
+      card.routeUrl ||
+      card.routeOrAction ||
+      (card.id === 'card-3'
+        ? '/dashboard/apps/pos'
+        : card.id === 'card-1'
+        ? '/dashboard/apps/ai-generator'
+        : card.id === 'card-2'
+        ? '/dashboard/apps/wameet'
+        : '');
+    const resolvedMediaUrl = card.mediaUrl || card.imageUrl || '';
+    const resolvedKeywords = Array.isArray(card.keywords)
+      ? card.keywords.filter(Boolean).map(String)
+      : [];
+
+    const normalizeSlides = (rawSlides: any) => {
+      const arr = Array.isArray(rawSlides)
+        ? rawSlides
+        : rawSlides && typeof rawSlides === 'object'
+        ? Object.values(rawSlides)
+        : [];
+      return arr
+        .filter((s: any) => s && typeof s === 'object' && (s.imageUrl || s.url))
+        .map((s: any, idx: number) => ({
+          id: String(s.id || `slide-${idx}`),
+          imageUrl: cleanUrl(s.imageUrl || s.url),
+          captionTitle: String(s.captionTitle || s.title || ''),
+          captionText: String(s.captionText || s.text || '')
+        }));
+    };
+
+    const normalizeSlideSettings = (rawSettings: any) => {
+      if (rawSettings && typeof rawSettings === 'object') {
+        return {
+          autoplay: rawSettings.autoplay ?? true,
+          interval: Number(rawSettings.interval) || 3500,
+          aspectRatio: rawSettings.aspectRatio || 'wide'
+        };
+      }
+      return { autoplay: true, interval: 3500, aspectRatio: 'wide' };
+    };
+
+    if (safeBlocks.length > 0) {
+      const h = safeBlocks.find((b: any) => b?.type === 'header');
+      const d = safeBlocks.find((b: any) => b?.type === 'description');
+      const m = safeBlocks.find((b: any) => b?.type === 'image' || b?.type === 'video');
+      const c = safeBlocks.find((b: any) => b?.type === 'cta');
+      const slider = safeBlocks.find((b: any) => b?.type === 'image_slider');
+      const safeSlides = normalizeSlides(slider?.slides || card.slides);
+      const sliderImg = safeSlides[0]?.imageUrl;
 
       return {
-        id: card.id || `card-${Math.random()}`,
-        title: card.title || h?.title || 'Module',
+        id: String(card.id || `card-${Math.random()}`),
+        title: String(card.title || h?.title || card.appName || card.name || 'Module Nanasore'),
         routeUrl: card.routeUrl || card.routeOrAction || fallbackRoute,
-        subtitle: card.subtitle || h?.badge || card.palmares || '',
-        palmares: card.palmares || h?.badge || '',
-        description: card.description || d?.text || '',
+        subtitle: String(card.subtitle || h?.badge || card.category || card.palmares || ''),
+        palmares: String(card.palmares || h?.badge || ''),
+        description: String(card.description || d?.text || ''),
         mediaType: card.mediaType || (m ? m.type : 'image'),
         mediaUrl: resolvedMediaUrl || sliderImg || m?.url || '',
-        tutorialUrl: card.tutorialUrl || c?.tutorialUrl || '',
-        trialBadge: card.trialBadge || c?.trialBadge || '',
+        tutorialUrl: String(card.tutorialUrl || c?.tutorialUrl || ''),
+        trialBadge: String(card.trialBadge || c?.trialBadge || ''),
         targetView: card.targetView,
         isRootApp,
         linkedModuleIds,
         keywords: resolvedKeywords,
-        blocks: card.blocks || [],
-        slides: slider?.slides || card.slides,
-        slideSettings: slider?.slideSettings || card.slideSettings || card.settings
+        blocks: safeBlocks,
+        slides: safeSlides,
+        slideSettings: normalizeSlideSettings(slider?.slideSettings || card.slideSettings || card.settings)
       } as any;
     }
+
+    const safeSlides = normalizeSlides(card.slides);
     return {
-      id: card.id || `card-${Math.random()}`,
-      title: card.title || 'Module',
+      id: String(card.id || `card-${Math.random()}`),
+      title: String(card.title || card.appName || card.name || 'Module Nanasore'),
       routeUrl: card.routeUrl || card.routeOrAction || fallbackRoute,
-      subtitle: card.subtitle || card.palmares || '',
-      palmares: card.palmares || '',
-      description: card.description || '',
+      subtitle: String(card.subtitle || card.category || card.palmares || ''),
+      palmares: String(card.palmares || ''),
+      description: String(card.description || ''),
       mediaType: card.mediaType || 'image',
       mediaUrl: resolvedMediaUrl,
-      tutorialUrl: card.tutorialUrl || '',
-      trialBadge: card.trialBadge || '',
+      tutorialUrl: String(card.tutorialUrl || ''),
+      trialBadge: String(card.trialBadge || ''),
       targetView: card.targetView,
       isRootApp,
       linkedModuleIds,
       keywords: resolvedKeywords,
-      blocks: card.blocks || [],
-      slides: card.slides,
-      slideSettings: card.slideSettings || card.settings
+      blocks: [],
+      slides: safeSlides,
+      slideSettings: normalizeSlideSettings(card.slideSettings || card.settings)
     } as any;
   };
 
-  // Catégories déduites des rangées RTDB + catalogue des 35+ applications Nanasore
-  const categories = useMemo(() => {
-    const list: string[] = [];
-    if (blocks && Array.isArray(blocks)) {
-      blocks.forEach((r: any) => {
-        const t = cleanCategoryName(r?.rowTitle || r?.title);
-        if (t) list.push(t);
-      });
+  // Helper de normalisation sans accents ni pluriels stricts pour comparaison tolérante de catégories
+  const normCategoryText = (str: string) =>
+    String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  // Synonymes métiers entre les catégories d'OFFICIAL_MODULES et d'APPS_REGISTRY
+  const getCategoryTokens = (catName: string): string[] => {
+    const base = normCategoryText(cleanCategoryName(catName));
+    if (!base) return [];
+    const rawTokens = base
+      .split(/[\s&,\/\-()]+/)
+      .filter((w) => w.length >= 2 && !['les', 'des', 'aux', 'sur', 'par', 'pour', 'dans', 'avec'].includes(w))
+      .map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w));
+
+    const expanded = new Set<string>(rawTokens);
+    if (base.includes('commerce') || base.includes('vente') || base.includes('caisse')) {
+      expanded.add('commerce');
+      expanded.add('vente');
+      expanded.add('caisse');
+      expanded.add('boutique');
+      expanded.add('vitrine');
     }
-    APPS_REGISTRY.forEach((app) => {
-      if (app.category) {
-        const cleaned = cleanCategoryName(app.category);
-        if (cleaned) list.push(cleaned);
-      }
-    });
-    return Array.from(new Set(list));
-  }, [blocks]);
-
-  // =========================================================================
-  // RECHERCHE STRUCTURÉE (CONDITION 1 & CONDITION 2) :
-  // - Quand on ne tape rien : RIEN NE SORT (prompt propre des 35+ modules)
-  // - Quand on tape un module :
-  //   * Le module sort en haut comme Module Principal
-  //   * Condition 1 : S'il a des modules liés -> ils suivent en bas
-  //   * Condition 2 : S'il n'a pas de modules liés -> UNIQUEMENT 4 modules de succession (interdit de tout déverser)
-  // =========================================================================
-  const structuredOutput = useMemo(() => {
-    const q = (searchQuery || '').trim().toLowerCase();
-    const activeCat = selectedCategory ? selectedCategory.toLowerCase() : null;
-
-    if (!q && !activeCat) {
-      return null;
+    if (base.includes('marketing') || base.includes('studio') || base.includes('communication')) {
+      expanded.add('marketing');
+      expanded.add('studio');
+      expanded.add('campagne');
+      expanded.add('emailing');
+      expanded.add('publicite');
     }
+    if (base.includes('finance') || base.includes('tresorerie') || base.includes('comptabilite')) {
+      expanded.add('finance');
+      expanded.add('tresorerie');
+      expanded.add('comptabilite');
+      expanded.add('dette');
+      expanded.add('facture');
+    }
+    if (base.includes('gestion') || base.includes('stock') || base.includes('operation')) {
+      expanded.add('gestion');
+      expanded.add('stock');
+      expanded.add('inventaire');
+      expanded.add('operation');
+      expanded.add('livraison');
+    }
+    if (base.includes('formation') || base.includes('coaching') || base.includes('education') || base.includes('lms') || base.includes('academie')) {
+      expanded.add('formation');
+      expanded.add('coaching');
+      expanded.add('education');
+      expanded.add('lms');
+      expanded.add('cours');
+      expanded.add('academie');
+      expanded.add('certificat');
+    }
+    if (base.includes('securite') || base.includes('legal') || base.includes('docusign')) {
+      expanded.add('securite');
+      expanded.add('legal');
+      expanded.add('contrat');
+      expanded.add('signature');
+      expanded.add('kyc');
+    }
+    if (base.includes('productivite') || base.includes('rh') || base.includes('equipe')) {
+      expanded.add('productivite');
+      expanded.add('employe');
+      expanded.add('equipe');
+      expanded.add('cv');
+    }
+    if (base.includes('technologie') || base.includes('api') || base.includes('infrastructure') || base.includes('administration')) {
+      expanded.add('technologie');
+      expanded.add('api');
+      expanded.add('infrastructure');
+      expanded.add('connecteur');
+      expanded.add('domaine');
+      expanded.add('admin');
+    }
+    return Array.from(expanded);
+  };
 
-    // 1. Aplatir toutes les cartes des blocs RTDB avec leur contexte de rangée et de liens
-    const rtdbCardsWithContext: any[] = [];
+  // Catalogue complet unifié (OFFICIAL_MODULES + APPS_REGISTRY + Supabase app_registry) mémorisé
+  const allAvailableCards = useMemo(() => {
+    const customBlocksById = new Map<string, any>();
+    const standaloneCustomCards: any[] = [];
+
     if (blocks && Array.isArray(blocks)) {
       blocks.forEach((row: any, rIdx: number) => {
-        if (!row) return;
-        const rowTitle = row?.rowTitle || row?.title || `Section ${rIdx + 1}`;
-        const rawCards = Array.isArray(row?.cards)
-          ? row.cards
-          : (row?.cards && typeof row.cards === 'object' ? Object.values(row.cards) : []);
+        if (!row || typeof row !== 'object') return;
+        const card = getCardDetails(row);
+        const matchedOfficial =
+          getOfficialModuleById(String(card.id || '')) ||
+          getOfficialModuleById(String(card.title || '')) ||
+          (card.routeUrl ? getModuleByRoute(String(card.routeUrl)) : undefined);
 
-        if (rawCards.length > 0) {
-          const extractedRowCards = rawCards.map((c: any, cIdx: number) => {
-            const card = getCardDetails(c);
-            return {
-              ...card,
-              id: card.id || `card-${rIdx}-${cIdx}`,
-              rowTitle,
-              isRtdb: true
-            };
-          });
-
-          extractedRowCards.forEach((c: any) => {
-            rtdbCardsWithContext.push({
-              ...c,
-              allRowCards: extractedRowCards
-            });
-          });
-        } else if (row.id || row.title || row.type) {
-          // Module autonome publié directement sous /central_hub_config/{blockId} ou dans app_registry_cache
-          const card = getCardDetails(row);
-          const singleCard = {
+        if (matchedOfficial) {
+          customBlocksById.set(matchedOfficial.id.toLowerCase(), card);
+        } else if (row.id && row.title && row.type !== 'image_slider') {
+          standaloneCustomCards.push({
             ...card,
-            id: card.id || `block-${rIdx}`,
-            rowTitle: row.category || 'Modules Publiés',
-            isRtdb: true
-          };
-          rtdbCardsWithContext.push({
-            ...singleCard,
-            allRowCards: [singleCard]
+            id: String(card.id || `block-${rIdx}`),
+            title: String(card.title || row.title || 'Module Nanasore'),
+            rowTitle: String(row.category || row.rowTitle || 'Modules Publiés'),
+            category: String(row.category || card.subtitle || 'Modules Publiés'),
+            altCategory: String(row.rowTitle || ''),
+            isRtdb: false,
+            allRowCards: []
           });
         }
       });
     }
 
-    // 1. Extraire les cartes publiées via le Block Builder (RTDB /central_hub_config)
-    const publishedIds = new Set<string>();
-    const publishedTitles = new Set<string>();
+    const isCardExcluded = (idLower: string, titleLower: string) =>
+      Boolean(
+        idLower === 'nana-switch' ||
+          idLower === 'crm-automation' ||
+          idLower === 'wameet' ||
+          idLower === 'app-wameet' ||
+          idLower === 'srv-nana-switch' ||
+          idLower === 'srv-crm-automation' ||
+          idLower.includes('crm-automation') ||
+          titleLower.includes('wameet') ||
+          titleLower.includes('crm et automation') ||
+          titleLower.includes('crm & automation')
+      );
 
-    rtdbCardsWithContext.forEach((c) => {
-      if (c.id) publishedIds.add(String(c.id).toLowerCase());
-      if (c.title) publishedTitles.add(String(c.title).toLowerCase().trim());
-    });
-
-    // 2. Normaliser les 27 solutions officielles de l'écosystème (ALL_OFFICIAL_CATALOG)
-    // RÈGLE STRICTE DU BLOCK BUILDER : Si un composant a été publié via le Block Builder,
-    // la version Block Builder ÉCRASE OBLIGATOIREMENT l'ancienne version statique sans doublon !
+    // 1. Source de vérité primaire : Les 27 modules canoniques d'OFFICIAL_MODULES (src/config/appRegistry.ts)
     const officialCatalogCards: any[] = [];
-
     OFFICIAL_MODULES.forEach((official) => {
-      const idLower = official.id.toLowerCase();
-      const titleLower = official.name.toLowerCase().trim();
+      const idLower = String(official.id || '').toLowerCase();
+      const titleLower = String(official.name || '').toLowerCase().trim();
 
-      // Si le Block Builder a publié une version pour cet ID ou ce Nom, ON ÉCRASE ET ON NE CRÉE PAS DE DOUBLON
-      const isOverwrittenByBlockBuilder = 
-        publishedIds.has(idLower) || 
-        publishedTitles.has(titleLower) ||
-        (official.aliases && official.aliases.some((a) => publishedIds.has(a.toLowerCase())));
-
-      if (isOverwrittenByBlockBuilder) {
-        // La version Block Builder publiée a la priorité absolue d'écrasement
+      if (isCardExcluded(idLower, titleLower)) {
         return;
       }
 
-      // Exclusion stricte : Ne plus afficher dans l'Omnibar les modules en cours de développement
-      const isExcludedFromOmnibar = Boolean(
-        idLower === 'nana-switch' ||
-        idLower === 'crm-automation' ||
-        idLower === 'wameet' ||
-        idLower === 'app-wameet' ||
-        idLower === 'srv-nana-switch' ||
-        idLower === 'srv-crm-automation' ||
-        idLower.includes('crm-automation') ||
-        titleLower.includes('wameet') ||
-        titleLower.includes('crm et automation') ||
-        titleLower.includes('crm & automation')
+      const matchingRegistryApp = APPS_REGISTRY.find(
+        (a) =>
+          String(a.id || '').toLowerCase() === idLower ||
+          String(a.appName || '').toLowerCase().trim() === titleLower ||
+          (official.aliases && official.aliases.some((al) => String(al).toLowerCase() === String(a.id || '').toLowerCase())) ||
+          getOfficialModuleById(a.id)?.id === official.id
       );
-      if (isExcludedFromOmnibar) {
-        return; // Ne l'affiche même plus dans l'Omnibar
-      }
 
+      const customOverride = customBlocksById.get(idLower);
       const active = isModuleActive(official.id);
+
       officialCatalogCards.push({
-        id: official.id,
-        title: official.name, // NOM D'ORIGINE EXACT RESTAURÉ
-        subtitle: official.category,
-        category: official.category,
-        description: official.description,
-        palmares: active ? '✅ Module Actif' : (official.defaultActive ? 'Inclus' : 'Disponible'),
-        trialBadge: active ? 'Actif' : 'Prêt à l\'emploi',
-        mediaUrl: getCardMediaUrl(official),
-        mediaType: 'image' as const,
-        routeUrl: official.route,
-        targetView: official.view,
-        taxonomyType: official.taxonomy === 'APPLICATION' ? 'Application' : official.taxonomy === 'SERVICE' ? 'Service' : official.taxonomy === 'MODULE' ? 'Module' : 'Outil',
+        id: String(official.id),
+        title: String(customOverride?.title || official.name || 'Module Nanasore'),
+        subtitle: matchingRegistryApp?.category || official.category || '',
+        category: official.category || '',
+        altCategory: matchingRegistryApp?.category || customOverride?.subtitle || '',
+        description: String(customOverride?.description || official.description || matchingRegistryApp?.shortDescription || ''),
+        palmares: active
+          ? '✅ Module Actif'
+          : customOverride?.palmares || matchingRegistryApp?.badgePalmares || (official.defaultActive ? 'Inclus' : 'Disponible'),
+        trialBadge: active ? 'Actif' : customOverride?.trialBadge || matchingRegistryApp?.trialLabel || "Prêt à l'emploi",
+        mediaUrl: customOverride?.mediaUrl || getCardMediaUrl(official),
+        mediaType: customOverride?.mediaType || ('image' as const),
+        // Route et vue canoniques TOUJOURS garanties par appRegistry.ts
+        routeUrl: official.route || `/dashboard/apps/${official.id}`,
+        targetView: official.view || official.actionId,
+        actionId: official.actionId,
+        taxonomyType:
+          official.taxonomy === 'APPLICATION'
+            ? 'Application'
+            : official.taxonomy === 'SERVICE'
+            ? 'Service'
+            : official.taxonomy === 'MODULE'
+            ? 'Module'
+            : 'Outil',
         badge: official.taxonomy,
-        isRootApp: official.id === 'app-pos',
-        linkedModuleIds: official.id === 'app-pos' ? ['mod-inventory', 'mod-debts', 'tool-scanner'] : [],
-        keywords: official.keywords || [],
+        isRootApp: official.id === 'app-pos' || official.id === 'pos',
+        linkedModuleIds:
+          official.id === 'app-pos' || official.id === 'pos'
+            ? ['inventory', 'debts', 'scanner', 'mod-inventory', 'mod-debts', 'tool-scanner']
+            : [],
+        keywords: Array.from(
+          new Set([
+            ...(official.keywords || []),
+            ...(matchingRegistryApp?.keywords || []),
+            ...(customOverride?.keywords || [])
+          ])
+        ),
         isOfficialCatalog: true,
-        isActive: active
+        isActive: active,
+        blocks: customOverride?.blocks || [],
+        slides: customOverride?.slides || [],
+        slideSettings: customOverride?.slideSettings
       });
     });
 
-    // 3. Normaliser les mini-applications de catalogue étendu (APPS_REGISTRY) sans doublons
+    // 2. Modules complémentaires d'APPS_REGISTRY (sans aucun doublon avec OFFICIAL_MODULES)
     const registryCards: any[] = [];
     APPS_REGISTRY.forEach((app) => {
-      const idLower = app.id.toLowerCase();
-      const titleLower = app.appName.toLowerCase().trim();
+      const idLower = String(app.id || '').toLowerCase();
+      const titleLower = String(app.appName || '').toLowerCase().trim();
 
-      // Exclusion stricte de l'Omnibar
-      const isExcluded = Boolean(
-        idLower === 'nana-switch' ||
-        idLower === 'crm-automation' ||
-        idLower === 'wameet' ||
-        idLower === 'app-wameet' ||
-        idLower === 'srv-nana-switch' ||
-        idLower === 'srv-crm-automation' ||
-        idLower.includes('crm-automation') ||
-        titleLower.includes('wameet') ||
-        titleLower.includes('crm et automation') ||
-        titleLower.includes('crm & automation')
-      );
-      if (isExcluded) return;
+      if (isCardExcluded(idLower, titleLower)) return;
 
-      if (publishedIds.has(idLower) || publishedTitles.has(titleLower)) return;
-      if (officialCatalogCards.some(c => c.id.toLowerCase() === idLower || c.title.toLowerCase().trim() === titleLower)) return;
+      // Si ce module correspond déjà à un module canonique (par ID, alias ou nom), il est déjà enrichi ci-dessus
+      const matchedCanonical =
+        getOfficialModuleById(app.id) ||
+        getOfficialModuleById(app.appName) ||
+        (app.route ? getModuleByRoute(app.route) : undefined);
+
+      if (matchedCanonical) return;
+      if (
+        officialCatalogCards.some(
+          (c) =>
+            String(c.id || '').toLowerCase() === idLower ||
+            String(c.title || '').toLowerCase().trim() === titleLower ||
+            (app.targetView && c.targetView === app.targetView)
+        )
+      ) {
+        return;
+      }
 
       registryCards.push({
-        id: app.id,
-        title: app.appName, // NOM D'ORIGINE EXACT RESTAURÉ
-        subtitle: app.category,
-        category: app.category,
-        description: app.shortDescription,
-        palmares: app.badgePalmares || app.palmares || '⭐ 98% de satisfaction',
-        trialBadge: app.trialLabel || 'Essai disponible',
-        mediaUrl: app.appLogo || '',
+        id: String(app.id),
+        title: String(app.appName || 'Module Nanasore'),
+        subtitle: String(app.category || ''),
+        category: String(app.category || ''),
+        altCategory: String(app.category || ''),
+        description: String(app.shortDescription || ''),
+        palmares: String(app.badgePalmares || app.palmares || '⭐ 98% de satisfaction'),
+        trialBadge: String(app.trialLabel || 'Essai disponible'),
+        mediaUrl: app.appLogo || getCardMediaUrl({ id: app.id, title: app.appName }),
         mediaType: 'image' as const,
         routeUrl: app.route || `/dashboard/apps/${app.id}`,
         targetView: app.targetView,
@@ -1927,51 +1959,131 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         badge: app.badge,
         isRootApp: false,
         linkedModuleIds: [],
-        keywords: app.keywords || [],
-        isRtdb: false
+        keywords: Array.isArray(app.keywords) ? app.keywords : [],
+        isOfficialCatalog: false,
+        isRtdb: false,
+        blocks: [],
+        slides: []
       });
     });
 
-    // Fusion unifiée : Cartes Block Builder filtrées + Catalogue officiel + Catalogue étendu
-    const filteredRtdbCards = rtdbCardsWithContext.filter(c => {
+    const filteredCustomCards = standaloneCustomCards.filter((c) => {
       const idL = String(c.id || '').toLowerCase();
       const titleL = String(c.title || '').toLowerCase();
-      return !(
-        idL === 'nana-switch' ||
-        idL === 'crm-automation' ||
-        idL === 'wameet' ||
-        idL === 'app-wameet' ||
-        idL === 'srv-nana-switch' ||
-        idL === 'srv-crm-automation' ||
-        idL.includes('crm-automation') ||
-        titleL.includes('wameet') ||
-        titleL.includes('crm et automation') ||
-        titleL.includes('crm & automation')
-      );
+      return !isCardExcluded(idL, titleL);
     });
 
-    const allAvailableCards: any[] = [
-      ...filteredRtdbCards,
-      ...officialCatalogCards,
-      ...registryCards
-    ];
+    return [...officialCatalogCards, ...registryCards, ...filteredCustomCards];
+  }, [blocks, activeModules]);
 
-    // 3. Calculer les correspondances et le score de pertinence
+  // Vérifie si une carte appartient à une catégorie (exacte ou par tokens/synonymes métiers)
+  const matchCardToCategory = (card: any, categoryLabel: string): { matches: boolean; exact: boolean } => {
+    if (!card || !categoryLabel) return { matches: false, exact: false };
+    const normCat = normCategoryText(cleanCategoryName(categoryLabel));
+    if (!normCat) return { matches: false, exact: false };
+
+    const combinedCat = [card.subtitle, card.category, card.altCategory, card.rowTitle]
+      .filter(Boolean)
+      .map((c) => cleanCategoryName(String(c)))
+      .join(' ');
+    const normS = normCategoryText(combinedCat);
+
+    if (normS && (normS.includes(normCat) || (normCat.includes(normS) && normS.length >= 4))) {
+      return { matches: true, exact: true };
+    }
+
+    const catTokens = getCategoryTokens(categoryLabel);
+    if (catTokens.length === 0) return { matches: false, exact: false };
+
+    const normT = normCategoryText(card.title || '');
+    const normKw = Array.isArray(card.keywords) ? card.keywords.map(normCategoryText).join(' ') : '';
+
+    const tokenHit = catTokens.some(
+      (tok) => normS.includes(tok) || normT.includes(tok) || normKw.includes(tok)
+    );
+    return { matches: tokenHit, exact: false };
+  };
+
+  // Catégories déduites des rangées RTDB + catalogue Nanasore (garanties 100% non-vides)
+  const categories = useMemo(() => {
+    const candidateList: string[] = [];
+    if (blocks && Array.isArray(blocks)) {
+      blocks.forEach((r: any) => {
+        const rawCards = Array.isArray(r?.cards)
+          ? r.cards.filter(Boolean)
+          : r?.cards && typeof r.cards === 'object'
+          ? Object.values(r.cards).filter(Boolean)
+          : [];
+        if (rawCards.length > 0) {
+          const t = cleanCategoryName(r?.rowTitle || r?.title);
+          if (t) candidateList.push(t);
+        }
+      });
+    }
+    APPS_REGISTRY.forEach((app) => {
+      if (app.category) {
+        const cleaned = cleanCategoryName(app.category);
+        if (cleaned && cleaned.toLowerCase() !== 'academic' && !cleaned.toLowerCase().includes('super admin')) {
+          candidateList.push(cleaned);
+        }
+      }
+    });
+    OFFICIAL_MODULES.forEach((mod) => {
+      if (mod.category) {
+        const cleaned = cleanCategoryName(mod.category);
+        if (cleaned && cleaned.toLowerCase() !== 'academic') {
+          candidateList.push(cleaned);
+        }
+      }
+    });
+
+    const uniqueCandidates = Array.from(new Set(candidateList));
+    // Ne conserver que les catégories qui retournent au moins 1 module réel
+    return uniqueCandidates.filter((cat) =>
+      allAvailableCards.some((card) => matchCardToCategory(card, cat).matches)
+    );
+  }, [blocks, allAvailableCards]);
+
+  // =========================================================================
+  // RECHERCHE STRUCTURÉE (CONDITION 1 & CONDITION 2) :
+  // - Quand on ne tape rien : RIEN NE SORT (prompt propre des 35+ modules)
+  // - Quand on tape un module ou sélectionne une catégorie :
+  //   * Le module principal sort en haut
+  //   * Condition 1 : S'il a des modules liés -> ils suivent en bas
+  //   * Condition 2 : Tous les autres modules de la catégorie ou 4 modules de succession suivent
+  // =========================================================================
+  const structuredOutput = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    const activeCat = selectedCategory ? selectedCategory.trim() : null;
+
+    if (!q && !activeCat) {
+      return null;
+    }
+
     const scoredMatches: { card: any; score: number }[] = [];
 
     allAvailableCards.forEach((card) => {
-      const t = (card.title || '').toLowerCase();
-      const d = (card.description || '').toLowerCase();
-      const p = (card.palmares || '').toLowerCase();
-      const s = (card.subtitle || card.category || card.rowTitle || '').toLowerCase();
-      const kw = Array.isArray(card.keywords) ? card.keywords.map((k: string) => k.toLowerCase()) : [];
+      if (!card) return;
+      const t = String(card.title || '').toLowerCase();
+      const d = String(card.description || '').toLowerCase();
+      const p = String(card.palmares || '').toLowerCase();
+      const combinedCat = [card.subtitle, card.category, card.altCategory, card.rowTitle].filter(Boolean).join(' ');
+      const s = combinedCat.toLowerCase();
+      const kw = Array.isArray(card.keywords) ? card.keywords.map((k: string) => String(k || '').toLowerCase()) : [];
 
-      if (activeCat && !s.includes(activeCat) && !t.includes(activeCat)) {
-        return;
+      let catMatchResult = { matches: true, exact: false };
+      if (activeCat) {
+        catMatchResult = matchCardToCategory(card, activeCat);
+        if (!catMatchResult.matches) {
+          return;
+        }
       }
 
       if (!q) {
-        scoredMatches.push({ card, score: card.isRootApp ? 100 : 50 });
+        scoredMatches.push({
+          card,
+          score: (catMatchResult.exact ? 300 : 100) + (card.isRootApp ? 80 : 40) + (card.isOfficialCatalog ? 30 : 0)
+        });
         return;
       }
 
@@ -1987,13 +2099,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       if (p.includes(q)) score += 80;
       if (s.includes(q)) score += 60;
       if (card.isRootApp) score += 100;
-      if (card.isOfficial14) score += 400; // Priorité aux 14 modules officiels
-      if (card.isRtdb) score += 300; // Priorité aux modules réels configurés en RTDB
+      if (card.isOfficialCatalog) score += 250;
 
       if (score > 0) {
         scoredMatches.push({ card, score });
       }
     });
+
+    // Fallback de sécurité absolu : si une catégorie est sélectionnée mais aucun match direct, proposer les piliers Nanasore
+    if (scoredMatches.length === 0 && activeCat && !q && allAvailableCards.length > 0) {
+      allAvailableCards.slice(0, 6).forEach((card, idx) => {
+        scoredMatches.push({ card, score: 100 - idx });
+      });
+    }
 
     if (scoredMatches.length === 0) {
       return null;
@@ -2008,7 +2126,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     const primaryLinkedIds: string[] = Array.isArray(primaryMatch.linkedModuleIds) ? primaryMatch.linkedModuleIds : [];
 
     if (primaryMatch.allRowCards && Array.isArray(primaryMatch.allRowCards)) {
-      const siblings = primaryMatch.allRowCards.filter((c: any) => c.id !== primaryMatch.id);
+      const siblings = primaryMatch.allRowCards.filter((c: any) => c && c.id !== primaryMatch.id);
       if (primaryLinkedIds.length > 0) {
         linkedModules = siblings.filter((c: any) => primaryLinkedIds.includes(c.id));
         if (linkedModules.length === 0) {
@@ -2017,13 +2135,31 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       } else if (primaryMatch.isRootApp) {
         linkedModules = siblings;
       }
+    } else if (primaryLinkedIds.length > 0) {
+      linkedModules = allAvailableCards.filter(
+        (c: any) => c && c.id !== primaryMatch.id && primaryLinkedIds.includes(c.id)
+      );
     }
 
     const hasLinkedModules = linkedModules.length > 0;
+    const linkedIdsSet = new Set(linkedModules.map((m: any) => String(m?.id || '')));
 
-    // 5. CONDITION 2 : S'il n'y a pas de modules liés, calculer STRICTEMENT 4 modules de succession
+    // 5. CONDITION 2 : Modules de la catégorie sélectionnée ou 4 modules de succession
     let suggestedModules: any[] = [];
-    if (!hasLinkedModules) {
+    if (activeCat) {
+      const remainingCategoryMatches = scoredMatches
+        .slice(1)
+        .map((m) => m.card)
+        .filter((c) => c && c.id !== primaryMatch.id && !linkedIdsSet.has(String(c.id || '')));
+      const extraSuggestions = getSuccessionSuggestions(primaryMatch, allAvailableCards).filter(
+        (sug) =>
+          sug &&
+          sug.id !== primaryMatch.id &&
+          !linkedIdsSet.has(String(sug.id || '')) &&
+          !remainingCategoryMatches.some((rm) => rm.id === sug.id)
+      );
+      suggestedModules = [...remainingCategoryMatches, ...extraSuggestions].slice(0, 10);
+    } else if (!hasLinkedModules) {
       suggestedModules = getSuccessionSuggestions(primaryMatch, allAvailableCards);
     }
 
@@ -2033,7 +2169,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       linkedModules,
       suggestedModules
     };
-  }, [blocks, searchQuery, selectedCategory]);
+  }, [allAvailableCards, searchQuery, selectedCategory]);
 
   // État des cases à cocher pour les modules associés
   const [checkedModules, setCheckedModules] = useState<Record<string, boolean>>({});
@@ -2056,9 +2192,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const handleActivateModule = async (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
     e.stopPropagation();
 
+    // Résolution canonique via src/config/appRegistry.ts
+    const official =
+      getOfficialModuleById(card.id) ||
+      getOfficialModuleById(card.title || '') ||
+      (card.targetView ? getOfficialModuleById(card.targetView) : undefined) ||
+      (card.routeUrl ? getModuleByRoute(card.routeUrl) : undefined);
+
+    const canonicalId = official?.id || card.id;
+    const idLower = (canonicalId || '').toLowerCase();
+
     // 0. Modules en construction ou désactivés de l'appel
-    const idLower = (card.id || '').toLowerCase();
     const isUnderConstruction = Boolean(
+      official?.isUnderConstruction ||
       (card as any).isUnderConstruction ||
       idLower === 'nana-switch' ||
       idLower === 'crm-automation' ||
@@ -2073,7 +2219,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         window.dispatchEvent(new CustomEvent('nana_show_toast', {
           detail: {
             title: 'Module en construction',
-            message: `Le module "${card.title || 'Sélectionné'}" est actuellement en cours de développement et sera disponible prochainement.`,
+            message: `Le module "${card.title || official?.name || 'Sélectionné'}" est actuellement en cours de développement et sera disponible prochainement.`,
             type: 'info'
           }
         }));
@@ -2081,60 +2227,61 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       return;
     }
 
-    // 1. Persistance dynamique dans Firebase RTDB : /tenants/{tenantId}/modules/{moduleId}
+    // 1. Persistance dynamique dans Supabase (organization_blocks) & LocalStorage
     try {
-      await toggleModule(card.id, true);
+      await toggleModule(canonicalId, true);
       if (activatedSubModuleIds && activatedSubModuleIds.length > 0) {
         for (const subId of activatedSubModuleIds) {
-          await toggleModule(subId, true);
+          const subOff = getOfficialModuleById(subId);
+          await toggleModule(subOff?.id || subId, true);
         }
       }
     } catch (err) {
-      console.warn('[OMNIBAR] Erreur écriture Firebase RTDB module :', err);
+      console.warn('[OMNIBAR] Erreur activation module Supabase :', err);
     }
 
     setIsOpen(false);
 
-    // 2. Déblocage immédiat de la route sans rechargement de page
-    const route = card.routeUrl || (card as any).route;
-    if (route && route !== '#') {
-      window.history.pushState({}, '', route);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: route } }));
+    // 2. Résolution de la route et de la vue canoniques (AppRegistry)
+    const canonicalRoute = official?.route || card.routeUrl || (card as any).route || `/dashboard/apps/${canonicalId}`;
+    const canonicalView = official?.view || official?.actionId || card.targetView || (card as any).actionId;
+
+    if (canonicalRoute && canonicalRoute !== '#') {
+      try {
+        window.history.pushState({}, '', canonicalRoute);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch (_) {}
+      window.dispatchEvent(
+        new CustomEvent('app_navigate', {
+          detail: {
+            path: canonicalRoute,
+            view: canonicalView,
+            actionId: official?.actionId,
+            moduleId: canonicalId
+          }
+        })
+      );
     }
 
     if (onOpenApp) {
-      onOpenApp({ ...card, activatedSubModuleIds, isActivated: true });
+      onOpenApp({
+        ...card,
+        id: canonicalId,
+        routeUrl: canonicalRoute,
+        targetView: canonicalView,
+        activatedSubModuleIds,
+        isActivated: true
+      });
       return;
     }
 
     if (onNavigate) {
-      if (card.targetView) {
-        onNavigate(card.targetView);
+      if (canonicalView) {
+        onNavigate(canonicalView);
         return;
       }
-      const titleLower = (card.title || '').toLowerCase();
-      const routeLower = (card.routeUrl || '').toLowerCase();
-      const idLower = (card.id || '').toLowerCase();
-
-      if (titleLower.includes('caisse') || routeLower.includes('pos') || idLower.includes('pos')) {
-        onNavigate('POS');
-        return;
-      }
-      if (titleLower.includes('stock') || titleLower.includes('inventaire') || routeLower.includes('inventory')) {
-        onNavigate('INVENTORY');
-        return;
-      }
-      if (titleLower.includes('factur') || titleLower.includes('devis') || routeLower.includes('invoice')) {
-        onNavigate('INVOICES');
-        return;
-      }
-      if (titleLower.includes('dette') || titleLower.includes('credit') || routeLower.includes('debt')) {
-        onNavigate('DEBT_BOOK');
-        return;
-      }
-      if (titleLower.includes('crm') || routeLower.includes('crm')) {
-        onNavigate('CRM');
+      if (canonicalRoute && canonicalRoute !== '#') {
+        onNavigate(canonicalRoute);
         return;
       }
     }
@@ -2498,15 +2645,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                         {/* VIGNETTE D'IMAGE / SLIDE DU MODULE PRINCIPAL */}
                         {(() => {
                           const primImg = getCardMediaUrl(structuredOutput.primaryModule);
-                          const hasSlides = structuredOutput.primaryModule.slides && structuredOutput.primaryModule.slides.length > 0;
+                          const hasSlides = Array.isArray(structuredOutput.primaryModule.slides) && structuredOutput.primaryModule.slides.length > 0;
                           
                           if (hasSlides) {
                             return (
                               <div className="w-full sm:w-56 rounded-xl overflow-hidden shrink-0 border border-blue-500/30 shadow-md">
                                 <SlideModuleBlock
-                                  id={structuredOutput.primaryModule.id}
+                                  id={String(structuredOutput.primaryModule.id || 'primary-slide')}
                                   slides={structuredOutput.primaryModule.slides}
-                                  settings={structuredOutput.primaryModule.slideSettings || { autoplay: true, interval: 3500, aspectRatio: 'wide' }}
+                                  settings={
+                                    structuredOutput.primaryModule.slideSettings && typeof structuredOutput.primaryModule.slideSettings === 'object'
+                                      ? structuredOutput.primaryModule.slideSettings
+                                      : { autoplay: true, interval: 3500, aspectRatio: 'wide' }
+                                  }
                                 />
                               </div>
                             );
@@ -2517,7 +2668,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                               <div className="relative w-full sm:w-44 h-28 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-md group">
                                 <img
                                   src={primImg}
-                                  alt={structuredOutput.primaryModule.title}
+                                  alt={structuredOutput.primaryModule.title || 'Module'}
                                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   crossOrigin="anonymous"
                                   loading="lazy"
@@ -2543,7 +2694,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                               className="text-base sm:text-lg font-black text-blue-400 hover:text-blue-300 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] hover:drop-shadow-[0_0_14px_rgba(96,165,250,1)] transition-all duration-200 cursor-pointer hover:underline inline-flex items-center gap-1.5"
                               style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.8), 0 0 20px rgba(37, 99, 235, 0.4)' }}
                             >
-                              <span>{structuredOutput.primaryModule.title}</span>
+                              <span>{structuredOutput.primaryModule.title || 'Module Nanasore'}</span>
                               <ExternalLink className="w-4 h-4 text-blue-400 shrink-0 drop-shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
                             </a>
                             <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold tracking-wider bg-blue-500/15 text-blue-300 border border-blue-400/30 shadow-xs shadow-blue-500/10 shrink-0">
@@ -2733,7 +2884,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-sm relative group">
                                     <img
                                       src={modImg}
-                                      alt={mod.title}
+                                      alt={mod.title || 'Module'}
                                       className="w-full h-full object-cover"
                                       crossOrigin="anonymous"
                                       loading="lazy"
@@ -2744,7 +2895,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   </div>
                                 ) : (
                                   <div className="w-11 h-11 rounded-lg shrink-0 border border-blue-500/30 bg-blue-950/40 flex items-center justify-center text-blue-400 font-bold text-xs">
-                                    {mod.title.slice(0, 2).toUpperCase()}
+                                    {String(mod.title || 'MO').slice(0, 2).toUpperCase()}
                                   </div>
                                 )}
                                 <div className="space-y-0.5 min-w-0 flex-1">
@@ -2760,7 +2911,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                       style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.75)' }}
                                     >
                                       <ArrowRight className="w-3.5 h-3.5 text-blue-400 shrink-0 drop-shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
-                                      <span>{mod.title}</span>
+                                      <span>{mod.title || 'Module'}</span>
                                     </a>
                                     <span className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold tracking-wider bg-blue-500/15 text-blue-300 border border-blue-400/30 shadow-xs shrink-0">
                                       [{getTaxonomyBadge(mod)}]
@@ -2863,18 +3014,20 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     </div>
                   )}
 
-                  {/* 3. CONDITION 2 : S'IL N'Y A PAS DE MODULES LIÉS -> UNIQUEMENT 4 AUTRES MODULES DE SUCCESSION */}
-                  {!structuredOutput.hasLinkedModules && structuredOutput.suggestedModules && structuredOutput.suggestedModules.length > 0 && (
+                  {/* 3. CONDITION 2 : MODULES DE LA CATÉGORIE SÉLECTIONNÉE OU 4 MODULES DE SUCCESSION */}
+                  {(!structuredOutput.hasLinkedModules || Boolean(selectedCategory)) && structuredOutput.suggestedModules && structuredOutput.suggestedModules.length > 0 && (
                     <div className="space-y-3 pt-2">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div className="flex items-center gap-2">
                           <Compass className="w-4 h-4 text-amber-400" />
                           <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                            Modules de succession conseillés (4 suggestions utiles selon vos recherches)
+                            {selectedCategory
+                              ? `Autres modules de la catégorie « ${cleanCategoryName(selectedCategory)} » (${structuredOutput.suggestedModules.length})`
+                              : 'Modules de succession conseillés (4 suggestions utiles selon vos recherches)'}
                           </h4>
                         </div>
                         <span className="text-[11px] text-slate-400">
-                          Recommandations ciblées
+                          {selectedCategory ? 'Catalogue thématique' : 'Recommandations ciblées'}
                         </span>
                       </div>
 
@@ -2891,7 +3044,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 bg-slate-950 shadow-sm relative group">
                                     <img
                                       src={sugImg}
-                                      alt={sug.title}
+                                      alt={sug.title || 'Module'}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                                       crossOrigin="anonymous"
                                       loading="lazy"
@@ -2902,7 +3055,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   </div>
                                 ) : (
                                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl shrink-0 border border-blue-500/30 bg-blue-950/40 flex items-center justify-center text-blue-400 font-bold text-xs shadow-sm">
-                                    {sug.title.slice(0, 2).toUpperCase()}
+                                    {String(sug.title || 'MO').slice(0, 2).toUpperCase()}
                                   </div>
                                 )}
 

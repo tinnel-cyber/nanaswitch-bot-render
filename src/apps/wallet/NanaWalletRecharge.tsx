@@ -22,8 +22,7 @@ import {
   X
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, formatCFA } from '../../utils/audio';
-import { auth, db } from '../../firebase';
-import { doc, setDoc, increment } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 
 export interface NanaWalletRechargeProps {
   onBack?: () => void;
@@ -96,23 +95,32 @@ export default function NanaWalletRecharge({
         }));
       } catch {}
 
-      // 2. Synchronisation Firestore si utilisateur connecté
-      if (auth.currentUser && db) {
+      // 2. Synchronisation Supabase si utilisateur connecté
+      (async () => {
         try {
-          const uRef = doc(db, 'users', auth.currentUser.uid);
-          await setDoc(uRef, {
-            credits: increment(effectiveAmount),
-            lastCreditRecharge: {
-              amount: effectiveAmount,
-              provider: providerLabel,
-              timestamp: Date.now()
-            },
-            updatedAt: new Date().toISOString()
-          }, { merge: true });
+          const { data: authData } = await supabase.auth.getUser();
+          const uid = authData?.user?.id;
+          if (uid) {
+            await supabase.from('app_registry').upsert({
+              key: `wallet_${uid}`,
+              name: `wallet_${uid}`,
+              module_key: 'user_wallet',
+              config_json: {
+                balance: newBal,
+                lastCreditRecharge: {
+                  amount: effectiveAmount,
+                  provider: providerLabel,
+                  timestamp: Date.now()
+                },
+                updatedAt: new Date().toISOString()
+              },
+              updated_at: new Date().toISOString()
+            });
+          }
         } catch (e) {
-          console.warn('[RECHARGE] Synchro Firestore ignorée :', e);
+          console.warn('[RECHARGE] Synchro Supabase ignorée :', e);
         }
-      }
+      })();
 
       setIsProcessing(false);
       playCashChime();

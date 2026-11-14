@@ -27,9 +27,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
-import { doc, setDoc } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
-import { db } from '../../../firebase';
 import {
   initiateSPayment,
   verifySPayment,
@@ -485,29 +483,41 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       status: 'CONFIRMED'
     };
 
-    // Sauvegarde en base Firestore / LocalStorage
+    // Sauvegarde en base Supabase SQL (sales & app_registry)
     try {
-      const orderRef = doc(db, 'orders', orderId);
-      await setDoc(orderRef, {
-        orderId,
-        customerName: details.customerName,
-        customerPhone: details.phoneNumber,
-        deliveryAddress: details.deliveryAddress,
-        customerEmail: details.customerEmail || null,
-        total: finalTotal,
-        subtotal,
-        discount: discountAmount,
-        currency,
-        paymentMethod: 'CASH_ON_DELIVERY',
+      await supabase.from('sales').insert({
+        total_amount: finalTotal,
+        payment_method: 'CASH_ON_DELIVERY',
         status: 'EN_ATTENTE_LIVRAISON',
-        createdAt: Date.now(),
-        product: {
-          name: resolvedProduct.name,
-          price: resolvedProduct.price
+        is_paid: false
+      }).catch(() => {});
+
+      await supabase.from('app_registry').upsert({
+        key: `order_${orderId}`,
+        name: `order_${orderId}`,
+        tenant_id: 'default',
+        module_key: 'orders',
+        config_json: {
+          orderId,
+          customerName: details.customerName,
+          customerPhone: details.phoneNumber,
+          deliveryAddress: details.deliveryAddress,
+          customerEmail: details.customerEmail || null,
+          total: finalTotal,
+          subtotal,
+          discount: discountAmount,
+          currency,
+          paymentMethod: 'CASH_ON_DELIVERY',
+          status: 'EN_ATTENTE_LIVRAISON',
+          createdAt: Date.now(),
+          product: {
+            name: resolvedProduct.name,
+            price: resolvedProduct.price
+          }
         }
-      }, { merge: true });
+      }, { onConflict: 'key' });
     } catch (e) {
-      console.warn('[ORDER SAVE] Info sauvegarde locale :', e);
+      console.warn('[ORDER SAVE] Info sauvegarde Supabase :', e);
     }
 
     setTimeout(() => {

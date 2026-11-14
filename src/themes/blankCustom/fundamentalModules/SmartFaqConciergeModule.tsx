@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, MessageCircle, Phone, Sparkles, HelpCircle } from 'lucide-react';
 import { CustomSectionInstance } from '../../../types';
 import { MoodStyleConfig } from '../moodStyles';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 import { playTapBeep } from '../../../utils/audio';
 
 export interface SmartFaqConciergeModuleProps {
@@ -11,6 +12,7 @@ export interface SmartFaqConciergeModuleProps {
   wPhone?: string;
   whatsappPhone?: string;
   storeName?: string;
+  isAdminPreview?: boolean;
 }
 
 export const SmartFaqConciergeModule: React.FC<SmartFaqConciergeModuleProps> = ({
@@ -19,7 +21,8 @@ export const SmartFaqConciergeModule: React.FC<SmartFaqConciergeModuleProps> = (
   buttonRadiusClass,
   wPhone = "",
   whatsappPhone = "",
-  storeName = "Notre Boutique"
+  storeName = "Notre Boutique",
+  isAdminPreview
 }) => {
   const cfg = section.settings || section.config || {};
   const title = section.title || cfg.title || "Questions Fréquentes";
@@ -64,12 +67,28 @@ export const SmartFaqConciergeModule: React.FC<SmartFaqConciergeModuleProps> = (
           <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
             AIDE & SERVICE CLIENT
           </span>
-          <h2 className={`text-2xl sm:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>
-            {title}
-          </h2>
-          <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
-            {subtitle}
-          </p>
+          <LiveEditable
+            label="Titre FAQ"
+            sectionId={section.id}
+            sectionField="title"
+            value={title}
+            isAdminPreview={isAdminPreview}
+          >
+            <h2 className={`text-2xl sm:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>
+              {title}
+            </h2>
+          </LiveEditable>
+          <LiveEditable
+            label="Sous-titre FAQ"
+            sectionId={section.id}
+            sectionField="subtitle"
+            value={subtitle}
+            isAdminPreview={isAdminPreview}
+          >
+            <p className={`text-xs sm:text-sm ${moodStyle.textSecondary}`}>
+              {subtitle}
+            </p>
+          </LiveEditable>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

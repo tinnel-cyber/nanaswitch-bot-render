@@ -154,7 +154,7 @@ export async function saveResumeData(userId: string, resume: ResumeData): Promis
     const docRef = doc(db, 'merchants', userId, 'resume', 'current');
     await setDoc(docRef, updated, { merge: true });
   } catch (err) {
-    console.warn('Erreur Firestore saveResumeData :', err);
+    console.warn('Erreur storage saveResumeData :', err);
   }
 }
 
@@ -186,7 +186,7 @@ export async function loadResumeData(userId: string): Promise<ResumeData> {
       return data;
     }
   } catch (err) {
-    console.warn('Erreur lecture Firestore CV :', err);
+    console.warn('Erreur lecture storage CV :', err);
   }
 
   return { ...DEFAULT_RESUME_DATA, updatedAt: Date.now() };

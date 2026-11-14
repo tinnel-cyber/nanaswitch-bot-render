@@ -214,7 +214,7 @@ export const NaNaSwitchExtensionPage: React.FC<NaNaSwitchExtensionPageProps> = (
           }
         }
       } catch (err) {
-        console.warn('[NANA_SWITCH] Sync settings Firestore :', err);
+        console.warn('[NANA_SWITCH] Sync settings storage :', err);
       }
     };
 

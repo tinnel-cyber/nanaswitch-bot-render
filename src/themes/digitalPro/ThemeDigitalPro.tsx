@@ -4,7 +4,7 @@ import {
   ShieldCheck, Zap, MessageCircle, ArrowLeft, Laptop, 
   BookOpen, Sparkles, Download, Layers, Play, Eye, 
   Edit3, Trash2, Share2, Plus, Minus, Lock, CheckCircle2,
-  Palette, ShoppingCart, Copy, GraduationCap, User
+  Palette, ShoppingCart, Copy, GraduationCap, User, Flame, ArrowRight
 } from 'lucide-react';
 import { StudentAuthModal } from '../../components/lms/student/StudentAuthModal';
 import { getCurrentStudent, navigateToStudentDashboard } from '../../services/studentAuthService';
@@ -15,6 +15,9 @@ import { buildPublicShopUrl } from '../../config/domains';
 import { AdminSectionEditTrigger } from '../../components/storeBuilder/AdminSectionEditTrigger';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
 import { DigitalWideProductView } from '../../components/storeBuilder/DigitalWideProductView';
+import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/AdaptiveHeaderEngine';
+import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 
 
 // =========================================================================
@@ -342,6 +345,15 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
     onSelectProduct(null as any);
   };
 
+  // Produit Vedette / Offre Numérique Spéciale (customConfig.specialOfferProductId)
+  const specialOfferProduct = useMemo(() => {
+    if (customConfig?.specialOfferProductId) {
+      const picked = displayProducts.find(p => p.id === customConfig.specialOfferProductId);
+      if (picked) return picked;
+    }
+    return displayProducts.find(p => p.originalPrice && p.originalPrice > p.price) || null;
+  }, [displayProducts, customConfig?.specialOfferProductId]);
+
   const handleExecuteBuyNow = (prod: StoreProductItem, qty: number = 1) => {
     playTapBeep();
     onBuyNow(prod, qty);
@@ -428,17 +440,46 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
       `}</style>
 
       {/* =========================================================================
-          1. NAVIGATION HEADER ÉPURÉE (EXACTE AU MOCKUP IMAGE 1 & 2)
+          1. NAVIGATION HEADER ADAPTATIF OU ÉPURÉE
          ========================================================================= */}
-      {(customConfig?.announcementBarEnabled ?? true) && customConfig?.announcementBarText && (
-        <div
-          className="w-full py-2 px-4 text-center text-[11px] font-extrabold uppercase tracking-wider text-white"
-          style={{ backgroundColor: customConfig?.primaryAccentColor || '#0056D2' }}
-        >
-          {customConfig.announcementBarText}
+      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Navigation ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveHeaderEngine
+            config={customConfig}
+            products={displayProducts}
+            categories={categories}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={handleOpenTunnel}
+            onResetToHome={() => {
+              if (activeTunnel) handleCloseTunnel();
+              if (onSelectCategory) onSelectCategory('Tous');
+            }}
+            onSelectCategory={onSelectCategory}
+            onSearch={onSearchChange}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
         </div>
-      )}
-      <div className="relative group">
+      ) : (
+        <>
+          {(customConfig?.announcementBarEnabled ?? true) && customConfig?.announcementBarText && (
+            <div
+              className="w-full py-2 px-4 text-center text-[11px] font-extrabold uppercase tracking-wider text-white"
+              style={{ backgroundColor: customConfig?.primaryAccentColor || '#0056D2' }}
+            >
+              {customConfig.announcementBarText}
+            </div>
+          )}
+          <div className="relative group">
         <AdminSectionEditTrigger
           label="✏️ Modifier l'En-Tête & Navigation ⚡"
           targetAccordion={1}
@@ -628,6 +669,8 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
         </div>
       </header>
       </div>
+      </>
+      )}
 
       {/* =========================================================================
           VUE 1 : PAGE DÉTAIL PRODUIT & TUNNEL DE VENTE 60/40 (SI PRODUIT SÉLECTIONNÉ)
@@ -683,22 +726,48 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
               {/* Colonne Gauche (50%) : Titre Massif, Sous-Titre & Barre de Recherche */}
               <div className="lg:col-span-6 space-y-6 text-left">
                 
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EBF3FC] text-[#0056D2] text-xs font-black uppercase tracking-wider">
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>{customConfig?.heroSubtitle || 'E-learning & Produits Digitaux'}</span>
-                </div>
+                <LiveEditable
+                  label="Badge Hero"
+                  field="heroSubtitle"
+                  value={customConfig?.heroSubtitle || 'E-learning & Produits Digitaux'}
+                  targetAccordion={2}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EBF3FC] text-[#0056D2] text-xs font-black uppercase tracking-wider">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    <span>{customConfig?.heroSubtitle || 'E-learning & Produits Digitaux'}</span>
+                  </div>
+                </LiveEditable>
 
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0F172A] tracking-tight leading-[1.15]">
-                  {customConfig?.heroTitle ||
-                    (storeConfig.welcomeText && storeConfig.welcomeText.length > 5
-                      ? storeConfig.welcomeText
-                      : 'Boostez vos compétences avec nos ressources digitales.')}
-                </h1>
+                <LiveEditable
+                  label="Titre Principal Hero"
+                  field="heroTitle"
+                  value={customConfig?.heroTitle || (storeConfig.welcomeText && storeConfig.welcomeText.length > 5 ? storeConfig.welcomeText : 'Boostez vos compétences avec nos ressources digitales.')}
+                  targetAccordion={2}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0F172A] tracking-tight leading-[1.15]">
+                    {customConfig?.heroTitle ||
+                      (storeConfig.welcomeText && storeConfig.welcomeText.length > 5
+                        ? storeConfig.welcomeText
+                        : 'Boostez vos compétences avec nos ressources digitales.')}
+                  </h1>
+                </LiveEditable>
 
-                <p className="text-sm sm:text-base text-slate-600 font-normal leading-relaxed max-w-xl">
-                  {customConfig?.heroDescription ||
-                    'Accédez instantanément à nos meilleures formations, e-books et outils indispensables pour accélérer votre business.'}
-                </p>
+                <LiveEditable
+                  label="Description Hero"
+                  field="heroDescription"
+                  value={customConfig?.heroDescription || 'Accédez instantanément à nos meilleures formations, e-books et outils indispensables pour accélérer votre business.'}
+                  type="textarea"
+                  targetAccordion={2}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <p className="text-sm sm:text-base text-slate-600 font-normal leading-relaxed max-w-xl">
+                    {customConfig?.heroDescription ||
+                      'Accédez instantanément à nos meilleures formations, e-books et outils indispensables pour accélérer votre business.'}
+                  </p>
+                </LiveEditable>
 
                 {/* Barre de Recherche Intuitive avec gros bouton bleu */}
                 <div 
@@ -712,7 +781,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
                     <Search className="w-5 h-5 text-slate-400 shrink-0" />
                     <input 
                       ref={searchInputRef}
-                      type="text"
+                      type="text" 
                       value={searchQuery}
                       onChange={(e) => onSearchChange(e.target.value)}
                       placeholder="Recherche..."
@@ -730,36 +799,63 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      if (customConfig?.heroLinkedProductId) {
-                        const targetProd = displayProducts.find(p => p.id === customConfig.heroLinkedProductId);
-                        if (targetProd) {
-                          handleOpenTunnel(targetProd);
-                          return;
-                        }
-                      }
-                      const gridEl = document.getElementById('digital-products-grid');
-                      if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition shadow-md hover:shadow-lg cursor-pointer shrink-0"
+                  <LiveEditable
+                    label="Bouton CTA Hero"
+                    field="heroCtaText"
+                    value={customConfig?.heroCtaText || 'Découvrir la sélection'}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
                   >
-                    {customConfig?.heroCtaText || 'Découvrir la sélection'}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        if (customConfig?.heroLinkedProductId) {
+                          const targetProd = displayProducts.find(p => p.id === customConfig.heroLinkedProductId);
+                          if (targetProd) {
+                            handleOpenTunnel(targetProd);
+                            return;
+                          }
+                        }
+                        const gridEl = document.getElementById('digital-products-grid');
+                        if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-xl transition shadow-md hover:shadow-lg cursor-pointer shrink-0"
+                    >
+                      {customConfig?.heroCtaText || 'Découvrir la sélection'}
+                    </button>
+                  </LiveEditable>
                 </div>
 
                 {/* Preuves de Confiance sous la recherche */}
                 <div className="flex items-center gap-5 pt-2 text-xs text-slate-500 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-[#0056D2]" />
-                    <span>{customConfig?.reassurance1Title || 'Téléchargement immédiat'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-[#0056D2]" />
-                    <span>{customConfig?.reassurance2Title || 'Paiement Mobile Money'}</span>
-                  </div>
+                  <LiveEditable
+                    label="Garantie 1"
+                    field="reassurance1Title"
+                    value={customConfig?.reassurance1Title || 'Téléchargement immédiat'}
+                    targetAccordion={4}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-[#0056D2]" />
+                      <span>{customConfig?.reassurance1Title || 'Téléchargement immédiat'}</span>
+                    </div>
+                  </LiveEditable>
+                  <LiveEditable
+                    label="Garantie 2"
+                    field="reassurance2Title"
+                    value={customConfig?.reassurance2Title || 'Paiement Mobile Money'}
+                    targetAccordion={4}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-[#0056D2]" />
+                      <span>{customConfig?.reassurance2Title || 'Paiement Mobile Money'}</span>
+                    </div>
+                  </LiveEditable>
                 </div>
 
               </div>
@@ -884,6 +980,151 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
 
             </div>
           </section>
+
+          {/* =======================================================================
+              SOUS-BANNIÈRES SECONDAIRES FORMATIONS & RESSOURCES (subBanner1 & subBanner2)
+             ======================================================================= */}
+          {(customConfig?.subBanner1Title || customConfig?.subBanner1Image || customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+            <section className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {(customConfig?.subBanner1Title || customConfig?.subBanner1Image) && (
+                  <div
+                    onClick={() => {
+                      playTapBeep();
+                      const gridEl = document.getElementById('digital-products-grid');
+                      if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-950 text-white p-6 sm:p-7 flex items-center justify-between gap-4 cursor-pointer hover:shadow-xl transition-all group"
+                  >
+                    <div className="space-y-2 z-10">
+                      {customConfig?.subBanner1Badge && (
+                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-blue-500 text-white inline-block">
+                          {customConfig.subBanner1Badge}
+                        </span>
+                      )}
+                      <h3 className="text-xl sm:text-2xl font-black leading-tight text-white group-hover:text-blue-300 transition-colors">
+                        {customConfig.subBanner1Title}
+                      </h3>
+                      {customConfig?.subBanner1Subtitle && (
+                        <p className="text-xs text-blue-100 max-w-xs">{customConfig.subBanner1Subtitle}</p>
+                      )}
+                      {customConfig?.subBanner1CtaText && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-300 pt-1">
+                          <span>{customConfig.subBanner1CtaText}</span>
+                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                        </span>
+                      )}
+                    </div>
+                    {customConfig?.subBanner1Image && (
+                      <img
+                        src={customConfig.subBanner1Image}
+                        alt={customConfig.subBanner1Title || 'Bannière'}
+                        className="w-24 sm:w-32 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                      />
+                    )}
+                  </div>
+                )}
+                {(customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+                  <div
+                    onClick={() => {
+                      playTapBeep();
+                      const gridEl = document.getElementById('digital-products-grid');
+                      if (gridEl) gridEl.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 sm:p-7 flex items-center justify-between gap-4 cursor-pointer hover:shadow-xl transition-all group"
+                  >
+                    <div className="space-y-2 z-10">
+                      {customConfig?.subBanner2Badge && (
+                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded bg-amber-400 text-slate-950 inline-block">
+                          {customConfig.subBanner2Badge}
+                        </span>
+                      )}
+                      <h3 className="text-xl sm:text-2xl font-black leading-tight text-white group-hover:text-amber-300 transition-colors">
+                        {customConfig.subBanner2Title}
+                      </h3>
+                      {customConfig?.subBanner2Subtitle && (
+                        <p className="text-xs text-slate-300 max-w-xs">{customConfig.subBanner2Subtitle}</p>
+                      )}
+                      {customConfig?.subBanner2CtaText && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300 pt-1">
+                          <span>{customConfig.subBanner2CtaText}</span>
+                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                        </span>
+                      )}
+                    </div>
+                    {customConfig?.subBanner2Image && (
+                      <img
+                        src={customConfig.subBanner2Image}
+                        alt={customConfig.subBanner2Title || 'Bannière'}
+                        className="w-24 sm:w-32 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* =======================================================================
+              OFFRE SPÉCIALE NUMÉRIQUE VEDETTE (specialOfferProductId)
+             ======================================================================= */}
+          {specialOfferProduct && (
+            <section className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+              <div className="rounded-2xl border-2 border-blue-500/30 bg-gradient-to-r from-blue-50/60 via-white to-indigo-50/50 p-6 sm:p-7 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+                <div className="flex items-center gap-5">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-white border border-slate-200/80 p-2 flex items-center justify-center shrink-0">
+                    <img
+                      src={specialOfferProduct.image || EBOOK_COVER_SVG}
+                      alt={specialOfferProduct.name}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#0056D2] font-black text-[10px] uppercase tracking-wider flex items-center gap-1">
+                        <Flame className="w-3 h-3 fill-blue-500 text-blue-500" />
+                        <span>Offre Numérique Phare</span>
+                      </span>
+                      {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-black text-[10px]">
+                          -{Math.round(((specialOfferProduct.originalPrice - specialOfferProduct.price) / specialOfferProduct.originalPrice) * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black text-[#0F172A] tracking-tight">
+                      {specialOfferProduct.name}
+                    </h3>
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-2xl font-black text-[#0056D2]">
+                        {formatCFA(specialOfferProduct.price)}
+                      </span>
+                      {specialOfferProduct.originalPrice && specialOfferProduct.originalPrice > specialOfferProduct.price && (
+                        <span className="text-xs text-slate-400 line-through">
+                          {formatCFA(specialOfferProduct.originalPrice)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTunnel(specialOfferProduct)}
+                    className="flex-1 md:flex-initial px-5 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition cursor-pointer shadow-xs"
+                  >
+                    Voir le programme
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteBuyNow(specialOfferProduct, 1)}
+                    className="flex-1 md:flex-initial px-6 py-3 rounded-xl bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs transition cursor-pointer shadow-md"
+                  >
+                    Accéder maintenant
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* -----------------------------------------------------------------------
               3. LES CARTES PRODUITS "INDESTRUCTIBLES" (LE CŒUR DU THÈME)
@@ -1121,30 +1362,58 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
       )}
 
       {/* =========================================================================
-          FOOTER DISCRET & SÉCURITÉ DE MARQUE
+          FOOTER ADAPTATIF OU DISCRET & SÉCURITÉ DE MARQUE
          ========================================================================= */}
-      <footer className="w-full bg-[#FFFFFF] border-t border-slate-100 py-6 px-4 text-center text-xs text-slate-400 relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier le Footer & Coordonnées ⚡"
-          targetAccordion={5}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div>
-            {customConfig?.copyrightText || `© ${new Date().getFullYear()} ${customConfig?.storeName || storeConfig.storeName || 'Nanasore'}. Tous droits réservés.`}
-          </div>
-          <div className="flex items-center gap-4 text-slate-500 font-medium">
-            <span>{customConfig?.storeTagline || 'Formations & E-learning'}</span>
-            <span>•</span>
-            <span>{customConfig?.footerAddress || 'Produits Numériques'}</span>
-            <span>•</span>
-            <span>{customConfig?.footerAboutText || 'Propulsé par Sebpay & NaNa'}</span>
-          </div>
+      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+        <div className="relative group/footer-section">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveFooterEngine
+            config={customConfig}
+            products={displayProducts}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            categories={categories}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={handleOpenTunnel}
+            onResetToHome={() => {
+              if (activeTunnel) handleCloseTunnel();
+              if (onSelectCategory) onSelectCategory('Tous');
+            }}
+            onSelectCategory={onSelectCategory}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
         </div>
-      </footer>
+      ) : (
+        <footer className="w-full bg-[#FFFFFF] border-t border-slate-100 py-6 px-4 text-center text-xs text-slate-400 relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Coordonnées ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              {customConfig?.copyrightText || `© ${new Date().getFullYear()} ${customConfig?.storeName || storeConfig.storeName || 'Nanasore'}. Tous droits réservés.`}
+            </div>
+            <div className="flex items-center gap-4 text-slate-500 font-medium">
+              <span>{customConfig?.storeTagline || 'Formations & E-learning'}</span>
+              <span>•</span>
+              <span>{customConfig?.footerAddress || 'Produits Numériques'}</span>
+              <span>•</span>
+              <span>{customConfig?.footerAboutText || 'Propulsé par Sebpay & NaNa'}</span>
+            </div>
+          </div>
+        </footer>
+      )}
 
       {/* Modal d'Authentification Élève (Connexion & Inscription) */}
       <StudentAuthModal

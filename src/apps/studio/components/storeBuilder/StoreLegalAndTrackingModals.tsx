@@ -21,8 +21,7 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { db } from '../../../../firebase';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { supabase } from '../../../../lib/supabase';
 
 export type LegalModalTabType = 'terms' | 'shipping' | 'privacy' | 'tracking';
 
@@ -254,41 +253,44 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
 
     // 2. Recherche distante dans Firestore
     try {
-      const ordersRef = collection(db, 'orders');
-      
-      // Recherche 1 : par identifiant ou numéro de commande direct
-      let q = query(ordersRef, where('orderNumber', '==', queryTrimmed), limit(1));
-      let snap = await getDocs(q);
+      // Recherche distante dans Supabase SQL (app_registry & sales)
+      let found: any = null;
+      let orderId = queryTrimmed;
 
-      if (snap.empty) {
-        // Recherche 2 : par id direct de document
-        q = query(ordersRef, where('id', '==', queryTrimmed), limit(1));
-        snap = await getDocs(q);
+      const { data: regRows } = await supabase
+        .from('app_registry')
+        .select('config_json')
+        .or(`key.eq.order_${queryTrimmed},key.ilike.%${queryTrimmed}%`)
+        .limit(1);
+
+      if (regRows && regRows.length > 0 && regRows[0].config_json) {
+        found = regRows[0].config_json;
+        orderId = found.orderId || found.id || queryTrimmed;
+      } else {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(queryTrimmed);
+        if (isUUID) {
+          const { data: salesRows } = await supabase
+            .from('sales')
+            .select('*')
+            .eq('id', queryTrimmed)
+            .limit(1);
+          if (salesRows && salesRows.length > 0) {
+            found = salesRows[0];
+            orderId = found.id;
+          }
+        }
       }
 
-      if (snap.empty && phoneInput.length >= 8) {
-        // Recherche 3 : par téléphone client
-        q = query(ordersRef, where('customerPhone', '==', queryTrimmed), limit(1));
-        snap = await getDocs(q);
-      }
-
-      if (snap.empty && phoneInput.length >= 8) {
-        // Recherche 4 : par téléphone client sans indicatif
-        q = query(ordersRef, where('customerPhone', '==', phoneInput), limit(1));
-        snap = await getDocs(q);
-      }
-
-      if (!snap.empty) {
-        const found = snap.docs[0].data();
+      if (found) {
         setSearchResult({
-          id: snap.docs[0].id,
-          orderNumber: found.orderNumber || snap.docs[0].id,
+          id: orderId,
+          orderNumber: found.order_number || found.orderNumber || orderId,
           status: found.status || 'En préparation',
-          customerName: found.customerName || 'Client Vérifié',
-          customerPhone: found.customerPhone || queryTrimmed,
-          total: found.total || found.totalAmount || 0,
+          customerName: found.customer_name || found.customerName || 'Client Vérifié',
+          customerPhone: found.customer_phone || found.customerPhone || queryTrimmed,
+          total: found.total || found.total_amount || 0,
           items: found.items || [],
-          createdAt: found.createdAt ? (found.createdAt?.toDate ? found.createdAt.toDate().toLocaleDateString('fr-FR') : new Date(found.createdAt).toLocaleDateString('fr-FR')) : 'Aujourd\'hui'
+          createdAt: found.created_at ? new Date(found.created_at).toLocaleDateString('fr-FR') : 'Aujourd\'hui'
         });
         playValidationBeep();
       } else {

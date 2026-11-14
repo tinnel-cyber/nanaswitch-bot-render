@@ -21,6 +21,8 @@ import { Zap, ShieldCheck, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { playTapBeep } from '../../../utils/audio';
 import { NaNaSwitchLogo } from './NaNaSwitchLogo';
 
+export type FirebaseUser = SupabaseAuthUser;
+
 export interface SwitchAccountData {
   uid: string;
   email: string;
@@ -110,8 +112,9 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   }, []);
 
   const refreshSwitchAccount = useCallback(async () => {
-    if (auth.currentUser) {
-      await fetchSwitchAccount(auth.currentUser.uid);
+    const supaUser = await getSupabaseCurrentUser();
+    if (supaUser) {
+      await fetchSwitchAccount(supaUser.uid);
     }
   }, [fetchSwitchAccount]);
 
@@ -135,7 +138,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
     }
   }, [onNavigate]);
 
-  // Surveillance Firebase Auth & Validation du document switch_accounts/{uid}
+  // Surveillance Supabase Auth & Validation du document switch_accounts/{uid}
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setSupabaseUser(user);
@@ -151,12 +154,12 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
         return;
       }
 
-      // L'utilisateur est connecté dans Firebase Auth, vérifions son compte d'organisation Cloud
+      // L'utilisateur est connecté dans Supabase Auth, vérifions son compte d'organisation Cloud
       const accountData = await fetchSwitchAccount(user.uid);
       setLoading(false);
 
       if (!accountData) {
-        // L'utilisateur est connecté à Firebase (ex: boutique Nanasore) mais n'a pas de compte d'organisation Cloud
+        // L'utilisateur est connecté à Supabase mais n'a pas encore de compte d'organisation Cloud
         if (typeof window !== 'undefined') {
           sessionStorage.setItem(
             'nanaswitch_auth_notice',

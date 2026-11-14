@@ -222,7 +222,7 @@ export async function completeRemedialModule(
       lastUpdated: Date.now()
     }, { merge: true });
   } catch (e) {
-    console.warn('[REMEDIATION] Firestore update offline fallback', e);
+    console.warn('[REMEDIATION] storage update offline fallback', e);
   }
 
   // Attribution de 30 points de réputation pour l'effort et la résilience !

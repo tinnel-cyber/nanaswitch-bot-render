@@ -1,16 +1,5 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  where, 
-  updateDoc
-} from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 export type Unsubscribe = () => void;
-import { db } from '../utils/firebase';
 import { CasierSession, SellerUser, CompletedSale } from '../types';
 
 /**
@@ -64,7 +53,7 @@ export function getOrCreateTabCasierSession(
             parsed.sellerRole = activeCashier.role;
             sessionStorage.setItem(tabStorageKey, JSON.stringify(parsed));
             // Sync async Firestore
-            syncCasierSessionToFirestore(parsed).catch(console.warn);
+            syncCasierSessionTostorage(parsed).catch(console.warn);
           }
           return parsed;
         }
@@ -120,7 +109,7 @@ export function getOrCreateTabCasierSession(
 
   // 5. Enregistrement Firestore sous stores/{storeId}/casierSessions/{sessionId}
   syncCasierSessionToFirestore(newSession).catch((err) => {
-    console.warn('Sauvegarde session casier Firestore reportée (mode offline) :', err);
+    console.warn('Sauvegarde session casier storage reportée (mode offline) :', err);
   });
 
   return newSession;
@@ -133,13 +122,17 @@ export function getOrCreateTabCasierSession(
 export async function syncCasierSessionToFirestore(session: CasierSession): Promise<void> {
   if (!session.storeId || !session.sessionId) return;
   try {
-    const sessionDocRef = doc(db, 'stores', session.storeId, 'casierSessions', session.sessionId);
-    await setDoc(sessionDocRef, {
-      ...session,
-      lastActiveAt: Date.now(),
-    }, { merge: true });
+    await supabase.from('app_registry').upsert({
+      key: `casier_${session.sessionId}`,
+      tenant_id: session.storeId,
+      module_key: 'casier_sessions',
+      config_json: {
+        ...session,
+        lastActiveAt: Date.now()
+      }
+    }, { onConflict: 'key' });
   } catch (err) {
-    console.warn('Impossible de synchroniser le casier avec Firestore (peut être hors-ligne):', err);
+    console.warn('Impossible de synchroniser le casier avec Supabase (mode offline):', err);
   }
 }
 
@@ -174,25 +167,35 @@ export async function recordSaleInCasierSession(
     }
   }
 
-  // 2. Mise à jour Firestore atomique du casier
+  // 2. Mise à jour Supabase du casier
   try {
-    const sessionRef = doc(db, 'stores', storeId, 'casierSessions', sessionId);
-    const snap = await getDoc(sessionRef);
-    if (snap.exists()) {
-      const data = snap.data();
+    const { data: rows } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('key', `casier_${sessionId}`)
+      .single();
+
+    if (rows && rows.config_json) {
+      const data = rows.config_json as any;
       const newTransactionsCount = (data.transactionsCount || 0) + 1;
       const newTotalCollected = (data.totalCollected || 0) + (sale.total || 0);
       const newBalance = (data.openingBalance || 0) + newTotalCollected;
 
-      await updateDoc(sessionRef, {
-        transactionsCount: newTransactionsCount,
-        totalCollected: newTotalCollected,
-        currentBalance: newBalance,
-        lastActiveAt: Date.now(),
-      });
+      await supabase.from('app_registry').upsert({
+        key: `casier_${sessionId}`,
+        tenant_id: storeId,
+        module_key: 'casier_sessions',
+        config_json: {
+          ...data,
+          transactionsCount: newTransactionsCount,
+          totalCollected: newTotalCollected,
+          currentBalance: newBalance,
+          lastActiveAt: Date.now()
+        }
+      }, { onConflict: 'key' });
     }
   } catch (err) {
-    console.warn('Erreur enregistrement de la vente dans le casier Firestore:', err);
+    console.warn('Erreur enregistrement de la vente dans le casier Supabase:', err);
   }
 }
 
@@ -225,15 +228,27 @@ export async function closeCasierSession(
   }
 
   try {
-    const sessionRef = doc(db, 'stores', storeId, 'casierSessions', sessionId);
-    await updateDoc(sessionRef, {
-      status: 'ferme',
-      closedAt: now,
-      ...(closingBalance !== undefined ? { currentBalance: closingBalance } : {}),
-      lastActiveAt: now,
-    });
+    const { data: rows } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('key', `casier_${sessionId}`)
+      .single();
+
+    const data = (rows?.config_json || {}) as any;
+    await supabase.from('app_registry').upsert({
+      key: `casier_${sessionId}`,
+      tenant_id: storeId,
+      module_key: 'casier_sessions',
+      config_json: {
+        ...data,
+        status: 'ferme',
+        closedAt: now,
+        ...(closingBalance !== undefined ? { currentBalance: closingBalance } : {}),
+        lastActiveAt: now
+      }
+    }, { onConflict: 'key' });
   } catch (err) {
-    console.warn('Erreur fermeture casier dans Firestore:', err);
+    console.warn('Erreur fermeture casier dans Supabase:', err);
   }
 }
 
@@ -251,17 +266,24 @@ export function subscribeToStoreCasierSessions(
 
   const fetchSessions = async () => {
     try {
-      const casiersCol = collection(db, 'stores', storeId, 'casierSessions');
-      const q = query(casiersCol, where('status', '==', 'ouvert'));
-      const snapshot = await getDocs(q);
+      const { data: rows } = await supabase
+        .from('app_registry')
+        .select('config_json')
+        .eq('tenant_id', storeId)
+        .eq('module_key', 'casier_sessions');
+
       const sessions: CasierSession[] = [];
-      snapshot.forEach((docSnap) => {
-        sessions.push(docSnap.data() as CasierSession);
-      });
+      if (rows) {
+        rows.forEach(r => {
+          if (r.config_json && (r.config_json as any).status === 'ouvert') {
+            sessions.push(r.config_json as CasierSession);
+          }
+        });
+      }
       sessions.sort((a, b) => b.openedAt - a.openedAt);
       onUpdate(sessions);
     } catch (err) {
-      console.warn('Erreur lecture casiers actifs:', err);
+      console.warn('Erreur lecture casiers actifs Supabase:', err);
     }
   };
 

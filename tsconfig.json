@@ -45,7 +45,8 @@
     "dist",
     "build",
     ".cache",
-    "app/routes"
+    "app/routes",
+    "supabase/functions"
   ],
   "include": [
     "next-env.d.ts",

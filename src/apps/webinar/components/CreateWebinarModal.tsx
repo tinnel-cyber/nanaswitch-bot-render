@@ -265,6 +265,11 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD (Daily.co)
   const handleAutoGenerateRoomUrl = useCallback(async (targetPlatform: LivePlatform) => {
     playTapBeep();
+    const currentUrl = (meetingUrl || streamUrl).trim();
+    if (!forceOverwrite && currentUrl && !isInternalGeneratedUrl(currentUrl)) {
+      // Ne jamais écraser un lien collé manuellement par l'utilisateur (ex: Google Meet, Zoom, YouTube...)
+      return;
+    }
     const roomId = generateUniqueRoomId();
     if (targetPlatform === 'jitsi') {
       const url = `https://meet.jit.si/${roomId}`;
@@ -297,16 +302,28 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMeetingUrl(finalDailyUrl);
       setStreamUrl(finalDailyUrl);
     }
-  }, [generateUniqueRoomId]);
+  }, [generateUniqueRoomId, isInternalGeneratedUrl, meetingUrl, streamUrl]);
 
-  // Initialisation automatique du lien Jitsi dès qu'on choisit Jitsi
+  // Initialisation automatique du lien Jitsi uniquement si aucun lien n'a été collé
   useEffect(() => {
-    if (platform === 'jitsi' && !meetingUrl) {
-      handleAutoGenerateRoomUrl('jitsi');
+    if (platform === 'jitsi' && !meetingUrl && !streamUrl) {
+      handleAutoGenerateRoomUrl('jitsi', false);
     }
-  }, [platform, meetingUrl, handleAutoGenerateRoomUrl]);
+  }, [platform, meetingUrl, streamUrl, handleAutoGenerateRoomUrl]);
 
-  // Charger les Lives du commerçant
+  // Génère un UUID v4 valide pour la clé primaire UUID de public.live_sessions dans Supabase
+  const generateSupabaseUuid = useCallback((): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }, []);
+
+  // Charger les Lives du commerçant depuis Supabase (table public.live_sessions) + cache local
   const loadMyWebinars = useCallback(async () => {
     setLoadingList(true);
     let loaded: LiveWebinar[] = [];
@@ -361,7 +378,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     loaded.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
     setMyWebinars(loaded);
     setLoadingList(false);
-  }, [merchantId]);
+  }, [merchantId, storeName, detectPlatformFromUrl]);
 
   // Charger les funnels sauvegardés
   const loadFunnels = useCallback(() => {
@@ -406,12 +423,11 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     loadFunnels();
   }, [loadMyWebinars, loadFunnels]);
 
-  // Utiliser un modèle prêt à l'emploi (1-clic)
+  // Utiliser un modèle prêt à l'emploi (1-clic) sans écraser un lien déjà collé par l'utilisateur
   const handleUseTemplate = (template: WebinarTemplate) => {
     playValidationBeep();
     setTitle(template.title);
     setDescription(template.description);
-    setPlatform(template.platform);
     setRoomMode(template.roomMode);
     setIsPaid(template.isPaid);
     setPrice(template.suggestedPrice.toString());
@@ -435,14 +451,25 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       // Déclencher le provisionnement réel auprès du serveur
       handleAutoGenerateRoomUrl('daily');
     } else {
-      setMeetingUrl('');
-      setStreamUrl('');
+      setPlatform(template.platform);
+      if (template.platform === 'jitsi') {
+        const url = `https://meet.jit.si/${generateUniqueRoomId()}`;
+        setMeetingUrl(url);
+        setStreamUrl(url);
+      } else if (template.platform === 'daily') {
+        const url = `https://nanasore.daily.co/${generateUniqueRoomId()}`;
+        setMeetingUrl(url);
+        setStreamUrl(url);
+      } else {
+        setMeetingUrl('');
+        setStreamUrl('');
+      }
     }
 
     setIsCreatingFormOpen(true);
   };
 
-  // Soumission et création du Webinaire
+  // Soumission et création du Webinaire dans Supabase (public.live_sessions) + Salle Live (/live/:id)
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) {
@@ -450,8 +477,12 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       return;
     }
 
-    if ((platform === 'zoom' || platform === 'google_meet' || platform === 'google_classroom') && !meetingUrl.trim()) {
-      setErrorMsg(`Veuillez coller le lien de votre réunion ${platformLabels[platform].name}.`);
+    const rawPastedUrl = (meetingUrl.trim() || streamUrl.trim());
+    const detectedPlat = detectPlatformFromUrl(rawPastedUrl);
+    const effectivePlatform: LivePlatform = detectedPlat || platform;
+
+    if ((effectivePlatform === 'zoom' || effectivePlatform === 'google_meet' || effectivePlatform === 'google_classroom') && !rawPastedUrl) {
+      setErrorMsg(`Veuillez coller le lien de votre réunion ${platformLabels[effectivePlatform].name}.`);
       return;
     }
 
@@ -461,27 +492,94 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
     try {
       const numericPrice = isPaid ? Math.max(0, parseInt(price) || 0) : 0;
-      const finalMeetingUrl = meetingUrl.trim() || (platform === 'jitsi' ? `https://meet.jit.si/${generateUniqueRoomId()}` : '');
-      const finalStreamUrl = streamUrl.trim() || finalMeetingUrl;
+      const finalMeetingUrl = rawPastedUrl || (
+        effectivePlatform === 'jitsi'
+          ? `https://meet.jit.si/${generateUniqueRoomId()}`
+          : effectivePlatform === 'daily'
+            ? `https://nanasore.daily.co/${generateUniqueRoomId()}`
+            : ''
+      );
+      const finalStreamUrl = rawPastedUrl || finalMeetingUrl;
 
-      // 1. Enregistrement dans Firebase Firestore
+      let liveId = generateSupabaseUuid();
+
+      const coachingRoom = (
+        effectivePlatform === 'google_meet' ||
+        effectivePlatform === 'zoom' ||
+        effectivePlatform === 'google_classroom' ||
+        effectivePlatform === 'jitsi'
+      )
+        ? finalMeetingUrl
+        : undefined;
+
+      const metaData = {
+        sessionSlug: liveId,
+        storeId: merchantId || 'merchant-store',
+        storeName: storeName || 'Ma Boutique',
+        date,
+        platform: effectivePlatform,
+        roomMode,
+        sessionMode: roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping',
+        aspectRatio: aspectRatio || '16:9',
+        resolution: resolution || '720p',
+        streamUrl: finalStreamUrl,
+        meetingUrl: finalMeetingUrl,
+        socialStreamUrl: finalStreamUrl,
+        coachingRoomUrl: coachingRoom,
+        isPaid,
+        price: numericPrice,
+        currency: 'FCFA',
+        registeredCount: 0
+      };
+
+      // 1. Enregistrement direct dans Supabase PostgreSQL (table public.live_sessions)
+      try {
+        const { data: insertedRow, error: sbErr } = await supabase
+          .from('live_sessions')
+          .upsert({
+            id: liveId,
+            tenant_id: merchantId || 'default',
+            host_id: merchantId || 'host',
+            title: title.trim(),
+            description: description.trim(),
+            is_live: true,
+            viewer_count: 1,
+            stream_url: finalStreamUrl,
+            status: 'live',
+            pinned_product_data: {
+              _meta: metaData
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' })
+          .select()
+          .maybeSingle();
+
+        if (sbErr) {
+          console.warn("[SUPABASE WEBINAR] Avertissement upsert live_sessions:", sbErr.message);
+        } else if (insertedRow?.id) {
+          liveId = insertedRow.id;
+        }
+      } catch (sbCatchErr) {
+        console.warn("[SUPABASE WEBINAR] Mode résilient activé:", sbCatchErr);
+      }
+
       const newWebinarData = {
         merchantId,
         storeName,
         title: title.trim(),
         description: description.trim(),
         date,
-        platform,
+        platform: effectivePlatform,
         roomMode,
         aspectRatio,
         resolution,
         socialStreamUrl: finalStreamUrl || null,
         meetingUrl: finalMeetingUrl || null,
+        streamUrl: finalStreamUrl || null,
         isPaid,
         price: numericPrice,
         currency: 'FCFA',
         status: 'scheduled' as LiveRoomStatus,
-        createdAt: serverTimestamp(),
         registeredCount: 0
       };
 
@@ -511,7 +609,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         console.warn("[WEBINAR] Sauvegarde Supabase SQL en repli:", sErr);
       }
 
-      // 2. Mise à jour du cache local
+      // 2. Mise à jour du cache local (nana_merchant_webinars + nana_live_sessions_cache)
       const localWebinarItem: LiveWebinar = {
         id: liveId,
         ...newWebinarData,
@@ -522,6 +620,10 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMyWebinars(updatedLocalList);
       try {
         localStorage.setItem('nana_merchant_webinars', JSON.stringify(updatedLocalList));
+        const rawSessionsCache = localStorage.getItem('nana_live_sessions_cache');
+        const sessionsMap = rawSessionsCache ? JSON.parse(rawSessionsCache) : {};
+        sessionsMap[liveId] = liveSessionPayload;
+        localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
       } catch {}
 
       // 3. Génération du lien de la Landing Page publique (Domaine public officiel : nsore.shop)
@@ -539,7 +641,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   };
 
-  // Suppression d'un webinaire
+  // Suppression d'un webinaire dans Supabase (public.live_sessions) + cache local
   const handleDeleteWebinar = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce live ?")) return;
@@ -555,6 +657,12 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     setMyWebinars(updated);
     try {
       localStorage.setItem('nana_merchant_webinars', JSON.stringify(updated));
+      const rawSessionsCache = localStorage.getItem('nana_live_sessions_cache');
+      if (rawSessionsCache) {
+        const sessionsMap = JSON.parse(rawSessionsCache);
+        delete sessionsMap[id];
+        localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
+      }
     } catch {}
   };
 
@@ -955,7 +1063,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                         const newPlat = e.target.value as LivePlatform;
                         setPlatform(newPlat);
                         if (newPlat === 'jitsi' || newPlat === 'daily') {
-                          handleAutoGenerateRoomUrl(newPlat);
+                          handleAutoGenerateRoomUrl(newPlat, false);
                         }
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition min-h-[44px] cursor-pointer"
@@ -986,18 +1094,18 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                     </p>
                   </div>
 
-                  {/* Bouton de génération 1-clic pour Jitsi ou NaNa Live */}
+                  {/* Bouton de génération 1-clic ou collage direct de lien (Google Meet, Zoom, YouTube, Jitsi...) */}
                   {(platform === 'jitsi' || platform === 'daily') && (
                     <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                          Salle {platform === 'jitsi' ? 'Jitsi Meet' : 'NaNa Live HD'} générée en 1-clic
+                          Collez votre lien Live (Google Meet, Zoom, YouTube...) ou utilisez la salle {platform === 'jitsi' ? 'Jitsi Meet' : 'NaNa Live HD'}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleAutoGenerateRoomUrl(platform)}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          onClick={() => handleAutoGenerateRoomUrl(platform, true)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
                         >
                           <RefreshCw className="w-3 h-3" />
                           <span>Régénérer</span>
@@ -1006,11 +1114,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       <input 
                         type="url" 
                         value={meetingUrl || streamUrl} 
-                        onChange={(e) => {
-                          setMeetingUrl(e.target.value);
-                          setStreamUrl(e.target.value);
-                        }} 
-                        placeholder={platform === 'jitsi' ? 'https://meet.jit.si/nana-live-...' : 'https://nanasore.daily.co/...'}
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
+                        placeholder="Collez un lien (https://meet.google.com/..., https://zoom.us/..., YouTube...) ou laissez générer"
                         className="w-full bg-slate-950/80 border border-indigo-500/30 rounded-xl px-3 py-2 text-xs font-mono text-indigo-200 focus:outline-none min-h-[38px]"
                       />
                     </div>
@@ -1026,11 +1131,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       </label>
                       <input 
                         type="url" 
-                        value={meetingUrl} 
-                        onChange={(e) => {
-                          setMeetingUrl(e.target.value);
-                          setStreamUrl(e.target.value);
-                        }} 
+                        value={meetingUrl || streamUrl} 
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
                         required
                         placeholder={
                           platform === 'zoom' 
@@ -1061,8 +1163,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       </label>
                       <input 
                         type="url" 
-                        value={streamUrl} 
-                        onChange={(e) => setStreamUrl(e.target.value)} 
+                        value={streamUrl || meetingUrl} 
+                        onChange={(e) => handleLiveUrlInput(e.target.value)} 
                         placeholder="https://..."
                         className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition min-h-[44px]"
                       />

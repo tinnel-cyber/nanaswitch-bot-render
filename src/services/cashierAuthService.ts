@@ -32,48 +32,49 @@ export function shareCashierLinkWhatsApp(tenantId: string, caisseId: string, pin
 }
 
 /**
- * Synchronise un caissier dans Firebase RTDB :
- * nodes/tenants/{tenantId}/cashiers/{cashierId}.json
+ * Synchronise un caissier dans Supabase :
+ * app_registry (module_key: 'cashiers')
  */
 export async function saveCashierToRTDB(tenantId: string, cashier: SellerUser): Promise<boolean> {
   if (!tenantId || !cashier.id) return false;
   try {
-    const url = `${RTDB_BASE_URL}/nodes/tenants/${encodeURIComponent(tenantId)}/cashiers/${encodeURIComponent(cashier.id)}.json`;
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const { error } = await supabase.from('app_registry').upsert({
+      key: `cashier_${tenantId}_${cashier.id}`,
+      name: cashier.name || cashier.id,
+      tenant_id: tenantId,
+      module_key: 'cashiers',
+      config_json: {
         ...cashier,
         tenantId,
         updatedAt: Date.now(),
-      }),
+      },
+      updated_at: new Date().toISOString()
     });
-    return res.ok;
+    return !error;
   } catch (err) {
-    console.warn('[cashierAuthService] Erreur synchronisation RTDB caissier:', err);
+    console.warn('[cashierAuthService] Erreur synchronisation Supabase caissier:', err);
     return false;
   }
 }
 
 /**
- * Récupère tous les caissiers d'un tenant depuis Firebase RTDB
+ * Récupère tous les caissiers d'un tenant depuis Supabase
  */
 export async function fetchCashiersFromRTDB(tenantId: string): Promise<SellerUser[]> {
   if (!tenantId) return [];
   try {
-    const url = `${RTDB_BASE_URL}/nodes/tenants/${encodeURIComponent(tenantId)}/cashiers.json`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!data) return [];
+    const { data, error } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('tenant_id', tenantId)
+      .eq('module_key', 'cashiers');
+    if (error || !data) return [];
     
-    // Normalisation en tableau
-    return Object.keys(data).map(key => ({
-      ...data[key],
-      id: data[key].id || key,
-    }));
+    return data
+      .map((row: any) => row.config_json)
+      .filter(Boolean);
   } catch (err) {
-    console.warn('[cashierAuthService] Erreur fetch caissiers RTDB:', err);
+    console.warn('[cashierAuthService] Erreur fetch caissiers Supabase:', err);
     return [];
   }
 }

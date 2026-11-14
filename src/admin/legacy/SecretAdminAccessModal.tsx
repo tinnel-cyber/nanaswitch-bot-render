@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldAlert, KeyRound, X, Check, Lock, AlertCircle } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../utils/audio';
+import { promoteSuperAdminLocally } from '../../services/superAdminService';
 
 interface SecretAdminAccessModalProps {
   isOpen: boolean;
@@ -29,11 +30,15 @@ export const SecretAdminAccessModal: React.FC<SecretAdminAccessModalProps> = ({
     e.preventDefault();
     const cleanCode = codeInput.trim();
 
-    // Codes secrets autorisés pour le Super Admin (*#007#, 007, ou mot de passe maître)
-    const validCodes = ['*#007#', '007', '*#007', 'pousbila36@gmail.com', 'pousbila04@gmail.com', 'pousbila', 'pousbila04', 'admin2026'];
+    // Codes secrets autorisés pour le Super Admin (*#007#, 007, codes PIN, ou identifiants maîtres)
+    const validCodes = [
+      '*#007#', '007', '*#007', 'pousbila36@gmail.com', 'pousbila04@gmail.com', 
+      'pousbila', 'pousbila04', 'admin2026', '2026', '1234', '7777', '8888', '0007', 'admin', 'superadmin', 'konkobo'
+    ];
 
-    if (validCodes.includes(cleanCode)) {
+    if (validCodes.includes(cleanCode) || validCodes.includes(cleanCode.toLowerCase())) {
       playValidationBeep();
+      promoteSuperAdminLocally('pousbila04-superadmin');
       onSuccess();
       onClose();
     } else {

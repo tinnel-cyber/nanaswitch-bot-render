@@ -5,9 +5,6 @@
  */
 
 import { supabase } from '../lib/supabase';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { ref as rtdbRef, set as rtdbSet, get as rtdbGet } from 'firebase/database';
-import { db, rtdb } from '../firebase';
 import {
   OmniFunnelOrder,
   FunnelProductItem,
@@ -46,7 +43,7 @@ export function calculateShippingFee(city: string, optionId: string): number {
 }
 
 /**
- * Vérifie le stock en temps réel dans WooCommerce et Firestore
+ * Vérifie le stock en temps réel dans WooCommerce et Supabase
  */
 export async function checkProductInventory(productId: string): Promise<{ inStock: boolean; availableQuantity: number }> {
   try {
@@ -62,12 +59,11 @@ export async function checkProductInventory(productId: string): Promise<{ inStoc
     console.warn('[FUNNEL] Vérification stock API échouée, fallback local:', err);
   }
 
-  // Fallback local Caisse NaNa
+  // Fallback Supabase SQL products
   try {
-    const prodDoc = await getDoc(doc(db, 'inventory', productId));
-    if (prodDoc.exists()) {
-      const stock = prodDoc.data().stock || 0;
-      return { inStock: stock > 0, availableQuantity: stock };
+    const { data: prodData } = await supabase.from('products').select('stock').eq('id', productId).maybeSingle();
+    if (prodData && prodData.stock !== undefined) {
+      return { inStock: prodData.stock > 0, availableQuantity: prodData.stock };
     }
   } catch {}
 
@@ -128,11 +124,22 @@ export async function createOmniFunnelOrder(params: {
     updatedAt: Date.now()
   };
 
-  // 1. Enregistrement Firestore & Local
+  // 1. Enregistrement Supabase SQL (table public.orders) & Cache Local
   try {
-    await setDoc(doc(db, 'funnel_orders', orderId), order);
+    await supabase.from('orders').upsert({
+      id: orderId,
+      customer_name: params.customer.name,
+      customer_phone: params.customer.phone,
+      total_amount: grandTotal,
+      currency: 'FCFA',
+      status: 'pending',
+      payment_status: params.provider === 'CASH_ON_DELIVERY' ? 'pending_on_delivery' : 'pending',
+      payment_provider: params.provider,
+      metadata: order,
+      created_at: new Date().toISOString()
+    });
   } catch (err) {
-    console.warn('[FUNNEL] Sauvegarde Firestore échouée, fallback local:', err);
+    console.warn('[FUNNEL] Sauvegarde Supabase orders notice:', err);
   }
   localStorage.setItem(`nana_order_${orderId}`, JSON.stringify(order));
 
@@ -167,8 +174,8 @@ export async function confirmPrimaryPayment(orderId: string, transactionId: stri
 
   if (!order) {
     try {
-      const snap = await getDoc(doc(db, 'funnel_orders', orderId));
-      if (snap.exists()) order = snap.data() as OmniFunnelOrder;
+      const { data: supaOrder } = await supabase.from('orders').select('metadata').eq('id', orderId).maybeSingle();
+      if (supaOrder && supaOrder.metadata) order = supaOrder.metadata as OmniFunnelOrder;
     } catch {}
   }
 
@@ -179,14 +186,14 @@ export async function confirmPrimaryPayment(orderId: string, transactionId: stri
   order.payment.transactionId = transactionId;
   order.updatedAt = Date.now();
 
-  // Mise à jour Firestore & Local
+  // Mise à jour Supabase & Local
   try {
-    await updateDoc(doc(db, 'funnel_orders', orderId), {
+    await supabase.from('orders').update({
       status: order.status,
-      'payment.paidAt': order.payment.paidAt,
-      'payment.transactionId': transactionId,
-      updatedAt: Date.now()
-    });
+      payment_status: 'paid',
+      metadata: order,
+      updated_at: new Date().toISOString()
+    }).eq('id', orderId);
   } catch {}
   localStorage.setItem(`nana_order_${orderId}`, JSON.stringify(order));
 
@@ -217,12 +224,11 @@ export async function purchaseUpsellItem(orderId: string, upsellProduct: FunnelP
 
   localStorage.setItem(`nana_order_${orderId}`, JSON.stringify(order));
   try {
-    await updateDoc(doc(db, 'funnel_orders', orderId), {
-      upsell: order.upsell,
-      'payment.upsellAmount': amount,
-      'payment.grandTotal': order.payment.grandTotal,
-      updatedAt: Date.now()
-    });
+    await supabase.from('orders').update({
+      total_amount: order.payment.grandTotal,
+      metadata: order,
+      updated_at: new Date().toISOString()
+    }).eq('id', orderId);
   } catch {}
 
   // Mise à jour PUT WooCommerce (ajout de la ligne de commande)
@@ -275,12 +281,11 @@ export async function purchaseDownsellItem(orderId: string, downsellProduct: Fun
 
   localStorage.setItem(`nana_order_${orderId}`, JSON.stringify(order));
   try {
-    await updateDoc(doc(db, 'funnel_orders', orderId), {
-      downsell: order.downsell,
-      'payment.downsellAmount': amount,
-      'payment.grandTotal': order.payment.grandTotal,
-      updatedAt: Date.now()
-    });
+    await supabase.from('orders').update({
+      total_amount: order.payment.grandTotal,
+      metadata: order,
+      updated_at: new Date().toISOString()
+    }).eq('id', orderId);
   } catch {}
 
   // Mise à jour PUT WooCommerce
@@ -420,16 +425,20 @@ export async function saveProductModularFunnelRTDB(
   try {
     localStorage.setItem(`nana_rtdb_product_${cleanId}_modular_funnel`, JSON.stringify(safePayload));
     localStorage.setItem(`nana_funnel_t-${cleanId}`, JSON.stringify(safePayload));
+    localStorage.setItem(`nana_funnel_${cleanId}`, JSON.stringify(safePayload));
   } catch {}
 
   try {
-    await rtdbSet(rtdbRef(rtdb, `products/${cleanId}/modular_funnel`), safePayload);
-    if (tenantId) {
-      await rtdbSet(rtdbRef(rtdb, `tenants/${tenantId}/products/${cleanId}/modular_funnel`), safePayload);
-    }
+    await supabase.from('funnels').upsert({
+      slug: cleanId,
+      title: safePayload.title || `Tunnel ${cleanId}`,
+      template_data: safePayload,
+      is_published: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'slug' });
     return true;
   } catch (err) {
-    console.warn('[OMNI-FUNNEL RTDB] Fallback local modular_funnel:', err);
+    console.warn('[OMNI-FUNNEL] Fallback local modular_funnel:', err);
     return false;
   }
 }
@@ -451,20 +460,24 @@ export async function saveProductUltimateFunnelRTDB(
     })
   );
 
-  // Sauvegarde isolée : NE SURCHARGE JAMAIS modular_funnel ni nana_funnel_t-{id}
+  // Sauvegarde isolée
   try {
     localStorage.setItem(`nana_rtdb_product_${cleanId}_ultimate_funnel`, JSON.stringify(safePayload));
     localStorage.setItem(`nana_funnel_f-${cleanId}`, JSON.stringify(safePayload));
+    localStorage.setItem(`nana_funnel_${cleanId}`, JSON.stringify(safePayload));
   } catch {}
 
   try {
-    await rtdbSet(rtdbRef(rtdb, `products/${cleanId}/ultimate_funnel`), safePayload);
-    if (tenantId) {
-      await rtdbSet(rtdbRef(rtdb, `tenants/${tenantId}/products/${cleanId}/ultimate_funnel`), safePayload);
-    }
+    await supabase.from('funnels').upsert({
+      slug: cleanId,
+      title: safePayload.title || `Ultimate Funnel ${cleanId}`,
+      template_data: safePayload,
+      is_published: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'slug' });
     return true;
   } catch (err) {
-    console.warn('[OMNI-FUNNEL RTDB] Fallback local ultimate_funnel:', err);
+    console.warn('[OMNI-FUNNEL] Fallback local ultimate_funnel:', err);
     return false;
   }
 }
@@ -635,49 +648,7 @@ export async function registerSubdomainInFirebase(subdomain: string, title?: str
       console.warn('[OMNI-FUNNEL] Sauvegarde Supabase notice:', supaErr);
     }
 
-    // 1. Sauvegarde directe dans 'funnels' sous la clé typée préfixée (t-slug, c-slug, f-slug) pour zéro conflit
-    await setDoc(doc(db, 'funnels', typeKey), payload, { merge: true });
-
-    // 2. NON-ÉCRASEMENT DES CONFIGURATIONS :
-    // Si linkPrefix === 't' (Funnel Modulaire 12 blocs), il a la Priorité Haute : écrit dans funnels/{slug}, tunnels/{slug} et /products/$productId/modular_funnel
-    // Si linkPrefix === 'f' (Ultimate Funnel), il écrit dans /products/$productId/ultimate_funnel et NE SURCHARGE JAMAIS funnels/{slug} ni modular_funnel !
-    if (linkPrefix === 't') {
-      try {
-        await setDoc(doc(db, 'funnels', cleanSub), payload, { merge: true });
-      } catch (e) {}
-      try {
-        await setDoc(doc(db, 'tunnels', cleanSub), payload, { merge: true });
-      } catch (tErr) {}
-      await saveProductModularFunnelRTDB(productId, payload, tenantId);
-      if (cleanSub !== productId) {
-        await saveProductModularFunnelRTDB(cleanSub, payload, tenantId);
-      }
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-        localStorage.setItem(`nana_funnel_${cleanSub}`, JSON.stringify(payload));
-      } catch (e) {}
-    } else if (linkPrefix === 'c') {
-      try {
-        await setDoc(doc(db, 'deals', cleanSub), payload, { merge: true });
-        await setDoc(doc(db, 'deals', typeKey), payload, { merge: true });
-      } catch (dealErr) {
-        console.warn('[OMNI-FUNNEL] Erreur écriture deals:', dealErr);
-      }
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-      } catch (e) {}
-    } else if (linkPrefix === 'f') {
-      // Ultimate Funnel : Stockage strictement isolé dans /products/$productId/ultimate_funnel et nana_funnel_f-{slug}
-      await saveProductUltimateFunnelRTDB(productId, payload, tenantId);
-      if (cleanSub !== productId) {
-        await saveProductUltimateFunnelRTDB(cleanSub, payload, tenantId);
-      }
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-      } catch (e) {}
-    }
-
-    // 3. Si et seulement si un véritable domaine personnalisé externe est configuré, liaison dans 'tenants'
+    // Sauvegarde domaine personnalisé Supabase SQL (table public.tenants)
     if (isRealCustom && cleanCustomDomain) {
       try {
         const customTenantData = {
@@ -700,18 +671,23 @@ export async function registerSubdomainInFirebase(subdomain: string, title?: str
           createdAt: timestamp,
           updatedAt: timestamp
         };
-        await setDoc(doc(db, 'tenants', cleanCustomDomain), customTenantData, { merge: true });
+        await supabase.from('tenants').upsert({
+          domain: cleanCustomDomain,
+          store_name: funnelTitle,
+          template_data: customTenantData,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'domain' });
         localStorage.setItem(`nana_resolved_tenant_domain_${cleanCustomDomain}`, JSON.stringify(customTenantData));
         localStorage.setItem(`nana_custom_domain_${cleanSub}`, cleanCustomDomain);
       } catch (customErr) {
-        console.warn('[OMNI-FUNNEL] Erreur enregistrement domaine personnalisé:', customErr);
+        console.warn('[OMNI-FUNNEL] Erreur enregistrement domaine personnalisé Supabase:', customErr);
       }
     }
 
-    console.log(`[OMNI-FUNNEL] Tunnel '${cleanSub}' (${linkPrefix}) enregistré avec succès !`);
+    console.log(`[OMNI-FUNNEL] Tunnel '${cleanSub}' (${linkPrefix}) enregistré avec succès dans Supabase SQL !`);
     return true;
   } catch (err) {
-    console.warn('[OMNI-FUNNEL] registerSubdomainInFirebase fallback local:', err);
+    console.warn('[OMNI-FUNNEL] registerSubdomainInstorage fallback local:', err);
     try {
       localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
       if (linkPrefix === 't') {
@@ -785,46 +761,7 @@ export async function saveFunnelConfig(funnelData: any): Promise<boolean> {
       console.warn('[OMNI-FUNNEL] Sauvegarde Supabase notice:', supaErr);
     }
 
-    // 1. Sauvegarde standardisée par clé typée pour isolation absolue (zéro collision)
-    await setDoc(doc(db, 'funnels', typeKey), payload, { merge: true });
-
-    // 2. NON-ÉCRASEMENT DES CONFIGURATIONS :
-    // - Si 't' (Funnel Modulaire 12 blocs) : met à jour funnels/{slug}, tunnels/{slug}, et /products/$productId/modular_funnel
-    // - Si 'f' (Ultimate Funnel) : met à jour UNIQUEMENT /products/$productId/ultimate_funnel et funnels/f-{slug} sans écraser funnels/{slug} !
-    if (linkPrefix === 't') {
-      try {
-        await setDoc(doc(db, 'funnels', slug), payload, { merge: true });
-      } catch (e) {}
-      try {
-        await setDoc(doc(db, 'tunnels', slug), payload, { merge: true });
-      } catch (e) {}
-      await saveProductModularFunnelRTDB(productId, payload, tenantId);
-      if (slug !== productId) {
-        await saveProductModularFunnelRTDB(slug, payload, tenantId);
-      }
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-        localStorage.setItem(`nana_funnel_${slug}`, JSON.stringify(payload));
-      } catch (e) {}
-    } else if (linkPrefix === 'c') {
-      try {
-        await setDoc(doc(db, 'deals', slug), payload, { merge: true });
-        await setDoc(doc(db, 'deals', typeKey), payload, { merge: true });
-      } catch (e) {}
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-      } catch (e) {}
-    } else if (linkPrefix === 'f') {
-      await saveProductUltimateFunnelRTDB(productId, payload, tenantId);
-      if (slug !== productId) {
-        await saveProductUltimateFunnelRTDB(slug, payload, tenantId);
-      }
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-      } catch (e) {}
-    }
-
-    // 3. Enregistrement dans 'tenants' UNIQUEMENT pour les vrais domaines personnalisés externes
+    // Enregistrement dans 'tenants' Supabase SQL UNIQUEMENT pour les vrais domaines personnalisés externes
     if (isRealCustomDomain && cleanCustomDomain) {
       try {
         const tenantPayload = {
@@ -847,23 +784,22 @@ export async function saveFunnelConfig(funnelData: any): Promise<boolean> {
           },
           updatedAt: timestamp
         };
-        await setDoc(doc(db, 'tenants', cleanCustomDomain), tenantPayload, { merge: true });
+        await supabase.from('tenants').upsert({
+          domain: cleanCustomDomain,
+          store_name: payload.title || 'Tunnel de Vente',
+          template_data: tenantPayload,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'domain' });
         localStorage.setItem(`nana_resolved_tenant_domain_${cleanCustomDomain}`, JSON.stringify(tenantPayload));
         localStorage.setItem(`nana_custom_domain_${slug}`, cleanCustomDomain);
       } catch (e) {
-        console.warn('[OMNI-FUNNEL] Erreur enregistrement tenant domaine personnalisé:', e);
+        console.warn('[OMNI-FUNNEL] Erreur enregistrement tenant Supabase:', e);
       }
     }
 
     return true;
   } catch (err) {
-    console.warn('[OMNI-FUNNEL] Erreur écriture Firestore:', err);
-    try {
-      localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
-      if (linkPrefix === 't') {
-        localStorage.setItem(`nana_funnel_${slug}`, JSON.stringify(payload));
-      }
-    } catch (e) {}
+    console.warn('[OMNI-FUNNEL] Erreur enregistrement tunnel:', err);
     return false;
   }
 }
@@ -915,170 +851,55 @@ export async function getFunnelBySlug(slug: string, typeHint?: string): Promise<
     console.warn('[OMNI-FUNNEL] Supabase getFunnelBySlug notice:', supaErr);
   }
 
-  // 1. Priorité 1 : Si on cherche le Funnel Modulaire 12 blocs ('t'), vérifier d'abord le stockage dédié modular_funnel
-  if (normType === 't') {
-    try {
-      const rtdbLocalMod = localStorage.getItem(`nana_rtdb_product_${cleanSlug}_modular_funnel`) ||
-        localStorage.getItem(`nana_rtdb_product_${slug}_modular_funnel`);
-      if (rtdbLocalMod) {
-        const parsed = JSON.parse(rtdbLocalMod);
-        if (parsed) return parsed;
-      }
-      const cachedTyped = localStorage.getItem(`nana_funnel_t-${cleanSlug}`);
-      if (cachedTyped) {
-        const parsed = JSON.parse(cachedTyped);
-        if (parsed) return parsed;
-      }
-      const cachedDirect = localStorage.getItem(`nana_funnel_${cleanSlug}`);
-      if (cachedDirect) {
-        const parsed = JSON.parse(cachedDirect);
-        // Ne jamais laisser un cache 'ultimate' masquer le Funnel 12 blocs !
-        if (parsed && parsed.funnelType !== 'ultimate' && parsed.linkPrefix !== 'f') {
-          return parsed;
-        }
-      }
-    } catch (e) {}
-
-    // Vérification Firebase RTDB /products/$productId/modular_funnel
-    try {
-      const rtdbSnap = await rtdbGet(rtdbRef(rtdb, `products/${cleanSlug}/modular_funnel`));
-      if (rtdbSnap.exists()) {
-        const data = rtdbSnap.val();
-        try { localStorage.setItem(`nana_rtdb_product_${cleanSlug}_modular_funnel`, JSON.stringify(data)); } catch {}
-        return data;
-      }
-    } catch (e) {}
-
-    // Vérification Firestore 'funnels/t-{slug}' et 'tunnels/{slug}'
-    try {
-      const snapTyped = await getDoc(doc(db, 'funnels', `t-${cleanSlug}`));
-      if (snapTyped.exists()) {
-        const data = snapTyped.data();
-        try { localStorage.setItem(`nana_funnel_t-${cleanSlug}`, JSON.stringify(data)); } catch (e) {}
-        return data;
-      }
-    } catch (e) {}
-
-    try {
-      const tSnap = await getDoc(doc(db, 'tunnels', cleanSlug));
-      if (tSnap.exists()) {
-        const data = tSnap.data();
-        try { localStorage.setItem(`nana_funnel_t-${cleanSlug}`, JSON.stringify(data)); } catch (e) {}
-        return data;
-      }
-    } catch (e) {}
-
-    // Fallback Firestore 'funnels/{slug}' uniquement s'il ne s'agit pas d'un Ultimate Funnel
-    try {
-      const snap = await getDoc(doc(db, 'funnels', cleanSlug));
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data && data.funnelType !== 'ultimate' && data.linkPrefix !== 'f') {
-          try { localStorage.setItem(`nana_funnel_t-${cleanSlug}`, JSON.stringify(data)); } catch (e) {}
-          return data;
-        }
-      }
-    } catch (e) {}
-
-    // Structure par défaut Modulaire 12 blocs (FunnelBuilder générera automatiquement les 12 blocs)
-    return {
-      id: `tunnel-${cleanSlug}`,
-      slug: cleanSlug,
-      subdomain: cleanSlug,
-      productId: `prod_${cleanSlug}`,
-      funnelType: 'modular',
-      funnelStudio: 'nana_studio_3',
-      linkPrefix: 't',
-      title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1).replace(/-/g, ' '),
-      brandColor: '#10b981',
-      blocks: [],
-      ogMetadata: {
-        title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1).replace(/-/g, ' '),
-        description: 'Offre exclusive et commande express.',
-        priceAmount: 25000,
-        currency: 'FCFA'
-      },
-      isPublished: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-  }
-
-  // 2. Si normType === 'f' (Ultimate Funnel - Priorité 2 Conditionnelle)
-  if (normType === 'f') {
-    try {
-      const rtdbLocalUlt = localStorage.getItem(`nana_rtdb_product_${cleanSlug}_ultimate_funnel`) ||
-        localStorage.getItem(`nana_rtdb_product_${slug}_ultimate_funnel`);
-      if (rtdbLocalUlt) {
-        const parsed = JSON.parse(rtdbLocalUlt);
-        if (parsed) return parsed;
-      }
-      const cachedTyped = localStorage.getItem(`nana_funnel_f-${cleanSlug}`);
-      if (cachedTyped) {
-        const parsed = JSON.parse(cachedTyped);
-        if (parsed) return parsed;
-      }
-    } catch (e) {}
-
-    try {
-      const rtdbSnap = await rtdbGet(rtdbRef(rtdb, `products/${cleanSlug}/ultimate_funnel`));
-      if (rtdbSnap.exists()) {
-        const data = rtdbSnap.val();
-        try { localStorage.setItem(`nana_rtdb_product_${cleanSlug}_ultimate_funnel`, JSON.stringify(data)); } catch {}
-        return data;
-      }
-    } catch (e) {}
-
-    try {
-      const snapTyped = await getDoc(doc(db, 'funnels', `f-${cleanSlug}`));
-      if (snapTyped.exists()) {
-        const data = snapTyped.data();
-        try { localStorage.setItem(`nana_funnel_f-${cleanSlug}`, JSON.stringify(data)); } catch (e) {}
-        return data;
-      }
-    } catch (e) {}
-  }
-
-  // 3. Si normType === 'c' (Caisse Express)
-  if (normType === 'c') {
-    try {
-      const cachedTyped = localStorage.getItem(`nana_funnel_${typeKey}`);
-      if (cachedTyped) {
-        const parsed = JSON.parse(cachedTyped);
-        if (parsed) return parsed;
-      }
-      const cSnap = await getDoc(doc(db, 'deals', typeKey)) || await getDoc(doc(db, 'deals', cleanSlug));
-      if (cSnap && cSnap.exists()) {
-        const data = cSnap.data();
-        try { localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(data)); } catch (e) {}
-        return data;
-      }
-    } catch (e) {}
-  }
-
-  // 4. Fallback générique Firestore
+  // 1. Priorité Supabase SQL (public.funnels)
   try {
-    const snap = await getDoc(doc(db, 'funnels', cleanSlug));
-    if (snap.exists()) {
-      const data = snap.data();
-      return data;
+    const { data: supaRow, error } = await supabase
+      .from('funnels')
+      .select('template_data, title, slug, is_published')
+      .eq('slug', cleanSlug)
+      .maybeSingle();
+
+    if (!error && supaRow?.template_data && Object.keys(supaRow.template_data).length > 0) {
+      try {
+        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(supaRow.template_data));
+        localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(supaRow.template_data));
+      } catch (e) {}
+      return supaRow.template_data;
+    }
+  } catch (supaErr) {
+    console.warn('[OMNI-FUNNEL] Supabase getFunnelBySlug notice:', supaErr);
+  }
+
+  // 2. Cache local réactif de secours
+  try {
+    const cachedTyped = localStorage.getItem(`nana_funnel_${typeKey}`) ||
+      localStorage.getItem(`nana_funnel_${normType}-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_c-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_t-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_f-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_${cleanSlug}`);
+    if (cachedTyped) {
+      const parsed = JSON.parse(cachedTyped);
+      if (parsed && (parsed.blocks || parsed.steps || parsed.title)) {
+        return parsed;
+      }
     }
   } catch (e) {}
 
-  // 5. Structure par défaut minimale si introuvable
+  // 3. Structure par défaut minimale si introuvable
   return {
-    id: `tunnel-${cleanSlug}`,
+    id: `caisse_${cleanSlug}`,
     slug: cleanSlug,
     subdomain: cleanSlug,
     productId: `prod_${cleanSlug}`,
-    funnelType: 'modular',
-    linkPrefix: 't',
-    title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1),
+    funnelType: normType === 'c' ? 'checkout' : normType === 'f' ? 'ultimate' : 'modular',
+    linkPrefix: normType,
+    title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1).replace(/-/g, ' '),
     brandColor: '#10b981',
-    blocks: [],
+    blocks: DEFAULT_PHYSICAL_FUNNEL_BLOCKS,
     ogMetadata: {
-      title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1),
-      description: 'Offre exclusive et commande express.',
+      title: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1).replace(/-/g, ' '),
+      description: 'Offre exclusive et commande express avec livraison rapide.',
       priceAmount: 35000,
       currency: 'FCFA'
     },
@@ -1096,7 +917,7 @@ export interface VendorFunnelSummary {
 }
 
 /**
- * Récupère les tunnels de vente créés par un vendeur (Firestore collection 'funnels' + cache local)
+ * Récupère les tunnels de vente créés par un vendeur (Supabase SQL table 'funnels' + cache local)
  */
 export async function fetchVendorFunnels(storeId?: string): Promise<VendorFunnelSummary[]> {
   const funnelsMap = new Map<string, VendorFunnelSummary>();
@@ -1114,14 +935,13 @@ export async function fetchVendorFunnels(storeId?: string): Promise<VendorFunnel
               const funnelId = parsed.slug || parsed.id;
               const funnelTitle = parsed.title || parsed.funnelTitle || parsed.name;
               if (funnelId && funnelTitle && (!storeId || !parsed.storeId || parsed.storeId === storeId)) {
-                // Éviter d'enregistrer les clés typées doubles comme f-slug
                 const cleanId = funnelId.replace(/^[fct]-/, '');
                 if (!funnelsMap.has(cleanId)) {
                   funnelsMap.set(cleanId, {
                     id: cleanId,
                     title: funnelTitle,
                     slug: parsed.slug || cleanId,
-                    linkPrefix: parsed.linkPrefix
+                    linkPrefix: parsed.linkPrefix || 'c'
                   });
                 }
               }
@@ -1134,7 +954,11 @@ export async function fetchVendorFunnels(storeId?: string): Promise<VendorFunnel
 
   // 2. Récupérer dans Supabase (table 'funnels')
   try {
-    const { data: supaList, error } = await supabase.from('funnels').select('*');
+    let query = supabase.from('funnels').select('*');
+    if (storeId) {
+      query = query.eq('user_id', storeId);
+    }
+    const { data: supaList, error } = await query;
     if (!error && supaList) {
       supaList.forEach((row: any) => {
         const cleanId = String(row.slug || row.id).replace(/^[fct]-/, '');
@@ -1144,37 +968,13 @@ export async function fetchVendorFunnels(storeId?: string): Promise<VendorFunnel
             id: cleanId,
             title: funnelTitle,
             slug: row.slug || cleanId,
-            linkPrefix: row.template_data?.linkPrefix || 't'
+            linkPrefix: row.template_data?.linkPrefix || 'c'
           });
         }
       });
     }
   } catch (supaErr) {
     console.warn('[OMNI-FUNNEL] fetchVendorFunnels Supabase notice:', supaErr);
-  }
-
-  // 3. Récupérer dans Firestore (collection 'funnels') en fallback
-  try {
-    const funnelsCol = collection(db, 'funnels');
-    const snap = await getDocs(funnelsCol);
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      const rawId = data.slug || data.id || docSnap.id;
-      const cleanId = String(rawId).replace(/^[fct]-/, '');
-      const funnelTitle = data.title || data.funnelTitle || data.name || cleanId;
-      if (!storeId || !data.storeId || data.storeId === storeId || data.userId === storeId) {
-        if (!funnelsMap.has(cleanId)) {
-          funnelsMap.set(cleanId, {
-            id: cleanId,
-            title: funnelTitle,
-            slug: data.slug || cleanId,
-            linkPrefix: data.linkPrefix
-          });
-        }
-      }
-    });
-  } catch (err) {
-    console.warn('[OMNI-FUNNEL] fetchVendorFunnels Firestore notice:', err);
   }
 
   return Array.from(funnelsMap.values());

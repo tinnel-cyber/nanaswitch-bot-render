@@ -156,7 +156,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
             type="button"
             onClick={() => {
               playTapBeep();
-              onNavigate('MASTER_HUB');
+              onNavigate('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/dashboard');
               }
@@ -254,7 +254,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto h-full">
                   <NanaGeneratorModal
                     isOpen={true}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                     isModal={false}
                   />
                 </div>
@@ -267,7 +267,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <CustomerOrdersView
                     orders={customerOrders}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -279,7 +279,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <InventoryView
                     inventory={inventory}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -292,7 +292,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                   <ReportsView
                     sales={sales}
                     inventory={inventory}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -305,7 +305,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                   <AiAdvisorView
                     inventory={inventory}
                     sales={sales}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -317,7 +317,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <AffiliateDashboardModal
                     isOpen={true}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -334,7 +334,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                         window.dispatchEvent(new PopStateEvent('popstate'));
                       }
                     }}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -346,7 +346,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <DocuSignHub
                     isOpen={true}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -358,7 +358,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <SettingsExtensionsView
                     currentUser={currentUser}
-                    onClose={() => onNavigate('MASTER_HUB')}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -371,7 +371,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                   <NanaSwitchApp
                     slug={id}
                     embedded={true}
-                    onBack={() => onNavigate('MASTER_HUB')}
+                    onBack={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );

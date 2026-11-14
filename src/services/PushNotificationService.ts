@@ -145,12 +145,12 @@ export async function getOrRegisterFcmToken(options?: {
           },
           { merge: true }
         );
-        console.log(`[PushNotificationService] Jeton associé au marchand ${options.merchantId} dans Firestore (token unitaire écrasé).`);
+        console.log(`[PushNotificationService] Jeton associé au marchand ${options.merchantId} dans storage (token unitaire écrasé).`);
 
         // Déclenchement automatique de la purge des notifications vieilles de plus de 7 jours
         cleanOldNotifications(options.merchantId, 7).catch(() => {});
       } catch (firestoreErr) {
-        console.warn('[PushNotificationService] Impossible de mettre à jour Firestore :', firestoreErr);
+        console.warn('[PushNotificationService] Impossible de mettre à jour storage :', storageErr);
       }
     }
 
@@ -313,7 +313,7 @@ export async function cleanOldNotifications(
       batch.delete(docSnap.ref);
     });
     await batch.commit();
-    console.log(`[PushNotificationService] Nettoyage Firestore : ${snap.size} notification(s) expirée(s) (> ${daysThreshold} jours) purgée(s).`);
+    console.log(`[PushNotificationService] Nettoyage storage : ${snap.size} notification(s) expirée(s) (> ${daysThreshold} jours) purgée(s).`);
     return snap.size;
   } catch (err) {
     console.warn('[PushNotificationService] Nettoyage auto des notifications ignoré :', err);

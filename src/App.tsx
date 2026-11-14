@@ -49,7 +49,8 @@ import { PosSearchBar } from './components/PosSearchBar';
 import { PinKeypadModal } from './components/PinKeypadModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { isCashierSession } from './utils/managerSecurityService';
-import { auth, logoutUser, onSupabaseAuthStateChange } from './firebase';
+import { logoutUser, onSupabaseAuthStateChange } from './services/supabaseAuthService';
+import { auth } from './firebase';
 import { GoogleFlowToast } from './components/GoogleFlowToast';
 import { ClassroomErrorBoundary } from './components/lms/ClassroomErrorBoundary';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
@@ -244,12 +245,15 @@ import {
   isSuperAdminLocally, 
   verifySuperAdminPrivileges, 
   KNOWN_SUPERADMIN_UIDS, 
-  KNOWN_SUPERADMIN_EMAILS 
+  KNOWN_SUPERADMIN_EMAILS,
+  promoteSuperAdminLocally
 } from './services/superAdminService';
 
 const SUPERADMIN_EMAILS = KNOWN_SUPERADMIN_EMAILS;
 
 export type AppView =
+  | 'AUTH'
+  | 'auth'
   | 'EMAILING'
   | 'emailing' 
   | 'HOME'
@@ -347,7 +351,11 @@ export type AppView =
   | 'WALLET'
   | 'wallet'
   | 'NANA_WALLET'
-  | 'nanawallet';
+  | 'nanawallet'
+  | 'NANA_SWITCH_APP'
+  | 'nana_switch_app'
+  | 'ACADEMIC_UPLOAD'
+  | 'academic_upload';
 export default function App() {
   // Détection & Résolution Multi-Tenant Marque Blanche (Custom Domains)
   const { 
@@ -444,6 +452,17 @@ export default function App() {
   const [currentView, setCurrentView] = useState<AppView>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      if (
+        pathname === '/login' ||
+        pathname === '/register' ||
+        pathname === '/signup' ||
+        pathname === '/auth' ||
+        params.get('auth') === 'login' ||
+        params.get('auth') === 'register'
+      ) {
+        return 'AUTH';
+      }
       if (pathname === '/test-supabase' || pathname.startsWith('/test-supabase')) {
         return 'TEST_SUPABASE';
       }
@@ -453,7 +472,6 @@ export default function App() {
       if (pathname === '/pos' || pathname.startsWith('/pos')) {
         return 'POS';
       }
-      const params = new URLSearchParams(window.location.search);
       const isBoutiquePath =
         pathname === '/s' ||
         pathname.startsWith('/s/') ||
@@ -523,7 +541,7 @@ export default function App() {
           if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') return 'POS';
           if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') return 'STUDIO';
           if (subMod === 'nana-market' || subMod === 'market') return 'MARKET_DIRECTORY';
-          if (subMod === 'funnel-builder' || subMod === 'funnel') return 'MODULAR_FUNNEL';
+          if (subMod === 'funnel-builder' || subMod === 'funnel' || subMod === 'tunnels') return 'PHYSICAL_FUNNEL';
           if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') return 'INVENTORY';
           if (subMod === 'orders-quotes' || subMod === 'commandes') return 'CUSTOMER_ORDERS';
           if (subMod === 'reports-analytics' || subMod === 'rapports') return 'REPORTS';
@@ -541,7 +559,7 @@ export default function App() {
           if (subMod === 'docusign-hub' || subMod === 'docusign') return 'DOCUSIGN';
           if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') return 'SETTINGS_EXTENSIONS';
           if (subMod === 'saas-admin' || subMod === 'admin') return 'SAAS_ADMIN';
-          return 'AI_STUDIO';
+          return 'STANDALONE_APP';
         }
         if (modName === 'nanagenerator' || modName === 'nanagenerateur') {
           return 'AI_STUDIO';
@@ -558,9 +576,7 @@ export default function App() {
           return 'STUDIO';
         }
         if (modName === 'funnel' || modName === 'funnels' || modName === 'tunnels' || modName === 'tunnel') {
-          if (subMod === 'physical' || subMod === 'checkout') return 'PHYSICAL_FUNNEL';
-          if (subMod === 'ultimate') return 'ULTIMATE_FUNNEL';
-          return 'MODULAR_FUNNEL';
+          return 'PHYSICAL_FUNNEL';
         }
         if (modName === 'inventaire' || modName === 'stock' || modName === 'excel') {
           return 'INVENTORY';
@@ -822,7 +838,7 @@ export default function App() {
         return 'SALLES_VIP';
       }
     }
-    return 'MASTER_HUB';
+    return 'NANA_SWITCH_APP';
   });
 
   // Détection URL des Salles VIP E-learning (/salles-vip/:id, /vip/salle/:id, /vip/room/:id)
@@ -1339,7 +1355,7 @@ export default function App() {
         return;
       }
 
-      // Hub Central Direction Générale (/hub)
+      // Redirection de l'ancien Hub Central (/hub) vers le Nouveau Tableau de Bord (/dashboard)
       if (
         pathname === '/hub' ||
         pathname.startsWith('/hub') ||
@@ -1348,9 +1364,66 @@ export default function App() {
         params.get('view') === 'hub' ||
         params.get('view') === 'master_hub'
       ) {
-        setCurrentView('MASTER_HUB');
+        try {
+          window.history.replaceState({}, '', '/dashboard');
+        } catch {
+          // ignore
+        }
+        setCurrentView('NANA_SWITCH_APP');
         setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
         setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
+        return;
+      }
+
+      // Portail Dépôt Académique & Marchand (/academic/upload)
+      if (
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/upload') ||
+        pathname === '/dashboard/upload' ||
+        params.get('view') === 'academic_upload'
+      ) {
+        setCurrentView('ACADEMIC_UPLOAD');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
+        return;
+      }
+
+      // Routes Modales Directes (/webinar, /docusign, /scanner, /excel, /kyc)
+      if (pathname === '/webinar' || pathname === '/lives') {
+        setCurrentView('NANA_SWITCH_APP');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setIsGlobalWebinarModalOpen(true);
+        return;
+      }
+      if (pathname === '/docusign' || pathname === '/signatures') {
+        setCurrentView('NANA_SWITCH_APP');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setIsDocuSignOpen(true);
+        return;
+      }
+      if (pathname === '/scanner') {
+        setCurrentView('NANA_SWITCH_APP');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setIsPosCameraScannerOpen(true);
+        return;
+      }
+      if (pathname === '/excel') {
+        setCurrentView('INVENTORY');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setIsGlobalExcelImporterOpen(true);
+        return;
+      }
+      if (pathname === '/kyc') {
+        setCurrentView('NANA_SWITCH_APP');
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+        setIsKycModalOpen(true);
         return;
       }
 
@@ -1367,6 +1440,7 @@ export default function App() {
       ) {
         setCurrentView('NANA_SWITCH_APP');
         setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
         setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
         return;
       }
@@ -1378,35 +1452,45 @@ export default function App() {
         const modName = segments[0]?.toLowerCase();
         const subMod = segments[1]?.toLowerCase();
 
+        setShowWelcomeShowcase(false);
+        setIsAuthScreenExplicitlyBypassed(true);
+
         if (modName === 'apps' && subMod) {
-          if (subMod === 'nanagenerator' || subMod === 'nanagenerateur' || subMod === 'studio-ia') return 'AI_STUDIO';
-          if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') return 'POS';
-          if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') return 'STUDIO';
-          if (subMod === 'nana-market' || subMod === 'market') return 'MARKET_DIRECTORY';
-          if (subMod === 'funnel-builder' || subMod === 'funnel') return 'MODULAR_FUNNEL';
-          if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') return 'INVENTORY';
-          if (subMod === 'orders-quotes' || subMod === 'commandes') return 'CUSTOMER_ORDERS';
-          if (subMod === 'reports-analytics' || subMod === 'rapports') return 'REPORTS';
-          if (subMod === 'debt-book' || subMod === 'dettes') return 'DEBT_BOOK';
-          if (subMod === 'partners-affiliate' || subMod === 'partenaire') return 'PARTNER';
-          if (subMod === 'ai-gemini' || subMod === 'gemini') return 'AI_ADVISOR';
-          if (subMod === 'cv-pro' || subMod === 'cv') return 'CV_CREATOR';
-          if (subMod === 'lms-academy' || subMod === 'campus') return 'CAMPUS';
-          if (subMod === 'lms-marketplace' || subMod === 'marketplace') return 'CATALOG';
-          if (subMod === 'instructor-hub' || subMod === 'formateur') return 'INSTRUCTOR';
-          if (subMod === 'certificate-hub' || subMod === 'certificats') return 'CERTIFICATE';
-          if (subMod === 'wameet-network' || subMod === 'wameet') return 'WAMEET';
-          if (subMod === 'salles-vip' || subMod === 'vip') return 'SALLES_VIP';
-          if (subMod === 'nana-switch-app' || subMod === 'nanaswitch' || subMod === 'nanaswitch-app' || subMod === 'switch' || subMod === 'nana-switch') return 'NANA_SWITCH_APP';
-          if (subMod === 'docusign-hub' || subMod === 'docusign') return 'DOCUSIGN';
-          if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') return 'SETTINGS_EXTENSIONS';
-          if (subMod === 'saas-admin' || subMod === 'admin') return 'SAAS_ADMIN';
-          return 'AI_STUDIO';
+          if (subMod === 'nanagenerator' || subMod === 'nanagenerateur' || subMod === 'studio-ia') { setCurrentView('AI_STUDIO'); return; }
+          if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') { setCurrentView('POS'); return; }
+          if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') { setCurrentView('STUDIO'); return; }
+          if (subMod === 'nana-market' || subMod === 'market') { setCurrentView('MARKET_DIRECTORY'); return; }
+          if (subMod === 'funnel-builder' || subMod === 'funnel') { setCurrentView('MODULAR_FUNNEL'); return; }
+          if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock') { setCurrentView('INVENTORY'); return; }
+          if (subMod === 'excel-importer') { setCurrentView('INVENTORY'); setIsGlobalExcelImporterOpen(true); return; }
+          if (subMod === 'orders-quotes' || subMod === 'commandes') { setCurrentView('CUSTOMER_ORDERS'); return; }
+          if (subMod === 'reports-analytics' || subMod === 'rapports') { setCurrentView('REPORTS'); return; }
+          if (subMod === 'debt-book' || subMod === 'dettes') { setCurrentView('DEBT_BOOK'); return; }
+          if (subMod === 'partners-affiliate' || subMod === 'partenaire') { setCurrentView('PARTNER'); return; }
+          if (subMod === 'ai-gemini' || subMod === 'gemini') { setCurrentView('AI_ADVISOR'); return; }
+          if (subMod === 'cv-pro' || subMod === 'cv') { setCurrentView('CV_CREATOR'); return; }
+          if (subMod === 'lms-academy' || subMod === 'campus') { setIsStudentDashboardView(true); setCurrentView('CAMPUS'); return; }
+          if (subMod === 'lms-marketplace' || subMod === 'marketplace') { setIsCatalogView(true); setCurrentView('CATALOG'); return; }
+          if (subMod === 'instructor-hub' || subMod === 'formateur') { setIsInstructorView(true); setCurrentView('INSTRUCTOR'); return; }
+          if (subMod === 'certificate-hub' || subMod === 'certificats') { setIsCertificateView(true); setCurrentView('CERTIFICATE'); return; }
+          if (subMod === 'wameet-network' || subMod === 'wameet') { setCurrentView('WAMEET'); return; }
+          if (subMod === 'salles-vip' || subMod === 'vip') { setCurrentView('SALLES_VIP'); return; }
+          if (subMod === 'nana-switch-app' || subMod === 'nanaswitch' || subMod === 'nanaswitch-app' || subMod === 'switch' || subMod === 'nana-switch') { setCurrentView('NANA_SWITCH_APP'); return; }
+          if (subMod === 'docusign-hub' || subMod === 'docusign') { setCurrentView('NANA_SWITCH_APP'); setIsDocuSignOpen(true); return; }
+          if (subMod === 'connectors-webhooks' || subMod === 'connecteurs') { setCurrentView('SETTINGS_EXTENSIONS'); return; }
+          if (subMod === 'saas-admin' || subMod === 'admin') { setCurrentView('SAAS_ADMIN'); return; }
+          setCurrentStandaloneAppId(subMod);
+          setCurrentView('STANDALONE_APP');
+          return;
         }
         if (modName === 'nanagenerator' || modName === 'nanagenerateur') {
-          return 'AI_STUDIO';
+          setCurrentView('AI_STUDIO');
+          return;
         }
-        setShowWelcomeShowcase(false);
+        if (modName === 'upload' || modName === 'academic') {
+          setCurrentView('ACADEMIC_UPLOAD');
+          return;
+        }
 
         if (modName === 'pos' || modName === 'caisse') {
           if (subMod === 'connect') setCurrentView('POS_CONNECT');
@@ -1431,7 +1515,17 @@ export default function App() {
         }
         if (modName === 'inventaire' || modName === 'stock' || modName === 'excel') {
           setCurrentView('INVENTORY');
-          if (subMod === 'excel') setIsGlobalExcelImporterOpen(true);
+          if (subMod === 'excel' || modName === 'excel') setIsGlobalExcelImporterOpen(true);
+          return;
+        }
+        if (modName === 'scanner') {
+          setCurrentView('NANA_SWITCH_APP');
+          setIsPosCameraScannerOpen(true);
+          return;
+        }
+        if (modName === 'kyc') {
+          setCurrentView('NANA_SWITCH_APP');
+          setIsKycModalOpen(true);
           return;
         }
         if (modName === 'commandes' || modName === 'devis' || modName === 'orders') {
@@ -1463,12 +1557,20 @@ export default function App() {
           return;
         }
         if (modName === 'marketing') {
-          setCurrentView('STUDIO');
+          if (subMod === 'emailing') {
+            setCurrentView('EMAILING');
+            return;
+          }
+          setCurrentView('NANA_SWITCH_APP');
           handleOpenMarketingAi();
           return;
         }
+        if (modName === 'emailing') {
+          setCurrentView('EMAILING');
+          return;
+        }
         if (modName === 'lives' || modName === 'webinaires') {
-          setCurrentView('STUDIO');
+          setCurrentView('NANA_SWITCH_APP');
           setIsGlobalWebinarModalOpen(true);
           return;
         }
@@ -1496,12 +1598,12 @@ export default function App() {
           return;
         }
         if (modName === 'docusign' || modName === 'signatures') {
-          setCurrentView('DOCUSIGN');
+          setCurrentView('NANA_SWITCH_APP');
+          setIsDocuSignOpen(true);
           return;
         }
         if (modName === 'admin' || modName === 'saas-admin' || modName === 'superadmin') {
           setCurrentView('SAAS_ADMIN');
-          setShowWelcomeShowcase(false);
           setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
           return;
         }
@@ -2056,12 +2158,18 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-  // État (Google Sign-In)
+  // État (Google Sign-In / Supabase Auth)
   const [currentUser, setCurrentUser] = useState<StoreUser | null>(() => {
     const saved = safeGetItem('nana_store_auth_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed?.email && KNOWN_SUPERADMIN_EMAILS.includes(parsed.email.toLowerCase())) {
+          parsed.role = 'SUPER_ADMIN';
+          parsed.isSuperAdmin = true;
+          promoteSuperAdminLocally(parsed.id || 'pousbila04-superadmin');
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse saved user', e);
       }
@@ -2073,26 +2181,34 @@ export default function App() {
   useEffect(() => {
     const unsub = onSupabaseAuthStateChange((supaUser) => {
       if (supaUser) {
+        const isSuperAdminUser = supaUser.email && KNOWN_SUPERADMIN_EMAILS.includes(supaUser.email.toLowerCase());
+        if (isSuperAdminUser) {
+          promoteSuperAdminLocally(supaUser.id || 'pousbila04-superadmin');
+        }
+
         setCurrentUser((prev) => {
-          if (prev && prev.id === supaUser.id) return prev;
+          if (prev && prev.id === supaUser.id && prev.role === (isSuperAdminUser ? 'SUPER_ADMIN' : prev.role)) return prev;
           const storeId = prev?.storeId || `store-${supaUser.id.slice(0, 8)}`;
           return {
+            ...prev,
             id: supaUser.id,
             storeId,
             name: supaUser.displayName || supaUser.name || 'Utilisateur Nanasore',
             email: supaUser.email,
-            role: (supaUser.role as any) || 'GERANT',
-            vendorType: 'ecommerce',
-            sellerMode: (supaUser.sellerMode as any) || 'merchant_ecommerce',
+            role: isSuperAdminUser ? 'SUPER_ADMIN' : ((supaUser.role as any) || prev?.role || 'GERANT'),
+            isSuperAdmin: Boolean(isSuperAdminUser || prev?.isSuperAdmin),
+            vendorType: prev?.vendorType || 'ecommerce',
+            sellerMode: (supaUser.sellerMode as any) || prev?.sellerMode || 'merchant_ecommerce',
             phone: prev?.phone || '+226 00 00 00 00',
             city: prev?.city || 'Ouagadougou',
             country: 'Burkina Faso',
             currency: 'F CFA',
-            defaultCreditLimit: 20000,
+            defaultCreditLimit: isSuperAdminUser ? 10000000 : (prev?.defaultCreditLimit || 20000),
             loginProvider: 'google',
-            kycStatus: 'none',
-            plan: prev?.plan || 'free',
-            ...prev
+            kycStatus: isSuperAdminUser ? 'verified' : (prev?.kycStatus || 'none'),
+            plan: isSuperAdminUser ? 'elite' : (prev?.plan || 'free'),
+            subscriptionStatus: isSuperAdminUser ? 'active' : (prev?.subscriptionStatus || 'active'),
+            storeApprovalStatus: isSuperAdminUser ? 'APPROVED' : (prev?.storeApprovalStatus || 'APPROVED'),
           };
         });
       }
@@ -2145,8 +2261,51 @@ export default function App() {
   }, [isCustomDomain, customTenant, publicBoutiqueParams.isBoutique]);
 
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
-  const [isAuthScreenExplicitlyBypassed, setIsAuthScreenExplicitlyBypassed] = useState(false);
+  const [isAuthScreenExplicitlyBypassed, setIsAuthScreenExplicitlyBypassed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
   const [isSecretAdminModalOpen, setIsSecretAdminModalOpen] = useState(false);
+
+  const handleSecretAdminSuccess = useCallback(() => {
+    setIsSecretAdminModalOpen(false);
+    setShowWelcomeShowcase(false);
+    promoteSuperAdminLocally(currentUser?.id || 'pousbila04-superadmin');
+    setCurrentUser((prev) => ({
+      ...(prev || {
+        id: 'pousbila04-superadmin',
+        storeId: 'store-pousbila04',
+        name: 'Pousbila Super Admin',
+        email: 'pousbila04@gmail.com',
+        vendorType: 'ecommerce',
+        sellerMode: 'merchant_ecommerce',
+        phone: '+226 00 00 00 00',
+        city: 'Ouagadougou',
+        country: 'Burkina Faso',
+        currency: 'F CFA',
+        defaultCreditLimit: 10000000,
+        loginProvider: 'google',
+      }),
+      role: 'SUPER_ADMIN',
+      isSuperAdmin: true,
+      kycStatus: 'verified',
+      plan: 'elite',
+      subscriptionStatus: 'active',
+      storeApprovalStatus: 'APPROVED',
+    }));
+    setCurrentView('SAAS_ADMIN');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/admin');
+    }
+  }, [currentUser]);
 
   // État de la Landing Page Showcase de bienvenue
   const [showWelcomeShowcase, setShowWelcomeShowcase] = useState<boolean>(() => {
@@ -2169,6 +2328,17 @@ export default function App() {
         pathname.startsWith('/pos') ||
         pathname === '/dashboard' ||
         pathname.startsWith('/dashboard') ||
+        pathname === '/hub' ||
+        pathname.startsWith('/hub') ||
+        pathname === '/central-hub' ||
+        pathname === '/master-hub' ||
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/') ||
+        pathname === '/webinar' ||
+        pathname === '/docusign' ||
+        pathname === '/scanner' ||
+        pathname === '/excel' ||
+        pathname === '/kyc' ||
         pathname === '/admin' ||
         pathname.startsWith('/admin') ||
         pathname === '/s' ||
@@ -2299,6 +2469,12 @@ export default function App() {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       if (
+        pathname === '/dashboard' ||
+        pathname.startsWith('/dashboard') ||
+        pathname === '/hub' ||
+        pathname.startsWith('/hub') ||
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/') ||
         pathname === '/boutique' || 
         pathname.startsWith('/boutique/') || 
         pathname.startsWith('/store/') || 
@@ -2327,10 +2503,28 @@ export default function App() {
   const [pinLockReason, setPinLockReason] = useState<'LOCK' | 'TIMEOUT' | 'RESTART'>('RESTART');
   const [isAffiliateModalOpen, setIsAffiliateModalOpen] = useState(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
-  const [isDocuSignOpen, setIsDocuSignOpen] = useState(false);
+  const [isDocuSignOpen, setIsDocuSignOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      return p === '/docusign' || p === '/dashboard/docusign' || p === '/dashboard/apps/docusign-hub';
+    }
+    return false;
+  });
   const [docuSignDocTitle, setDocuSignDocTitle] = useState('Document Commercial');
-  const [isGlobalExcelImporterOpen, setIsGlobalExcelImporterOpen] = useState(false);
-  const [isGlobalWebinarModalOpen, setIsGlobalWebinarModalOpen] = useState(false);
+  const [isGlobalExcelImporterOpen, setIsGlobalExcelImporterOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      return p === '/excel' || p === '/dashboard/inventaire/excel' || p === '/dashboard/apps/excel-importer';
+    }
+    return false;
+  });
+  const [isGlobalWebinarModalOpen, setIsGlobalWebinarModalOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      return p === '/webinar' || p === '/dashboard/lives' || p === '/dashboard/webinaires';
+    }
+    return false;
+  });
 
   // État de l'Assistant Marketing & Vente IA (Gemini 3.8 Flash / Studio IA)
   const [isMarketingAiModalOpen, setIsMarketingAiModalOpen] = useState(false);
@@ -2630,8 +2824,23 @@ export default function App() {
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isSellerSwitchModalOpen, setIsSellerSwitchModalOpen] = useState(false);
-  const [isPosCameraScannerOpen, setIsPosCameraScannerOpen] = useState(false);
-  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
+  const [isPosCameraScannerOpen, setIsPosCameraScannerOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      return p === '/scanner' || p === '/dashboard/scanner';
+    }
+    return false;
+  });
+  const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      return p === '/kyc' || p === '/dashboard/kyc';
+    }
+    return false;
+  });
+  const [globalProFeatureTab, setGlobalProFeatureTab] = useState<
+    'CUSTOM_DOMAIN' | 'SOVEREIGN_GATEWAY' | 'EMPLOYEE_MANAGEMENT' | 'TRACKING_PIXELS_CRM' | 'WHITE_LABEL' | null
+  >(null);
   const [activeReceiptData, setActiveReceiptData] = useState<ReceiptData | null>(null);
   const [lastSaleToast, setLastSaleToast] = useState<string | null>(null);
   const [securityToast, setSecurityToast] = useState<{ message: string; type?: string } | null>(null);
@@ -2657,6 +2866,165 @@ export default function App() {
       window.removeEventListener('nana_open_academy', handleOpenAcademy);
       window.removeEventListener('tutorialProgressUpdated', handleProgress);
     };
+  }, []);
+
+  // Écouteur global d'ouverture des 27 modules AppRegistry & Omnibar depuis le Nouveau Dashboard (/dashboard)
+  useEffect(() => {
+    const handleAppNavigate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail || {};
+      const rawTarget = String(detail.view || detail.actionId || detail.moduleId || detail.path || '').trim();
+      const rawPath = String(detail.path || '').trim();
+      if (!rawTarget && !rawPath) return;
+
+      const official =
+        getOfficialModuleById(detail.moduleId || rawTarget) ||
+        (rawPath ? getModuleByRoute(rawPath) : undefined);
+
+      setShowWelcomeShowcase(false);
+      setIsAuthScreenExplicitlyBypassed(true);
+
+      const keyUpper = (official?.view || official?.actionId || rawTarget).toUpperCase();
+      const modId = (official?.id || detail.moduleId || rawTarget).toLowerCase();
+
+      // 1. Modales ProFeatures (RH & Caissiers, Passerelle Souveraine, Pixels CRM)
+      if (keyUpper === 'EMPLOYEE_MANAGEMENT' || modId === 'team-employees') {
+        setGlobalProFeatureTab('EMPLOYEE_MANAGEMENT');
+        return;
+      }
+      if (keyUpper === 'SOVEREIGN_GATEWAY' || modId === 'gateway' || modId === 'sovereign-gateway') {
+        setGlobalProFeatureTab('SOVEREIGN_GATEWAY');
+        return;
+      }
+      if (keyUpper === 'TRACKING_PIXELS_CRM' || keyUpper === 'TRACKING_CRM' || modId === 'pixels-crm' || modId === 'tracking-pixels') {
+        setGlobalProFeatureTab('TRACKING_PIXELS_CRM');
+        return;
+      }
+
+      // 2. Modales Outils & Services Globaux (Webinaire, DocuSign, Excel, Scanner, KYC, Académie)
+      if (keyUpper === 'WEBINAR' || modId === 'webinar' || modId === 'live-webinar' || rawPath === '/dashboard/lives' || rawPath === '/webinar') {
+        setIsGlobalWebinarModalOpen(true);
+        return;
+      }
+      if (keyUpper === 'DOCUSIGN' || modId === 'docusign' || modId === 'docusign-hub' || rawPath === '/dashboard/docusign' || rawPath === '/docusign') {
+        setIsDocuSignOpen(true);
+        return;
+      }
+      if (keyUpper === 'EXCEL_IMPORT' || modId === 'excel' || modId === 'excel-importer' || rawPath === '/dashboard/inventaire/excel' || rawPath === '/excel') {
+        setIsGlobalExcelImporterOpen(true);
+        return;
+      }
+      if (keyUpper === 'BARCODE_SCANNER' || modId === 'scanner' || modId === 'barcode-scanner' || rawPath === '/dashboard/scanner' || rawPath === '/scanner') {
+        setIsPosCameraScannerOpen(true);
+        return;
+      }
+      if (keyUpper === 'KYC_VERIFICATION' || keyUpper === 'SETTINGS_KYC' || modId === 'kyc' || modId === 'kyc-chain' || rawPath === '/dashboard/kyc' || rawPath === '/kyc') {
+        setIsKycModalOpen(true);
+        return;
+      }
+      if (keyUpper === 'ACADEMY' || modId === 'nana-academy') {
+        setActiveAcademyTutorialId('tuto-1-gmail-signup');
+        setIsAcademyDrawerOpen(true);
+        return;
+      }
+
+      // 3. Vues Plein Écran & Applications
+      if (keyUpper === 'ACADEMIC_UPLOAD' || modId === 'vendor-upload' || rawPath === '/academic/upload') {
+        setCurrentView('ACADEMIC_UPLOAD');
+        return;
+      }
+      if (keyUpper === 'POS' || modId === 'pos' || modId === 'caisse-pos') {
+        setCurrentView('POS');
+        return;
+      }
+      if (keyUpper === 'STUDIO' || keyUpper === 'BOUTIQUE' || modId === 'studio' || modId === 'theme-builder' || modId === 'vitrine-eshop' || modId === 'theme-builder-studio') {
+        setCurrentView('STUDIO');
+        return;
+      }
+      if (keyUpper === 'AI_STUDIO' || keyUpper === 'APPS_NANAGENERATOR' || modId === 'nanagenerator' || modId === 'studio-ia') {
+        setCurrentView('AI_STUDIO');
+        return;
+      }
+      if (keyUpper === 'AI_ADVISOR' || modId === 'ai-advisor' || modId === 'ai-gemini') {
+        setCurrentView('AI_ADVISOR');
+        return;
+      }
+      if (keyUpper === 'ULTIMATE_FUNNEL' || modId === 'ultimate-funnel' || modId === 'funnel-builder' || modId === 'ultimate-funnel-builder') {
+        setCurrentView('ULTIMATE_FUNNEL');
+        return;
+      }
+      if (keyUpper === 'MODULAR_FUNNEL' || modId === 'modular-funnel' || modId === 'modular-funnel-builder') {
+        setCurrentView('MODULAR_FUNNEL');
+        return;
+      }
+      if (keyUpper === 'PHYSICAL_FUNNEL' || modId === 'deal-builder' || modId === 'physical-funnel' || modId === 'public-deal-builder') {
+        setCurrentView('PHYSICAL_FUNNEL');
+        return;
+      }
+      if (keyUpper === 'COURSE_CREATE' || modId === 'cours-forge' || modId === 'course-forge') {
+        setIsInstructorView(true);
+        setCurrentView('COURSE_CREATE');
+        return;
+      }
+      if (keyUpper === 'INSTRUCTOR' || modId === 'course-create' || modId === 'instructor' || modId === 'instructor-hub') {
+        setIsInstructorView(true);
+        setCurrentView('teacher_dashboard');
+        return;
+      }
+      if (keyUpper === 'CAMPUS' || modId === 'academy-support' || modId === 'campus' || modId === 'lms-academy') {
+        setIsStudentDashboardView(true);
+        setCurrentView('CAMPUS');
+        return;
+      }
+      if (keyUpper === 'CATALOG' || modId === 'lms-marketplace') {
+        setIsCatalogView(true);
+        setCurrentView('CATALOG');
+        return;
+      }
+      if (keyUpper === 'CERTIFICATE' || modId === 'certificate-hub') {
+        setIsCertificateView(true);
+        setCurrentView('CERTIFICATE');
+        return;
+      }
+      if (keyUpper === 'MARKET_DIRECTORY' || keyUpper === 'NANAMARKET' || modId === 'nanamarket' || modId === 'nana-market') {
+        setCurrentView('MARKET_DIRECTORY');
+        return;
+      }
+      if (keyUpper === 'CV_CREATOR' || keyUpper === 'CVPRO' || modId === 'cvpro' || modId === 'cv-pro') {
+        setCurrentView('CV_CREATOR');
+        return;
+      }
+      if (keyUpper === 'EMAILING' || modId === 'emailing' || modId === 'marketing-campaigns') {
+        setCurrentView('EMAILING');
+        return;
+      }
+      if (keyUpper === 'PARTNER' || modId === 'partner' || modId === 'partners-affiliate') {
+        setCurrentView('PARTNER');
+        return;
+      }
+      if (keyUpper === 'INVENTORY' || modId === 'inventory' || modId === 'inventory-stock') {
+        setCurrentView('INVENTORY');
+        return;
+      }
+      if (keyUpper === 'DEBT_BOOK' || keyUpper === 'CUSTOMERS' || modId === 'debts' || modId === 'debt-book') {
+        setCurrentView('DEBT_BOOK');
+        return;
+      }
+      if (keyUpper === 'REPORTS' || keyUpper === 'ANALYTICS' || modId === 'analytics' || modId === 'reports-analytics') {
+        setCurrentView('REPORTS');
+        return;
+      }
+      if (keyUpper === 'CUSTOMER_ORDERS' || keyUpper === 'DELIVERY' || modId === 'customer-orders' || modId === 'orders-quotes' || modId === 'delivery-heatmap' || rawPath === '/dashboard/commandes') {
+        setCurrentView('CUSTOMER_ORDERS');
+        return;
+      }
+      if (keyUpper === 'NANA_SWITCH_APP' || keyUpper === 'MASTER_HUB' || keyUpper === 'DASHBOARD' || rawPath === '/dashboard') {
+        setCurrentView('NANA_SWITCH_APP');
+        return;
+      }
+    };
+
+    window.addEventListener('app_navigate', handleAppNavigate);
+    return () => window.removeEventListener('app_navigate', handleAppNavigate);
   }, []);
  
   // Déclenchement automatique du nettoyage SMS dès l'ouverture d'une modale de paiement
@@ -2797,9 +3165,9 @@ export default function App() {
       return;
     }
 
-    // 2. Redirection obligatoire vers le Tableau de Bord Caméléon Central (/dashboard) — JAMAIS vers la Caisse Physique (POS) !
+    // 2. Redirection obligatoire vers le Nouveau Tableau de Bord Général (/dashboard) — JAMAIS vers la Caisse Physique (POS) !
     setIsInstructorView(false);
-    setCurrentView('MASTER_HUB');
+    setCurrentView('NANA_SWITCH_APP');
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/dashboard');
     }
@@ -2888,7 +3256,7 @@ export default function App() {
     };
     setCurrentUser(demoUser);
     setIsInstructorView(false);
-    setCurrentView('MASTER_HUB');
+    setCurrentView('NANA_SWITCH_APP');
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/dashboard');
     }
@@ -4876,7 +5244,7 @@ export default function App() {
               });
             }
             setIsInstructorView(false);
-            setCurrentView('MASTER_HUB');
+            setCurrentView('NANA_SWITCH_APP');
             if (typeof window !== 'undefined') {
               window.history.pushState({}, '', '/dashboard');
             }
@@ -4929,17 +5297,9 @@ export default function App() {
             initialTab={currentView === 'COURSE_CREATE' || currentView === 'course_create' ? 'COURSE_CREATE' : 'DASHBOARD'}
             onBack={() => {
               setIsInstructorView(false);
-              if (currentUser) {
-                setCurrentView('MASTER_HUB');
-                if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/dashboard');
-                }
-              } else {
-                setCurrentView('HOME');
-                setShowWelcomeShowcase(true);
-                if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/');
-                }
+              setCurrentView('NANA_SWITCH_APP');
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', '/dashboard');
               }
             }}
             onNavigateModule={(moduleKey) => {
@@ -5007,14 +5367,14 @@ export default function App() {
           <CRMDashboard
             onBackToPOS={() => {
               setIsCrmDashboardView(false);
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/dashboard');
               }
             }}
             onClose={() => {
               setIsCrmDashboardView(false);
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/dashboard');
               }
@@ -5039,9 +5399,9 @@ export default function App() {
               }
             }}
             onBackToHome={() => {
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/');
+                window.history.pushState({}, '', '/dashboard');
                 window.dispatchEvent(new PopStateEvent('popstate'));
               }
             }}
@@ -5098,9 +5458,9 @@ export default function App() {
             }}
             onBackToApp={() => {
               setIsStudentDashboardView(false);
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/');
+                window.history.pushState({}, '', '/dashboard');
               }
             }}
           />
@@ -5116,10 +5476,9 @@ export default function App() {
       <ClassroomErrorBoundary
         onBackToStore={() => {
           setPublicClassroomId(null);
-          setIsInstructorView(true);
-          setCurrentView('INSTRUCTOR');
+          setCurrentView('NANA_SWITCH_APP');
           if (typeof window !== 'undefined') {
-            window.history.pushState({}, '', '/instructor');
+            window.history.pushState({}, '', '/dashboard');
           }
         }}
         onBackToCourse={() => {
@@ -5146,10 +5505,9 @@ export default function App() {
             }}
             onBackToStore={() => {
               setPublicClassroomId(null);
-              setIsInstructorView(true);
-              setCurrentView('INSTRUCTOR');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/instructor');
+                window.history.pushState({}, '', '/dashboard');
               }
             }}
           />
@@ -5179,13 +5537,13 @@ export default function App() {
           onFinish={() => {
             setPublicArenaId(null);
             if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', '/dashboard');
             }
           }}
           onClose={() => {
             setPublicArenaId(null);
             if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', '/dashboard');
             }
           }}
         />
@@ -5201,11 +5559,9 @@ export default function App() {
           <CertificatePage
             onBack={() => {
               setIsCertificateView(false);
-              if (currentView === 'CERTIFICATE') {
-                setCurrentView('MASTER_HUB');
-              }
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/');
+                window.history.pushState({}, '', '/dashboard');
                 window.dispatchEvent(new PopStateEvent('popstate'));
               }
             }}
@@ -5235,8 +5591,9 @@ export default function App() {
           }}
           onBackToApp={() => {
             setIsCatalogView(false);
+            setCurrentView('NANA_SWITCH_APP');
             if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', '/dashboard');
             }
           }}
         />
@@ -5277,7 +5634,7 @@ export default function App() {
           onBackToStore={() => {
             setIsCheckoutReturn(false);
             if (typeof window !== 'undefined') {
-              window.location.href = '/';
+              window.location.href = '/dashboard';
             }
           }}
         />
@@ -5310,9 +5667,9 @@ export default function App() {
       <React.Suspense fallback={<LazyModuleFallback label="Chargement du Programme Partenaire..." />}>
         <PartnerProgramLandingView
           onBack={() => {
-            setCurrentView('HOME');
+            setCurrentView('NANA_SWITCH_APP');
             if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', '/dashboard');
             }
           }}
           onRegisterPartner={() => {
@@ -5347,23 +5704,23 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                setCurrentView('HOME');
+                setCurrentView('NANA_SWITCH_APP');
                 if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/');
+                  window.history.pushState({}, '', '/dashboard');
                 }
               }}
               className="mb-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition cursor-pointer"
             >
-              <span>← Retour à l'accueil</span>
+              <span>← Retour au Tableau de Bord</span>
             </button>
             <AffiliateDashboardModal
               isOpen={true}
               isModal={false}
               currentUser={currentUser}
               onClose={() => {
-                setCurrentView('HOME');
+                setCurrentView('NANA_SWITCH_APP');
                 if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/');
+                  window.history.pushState({}, '', '/dashboard');
                 }
               }}
             />
@@ -5382,10 +5739,9 @@ export default function App() {
             isOpen={true}
             isModal={false}
             onClose={() => {
-              setCurrentView('HOME');
-              setShowWelcomeShowcase(true);
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/');
+                window.history.pushState({}, '', '/dashboard');
               }
             }}
             storeName="Nana Studio Démo"
@@ -5402,14 +5758,9 @@ export default function App() {
       <React.Suspense fallback={<LazyModuleFallback label="Chargement de NaNa Market..." />}>
         <MarketDirectory
           onNavigateHome={() => {
-            if (currentUser) {
-              setCurrentView('MASTER_HUB');
-            } else {
-              setCurrentView('HOME');
-              setShowWelcomeShowcase(true);
-            }
+            setCurrentView('NANA_SWITCH_APP');
             if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
+              window.history.pushState({}, '', '/dashboard');
             }
           }}
           onOpenStore={(storeId) => {
@@ -5463,7 +5814,7 @@ export default function App() {
               window.history.pushState({}, '', '/dashboard');
             }
             setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
-            setCurrentView('MASTER_HUB');
+            setCurrentView('NANA_SWITCH_APP');
           }}
         />
       </React.Suspense>
@@ -5487,10 +5838,10 @@ export default function App() {
             type="button"
             onClick={() => {
               if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/');
+                window.history.pushState({}, '', '/dashboard');
                 window.dispatchEvent(new PopStateEvent('popstate'));
               }
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
             }}
             className="px-5 py-2.5 bg-[#4169E1] hover:bg-blue-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-[#4169E1]/30 transition active:scale-95 cursor-pointer"
           >
@@ -5515,7 +5866,10 @@ export default function App() {
       <ModuleErrorBoundary moduleName="Administration - Control Plane Super Admin">
         <React.Suspense fallback={<LazyModuleFallback label="Chargement Control Plane Super Admin..." />}>
           <ControlPlaneRouter
-            onExitToMerchant={() => setCurrentView('MASTER_HUB')}
+            onExitToMerchant={() => {
+              setCurrentView('NANA_SWITCH_APP');
+              if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+            }}
             currentUser={currentUser}
           />
         </React.Suspense>
@@ -5550,7 +5904,7 @@ export default function App() {
           <NaNaSwitchLandingPage 
             onNavigate={(path) => {
               if (path === '/dashboard' || (path.startsWith('/dashboard') && path !== '/dashboard/nanaswitch')) {
-                setCurrentView('MASTER_HUB');
+                setCurrentView('NANA_SWITCH_APP');
                 window.history.pushState({}, '', path);
               } else if (
                 path.startsWith('/nana-switch') ||
@@ -5570,7 +5924,7 @@ export default function App() {
     );
   }
 
-  // 1cc. NaNaSwitch Partenaires B2B App : Application modulaire & multi-tenant B2B (/nana-switch/apps, /nana-switch/merchant, /app/nanaswitch, /dashboard/nanaswitch, /nana-switch-app)
+  // 1cc. NaNaSwitch Partenaires B2B App : Console Développeurs (/nana-switch/connectors, /nana-switch/byok, etc.)
   if (
     currentView === 'NANA_SWITCH_APP' ||
     currentView === 'nana_switch_app'
@@ -5599,15 +5953,6 @@ export default function App() {
         </ModuleErrorBoundary>
       );
     }
-
-    // Affiche le Tableau de bord marchand NanaSwitchApp (cloné et unifié sur /dashboard)
-    return (
-      <ModuleErrorBoundary moduleName="NaNaSwitch - Application Partenaire">
-        <React.Suspense fallback={<LoadingScreen message="Connexion à NanaSwitch App..." />}>
-          <NanaSwitchApp onBack={() => { setCurrentView('MASTER_HUB'); window.history.pushState({}, '', '/hub'); }} />
-        </React.Suspense>
-      </ModuleErrorBoundary>
-    );
   }
 
   // 1cc-wallet. nanawallet : Écran d'Accueil & Dashboard Portefeuille Mobile Hybride (/wallet, /nanawallet)
@@ -5622,8 +5967,8 @@ export default function App() {
         <React.Suspense fallback={<LoadingScreen message="Chargement de nanawallet..." />}>
           <NanaWalletHome 
             onBackToHub={() => {
-              setCurrentView('MASTER_HUB');
-              window.history.pushState({}, '', '/');
+              setCurrentView('NANA_SWITCH_APP');
+              window.history.pushState({}, '', '/dashboard');
             }}
           />
         </React.Suspense>
@@ -5679,7 +6024,7 @@ export default function App() {
               }
             }}
             onBackToDashboard={() => {
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/dashboard');
               }
@@ -5724,7 +6069,7 @@ export default function App() {
               }}
               onBackToHome={() => {
                 if (currentUser) {
-                  setCurrentView('MASTER_HUB');
+                  setCurrentView('NANA_SWITCH_APP');
                   if (typeof window !== 'undefined') {
                     window.history.pushState({}, '', '/dashboard');
                   }
@@ -5814,18 +6159,25 @@ export default function App() {
         <SecretAdminAccessModal
           isOpen={isSecretAdminModalOpen}
           onClose={() => setIsSecretAdminModalOpen(false)}
-          onSuccess={() => {
-            setIsSecretAdminModalOpen(false);
-            setCurrentView('SAAS_ADMIN');
-          }}
+          onSuccess={handleSecretAdminSuccess}
         />
         {renderGlobalAssistantAndAcademy('HOME')}
       </React.Suspense>
     );
   }
 
-  // 2. Écran de Connexion / Inscription Firebase Auth
-  if (!currentUser && !isAuthScreenExplicitlyBypassed) {
+  // 2. Écran de Connexion / Inscription Supabase Auth Officiel
+  if (
+    !currentUser &&
+    (
+      isEmailAuthScreenOpen ||
+      currentView === 'AUTH' ||
+      currentView === 'auth' ||
+      (!isAuthScreenExplicitlyBypassed && !publicBoutiqueParams.isBoutique)
+    ) &&
+    currentView !== 'ACADEMIC_UPLOAD' &&
+    currentView !== 'academic_upload'
+  ) {
     return (
       <React.Suspense fallback={<LoadingScreen message="Connexion à l'authentification..." />}>
         <WelcomeAuthScreen
@@ -5842,10 +6194,7 @@ export default function App() {
         <SecretAdminAccessModal
           isOpen={isSecretAdminModalOpen}
           onClose={() => setIsSecretAdminModalOpen(false)}
-          onSuccess={() => {
-            setIsSecretAdminModalOpen(false);
-            setCurrentView('SAAS_ADMIN');
-          }}
+          onSuccess={handleSecretAdminSuccess}
         />
         {renderGlobalAssistantAndAcademy('AUTH')}
       </React.Suspense>
@@ -5858,7 +6207,10 @@ export default function App() {
       <ModuleErrorBoundary moduleName="Paramètres - Extensions & Intégrations">
         <React.Suspense fallback={<LazyModuleFallback label="Chargement Paramètres & Extensions..." />}>
           <SettingsExtensionsView
-            onBackToPOS={() => setCurrentView('MASTER_HUB')}
+            onBackToPOS={() => {
+              setCurrentView('NANA_SWITCH_APP');
+              if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+            }}
             inventory={inventory}
             customers={customers}
             currentUser={currentUser}
@@ -5973,10 +6325,13 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCurrentView('MASTER_HUB')}
+                      onClick={() => {
+                        setCurrentView('NANA_SWITCH_APP');
+                        if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                      }}
                       className="w-full py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm border border-slate-700 transition-all cursor-pointer"
                     >
-                      Retour au Hub Master
+                      Retour au Tableau de Bord
                     </button>
                   </div>
                 </div>
@@ -6001,7 +6356,10 @@ export default function App() {
                     onOpenDocuSign={() => handleOpenDocuSign('Document Commercial')}
                     onOpenQuotesProjects={() => setCurrentView('QUOTES_PROJECTS')}
                     onOpenCvCreator={() => setCurrentView('CV_CREATOR')}
-                    onOpenReports={() => setCurrentView('MASTER_HUB')}
+                    onOpenReports={() => {
+                      setCurrentView('NANA_SWITCH_APP');
+                      if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                    }}
                     onOpenCompta={() => requireManagerAuth(() => setCurrentView('REPORTS'), 'Comptabilité & Rapports', 'Compta')}
                     onOpenInventory={() => setCurrentView('INVENTORY')}
                     onOpenVoiceTest={() => setCurrentView('VOICE_TEST')}
@@ -6130,7 +6488,10 @@ export default function App() {
                   onOpenDocuSign={() => handleOpenDocuSign('Document Commercial')}
                   onOpenQuotesProjects={() => setCurrentView('QUOTES_PROJECTS')}
                   onOpenCvCreator={() => setCurrentView('CV_CREATOR')}
-                  onOpenReports={() => setCurrentView('MASTER_HUB')}
+                  onOpenReports={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                   onOpenCompta={() => requireManagerAuth(() => setCurrentView('REPORTS'), 'Comptabilité & Rapports', 'Compta')}
                   onOpenInventory={() => setCurrentView('INVENTORY')}
                   onOpenVoiceTest={() => setCurrentView('VOICE_TEST')}
@@ -6219,7 +6580,8 @@ export default function App() {
                   initialCustomerId={selectedDebtCustomerId}
                   onBackToRegister={() => {
                     setSelectedDebtCustomerId(null);
-                    setCurrentView('MASTER_HUB');
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
                   }}
                   onRecordPayment={handleRecordPayment}
                   onAddCustomerDebt={handleAddCustomerDebt}
@@ -6237,7 +6599,10 @@ export default function App() {
                   inventory={inventory}
                   losses={losses}
                   sellers={sellers}
-                  onBackToRegister={() => setCurrentView('MASTER_HUB')}
+                  onBackToRegister={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                   onRecordLoss={handleRecordLoss}
                   onPrintSaleReceipt={handleOpenReceiptFromSale}
                 />
@@ -6255,7 +6620,10 @@ export default function App() {
                     handleAddToCartFromVoice(items);
                     setCurrentView('POS');
                   }}
-                  onBackToRegister={() => setCurrentView('MASTER_HUB')}
+                  onBackToRegister={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                 />
               </React.Suspense>
             </ModuleErrorBoundary>
@@ -6270,7 +6638,10 @@ export default function App() {
                   customers={customers}
                   sales={salesHistory}
                   losses={losses}
-                  onBackToRegister={() => setCurrentView('MASTER_HUB')}
+                  onBackToRegister={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                   onOpenInventory={() => {
                     setCurrentView('INVENTORY');
                   }}
@@ -6296,7 +6667,10 @@ export default function App() {
                   isCashierMode={isCashierMode}
                   storeId={getCurrentStoreId()}
                   onRequireManagerAuth={requireManagerAuth}
-                  onBackToRegister={() => setCurrentView('MASTER_HUB')}
+                  onBackToRegister={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                   onRestockProduct={handleRestockProduct}
                   onReconcileStock={handleReconcileStock}
                   onAddNewProduct={handleAddNewProduct}
@@ -6320,7 +6694,10 @@ export default function App() {
                   inventory={inventory}
                   customers={customers}
                   currentUser={currentUser}
-                  onBackToRegister={() => setCurrentView('MASTER_HUB')}
+                  onBackToRegister={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
                   onSaveOrder={handleSaveCustomerOrder}
                   onDeleteOrder={handleDeleteCustomerOrder}
                   onLoadOrderIntoCart={handleLoadOrderIntoCart}
@@ -6351,13 +6728,13 @@ export default function App() {
                     setIsPaywallModalOpen(true);
                   }}
                   onBack={() => {
-                    setCurrentView('MASTER_HUB');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
                       window.history.pushState({}, '', '/dashboard');
                     }
                   }}
                   onBackToHome={() => {
-                    setCurrentView('MASTER_HUB');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
                       window.history.pushState({}, '', '/dashboard');
                     }
@@ -6369,7 +6746,7 @@ export default function App() {
                     }
                   }}
                   onBackToHub={() => {
-                    setCurrentView('MASTER_HUB');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
                       window.history.pushState({}, '', '/dashboard');
                     }
@@ -6422,7 +6799,7 @@ export default function App() {
                     });
                   }}
                   onBackToDashboard={() => {
-                    setCurrentView('MASTER_HUB');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
                       window.history.pushState({}, '', '/dashboard');
                     }
@@ -6438,10 +6815,9 @@ export default function App() {
               <React.Suspense fallback={<LazyModuleFallback label="Chargement Devis & Projets..." />}>
                 <EscrowQuotesView
                   onBackToPOS={() => {
-                    setIsInstructorView(true);
-                    setCurrentView('INSTRUCTOR');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
-                      window.history.pushState({}, '', '/instructor');
+                      window.history.pushState({}, '', '/dashboard');
                     }
                   }}
                   currentUser={currentUser}
@@ -6457,10 +6833,9 @@ export default function App() {
               <React.Suspense fallback={<LazyModuleFallback label="Chargement CV Pro..." />}>
                 <ResumeBuilderView
                   onBackToPOS={() => {
-                    setIsInstructorView(true);
-                    setCurrentView('INSTRUCTOR');
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
-                      window.history.pushState({}, '', '/instructor');
+                      window.history.pushState({}, '', '/dashboard');
                     }
                   }}
                   currentUser={currentUser}
@@ -6479,9 +6854,9 @@ export default function App() {
                     isOpen={true}
                     isModal={false}
                     onClose={() => {
-                      setCurrentView('MASTER_HUB');
+                      setCurrentView('NANA_SWITCH_APP');
                       if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/');
+                        window.history.pushState({}, '', '/dashboard');
                       }
                     }}
                     storeName={currentUser?.storeName || 'Votre Entreprise'}
@@ -6500,24 +6875,24 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        setCurrentView('MASTER_HUB');
+                        setCurrentView('NANA_SWITCH_APP');
                         if (typeof window !== 'undefined') {
-                          window.history.pushState({}, '', '/');
+                          window.history.pushState({}, '', '/dashboard');
                         }
                       }}
                       className="mb-4 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-bold transition cursor-pointer"
                     >
                       <ArrowLeft className="w-4 h-4 text-emerald-400" />
-                      <span>← Retour au Hub Principal</span>
+                      <span>← Retour au Tableau de Bord</span>
                     </button>
                     <AffiliateDashboardModal
                       isOpen={true}
                       isModal={false}
                       currentUser={currentUser}
                       onClose={() => {
-                        setCurrentView('MASTER_HUB');
+                        setCurrentView('NANA_SWITCH_APP');
                         if (typeof window !== 'undefined') {
-                          window.history.pushState({}, '', '/');
+                          window.history.pushState({}, '', '/dashboard');
                         }
                       }}
                     />
@@ -6548,9 +6923,9 @@ export default function App() {
                     }}
                     sourceType="product"
                     onClose={() => {
-                      setCurrentView('MASTER_HUB');
+                      setCurrentView('NANA_SWITCH_APP');
                       if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/');
+                        window.history.pushState({}, '', '/dashboard');
                       }
                     }}
                     onSave={(savedPayload: any) => {
@@ -6565,17 +6940,17 @@ export default function App() {
             </ModuleErrorBoundary>
           )}
 
-          {/* VIEW 2 : Caisse Express 1-Clic (Produits Physiques) */}
-          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel') && (
+          {/* VIEW 2 & 3 : Constructeur Officiel Unifié - Caisse Express 1-Clic & Tunnels Physiques */}
+          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel' || currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
             <ModuleErrorBoundary moduleName="Tunnels - Caisse Express 1-Clic">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement de Caisse Express..." />}>
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Constructeur de Tunnels..." />}>
                 <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden flex flex-col p-2 sm:p-4">
                   <PhysicalFunnelBuilder
                     className="h-full"
                     onClose={() => {
-                      setCurrentView('MASTER_HUB');
+                      setCurrentView('NANA_SWITCH_APP');
                       if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/');
+                        window.history.pushState({}, '', '/dashboard');
                       }
                     }}
                     onSave={(savedPayload: any) => {
@@ -6595,70 +6970,56 @@ export default function App() {
             </ModuleErrorBoundary>
           )}
 
-          {/* VIEW 3 : NaNa Studio 3.0 (Tunnel Modulaire Divi) */}
-          {(currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
-            <ModuleErrorBoundary moduleName="Tunnels - Studio Modulaire Divi">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement de NaNa Funnel Studio 3.0..." />}>
-                <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden">
-                  <FunnelBuilder
-                    isOpen={true}
-                    isPublicView={false}
-                    product={inventory[0] ? {
-                      id: inventory[0].id || 'prod-nana-1',
-                      name: inventory[0].name || (currentUser?.storeName ? `Offre ${currentUser.storeName}` : 'Produit Phare NaNa Store'),
-                      price: inventory[0].sellingPrice || 25000,
-                      originalPrice: Math.round((inventory[0].sellingPrice || 25000) * 1.4),
-                      image: inventory[0].photoUrl || (inventory[0] as any)?.image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
-                      description: inventory[0].description || 'Tunnel de vente modulaire haute conversion avec sections Divi et Toolbox Pro.'
-                    } : null}
-                    onClose={() => {
-                      setCurrentView('MASTER_HUB');
-                      if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/');
-                      }
-                    }}
-                    onSave={(savedPayload: any) => {
-                      if (savedPayload) {
-                        saveFunnelConfig(savedPayload);
-                      }
-                      playValidationBeep();
-                    }}
-                  />
-                </div>
-              </React.Suspense>
-            </ModuleErrorBoundary>
-          )}
-
           {(currentView === 'EMAILING' || currentView === 'emailing') && (
             <ModuleErrorBoundary moduleName="Studio Emailing">
               <React.Suspense fallback={<LazyModuleFallback label="Chargement du Studio E-mailing..." />}>
                 <div className="fixed inset-0 z-50 bg-[#FBF9F5] overflow-y-auto">
+                  <div className="sticky top-0 z-50 bg-[#0B0F17]/95 backdrop-blur border-b border-slate-800 px-4 py-2.5 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentView('NANA_SWITCH_APP');
+                        if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>← Retour au Tableau de Bord</span>
+                    </button>
+                    <span className="text-xs font-bold text-slate-400">Studio E-mailing & Automation</span>
+                  </div>
                   <TenantEmailingDashboardPage />
                 </div>
               </React.Suspense>
             </ModuleErrorBoundary>
           )}
 
-          {currentView === 'MASTER_HUB' && (
-            /* View: Hub Central Master (ENTREPRISE KONKOBO POUSBILA) */
-            <ModuleErrorBoundary moduleName="Hub Central - Direction Générale">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Hub Master..." />}>
-                <CentralMasterHubView
-                  currentUser={currentUser}
-                  subscription={subscription}
-                  onOpenUpgrade={(planId?: string) => {
-                    setSelectedCheckoutPlanId(planId || 'starter');
-                    setIsPaywallModalOpen(true);
-                  }}
-                  onOpenAcademy={() => setIsAcademyDrawerOpen(true)}
-                  sales={salesHistory}
-                  inventory={inventory}
-                  customers={customers}
-                  customerOrders={customerOrders}
-                  onNavigateToCatalog={() => {
-                    setIsCatalogView(true);
+          {(currentView === 'NANA_SWITCH_APP' || currentView === 'nana_switch_app' || currentView === 'MASTER_HUB') && (
+            /* View: Nouveau Tableau de Bord Général Unifié (/dashboard) connecté à AppRegistry */
+            <ModuleErrorBoundary moduleName="Nouveau Tableau de Bord - NanaSwitch & AppRegistry">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Nouveau Tableau de Bord..." />}>
+                <NanaSwitchApp
+                  onBack={() => {
+                    setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
-                      window.history.pushState({}, '', '/catalog');
+                      window.history.pushState({}, '', '/dashboard');
+                    }
+                  }}
+                />
+              </React.Suspense>
+            </ModuleErrorBoundary>
+          )}
+
+          {(currentView === 'ACADEMIC_UPLOAD' || currentView === 'academic_upload') && (
+            /* View: Module Envoi Cours, Devoirs & Catalogue (vendor-upload) */
+            <ModuleErrorBoundary moduleName="Envoi Cours, Devoirs & Catalogue">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du module d'envoi..." />}>
+                <AcademicUploadView
+                  currentUser={currentUser}
+                  onBack={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') {
+                      window.history.pushState({}, '', '/dashboard');
                     }
                   }}
                   onNavigate={(v: AppView | string) => {
@@ -6991,7 +7352,7 @@ export default function App() {
           )}
 
           {/* View: Application Autonome PWA (/dashboard/apps/:appId) */}
-          {(currentView === 'STANDALONE_APP' || (currentStandaloneAppId && currentView !== 'MASTER_HUB')) && (
+          {(currentView === 'STANDALONE_APP' || (currentStandaloneAppId && currentView !== 'NANA_SWITCH_APP' && currentView !== 'nana_switch_app' && currentView !== 'MASTER_HUB')) && (
             <ModuleErrorBoundary moduleName={`Mini-App PWA - ${currentStandaloneAppId || 'app'}`}>
               <React.Suspense fallback={<LazyModuleFallback label="Chargement de l'application..." />}>
                 <StandaloneAppHost
@@ -7013,28 +7374,25 @@ export default function App() {
         </div>
       </main>
 
-      {/* Global Bottom Navigation Tab Bar (Accès direct 1-clic aux vues de l'app) */}
+      {/* Global Bottom Navigation Tab Bar (Accès direct 1-clic aux vues de l'app hors Dashboard principal) */}
+      {currentView !== 'NANA_SWITCH_APP' && currentView !== 'nana_switch_app' && currentView !== 'MASTER_HUB' && (
         <nav
           aria-label="Navigation principale"
           className="h-14 shrink-0 bg-[#0d1527] border-t border-slate-800 flex items-center justify-start sm:justify-center px-3 sm:px-4 gap-2 sm:gap-4 md:gap-6 overflow-x-auto overflow-y-hidden z-40 select-none scroll-smooth touch-pan-x overscroll-x-contain no-scrollbar shadow-[0_-4px_16px_rgba(0,0,0,0.5)]"
         >
-          {/* Onglet Hub Master Central (Tableau de Bord Caméléon) */}
+          {/* Onglet Nouveau Tableau de Bord (/dashboard) */}
           <button
             id="tab-nav-master-hub"
             type="button"
             onClick={() => {
               playTapBeep();
-              setCurrentView('MASTER_HUB');
+              setCurrentView('NANA_SWITCH_APP');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/dashboard');
               }
             }}
-            className={`shrink-0 min-w-[56px] min-h-[44px] py-1 px-1.5 flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all active:scale-95 touch-manipulation cursor-pointer ${
-              currentView === 'MASTER_HUB'
-                ? 'text-blue-400 font-bold bg-blue-950/50 border border-blue-500/40 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 font-medium'
-            }`}
-            title="Tableau de Bord Central (QG)"
+            className="shrink-0 min-w-[56px] min-h-[44px] py-1 px-1.5 flex flex-col items-center justify-center gap-0.5 rounded-xl transition-all active:scale-95 touch-manipulation cursor-pointer text-blue-400 hover:text-blue-300 font-bold bg-blue-950/40 border border-blue-500/30 shadow-xs"
+            title="Retour au Nouveau Tableau de Bord (/dashboard)"
           >
             <LayoutGrid className="w-4 h-4 shrink-0" />
             <span className="text-[10px] tracking-tight font-semibold">Tableau de Bord</span>
@@ -7340,6 +7698,7 @@ export default function App() {
             </>
           )}
         </nav>
+      )}
 
         {/* Modal: Paiement Cash */}
         <CashPaymentModal
@@ -7581,6 +7940,19 @@ export default function App() {
           </React.Suspense>
         )}
 
+        {/* Modal Fonctionnalités Pro & Souveraines (Gestion Équipe, Passerelle Souveraine, Tracking Pixels CRM) */}
+        {globalProFeatureTab && (
+          <React.Suspense fallback={<LazyModalFallback label="Chargement du module Pro..." />}>
+            <ProFeaturesModal
+              isOpen={Boolean(globalProFeatureTab)}
+              initialTab={globalProFeatureTab}
+              onClose={() => setGlobalProFeatureTab(null)}
+              currentUser={currentUser}
+              subscription={subscription}
+            />
+          </React.Suspense>
+        )}
+
         {/* Modal de Verrouillage Sécurisé PIN 4 Chiffres (Sas de sécurité & déverrouillage) */}
         {currentUser && (
           <PinKeypadModal
@@ -7623,10 +7995,7 @@ export default function App() {
             <SecretAdminAccessModal
               isOpen={isSecretAdminModalOpen}
               onClose={() => setIsSecretAdminModalOpen(false)}
-              onSuccess={() => {
-                setIsSecretAdminModalOpen(false);
-                setCurrentView('SAAS_ADMIN');
-              }}
+              onSuccess={handleSecretAdminSuccess}
             />
           </React.Suspense>
         )}

@@ -160,10 +160,10 @@ export async function apiProcessMobileMoneyPayment(payload: WebhookPaymentPayloa
     try {
       if (db) {
         await setDoc(doc(collection(db, 'transactions'), txId), txRecord);
-        console.log(`[FIRESTORE] Transaction consignée avec succès dans 'transactions' : ${txId}`);
+        console.log(`[storage] Transaction consignée avec succès dans 'transactions' : ${txId}`);
       }
     } catch (dbErr) {
-      console.warn('[FIRESTORE] Erreur écriture transactions Firestore :', dbErr);
+      console.warn('[storage] Erreur écriture transactions storage :', dbErr);
     }
 
     try {

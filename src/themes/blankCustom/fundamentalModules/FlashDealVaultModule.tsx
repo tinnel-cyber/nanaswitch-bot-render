@@ -4,6 +4,7 @@ import { CustomSectionInstance } from '../../../types';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { MoodStyleConfig } from '../moodStyles';
 import { AdminProductQuickBar } from '../../../components/storeBuilder/AdminProductQuickBar';
+import { LiveEditable } from '../../../components/storeBuilder/LiveEditable';
 import { triggerOpenFunnel } from '../../themeUtils';
 import { playTapBeep } from '../../../utils/audio';
 
@@ -158,13 +159,30 @@ const DEMO_FLASH_PRODUCT: StoreProductItem = {
             {/* Colonne Droite : Offre, Compte à Rebours, Jauge & Conversion */}
             <div className="lg:col-span-7 space-y-6 text-left">
               <div className="space-y-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>{subtitle}</span>
-                </span>
-                <h2 className={`text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>
-                  {title}
-                </h2>
+                <LiveEditable
+                  label="Badge Vente Flash"
+                  sectionId={section.id}
+                  sectionField="subtitle"
+                  value={subtitle}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${moodStyle.accentBadge}`}>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>{subtitle}</span>
+                  </span>
+                </LiveEditable>
+                <LiveEditable
+                  label="Titre Vente Flash"
+                  sectionId={section.id}
+                  sectionField="title"
+                  value={title}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h2 className={`text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight ${moodStyle.textPrimary}`}>
+                    {title}
+                  </h2>
+                </LiveEditable>
                 <h3 className="text-lg sm:text-xl font-bold text-blue-600">
                   {targetProduct.name}
                 </h3>

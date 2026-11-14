@@ -368,7 +368,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
         localStorage.setItem('nana_store_sub', JSON.stringify(newSub));
       }
     } catch (err) {
-      console.warn('Erreur activation Plan Gratuit Firestore :', err);
+      console.warn('Erreur activation Plan Gratuit storage :', err);
     }
 
     playCashChime();
@@ -445,7 +445,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
         );
       }
     } catch (err) {
-      console.warn('Erreur mise à jour abonnement Firestore :', err);
+      console.warn('Erreur mise à jour abonnement storage :', err);
     }
 
     setPaymentSuccess(true);

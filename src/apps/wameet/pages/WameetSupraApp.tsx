@@ -670,7 +670,7 @@ export const WameetSupraApp: React.FC<WameetSupraAppProps> = ({
           }
         }
       } catch (err) {
-        console.warn('[FIRESTORE REELS LOAD]', err);
+        console.warn('[storage REELS LOAD]', err);
       }
     };
     fetchFirestoreReels();
@@ -882,9 +882,9 @@ function sanitizeForFirestore(obj: any): any {
         });
 
         setDoc(doc(collection(db, 'wameet_reels'), newReel.id), sanitizedDoc)
-          .catch((err) => console.warn('[FIRESTORE SAVE REEL]', err));
+          .catch((err) => console.warn('[storage SAVE REEL]', err));
       } catch (fsErr) {
-        console.warn('[FIRESTORE SYNC ERROR]', fsErr);
+        console.warn('[storage SYNC ERROR]', fsErr);
       }
 
       if (redirectToReels && mediaType === 'video') {

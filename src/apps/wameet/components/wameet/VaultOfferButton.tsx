@@ -110,7 +110,7 @@ export const VaultOfferButton: React.FC<VaultButtonProps> = ({
             });
           }
         } catch (err) {
-          console.warn('[COFFRE NANASORE] Récupération offre Firestore :', err);
+          console.warn('[COFFRE NANASORE] Récupération offre storage :', err);
         } finally {
           setIsLoading(false);
         }

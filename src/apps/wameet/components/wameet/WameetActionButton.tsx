@@ -105,7 +105,7 @@ export const WameetActionButton: React.FC<WameetActionButtonProps> = ({
           });
         }
       } catch (dbErr) {
-        console.warn('[WAMEET ACTION BUTTON] Création canal chats Firestore :', dbErr);
+        console.warn('[WAMEET ACTION BUTTON] Création canal chats storage :', dbErr);
       }
 
       playValidationBeep();

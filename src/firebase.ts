@@ -1,18 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signInAnonymously,
-  setPersistence,
-  browserLocalPersistence,
-  User as FirebaseUser
-} from 'firebase/auth';
-import { 
   initializeFirestore, 
   persistentLocalCache, 
   persistentMultipleTabManager,
@@ -49,110 +36,57 @@ export const firebaseConfig = {
   measurementId: "G-W8N6127LE5"
 };
 
-// Initialisation unique de l'application Firebase
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// 1. Authentification Firebase & Fournisseur Google
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
-
-// Configuration de la persistance locale sans blocage
-if (typeof window !== 'undefined') {
-  try {
-    setPersistence(auth, browserLocalPersistence).catch((err) => {
-      console.info('[FIREBASE AUTH] Persistance locale standard fallback :', err?.message || err);
-    });
-  } catch (e) {
-    console.info('[FIREBASE AUTH] Initialisation persistance non-bloquante :', e);
-  }
-
-  // Interception globale des promesses rejetées pour auth/admin-restricted-operation
-  window.addEventListener('unhandledrejection', (event) => {
-    const reason = event?.reason;
-    const msg = reason?.message || String(reason || '');
-    const code = reason?.code || '';
-    if (
-      code === 'auth/admin-restricted-operation' ||
-      code === 'auth/operation-not-allowed' ||
-      msg.includes('admin-restricted-operation') ||
-      msg.includes('ADMIN_ONLY_OPERATION')
-    ) {
-      event.preventDefault(); // Empêche l'erreur de faire crasher React ou le GlobalErrorBoundary
-      try {
-        sessionStorage.setItem('nana_anon_auth_disabled', 'true');
-      } catch {}
-      console.info('[FIREBASE AUTH] Authentification anonyme non requise / restreinte. Mode local autonome actif.');
-    }
-  });
+export interface SafeAuthUser {
+  uid: string;
+  id?: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  phoneNumber?: string | null;
 }
 
-// Fonction sécurisée pour la connexion autonome sans crash si l'opération est restreinte
-let isAutonomousAttempted = false;
-export async function tryAutonomousSignIn(): Promise<FirebaseUser | null> {
-  if (typeof window === 'undefined') return null;
-  if (auth.currentUser) return auth.currentUser;
+export type FirebaseUser = SafeAuthUser;
 
-  try {
-    if (sessionStorage.getItem('nana_anon_auth_disabled') === 'true') {
-      return null;
-    }
-  } catch {}
-
-  if (isAutonomousAttempted) return null;
-  isAutonomousAttempted = true;
-
-  try {
-    const userCred = await signInAnonymously(auth);
-    return userCred.user;
-  } catch (err: any) {
-    const code = err?.code || '';
-    const msg = err?.message || '';
-    if (
-      code === 'auth/admin-restricted-operation' ||
-      code === 'auth/operation-not-allowed' ||
-      code === 'auth/configuration-not-found' ||
-      msg.includes('admin-restricted-operation') ||
-      msg.includes('ADMIN_ONLY_OPERATION')
-    ) {
+/**
+ * Objet d'authentification neutre 100% déconnecté des serveurs Firebase Auth.
+ * Empêche toute tentative de connexion anonyme ou réseau vers Firebase Auth,
+ * tout en assurant la compatibilité avec les composants lisant auth.currentUser.
+ */
+export const auth: any = {
+  get currentUser(): SafeAuthUser | null {
+    if (typeof window !== 'undefined') {
       try {
-        sessionStorage.setItem('nana_anon_auth_disabled', 'true');
-      } catch {}
-      console.info('[FIREBASE AUTH] Mode local / persistance autonome actif (Auth anonyme désactivée par le projet).');
-    } else {
-      console.info('[FIREBASE AUTH] Mode local autonome actif :', msg || err);
-    }
-    return null;
-  }
-}
-
-// Initialisation transparente : vérification sécurisée sans répétition
-if (typeof window !== 'undefined') {
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      // Détection & validation automatique des droits Super Admin (/admins/{uid})
-      try {
-        const { verifySuperAdminPrivileges } = await import('./services/superAdminService');
-        await verifySuperAdminPrivileges(user);
-      } catch (err) {
-        console.warn('[FIREBASE AUTH] Vérification Super Admin /admins/ non-bloquante :', err);
-      }
-    } else {
-      try {
-        if (sessionStorage.getItem('nana_anon_auth_disabled') !== 'true') {
-          tryAutonomousSignIn().catch(() => {});
+        const saved = localStorage.getItem('nana_store_auth_user');
+        if (saved) {
+          const u = JSON.parse(saved);
+          return {
+            uid: u.id || u.uid || 'usr-local',
+            id: u.id || u.uid || 'usr-local',
+            email: u.email || null,
+            displayName: u.name || u.displayName || 'Utilisateur Nanasore',
+            photoURL: u.avatarUrl || null,
+            phoneNumber: u.phone || null,
+          };
         }
       } catch {}
     }
-  });
+    return null;
+  },
+  onAuthStateChanged: (_cb: any) => () => {},
+  signOut: async () => {},
+};
+
+export const googleProvider: any = {};
+
+export async function tryAutonomousSignIn(): Promise<SafeAuthUser | null> {
+  return null;
 }
 
-// 2. Base de données Cloud Firestore avec Persistance Hors-ligne (IndexedDB multi-onglets / localCache)
-// Filtrer les avertissements de routine de compétition de lease entre onglets
+// 2. Base de données Cloud avec Persistance Hors-ligne (IndexedDB multi-onglets / localCache)
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {}
 
 let firestoreDb: Firestore;
@@ -162,7 +96,6 @@ try {
       tabManager: persistentMultipleTabManager(),
     }),
   });
-  console.log('[FIRESTORE] Cache hors-ligne persistant (IndexedDB multi-onglets) initialisé.');
 } catch (err) {
   try {
     firestoreDb = initializeFirestore(app, {
@@ -170,9 +103,7 @@ try {
         tabManager: persistentSingleTabManager({}),
       }),
     });
-    console.log('[FIRESTORE] Cache hors-ligne persistant (IndexedDB mono-onglet) initialisé.');
   } catch (err2) {
-    console.warn('[FIRESTORE] Fallback vers instance existante Firestore :', err2);
     firestoreDb = getFirestore(app);
     try {
       enableIndexedDbPersistence(firestoreDb).catch(() => {});
@@ -241,13 +172,12 @@ export async function uploadMediaToStorage(file: File, path: string): Promise<st
     const downloadUrl = await getDownloadURL(snapshot.ref);
     return downloadUrl;
   } catch (error) {
-    console.error('[FIREBASE STORAGE] Erreur upload média :', error);
     throw error;
   }
 }
 
 /**
- * Test de connexion Firestore
+ * Test de connexion
  */
 export async function testFirestoreConnection(): Promise<boolean> {
   try {

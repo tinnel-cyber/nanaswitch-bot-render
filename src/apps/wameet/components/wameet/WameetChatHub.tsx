@@ -808,7 +808,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
       },
       err => {
         setIsSyncingMessages(false);
-        console.warn('[WAMEET CHAT] Erreur Firestore messages sync:', err);
+        console.warn('[WAMEET CHAT] Erreur storage messages sync:', err);
       }
     );
 
@@ -939,7 +939,7 @@ export const WameetChatHub: React.FC<WameetChatHubProps> = ({
       });
 
     } catch (err: any) {
-      console.warn('[WAMEET CHAT] Erreur persistance Firestore/Storage :', err);
+      console.warn('[WAMEET CHAT] Erreur persistance storage/Storage :', err);
       if (err?.message?.includes('trop longue')) {
         showToast('Vidéo trop longue pour le chat rapide. Veuillez raccourcir la vidéo.');
       }

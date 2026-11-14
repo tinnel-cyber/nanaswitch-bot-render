@@ -15,8 +15,6 @@ import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/St
 import { StoreConfig, StoreProductItem } from '../../../components/storeBuilder/types';
 import { FALLBACK_STUDIO_PRODUCTS, getDefaultCustomConfig } from '../../../components/storeBuilder/themeStudioConstants';
 import { InventoryProduct, StoreUser, StoreSubscription, KycStatus, ThemeCustomizationConfig } from '../../../types';
-import { db, auth } from '../../../firebase';
-import { doc, setDoc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { ensureMandatoryStoreSlug, ensureMandatoryProductSlug, getSafeStoreSlug } from '../../../utils/slugEngine';
@@ -366,7 +364,6 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
     if (!targetStoreId) return;
     setIsPublishing(true);
     try {
-      const storeRef = doc(db, 'stores', targetStoreId);
       const blankIndex = draftThemeConfig.blankIndex || storeConfig.blankThemeIndex || 1;
       const prefix = getThemeRoutePrefix(activeThemeId, blankIndex);
       const publicShopUrl = buildPublicShopUrl(effectiveStoreSlug, { themeId: activeThemeId, blankIndex });
@@ -388,27 +385,16 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         whatsappPhone: draftThemeConfig.whatsappNumber || storeConfig.whatsappPhone,
         logoUrl: draftThemeConfig.logoUrl || storeConfig.logoUrl,
         bannerImage: draftThemeConfig.heroBannerImageUrl || storeConfig.bannerImage,
-        updatedAt: serverTimestamp()
+        updatedAt: new Date().toISOString()
       };
 
-      await setDoc(storeRef, storePayload, { merge: true });
-
-      // Synchronisation autoritaire dans la collection 'tenants/{slug}'
-      await ensureAndPersistTenantSlug(
-        targetStoreId,
-        {
-          ...storePayload,
-          storeName: draftThemeConfig.storeName || storeConfig.storeName
-        },
-        currentUser?.uid || targetStoreId,
-        { themeId: activeThemeId, blankIndex }
-      );
-
-      // Synchronisation instantanée Supabase Realtime (app_registry & organization_blocks)
+      // 1. Publication prioritaire Supabase SQL (table public.app_registry & public.tenants)
       try {
         await supabase
           .from('app_registry')
           .upsert({
+            key: `theme_config_${targetStoreId}`,
+            name: 'theme_config',
             tenant_id: targetStoreId,
             module_key: 'theme_config',
             theme_key: activeThemeId,
@@ -426,9 +412,38 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
               updated_at: new Date().toISOString()
             },
             updated_at: new Date().toISOString()
-          }, { onConflict: 'tenant_id,module_key' });
+          }, { onConflict: 'key' });
+
+        const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetStoreId);
+        if (isStoreUUID) {
+          await supabase
+            .from('tenants')
+            .upsert({
+              id: targetStoreId,
+              name: draftThemeConfig.storeName || storeConfig.storeName,
+              slug: effectiveStoreSlug,
+              logo_url: draftThemeConfig.logoUrl || storeConfig.logoUrl,
+              primary_color: draftThemeConfig.primaryAccentColor || '#2563EB',
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' }).catch(() => {});
+        }
       } catch (sbErr) {
-        console.warn('[Studio] Notice publication Supabase app_registry:', sbErr);
+        console.warn('[Studio] Notice publication Supabase SQL:', sbErr);
+      }
+
+      // 3. Synchronisation du slug centralisé
+      try {
+        await ensureAndPersistTenantSlug(
+          targetStoreId,
+          {
+            ...storePayload,
+            storeName: draftThemeConfig.storeName || storeConfig.storeName
+          },
+          currentUser?.uid || targetStoreId,
+          { themeId: activeThemeId, blankIndex }
+        );
+      } catch (slugErr) {
+        console.warn('[Studio] Notice persistance slug :', slugErr);
       }
 
       setSavedThemeConfig(draftThemeConfig);
@@ -440,8 +455,8 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
       showToast(`✅ Vitrine publiée sur nsore.shop/${prefix}/${effectiveStoreSlug} !`);
       playValidationBeep();
     } catch (err) {
-      console.error('[Studio] Erreur publication Firestore:', err);
-      showToast('❌ Erreur lors de la publication dans Firestore');
+      console.error('[Studio] Erreur publication vitrine:', err);
+      showToast('❌ Erreur lors de la publication de la vitrine');
     } finally {
       setIsPublishing(false);
     }
@@ -452,6 +467,67 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
     setDraftThemeConfig(savedThemeConfig);
     showToast('🔄 Personnalisation réinitialisée aux valeurs sauvegardées');
   }, [savedThemeConfig, showToast]);
+
+  const handleDeleteProduct = useCallback(async (productId: string, productName: string) => {
+    try {
+      playTapBeep();
+      const updated = studioCustomProducts.filter(p => p.id !== productId);
+      setStudioCustomProducts(updated);
+
+      const customKey = `nana_tenant_${targetStoreId}_custom_store_products`;
+      localStorage.setItem(customKey, JSON.stringify(updated));
+
+      const invKey = `nana_tenant_${targetStoreId}_inventory`;
+      const existingInvRaw = localStorage.getItem(invKey);
+      if (existingInvRaw) {
+        try {
+          const inv: any[] = JSON.parse(existingInvRaw);
+          localStorage.setItem(invKey, JSON.stringify(inv.filter(p => p.id !== productId)));
+        } catch {}
+      }
+
+      await supabase
+        .from('app_registry')
+        .upsert({
+          key: `products_${targetStoreId}`,
+          name: 'store_products',
+          tenant_id: targetStoreId,
+          module_key: 'products',
+          config_json: {
+            products: updated,
+            updated_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+
+      const cleanSlug = effectiveStoreSlug;
+      if (cleanSlug && cleanSlug !== targetStoreId) {
+        await supabase
+          .from('app_registry')
+          .upsert({
+            key: `products_${cleanSlug}`,
+            name: 'store_products',
+            tenant_id: cleanSlug,
+            module_key: 'products',
+            config_json: {
+              products: updated,
+              updated_at: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+      }
+
+      const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
+      if (isStoreUUID) {
+        await supabase.from('products').delete().eq('id', productId).catch(() => {});
+      }
+
+      showToast(`🗑️ "${productName}" supprimé avec succès !`);
+    } catch (err) {
+      console.warn('Erreur suppression produit:', err);
+      showToast(`🗑️ "${productName}" retiré`);
+    }
+  }, [studioCustomProducts, targetStoreId, effectiveStoreSlug, showToast]);
 
   const handleBackToDashboard = useCallback(() => {
     playTapBeep();
@@ -581,11 +657,101 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         }));
       }
     };
+    const handleUpdateThemeField = (e: Event) => {
+      const customEvt = e as CustomEvent<{ field: string; value: any }>;
+      if (!customEvt.detail) return;
+      const { field, value } = customEvt.detail;
+      setDraftThemeConfig(prev => {
+        if (!field) return prev;
+        if (field.includes('.')) {
+          const [parent, child] = field.split('.');
+          const flatKey = `${parent}${child.charAt(0).toUpperCase() + child.slice(1)}`;
+          return {
+            ...prev,
+            [parent]: {
+              ...((prev as any)[parent] || {}),
+              [child]: value
+            },
+            [flatKey]: value
+          };
+        }
+
+        // Si champ plat subBanner1Title / subBanner2Title, alimenter aussi l'objet imbriqué
+        const subBannerMatch = field.match(/^(subBanner[12])([A-Z].*)$/);
+        if (subBannerMatch) {
+          const parent = subBannerMatch[1];
+          const rawProp = subBannerMatch[2];
+          const child = rawProp.charAt(0).toLowerCase() + rawProp.slice(1);
+          return {
+            ...prev,
+            [field]: value,
+            [parent]: {
+              ...((prev as any)[parent] || {}),
+              [child]: value
+            }
+          };
+        }
+
+        return {
+          ...prev,
+          [field]: value
+        };
+      });
+    };
+
+    const handleUpdateSectionContent = (e: Event) => {
+      const customEvt = e as CustomEvent<{ sectionId: string; field: string; value: any }>;
+      if (!customEvt.detail) return;
+      const { sectionId, field, value } = customEvt.detail;
+      setDraftThemeConfig(prev => {
+        const sections = (prev.customSections || []).map(sec => {
+          if (sec.id !== sectionId) return sec;
+          const isStandardProp = ['title', 'subtitle', 'description', 'visible'].includes(field);
+          return {
+            ...sec,
+            ...(isStandardProp ? { [field]: value } : {}),
+            settings: {
+              ...(sec.settings || {}),
+              [field]: value
+            }
+          };
+        });
+        return {
+          ...prev,
+          customSections: sections
+        };
+      });
+    };
+
+    const handleOpenAccordion = (e: Event) => {
+      const customEvt = e as CustomEvent<{ accordionIndex: number }>;
+      if (customEvt.detail?.accordionIndex !== undefined) {
+        setIsCustomizerOpen(true);
+        setActiveCustomizerAccordion(customEvt.detail.accordionIndex);
+      }
+    };
+
+    const handleConfigureSection = (e: Event) => {
+      const customEvt = e as CustomEvent<{ sectionId: string }>;
+      if (customEvt.detail?.sectionId) {
+        setIsCustomizerOpen(true);
+        setSelectedSectionId(customEvt.detail.sectionId);
+      }
+    };
+
     window.addEventListener('nana_change_header_style', handleHeaderChange);
     window.addEventListener('nana_change_footer_style', handleFooterChange);
+    window.addEventListener('nana_update_theme_field', handleUpdateThemeField);
+    window.addEventListener('nana_update_section_content', handleUpdateSectionContent);
+    window.addEventListener('nana_open_customizer_accordion', handleOpenAccordion);
+    window.addEventListener('nana_configure_custom_section', handleConfigureSection);
     return () => {
       window.removeEventListener('nana_change_header_style', handleHeaderChange);
       window.removeEventListener('nana_change_footer_style', handleFooterChange);
+      window.removeEventListener('nana_update_theme_field', handleUpdateThemeField);
+      window.removeEventListener('nana_update_section_content', handleUpdateSectionContent);
+      window.removeEventListener('nana_open_customizer_accordion', handleOpenAccordion);
+      window.removeEventListener('nana_configure_custom_section', handleConfigureSection);
     };
   }, []);
 
@@ -595,50 +761,10 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
 
     let isSubscribed = true;
 
-    // 1. Initial Fetch (Firestore + Supabase app_registry)
+    // 1. Initial Fetch (Supabase app_registry + tenants)
     const initThemeAndStore = async () => {
       try {
-        const storeRef = doc(db, 'stores', targetStoreId);
-        const snap = await getDoc(storeRef);
         if (!isSubscribed) return;
-
-        if (snap.exists()) {
-          const data = snap.data();
-          const existingSlug = data.storeSlug || data.slug;
-          const autoSlug = ensureMandatoryStoreSlug(
-            existingSlug,
-            data.storeName || currentUser?.storeName,
-            currentUser?.email || currentUser?.displayName,
-            currentUser?.uid || targetStoreId
-          );
-
-          if ((!existingSlug || existingSlug.trim().length < 2 || existingSlug === 'boutique-officielle') && currentUser?.uid) {
-            updateDoc(storeRef, {
-              slug: autoSlug,
-              storeSlug: autoSlug
-            }).catch(console.warn);
-          }
-
-          const incomingTheme = data.activeThemeId || data.active_theme_id;
-          const localTheme = typeof window !== 'undefined' ? localStorage.getItem('nana_active_theme_id') : null;
-          const resolvedTheme = incomingTheme || localTheme || 'theme-beauty-emerald';
-
-          setStoreConfig(prev => ({
-            ...prev,
-            ...data,
-            active_theme_id: resolvedTheme,
-            activeThemeId: resolvedTheme,
-            storeName: data.storeName || prev.storeName,
-            slug: autoSlug
-          }));
-          if (data.kycStatus) setKycStatus(data.kycStatus);
-          if (data.themeCustomization) {
-            setSavedThemeConfig(data.themeCustomization);
-            try {
-              localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(data.themeCustomization));
-            } catch {}
-          }
-        }
 
         // Compléter avec la configuration Supabase app_registry
         const { data: registryData } = await supabase
@@ -661,6 +787,23 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
           if (cfg.customConfig) {
             setSavedThemeConfig(cfg.customConfig);
           }
+        }
+
+        // Charger les produits synchronisés depuis Supabase app_registry
+        const { data: prodData } = await supabase
+          .from('app_registry')
+          .select('config_json')
+          .eq('tenant_id', targetStoreId)
+          .eq('module_key', 'products')
+          .maybeSingle();
+
+        if (isSubscribed && prodData?.config_json?.products && Array.isArray(prodData.config_json.products) && prodData.config_json.products.length > 0) {
+          setStudioCustomProducts(prev => {
+            const map = new Map<string, InventoryProduct>();
+            prodData.config_json.products.forEach((p: InventoryProduct) => { if (p?.id) map.set(p.id, p); });
+            prev.forEach(p => { if (p?.id && !map.has(p.id)) map.set(p.id, p); });
+            return Array.from(map.values());
+          });
         }
       } catch (initErr) {
         console.warn('[Studio Supabase] Erreur initialisation store/thème:', initErr);
@@ -935,6 +1078,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
               isStoreAdmin={true}
               isProductEditor={true}
               canDelete={true}
+              onDeleteProduct={handleDeleteProduct}
               isAdminPreview={true}
               isSimulatedMobile={viewportMode === 'mobile'}
               onOpenEditProduct={(product) => {
@@ -1100,7 +1244,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
                     activeThemePrefix: prefix,
                     publicShopUrl: publicShopUrl
                   },
-                  currentUser?.uid || auth?.currentUser?.uid || targetStoreId,
+                  currentUser?.uid || targetStoreId,
                   { themeId: newThemeId }
                 );
                 showToast(`🎨 Thème activé ! Lien public : nsore.shop/${prefix}/${finalSlug}`);
@@ -1122,6 +1266,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
             setAddProductInitialCard(undefined);
           }}
           storeId={targetStoreId}
+          storeSlug={effectiveStoreSlug}
           currentUser={currentUser}
           subscription={subscription}
           availableProducts={allProducts}
@@ -1171,6 +1316,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
           setIsQuickCatalogOpen(false);
           setShowAddProductModal(true);
         }}
+        onDeleteProduct={handleDeleteProduct}
         onPreviewFunnel={(product) => {
           triggerOpenFunnel(product.linkedFunnelId || product.id, product.name, product);
         }}

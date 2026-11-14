@@ -7,8 +7,7 @@
  * et de charger directement leur boutique ou tunnel isolé sans exposer la landing page Nanasore.
  */
 
-import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { CustomDomainTenant } from '../types';
 
 /**
@@ -230,123 +229,56 @@ export async function resolveCustomDomain(domain: string): Promise<CustomDomainT
 }
 
 /**
- * Recherche le domaine personnalisé dans la collection 'tenants' de Firestore.
+ * Recherche le domaine personnalisé dans Supabase (app_registry).
  */
 async function fetchTenantFromFirestore(variants: string[], cacheKey: string): Promise<CustomDomainTenant | null> {
   try {
-    for (const hostVariant of variants) {
-      // A. Recherche directe par ID de document dans 'tenants' (clé = nom de domaine propre)
+    const keys = variants.map(v => `custom_domain_${v}`);
+    const { data: regRows } = await supabase
+      .from('app_registry')
+      .select('*')
+      .in('key', keys);
+
+    if (regRows && regRows.length > 0) {
+      const row = regRows[0];
+      const tData = (row.config_json || {}) as any;
+      const tenant: CustomDomainTenant = {
+        storeId: tData.storeId || row.tenant_id,
+        storeName: tData.storeName || 'Boutique Partenaire',
+        customDomain: tData.customDomain || variants[0],
+        type: tData.type || 'funnel',
+        vendorType: tData.vendorType || 'funnel',
+        funnelId: tData.funnelId || row.tenant_id,
+        funnelSlug: tData.funnelSlug || row.tenant_id,
+        dealSlug: tData.dealSlug || tData.funnelSlug || row.tenant_id,
+        funnelData: tData.funnelData,
+        logoUrl: tData.logoUrl || '',
+        primaryColor: tData.primaryColor || '#10b981',
+        whatsappPhone: tData.whatsappPhone || '',
+        whiteLabel: {
+          hidePoweredBy: true,
+          hideReceiptLogo: true,
+          customFaviconUrl: tData.customFaviconUrl || ''
+        },
+        ...tData
+      };
+
       try {
-        const directSnap = await getDoc(doc(db, 'tenants', hostVariant));
-        if (directSnap.exists()) {
-          const tData = directSnap.data();
-          const funnelId = tData.funnelId || tData.storeId || directSnap.id;
-          const funnelSlug = tData.funnelSlug || tData.slug || funnelId;
+        localStorage.setItem(cacheKey, JSON.stringify(tenant));
+      } catch {}
 
-          // Hydratation des données du funnel si non présentes
-          let funnelData = tData.funnelData;
-          if (!funnelData && funnelSlug) {
-            try {
-              const fSnap = await getDoc(doc(db, 'funnels', funnelSlug));
-              if (fSnap.exists()) {
-                funnelData = fSnap.data();
-              }
-            } catch {}
-          }
-
-          const tenant: CustomDomainTenant = {
-            storeId: tData.storeId || directSnap.id,
-            storeName: tData.storeName || funnelData?.title || funnelData?.funnelTitle || 'Boutique Partenaire',
-            customDomain: tData.customDomain || hostVariant,
-            type: tData.type || 'funnel',
-            vendorType: tData.vendorType || 'funnel',
-            funnelId,
-            funnelSlug,
-            dealSlug: tData.dealSlug || funnelSlug,
-            funnelData,
-            logoUrl: tData.logoUrl || funnelData?.ogImageUrl || funnelData?.image || '',
-            primaryColor: tData.primaryColor || funnelData?.brandColor || '#10b981',
-            whatsappPhone: tData.whatsappPhone || funnelData?.merchantWhatsapp || '',
-            whiteLabel: {
-              hidePoweredBy: true,
-              hideReceiptLogo: true,
-              customFaviconUrl: tData.customFaviconUrl || funnelData?.faviconUrl || ''
-            },
-            ...tData
-          };
-
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(tenant));
-          } catch {}
-
-          return tenant;
-        }
-      } catch (e) {
-        console.warn(`[CUSTOM-DOMAIN] Erreur getDoc direct tenants/${hostVariant}:`, e);
-      }
-
-      // B. Recherche par champ customDomain dans 'tenants'
-      try {
-        const q = query(collection(db, 'tenants'), where('customDomain', '==', hostVariant));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const docSnap = snap.docs[0];
-          const tData = docSnap.data();
-          const funnelId = tData.funnelId || tData.storeId || docSnap.id;
-          const funnelSlug = tData.funnelSlug || tData.slug || funnelId;
-
-          let funnelData = tData.funnelData;
-          if (!funnelData && funnelSlug) {
-            try {
-              const fSnap = await getDoc(doc(db, 'funnels', funnelSlug));
-              if (fSnap.exists()) {
-                funnelData = fSnap.data();
-              }
-            } catch {}
-          }
-
-          const tenant: CustomDomainTenant = {
-            storeId: tData.storeId || docSnap.id,
-            storeName: tData.storeName || funnelData?.title || funnelData?.funnelTitle || 'Boutique Partenaire',
-            customDomain: tData.customDomain || hostVariant,
-            type: tData.type || 'funnel',
-            vendorType: tData.vendorType || 'funnel',
-            funnelId,
-            funnelSlug,
-            dealSlug: tData.dealSlug || funnelSlug,
-            funnelData,
-            logoUrl: tData.logoUrl || funnelData?.ogImageUrl || funnelData?.image || '',
-            primaryColor: tData.primaryColor || funnelData?.brandColor || '#10b981',
-            whatsappPhone: tData.whatsappPhone || funnelData?.merchantWhatsapp || '',
-            whiteLabel: {
-              hidePoweredBy: true,
-              hideReceiptLogo: true,
-              customFaviconUrl: tData.customFaviconUrl || funnelData?.faviconUrl || ''
-            },
-            ...tData
-          };
-
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify(tenant));
-          } catch {}
-
-          return tenant;
-        }
-      } catch (e) {
-        console.warn(`[CUSTOM-DOMAIN] Erreur query tenants customDomain == ${hostVariant}:`, e);
-      }
+      return tenant;
     }
 
     return null;
   } catch (err) {
-    console.error('[CUSTOM-DOMAIN] Échec de la résolution du domaine personnalisé:', err);
+    console.error('[CUSTOM-DOMAIN] Échec de la résolution du domaine personnalisé Supabase:', err);
     return null;
   }
 }
 
 /**
- * Enregistre un nom de domaine personnalisé externe dans Firestore ('tenants')
- * et met à jour le funnel associé ('funnels/{funnelSlug}').
+ * Enregistre un nom de domaine personnalisé externe dans Supabase SQL ('app_registry').
  */
 export async function saveTenantCustomDomain(
   storeId: string,
@@ -377,18 +309,15 @@ export async function saveTenantCustomDomain(
   };
 
   try {
-    // 1. Sauvegarde dans la table unique des domaines personnalisés 'tenants'
-    await setDoc(doc(db, 'tenants', clean), payload, { merge: true });
+    // 1. Sauvegarde dans app_registry sous la clé custom_domain_${clean}
+    await supabase.from('app_registry').upsert({
+      key: `custom_domain_${clean}`,
+      tenant_id: storeId,
+      module_key: 'custom_domains',
+      config_json: payload
+    }, { onConflict: 'key' });
 
-    // 2. Mise à jour de la référence customDomain sur le document canonique du tunnel
-    try {
-      await updateDoc(doc(db, 'funnels', funnelSlug), {
-        customDomain: clean,
-        updatedAt: Date.now()
-      });
-    } catch {}
-
-    // 3. Mise en cache local pour résolution instantanée
+    // 2. Mise en cache local pour résolution instantanée
     try {
       localStorage.setItem(`nana_custom_domain_${storeId}`, clean);
       localStorage.setItem('nana_custom_domain', clean);
@@ -403,7 +332,7 @@ export async function saveTenantCustomDomain(
     console.log(`[CUSTOM-DOMAIN] Domaine personnalisé ${clean} relié avec succès au tunnel ${funnelSlug} !`);
     return true;
   } catch (error) {
-    console.error('[CUSTOM-DOMAIN] Erreur sauvegarde domaine personnalisé:', error);
+    console.error('[CUSTOM-DOMAIN] Erreur sauvegarde domaine personnalisé Supabase:', error);
     return false;
   }
 }
@@ -415,19 +344,13 @@ export async function removeTenantCustomDomain(storeId: string, domainToRemove?:
   try {
     const domain = domainToRemove ? cleanDomain(domainToRemove) : localStorage.getItem(`nana_custom_domain_${storeId}`);
     if (domain) {
-      await deleteDoc(doc(db, 'tenants', domain)).catch(() => {});
+      await supabase.from('app_registry').delete().eq('key', `custom_domain_${domain}`).catch(() => {});
       localStorage.removeItem(`nana_resolved_tenant_domain_${domain}`);
     }
     localStorage.removeItem(`nana_custom_domain_${storeId}`);
-    try {
-      await updateDoc(doc(db, 'funnels', storeId), {
-        customDomain: null,
-        updatedAt: Date.now()
-      });
-    } catch {}
     return true;
   } catch (e) {
-    console.warn('[CUSTOM-DOMAIN] Erreur suppression domaine personnalisé:', e);
+    console.warn('[CUSTOM-DOMAIN] Erreur suppression domaine personnalisé Supabase:', e);
     return false;
   }
 }

@@ -483,7 +483,7 @@ export const HubBuilderPage = () => {
           }
         }
       } catch (fsErr) {
-        console.warn('Initial Firestore fetch error:', fsErr);
+        console.warn('Initial storage fetch error:', fsErr);
       }
 
       try {
@@ -943,7 +943,7 @@ export const HubBuilderPage = () => {
     }));
   };
 
-  // CHARGEMENT INSTANTANÉ DE LA SUITE OFFICIELLE NANA POS & ERP (DONNÉES RÉELLES, ZÉRO MOCK, ZÉRO UNSPLASH)
+  // CHARGEMENT INSTANTANÉ DE LA SUITE OFFICIELLE NANASORE & ERP (DONNÉES RÉELLES, ZÉRO MOCK, ZÉRO UNSPLASH)
   const loadOfficialNanaSuite = () => {
     const suiteRows: RowItem[] = [
       {
@@ -1104,7 +1104,7 @@ export const HubBuilderPage = () => {
   const saveToFirebase = async () => {
     setIsSaving(true);
     try {
-      console.log('Enregistrement dans Firebase RTDB (/central_hub_config) :', hubData);
+      console.log('Enregistrement dans storage RTDB (/central_hub_config) :', hubData);
 
       // Générer une version enrichie avec rétro-compatibilité et purge stricte Unsplash
       const exportableData = hubData.map(row => ({
@@ -1252,7 +1252,7 @@ export const HubBuilderPage = () => {
           firestoreSuccess = true;
         }
       } catch (fsErr) {
-        console.warn('[HubBuilder] Erreur Firestore sync (non-bloquante) :', fsErr);
+        console.warn('[HubBuilder] Erreur storage sync (non-bloquante) :', fsErr);
       }
 
       // 4. LocalStorage & Événements locaux (Garantie temps-réel avec Omnibar et App Registry)
@@ -1294,7 +1294,7 @@ export const HubBuilderPage = () => {
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-base text-white tracking-wide">Central Hub Builder</h1>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-[#4169E1]/20 text-[#4169E1] border border-[#4169E1]/30 px-2 py-0.5 rounded-full">
-                Canvas Modulaire NaNa POS
+                Canvas Modulaire Nanasore
               </span>
             </div>
             <p className="text-xs text-slate-400">Glisser-déposer modulaire & prévisualisation dynamique 1 colonne</p>

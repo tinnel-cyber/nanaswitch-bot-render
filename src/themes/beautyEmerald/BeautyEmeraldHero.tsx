@@ -8,6 +8,7 @@ import {
   BEAUTY_FLACON_SERUM_SVG,
   BEAUTY_FLACON_PARFUM_SVG
 } from './beautyEmeraldAssets';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 
 export interface BeautyEmeraldHeroProps {
   storeDescription?: string;
@@ -181,22 +182,50 @@ export const BeautyEmeraldHero: React.FC<BeautyEmeraldHeroProps> = ({
       />
 
       {/* Grille 50/50 Éditoriale */}
+      {/* Grille 50/50 Éditoriale */}
       <div className="beauty-emerald-hero-grid">
         {/* Colonne Gauche : Typographie Haute Couture & Actions */}
         <div className="beauty-emerald-hero-content">
-          <span className="emerald-eyebrow">{currentSlide.eyebrow}</span>
+          <LiveEditable
+            label="Accroche / Catégorie Hero"
+            field="heroSubtitle"
+            value={customConfig?.heroSubtitle || currentSlide.eyebrow}
+            targetAccordion={2}
+            isInline={true}
+          >
+            <span className="emerald-eyebrow">{customConfig?.heroSubtitle || currentSlide.eyebrow}</span>
+          </LiveEditable>
 
-          <h1 className="emerald-title-giant">
-            {currentSlide.titleLine1}
-            {currentSlide.titleLine2 && (
-              <>
-                <br />
-                <span>{currentSlide.titleLine2}</span>
-              </>
-            )}
-          </h1>
+          <LiveEditable
+            label="Titre Principal Hero"
+            field="heroTitle"
+            value={customConfig?.heroTitle || `${currentSlide.titleLine1} ${currentSlide.titleLine2 || ''}`}
+            targetAccordion={2}
+          >
+            <h1 className="emerald-title-giant">
+              {customConfig?.heroTitle || (
+                <>
+                  {currentSlide.titleLine1}
+                  {currentSlide.titleLine2 && (
+                    <>
+                      <br />
+                      <span>{currentSlide.titleLine2}</span>
+                    </>
+                  )}
+                </>
+              )}
+            </h1>
+          </LiveEditable>
 
-          <p className="beauty-emerald-hero-desc">{currentSlide.description}</p>
+          <LiveEditable
+            label="Description Hero"
+            field="heroDescription"
+            value={customConfig?.heroDescription || currentSlide.description}
+            type="textarea"
+            targetAccordion={2}
+          >
+            <p className="beauty-emerald-hero-desc">{customConfig?.heroDescription || currentSlide.description}</p>
+          </LiveEditable>
 
           {currentSlide.priceHighlight && (
             <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0F4C3A]/8 border border-[#C59B27]/40 text-[#0F4C3A] text-xs font-bold tracking-wider uppercase w-fit">
@@ -206,19 +235,27 @@ export const BeautyEmeraldHero: React.FC<BeautyEmeraldHeroProps> = ({
           )}
 
           <div className="beauty-emerald-hero-actions">
-            <button
-              type="button"
-              onClick={handleCtaAction}
-              className="emerald-btn-strict flex items-center gap-2.5"
-              style={
-                customConfig?.primaryAccentColor
-                  ? { backgroundColor: customConfig.primaryAccentColor }
-                  : undefined
-              }
+            <LiveEditable
+              label="Bouton CTA Hero"
+              field="heroCtaText"
+              value={customConfig?.heroCtaText || currentSlide.ctaText}
+              targetAccordion={2}
+              isInline={true}
             >
-              <span>{currentSlide.ctaText}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+              <button
+                type="button"
+                onClick={handleCtaAction}
+                className="emerald-btn-strict flex items-center gap-2.5 cursor-pointer"
+                style={
+                  customConfig?.primaryAccentColor
+                    ? { backgroundColor: customConfig.primaryAccentColor }
+                    : undefined
+                }
+              >
+                <span>{customConfig?.heroCtaText || currentSlide.ctaText}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </LiveEditable>
 
             {onOpenVipRoutine && (
               <button
@@ -250,23 +287,32 @@ export const BeautyEmeraldHero: React.FC<BeautyEmeraldHeroProps> = ({
             </button>
 
             {/* Vidéo Hero ou Image Podium */}
-            {heroVideoUrl && activeSlideIndex === 0 ? (
-              <video
-                src={heroVideoUrl}
-                autoPlay
-                loop
-                muted
-                playsInline
-                poster={currentSlide.image}
-                className="beauty-emerald-hero-img object-cover"
-              />
-            ) : (
-              <img
-                src={currentSlide.image}
-                alt={currentSlide.titleLine1}
-                className="beauty-emerald-hero-img"
-              />
-            )}
+            <LiveEditable
+              label="Visuel Flacon / Podium Hero"
+              field="heroBannerImageUrl"
+              value={customConfig?.heroBannerImageUrl || currentSlide.image}
+              type="image"
+              targetAccordion={2}
+            >
+              {heroVideoUrl && activeSlideIndex === 0 ? (
+                <video
+                  src={heroVideoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  poster={currentSlide.image}
+                  className="beauty-emerald-hero-img object-cover"
+                />
+              ) : (
+                <img
+                  src={customConfig?.heroBannerImageUrl || currentSlide.image}
+                  alt={currentSlide.titleLine1}
+                  className="beauty-emerald-hero-img"
+                  loading="eager"
+                />
+              )}
+            </LiveEditable>
 
             {/* Bouton Suivant */}
             <button

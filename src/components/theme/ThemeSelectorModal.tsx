@@ -5,8 +5,6 @@ import {
 } from 'lucide-react';
 import { AVAILABLE_THEMES, DEFAULT_THEME_ID } from '../../themes/themeRegistry';
 import { ThemeDefinition, ThemeId } from '../../types/theme';
-import { db, auth } from '../../firebase';
-import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 import { buildPublicShopUrl } from '../../config/domains';
 import { getThemeRoutePrefix } from '../../utils/themeRoutePrefix';
@@ -114,19 +112,11 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
       console.warn('[THEMES] Cache local update error:', cacheErr);
     }
 
-    // 3. Persistance Cloud Absolue et Officielle dans Firebase Firestore & RTDB
+    // 3. Persistance Cloud prioritaire dans Supabase SQL & mise à jour du tenant
     try {
       console.log(`[THEMES ACTIVATION] Début persistance pour ${theme.id} sur storeId=${storeId}`);
-      await ensureAndPersistTenantSlug(storeId, {
-        activeThemeId: theme.id,
-        active_theme_id: theme.id,
-        themeId: theme.id,
-        activeThemePrefix: themePrefix,
-        publicShopUrl: publicShopUrl
-      }, authUid, { themeId: theme.id });
-      console.log(`[THEMES ACTIVATION] Persistance réussie pour ${theme.id}`);
-
-      // 4. Synchronisation instantanée Supabase Realtime (app_registry)
+      
+      // A. Synchronisation immédiate Supabase SQL (table app_registry & tenants)
       try {
         await supabase
           .from('app_registry')
@@ -148,9 +138,20 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
       } catch (sbErr) {
         console.warn('[THEMES ACTIVATION] Synchronisation Supabase app_registry:', sbErr);
       }
+
+      // B. Enregistrement centralisé du slug et des métadonnées
+      await ensureAndPersistTenantSlug(storeId, {
+        activeThemeId: theme.id,
+        active_theme_id: theme.id,
+        themeId: theme.id,
+        activeThemePrefix: themePrefix,
+        publicShopUrl: publicShopUrl
+      }, authUid, { themeId: theme.id });
+
+      console.log(`[THEMES ACTIVATION] Persistance réussie pour ${theme.id}`);
     } catch (error: any) {
-      console.error('[THEMES ACTIVATION ERROR] Échec complet de synchronisation Firebase :', error);
-      setErrorToast(`Échec d'enregistrement Firebase : ${error?.message || error || 'Erreur réseau/permissions'}`);
+      console.error('[THEMES ACTIVATION ERROR] Erreur lors de l\'activation du thème :', error);
+      setErrorToast(`Échec d'enregistrement du thème : ${error?.message || 'Erreur réseau/permissions'}`);
       setTimeout(() => setErrorToast(null), 6000);
     } finally {
       setSavingThemeId(null);

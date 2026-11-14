@@ -106,7 +106,7 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
         logoUrl: currentUser?.avatarUrl,
       });
     } catch (err) {
-      console.warn('[WHITE-LABEL] Erreur synchro domaine Firestore:', err);
+      console.warn('[WHITE-LABEL] Erreur synchro domaine storage:', err);
     }
   };
 

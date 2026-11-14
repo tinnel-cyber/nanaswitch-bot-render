@@ -4,8 +4,7 @@
  * /tenants/{tenantId}/modules/{moduleId}
  */
 
-import { rtdb } from '../firebase';
-import { ref, set, get } from 'firebase/database';
+import { supabase } from '../lib/supabase';
 import { getOfficialModuleById, isModuleDefaultActive, AppModule } from '../appRegistry';
 import { resolveCurrentTenantId } from './appActivationService';
 
@@ -116,13 +115,19 @@ export async function toggleModuleStatus(
     );
   }
 
-  // 3. Persistance temps réel dans Firebase Realtime Database
+  // 3. Persistance temps réel dans Supabase app_registry
   try {
-    const moduleRef = ref(rtdb, `tenants/${tId}/modules/${cleanId}`);
-    await set(moduleRef, payload);
-    console.log(`[RTDB] Module '${cleanId}' mis à jour sur /tenants/${tId}/modules/${cleanId} -> enabled: ${newEnabled}`);
+    await supabase.from('app_registry').upsert({
+      key: `module_${tId}_${cleanId}`,
+      name: `module_${cleanId}`,
+      tenant_id: tId,
+      module_key: cleanId,
+      config_json: payload,
+      updated_at: new Date().toISOString()
+    });
+    console.log(`[SUPABASE] Module '${cleanId}' mis à jour sur tenant ${tId} -> enabled: ${newEnabled}`);
   } catch (error) {
-    console.warn(`[RTDB ERROR] Échec écriture module ${cleanId} sur ${tId} (mode hors-ligne actif) :`, error);
+    console.warn(`[SUPABASE ERROR] Échec écriture module ${cleanId} sur ${tId} :`, error);
   }
 
   // 4. Synchronisation transactionnelle Supabase (RPC publish_organization_block)

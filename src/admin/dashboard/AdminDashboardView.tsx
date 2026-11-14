@@ -90,10 +90,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
             <a
               href="/dashboard"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 active:scale-95 border border-blue-400/40"
-              title="Accéder au Tableau de Bord Marchand NanaSwitch (Cloné)"
+              title="Accéder au Nouveau Tableau de Bord Marchand Univers (avec Omnibar Universel & Analytics TradingView)"
             >
               <LayoutDashboard className="w-4 h-4 text-white" />
-              <span>Tableau de Bord Marchand (/dashboard)</span>
+              <span>Nouveau Tableau de Bord Univers (/dashboard)</span>
             </a>
             <a
               href="/hub"

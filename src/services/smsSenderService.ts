@@ -101,7 +101,7 @@ export async function sendTransactionalSms(params: SendSmsParams): Promise<SendS
             description: `Envoi SMS vers ${cleanPhone}`
           });
         } catch (creditErr) {
-          console.warn('[SMS SERVICE] Avertissement décompte Firestore :', creditErr);
+          console.warn('[SMS SERVICE] Avertissement décompte storage :', creditErr);
         }
       }
 

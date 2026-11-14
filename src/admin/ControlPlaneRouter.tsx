@@ -93,7 +93,7 @@ export const ControlPlaneRouter: React.FC<ControlPlaneRouterProps> = ({
   };
 
   return (
-    <SuperAdminGuard onRedirect={handleReturnToMerchant}>
+    <SuperAdminGuard onRedirect={handleReturnToMerchant} currentUser={currentUser}>
       <div className="min-h-screen w-full bg-[#030712] text-slate-100 flex flex-col font-sans select-none">
         {/* Control Plane Global Header */}
         <header className="sticky top-0 z-40 bg-[#030712]/90 backdrop-blur-xl border-b border-slate-800/80 px-6 py-3.5 flex items-center justify-between">

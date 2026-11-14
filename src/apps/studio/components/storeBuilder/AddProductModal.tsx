@@ -7,9 +7,7 @@ import {
 } from 'lucide-react';
 import { InventoryProduct, StoreUser, StoreSubscription } from '../../../../types';
 import { StoreProductItem } from './types';
-import { persistInventoryProduct, cleanFirestoreData } from '../../../../utils/firestoreService';
-import { db } from '../../../../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '../../../../lib/supabase';
 import { formatCFA, playTapBeep, playValidationBeep, playCancelSound } from '../../../../utils/audio';
 import { RichTextEditor } from './RichTextEditor';
 import { stripHtmlToPlainText } from './AdaptiveProductRichText';
@@ -35,6 +33,7 @@ interface AddProductModalProps {
   productToEdit?: InventoryProduct | null;
   onProductUpdated?: (product: InventoryProduct) => void;
   storeId: string;
+  storeSlug?: string;
   existingCategories?: string[];
   currentUser?: StoreUser | null;
   subscription?: StoreSubscription | null;
@@ -66,6 +65,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   productToEdit = null,
   onProductUpdated,
   storeId,
+  storeSlug,
   existingCategories = [],
   currentUser,
   subscription,
@@ -564,46 +564,60 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         const existingInv: InventoryProduct[] = existingInvRaw ? JSON.parse(existingInvRaw) : [];
         const updatedInv = [resolvedProduct, ...existingInv.filter((p) => p.id !== productId)];
         localStorage.setItem(invKey, JSON.stringify(updatedInv));
+
+        // 1-bis. Persistance Supabase SQL instantanée (accessible de tous les navigateurs & nsore.shop)
+        try {
+          await supabase
+            .from('app_registry')
+            .upsert({
+              key: `products_${resolvedStoreId}`,
+              name: 'store_products',
+              tenant_id: resolvedStoreId,
+              module_key: 'products',
+              config_json: {
+                products: updatedCustom,
+                updated_at: new Date().toISOString()
+              },
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'key' });
+
+          const cleanSlug = (storeSlug || resolvedStoreId).replace(/^store-/, '');
+          if (cleanSlug && cleanSlug !== resolvedStoreId) {
+            await supabase
+              .from('app_registry')
+              .upsert({
+                key: `products_${cleanSlug}`,
+                name: 'store_products',
+                tenant_id: cleanSlug,
+                module_key: 'products',
+                config_json: {
+                  products: updatedCustom,
+                  updated_at: new Date().toISOString()
+                },
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'key' });
+          }
+
+          const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedStoreId);
+          const isProdUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
+          const prodUuidToUse = isProdUUID ? productId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+
+          if (prodUuidToUse) {
+            await supabase.from('products').upsert({
+              id: prodUuidToUse,
+              name: trimmedName,
+              price: priceNum,
+              stock: Number(stock) || 0,
+              image_url: photoUrl || '',
+              vendor_id: resolvedStoreId,
+              slug: finalSlug,
+              ...(isStoreUUID ? { tenant_id: resolvedStoreId } : {})
+            }, { onConflict: 'id' }).catch(() => {});
+          }
+        } catch (sbErr) {
+          console.warn("[Studio Supabase] Erreur persistance produit :", sbErr);
+        }
       } catch {}
-
-      // 2. Enregistrement Firestore via persistInventoryProduct
-      try {
-        await persistInventoryProduct(resolvedProduct, resolvedStoreId);
-      } catch (err) {
-        console.warn("Persistance produit via persistInventoryProduct différée :", err);
-      }
-
-      // 3. Enregistrement direct unifié dans les sous-collections Firestore et RTDB
-      try {
-        const cleanedData = cleanFirestoreData({
-          ...resolvedProduct,
-          updatedAt: new Date().toISOString()
-        });
-        // A. /stores/{storeId}/products/{productId}
-        const subDocRef = doc(db, 'stores', resolvedStoreId, 'products', productId);
-        await setDoc(subDocRef, cleanedData, { merge: true });
-
-        // B. /tenants/{tenantId}/products/{productId} (Unification Thème <-> Caisse POS)
-        const tenantDocRef = doc(db, 'tenants', resolvedStoreId, 'products', productId);
-        await setDoc(tenantDocRef, cleanedData, { merge: true }).catch(() => {});
-
-        // C. RTDB miroir /tenants/{tenantId}/products/{productId} + nœuds séparés /products/$productId/modular_funnel vs /products/$productId/ultimate_funnel
-        if (hasModularFunnel && resolvedProduct.modular_funnel) {
-          saveProductModularFunnelRTDB(productId, resolvedProduct.modular_funnel, resolvedStoreId).catch(() => {});
-        } else if (!hasModularFunnel && useUltimateFunnel && resolvedProduct.ultimate_funnel) {
-          saveProductUltimateFunnelRTDB(productId, resolvedProduct.ultimate_funnel, resolvedStoreId).catch(() => {});
-        }
-        if (auth.currentUser) {
-          Promise.all([
-            import('firebase/database'),
-            import('../../../../firebase')
-          ]).then(([{ ref: rtdbRef, set: rtdbSet }, { rtdb: rtdbInst }]) => {
-            rtdbSet(rtdbRef(rtdbInst, `tenants/${resolvedStoreId}/products/${productId}`), cleanedData).catch(() => {});
-          }).catch(() => {});
-        }
-      } catch (subErr) {
-        console.warn("Persistance sous-collection /stores/products différée :", subErr);
-      }
 
       playValidationBeep();
       if (productToEdit && onProductUpdated) {
@@ -636,10 +650,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     ? Number(originalPrice) - Number(sellingPrice)
     : 0;
 
-  const storeSlug = (currentUser?.storeId || storeId || 'boutique').replace(/^store-/, '');
+  const effectiveStoreSlug = (storeSlug || currentUser?.storeId || storeId || 'boutique').replace(/^store-/, '');
   const publicProductAdUrl = linkedFunnelId 
-    ? buildPublicShopUrl(storeSlug, { funnelSlugOrId: linkedFunnelId })
-    : buildPublicShopUrl(storeSlug);
+    ? buildPublicShopUrl(effectiveStoreSlug, { funnelSlugOrId: linkedFunnelId })
+    : buildPublicShopUrl(effectiveStoreSlug);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">

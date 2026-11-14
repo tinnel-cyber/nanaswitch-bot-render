@@ -211,7 +211,7 @@ export async function saveCampaign(campaign: PromoCampaign): Promise<PromoCampai
     const docRef = doc(db, 'campaigns', campaign.id);
     await setDoc(docRef, updatedCampaign, { merge: true });
   } catch (err) {
-    console.warn('Persistance Firestore campagne dégradée (mode autonome actif):', err);
+    console.warn('Persistance storage campagne dégradée (mode autonome actif):', err);
   }
 
   return updatedCampaign;
@@ -236,7 +236,7 @@ export async function getCampaignById(campaignId: string): Promise<PromoCampaign
       return { ...data, id: snap.id };
     }
   } catch (e) {
-    console.warn('Erreur récupération Firestore campagne:', e);
+    console.warn('Erreur récupération storage campagne:', e);
   }
 
   // 3. Fallback sur le premier seed
@@ -352,7 +352,7 @@ export async function trackCampaignVisit(
       userAgent: metadata.userAgent || navigator.userAgent || ''
     });
   } catch (err) {
-    console.warn('Erreur tracking visite Firestore:', err);
+    console.warn('Erreur tracking visite storage:', err);
   }
 }
 
@@ -398,7 +398,7 @@ export async function trackCampaignConversion(
       'urgencyScarcity.remainingSeats': increment(-1)
     });
   } catch (err) {
-    console.warn('Erreur tracking conversion Firestore:', err);
+    console.warn('Erreur tracking conversion storage:', err);
   }
 }
 

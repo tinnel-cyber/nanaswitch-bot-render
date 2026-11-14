@@ -84,6 +84,16 @@ export {
 };
 
 /**
+ * Détecte si une erreur Firestore provient du fonctionnement normal hors-ligne / indisponibilité temporaire
+ */
+function isOfflineOrUnavailableError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return msg.includes('offline') || msg.includes('client is offline') || code.includes('unavailable') || code.includes('failed-precondition');
+}
+
+/**
  * Types et gestion d'erreurs normalisées selon les directives de sécurité Firestore
  */
 export enum OperationType {
@@ -130,7 +140,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       })) || []
     }
   };
-  console.error('[FIRESTORE ERROR]', JSON.stringify(errInfo));
+  console.error('[STORAGE ERROR]', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -272,18 +282,8 @@ export function subscribeToStoreCollection<T extends { id: string; storeId: stri
 
   const fetchCollection = async () => {
     try {
-      const snapshot = await getDocs(colRef);
+      const items = await fetchStoreCollection<T>(collectionName, tenantId);
       if (isCancelled) return;
-      const items: T[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as any;
-        if (collectionName === 'sales') {
-          if (data.orderNumber && !data.paymentMethod) return;
-        } else if (collectionName === 'orders') {
-          if (data.paymentMethod && !data.orderNumber) return;
-        }
-        items.push({ ...data, id: docSnap.id, storeId: tenantId } as T);
-      });
 
       if (items.length > 0) {
         try {
@@ -356,6 +356,55 @@ export async function fetchStoreCollection<T extends { id: string; storeId: stri
   const colRef = collection(db, 'stores', tenantId, subcollection);
   const pathForError = `stores/${tenantId}/${subcollection}`;
 
+  // 1. Priorité Supabase SQL (Lecture ultra-rapide)
+  try {
+    const isProdCol = collectionName === 'inventory' || collectionName === 'products';
+    if (isProdCol) {
+      // Lecture depuis public.products
+      const { data: supaProds } = await supabase
+        .from('products')
+        .select('*')
+        .or(`vendor_id.eq.${tenantId}`);
+
+      if (supaProds && supaProds.length > 0) {
+        return supaProds.map(p => ({
+          id: p.id,
+          storeId: tenantId,
+          name: p.name,
+          price: Number(p.price) || 0,
+          description: p.description || '',
+          category: p.category || '',
+          image: p.image_url || '',
+          imageUrl: p.image_url || '',
+          stock: p.stock || 0,
+          sku: p.sku || p.id,
+          isActive: p.is_active,
+          createdAt: p.created_at
+        })) as unknown as T[];
+      }
+    }
+
+    // Lecture depuis public.app_registry
+    const { data: regDocs } = await supabase
+      .from('app_registry')
+      .select('config_json')
+      .eq('tenant_id', tenantId)
+      .eq('module_key', subcollection);
+
+    if (regDocs && regDocs.length > 0) {
+      const results: T[] = [];
+      regDocs.forEach(row => {
+        if (row.config_json) {
+          results.push({ ...(row.config_json as any), storeId: tenantId } as T);
+        }
+      });
+      return results;
+    }
+  } catch (sbFetchErr) {
+    console.warn(`[SUPABASE FETCH] ${pathForError} :`, sbFetchErr);
+  }
+
+  // 2. Fallback de secours Firestore si présent
   try {
     const snapshot = await getDocs(colRef);
     const results: T[] = [];
@@ -367,7 +416,7 @@ export async function fetchStoreCollection<T extends { id: string; storeId: stri
     });
     return results;
   } catch (error) {
-    console.warn(`[FIRESTORE FETCH] Lecture ${pathForError} :`, error);
+    console.warn(`[STORAGE FETCH] Lecture ${pathForError} :`, error);
     return [];
   }
 }
@@ -520,12 +569,55 @@ export async function saveStoreDocument<T extends { id: string }>(
     };
   }
 
-  // 2. Sauvegarde dans l'arborescence étanche du tenant dans Firestore
+  // 2. Sauvegarde prioritaire dans Supabase SQL
+  try {
+    const isProdCol = collectionName === 'inventory' || collectionName === 'products';
+    if (isProdCol) {
+      const priceNum = Number((securedPayload as any).price) || 0;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(docId);
+      const prodUuid = isUUID ? docId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+      if (prodUuid) {
+        supabase.from('products').upsert({
+          id: prodUuid,
+          name: (securedPayload as any).name || 'Produit Sans Nom',
+          price: priceNum,
+          description: (securedPayload as any).description || '',
+          vendor_id: tenantId,
+          sku: (securedPayload as any).sku || docId,
+          stock: Number((securedPayload as any).stock) || 0,
+          category: (securedPayload as any).category || 'Général',
+          image_url: (securedPayload as any).image || (securedPayload as any).imageUrl || '',
+          is_active: (securedPayload as any).status !== 'archived' && (securedPayload as any).isActive !== false,
+          created_at: new Date().toISOString()
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+    } else if (collectionName === 'sales') {
+      supabase.from('sales').insert({
+        total_amount: Number((securedPayload as any).total) || 0,
+        payment_method: (securedPayload as any).paymentMethod || 'CASH_ON_DELIVERY',
+        status: (securedPayload as any).status || 'completed',
+        is_paid: true
+      }).catch(() => {});
+    }
+
+    // Sauvegarde unifiée dans app_registry avec contrainte not-null 'name'
+    supabase.from('app_registry').upsert({
+      key: `doc_${tenantId}_${subcollection}_${docId}`,
+      name: `${subcollection}_${docId}`,
+      tenant_id: tenantId,
+      module_key: subcollection,
+      config_json: securedPayload
+    }, { onConflict: 'key' }).catch(() => {});
+  } catch (sbErr) {
+    console.warn('[SUPABASE SYNC] Erreur sync saveStoreDocument :', sbErr);
+  }
+
+  // 3. Sauvegarde miroir Firestore de secours si disponible
   try {
     await setDoc(doc(db, 'stores', tenantId, subcollection, docId), securedPayload, { merge: true });
-    console.log(`[FIRESTORE WRITE] Enregistré dans /${pathForWrite}`);
+    console.log(`[STORAGE WRITE] Enregistré dans /${pathForWrite}`);
   } catch (error) {
-    console.warn(`[FIRESTORE WRITE NOTICE] Sauvegarde ${pathForWrite} en attente (mise en file offlineSyncQueue) :`, error);
+    console.warn(`[STORAGE WRITE NOTICE] Sauvegarde ${pathForWrite} en attente (mise en file offlineSyncQueue) :`, error);
     if (collectionName === 'inventory' || collectionName === 'products') {
       queueOfflineMutation({
         type: 'SAVE_PRODUCT',
@@ -653,14 +745,14 @@ export async function commitFirestoreBatch(
 
   try {
     await batch.commit();
-    console.log(`[FirestoreBatch] Succès : Lot de ${validBatchItems.length} opérations validé en 1 seule écriture !`);
+    console.log(`[StorageBatch] Succès : Lot de ${validBatchItems.length} opérations validé en 1 seule écriture !`);
     return {
       success: true,
       syncedIds: validBatchItems.map(i => i.id),
       failedIds: []
     };
   } catch (err: any) {
-    console.error('[FirestoreBatch] Erreur lors du commit du batch :', err);
+    console.error('[StorageBatch] Erreur lors du commit du batch :', err);
     return {
       success: false,
       syncedIds: [],
@@ -727,7 +819,7 @@ export async function deleteStoreDocument(
         } catch (e) {}
       }
     } catch (error) {
-      console.warn(`[FIRESTORE DELETE NOTICE] ${pathForDelete} (mise en file offlineSyncQueue):`, error);
+      console.warn(`[STORAGE DELETE NOTICE] ${pathForDelete} (mise en file offlineSyncQueue):`, error);
       if (collectionName === 'inventory' || collectionName === 'products') {
         queueOfflineMutation({
           type: 'DELETE_PRODUCT',
@@ -784,7 +876,7 @@ export async function persistCompletedSale(
   // Mise à jour de la session de caisse (Casier) concurrente
   if (securedSale.casierSessionId) {
     recordSaleInCasierSession(resolvedStoreId, securedSale.casierSessionId, securedSale).catch((err) => {
-      console.warn('Erreur mise à jour de la session casier Firestore:', err);
+      console.warn('Erreur mise à jour de la session casier storage:', err);
     });
   }
 
@@ -829,6 +921,51 @@ export async function persistInventoryProduct(
 
   const res = await saveStoreDocument('inventory', safeProduct, tenantId);
 
+  // Synchronisation prioritaire Supabase SQL (table public.app_registry & public.products)
+  try {
+    const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+    const isProdUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(safeProduct.id);
+    const prodUuidToUse = isProdUUID ? safeProduct.id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+
+    if (prodUuidToUse) {
+      supabase.from('products').upsert({
+        id: prodUuidToUse,
+        name: safeProduct.name,
+        price: Number(safeProduct.sellingPrice || safeProduct.price || 0),
+        stock: Number(safeProduct.stock ?? 10),
+        image_url: safeProduct.photoUrl || (safeProduct as any).image || '',
+        vendor_id: tenantId,
+        slug: finalSlug,
+        ...(isStoreUUID ? { tenant_id: tenantId } : {})
+      }, { onConflict: 'id' }).catch(() => {});
+    }
+
+    // Synchronisation Cloud Supabase app_registry
+    try {
+      const customKey = `nana_tenant_${tenantId}_custom_store_products`;
+      const existingRaw = typeof window !== 'undefined' ? localStorage.getItem(customKey) : null;
+      const existing: InventoryProduct[] = existingRaw ? JSON.parse(existingRaw) : [];
+      const updatedCustom = [safeProduct, ...existing.filter((p) => p.id !== safeProduct.id)];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(customKey, JSON.stringify(updatedCustom));
+      }
+
+      await supabase
+        .from('app_registry')
+        .upsert({
+          key: `products_${tenantId}`,
+          name: 'store_products',
+          tenant_id: tenantId,
+          module_key: 'products',
+          config_json: {
+            products: updatedCustom,
+            updated_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' }).catch(() => {});
+    } catch {}
+  } catch {}
+
   // Écriture miroir sécurisée unifiée dans :
   // 1. tenants/{tenantId}/products/{id} (Unification Thème <-> Caisse POS)
   // 2. stores/{tenantId}/products/{id}
@@ -857,7 +994,7 @@ export async function persistInventoryProduct(
       }
     }
   } catch (err) {
-    console.warn('[FIRESTORE] Mirror product save deferred:', err);
+    console.warn('[STORAGE] Mirror product save deferred:', err);
   }
 
   return res;
@@ -960,7 +1097,7 @@ export async function getMonthlySummaries(storeId: string): Promise<MonthlySumma
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => d.data() as MonthlySummary);
   } catch (error) {
-    console.warn('[FIRESTORE] Erreur lecture monthly_summaries :', error);
+    console.warn('[STORAGE] Erreur lecture monthly_summaries :', error);
     return [];
   }
 }
@@ -1103,7 +1240,7 @@ export async function updateMerchantSubscription(
       { merge: true }
     );
   } catch (err) {
-    console.warn('[FIRESTORE] updateMerchantSubscription :', err);
+    console.warn('[STORAGE] updateMerchantSubscription :', err);
   }
 }
 
@@ -1188,7 +1325,7 @@ export async function updateStoreSubscription(
         }),
         { merge: true }
       );
-      console.log(`[FIRESTORE] Abonnement '${subscription.plan}' & quotas synchronisés dans users/${targetUserId}`);
+      console.log(`[STORAGE] Abonnement '${subscription.plan}' & quotas synchronisés dans users/${targetUserId}`);
 
       // Si le storeId est différent du targetUserId et existe dans users/, synchroniser également
       if (cleanStoreId && cleanStoreId !== targetUserId && !cleanStoreId.startsWith('store-')) {
@@ -1206,7 +1343,7 @@ export async function updateStoreSubscription(
         ).catch(() => {});
       }
     } catch (userErr) {
-      console.warn('[FIRESTORE] Erreur synchronisation users/' + targetUserId + ' :', userErr);
+      console.warn('[STORAGE] Erreur synchronisation users/' + targetUserId + ' :', userErr);
     }
   }
 
@@ -1301,8 +1438,10 @@ export async function getStoreSubscription(storeId: string, forceServer = false)
         };
       }
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getStoreSubscription :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[STORAGE] getStoreSubscription :', err);
+    }
   }
   return null;
 }
@@ -1404,8 +1543,10 @@ export function subscribeToUserProfile(
       } else {
         onUpdate(null);
       }
-    } catch (err) {
-      console.warn('[FIRESTORE] Lecture profil user :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[STORAGE] Lecture profil user :', err);
+      }
     }
   };
 
@@ -1539,7 +1680,7 @@ export async function getPrivacyPolicy(): Promise<PrivacyPolicyConfig> {
       return policyDoc.data() as PrivacyPolicyConfig;
     }
   } catch (err) {
-    console.warn('[FIRESTORE] Chargement de la politique par défaut :', err);
+    console.warn('[STORAGE] Chargement de la politique par défaut :', err);
   }
 
   return {
@@ -1608,8 +1749,10 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
       }
       return data;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] Lecture users/' + uid + ' :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[STORAGE] Lecture users/' + uid + ' :', err);
+    }
   }
   return null;
 }
@@ -1703,9 +1846,9 @@ export async function saveUserProfile(uid: string, profileData: Record<string, a
 
   try {
     await setDoc(userRef, payload, { merge: true });
-    console.log('[FIRESTORE] Profil, plan et PIN enregistrés dans users/' + uid);
+    console.log('[STORAGE] Profil, plan et PIN enregistrés dans users/' + uid);
   } catch (err) {
-    console.warn('[FIRESTORE] Sauvegarde users/' + uid + ' notice :', err);
+    console.warn('[STORAGE] Sauvegarde users/' + uid + ' notice :', err);
   }
 
   // Cache local de secours
@@ -1770,7 +1913,7 @@ export async function updateSellerModeInFirestore(
       await setDoc(doc(db, 'stores', targetStoreId), updates, { merge: true }).catch(() => {});
     }
   } catch (err) {
-    console.warn('[FIRESTORE] updateSellerModeInFirestore notice :', err);
+    console.warn('[STORAGE] updateSellerModeInstorage notice :', err);
   }
 }
 
@@ -1805,8 +1948,10 @@ export async function getUserCredits(uid: string): Promise<number> {
       }, { merge: true });
       return DEFAULT_FREE_CREDITS;
     }
-  } catch (e) {
-    console.warn('[FIRESTORE] Erreur lecture crédits users/' + uid + ' :', e);
+  } catch (e: any) {
+    if (!isOfflineOrUnavailableError(e)) {
+      console.warn('[STORAGE] Erreur lecture crédits users/' + uid + ' :', e);
+    }
     try {
       const cached = localStorage.getItem(`nana_user_credits_${uid}`);
       if (cached !== null) return parseInt(cached, 10);
@@ -1943,7 +2088,7 @@ export async function deductUserCredits(
       };
     });
   } catch (error: any) {
-    console.warn('[FIRESTORE] deductUserCredits transaction notice, repli avec atomic increment :', error);
+    console.warn('[STORAGE] deductUserCredits transaction notice, repli avec atomic increment :', error);
     try {
       await updateDoc(userRef, {
         credits: increment(-amount),
@@ -1956,7 +2101,7 @@ export async function deductUserCredits(
       } catch {}
       return { success: true, newBalance };
     } catch (err2: any) {
-      console.error('[FIRESTORE] deductUserCredits error :', err2);
+      console.error('[STORAGE] deductUserCredits error :', err2);
       return { success: false, newBalance: 0, error: err2?.message || 'TRANSACTION_FAILED' };
     }
   }
@@ -1991,7 +2136,7 @@ export async function addUserCredits(
     } catch {}
     return newBalance;
   } catch (e) {
-    console.error('[FIRESTORE] addUserCredits error :', e);
+    console.error('[STORAGE] addUserCredits error :', e);
     throw e;
   }
 }
@@ -2279,7 +2424,7 @@ export async function getPlatformSubscriptions(): Promise<PlatformSubscriptionCo
       return sanitized;
     }
   } catch (e) {
-    console.warn('[FIRESTORE] getPlatformSubscriptions error :', e);
+    console.warn('[STORAGE] getPlatformSubscriptions error :', e);
   }
   return fallback;
 }
@@ -2295,7 +2440,7 @@ export async function updateSubscriptionPlan(
 ): Promise<SubscriptionPlanConfig> {
   if (!planId || typeof planId !== 'string') {
     const err = new Error('Identifiant du plan (planId) invalide ou manquant.');
-    console.error('[FIRESTORE] updateSubscriptionPlan error :', err);
+    console.error('[STORAGE] updateSubscriptionPlan error :', err);
     throw err;
   }
 
@@ -2318,7 +2463,7 @@ export async function updateSubscriptionPlan(
     try {
       await setDoc(planRef, cleanData, { merge: true });
     } catch (setErr: any) {
-      console.error(`[FIRESTORE] Erreur écriture subscription_plans/${targetDocId} :`, setErr);
+      console.error(`[STORAGE] Erreur écriture subscription_plans/${targetDocId} :`, setErr);
       throw setErr;
     }
   }
@@ -2392,7 +2537,7 @@ export async function updateSubscriptionPlan(
     await setDoc(globalRef, updatedGlobalPayload, { merge: true });
     return mergedPlan;
   } catch (globalErr: any) {
-    console.error('[FIRESTORE] Erreur mise à jour globale platform_settings/subscriptions :', globalErr);
+    console.error('[STORAGE] Erreur mise à jour globale platform_settings/subscriptions :', globalErr);
     throw globalErr;
   }
 }
@@ -2423,7 +2568,7 @@ export async function savePlatformSubscriptions(config: PlatformSubscriptionConf
               updatedAt: Date.now(),
             });
             await setDoc(planRef, planData, { merge: true }).catch((err) => {
-              console.error(`[FIRESTORE] Erreur écriture individuelle subscription_plans/${planDocId} :`, err);
+              console.error(`[STORAGE] Erreur écriture individuelle subscription_plans/${planDocId} :`, err);
             });
           }
         })
@@ -2435,10 +2580,10 @@ export async function savePlatformSubscriptions(config: PlatformSubscriptionConf
       ...payload.paymentSettings,
       updatedAt: Date.now()
     }), { merge: true }).catch((err) => {
-      console.error('[FIRESTORE] Erreur synchronisation parametres/paiement :', err);
+      console.error('[STORAGE] Erreur synchronisation parametres/paiement :', err);
     });
   } catch (err: any) {
-    console.error('[FIRESTORE] Échec de la fonction savePlatformSubscriptions :', err);
+    console.error('[STORAGE] Échec de la fonction savePlatformSubscriptions :', err);
     throw err;
   }
 }
@@ -2530,7 +2675,7 @@ export async function getCentralPaymentConfig(): Promise<CentralPaymentConfig> {
       };
     }
   } catch (e) {
-    console.warn('[FIRESTORE] getCentralPaymentConfig error :', e);
+    console.warn('[STORAGE] getCentralPaymentConfig error :', e);
   }
   return fallback;
 }
@@ -2684,8 +2829,10 @@ export async function getPlatformLegal(): Promise<PlatformLegalConfig> {
       localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
       return resolved;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getPlatformLegal fallback :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[STORAGE] getPlatformLegal fallback :', err);
+    }
   }
 
   return DEFAULT_PLATFORM_LEGAL;
@@ -2706,9 +2853,9 @@ export async function savePlatformLegal(config: Partial<PlatformLegalConfig>): P
   // Enregistre dans Firestore
   try {
     await setDoc(doc(db, 'platform_settings', 'legal'), payload, { merge: true });
-    console.log('[FIRESTORE] platform_settings/legal mis à jour avec succès');
+    console.log('[STORAGE] platform_settings/legal mis à jour avec succès');
   } catch (err) {
-    console.warn('[FIRESTORE] Erreur écriture platform_settings/legal :', err);
+    console.warn('[STORAGE] Erreur écriture platform_settings/legal :', err);
   }
 
   // Met à jour le cache local
@@ -2766,8 +2913,10 @@ export function subscribeToPlatformLegal(
         localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
         onUpdate(resolved);
       }
-    } catch (err) {
-      console.warn('[LEGAL] Lecture platform_legal notice :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[LEGAL] Lecture platform_legal notice :', err);
+      }
     }
   };
 
@@ -2871,9 +3020,9 @@ export async function requestMerchantSubscriptionActivation(
       { merge: true }
     );
 
-    console.log(`[FIRESTORE] Demande d'activation enregistrée pour ${merchantId} / ${targetStoreId}`);
+    console.log(`[STORAGE] Demande d'activation enregistrée pour ${merchantId} / ${targetStoreId}`);
   } catch (err) {
-    console.warn('[FIRESTORE] requestMerchantSubscriptionActivation notice :', err);
+    console.warn('[STORAGE] requestMerchantSubscriptionActivation notice :', err);
   }
 
   // Cache local pour résilience
@@ -3004,8 +3153,10 @@ export async function getLandingPageConfig(): Promise<LandingPageConfig> {
       } catch (e) {}
       return merged;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getLandingPageConfig notice :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[STORAGE] getLandingPageConfig notice :', err);
+    }
   }
 
   // 2. Cache local de secours
@@ -3111,8 +3262,10 @@ export function subscribeToLandingPageConfig(
       } else {
         onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
       }
-    } catch (err) {
-      console.warn('[LANDING] Lecture platform_settings/landing notice :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[LANDING] Lecture platform_settings/landing notice :', err);
+      }
       onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
     }
   };
@@ -3235,18 +3388,46 @@ export async function recordUnifiedOrder(payload: UnifiedOrderPayload): Promise<
     timestamp: now
   });
 
-  // 1. Écriture miroir globale dans `orders/{orderDocId}`
+  // 1. Enregistrement prioritaire Supabase SQL (public.orders)
+  try {
+    const isOrderUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderDocId);
+    const orderUuidToUse = isOrderUUID ? orderDocId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined);
+    if (orderUuidToUse) {
+      supabase.from('orders').upsert({
+        id: orderUuidToUse,
+        order_number: orderNum,
+        customer_name: payload.customerName || 'Client Estimé',
+        customer_phone: payload.customerPhone || '',
+        total: Number(payload.total) || 0,
+        status: payload.status || 'pending',
+        items: cleanItems,
+        notes: payload.notes || '',
+        created_at: new Date().toISOString()
+      }, { onConflict: 'id' }).catch(() => {});
+
+      supabase.from('app_registry').upsert({
+        key: `order_${orderDocId}`,
+        tenant_id: cleanStoreId,
+        module_key: 'orders',
+        config_json: recordData
+      }, { onConflict: 'key' }).catch(() => {});
+    }
+  } catch (sbErr) {
+    console.warn('[SUPABASE] Orders upsert notice:', sbErr);
+  }
+
+  // 2. Écriture miroir globale dans `orders/{orderDocId}`
   try {
     await setDoc(doc(db, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
-    console.warn('[FIRESTORE] Global order save note :', err);
+    console.warn('[STORAGE] Global order save note :', err);
   }
 
-  // 2. Écriture sous `stores/{cleanStoreId}/orders/{orderDocId}`
+  // 3. Écriture sous `stores/{cleanStoreId}/orders/{orderDocId}`
   try {
     await setDoc(doc(db, 'stores', cleanStoreId, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
-    console.warn('[FIRESTORE] Store tenant order save note :', err);
+    console.warn('[STORAGE] Store tenant order save note :', err);
   }
 
   // 3. Cache local de secours
@@ -3326,13 +3507,32 @@ export function recordWLeadOrder(payload: {
         timestamp: now
       });
 
-      // Écriture miroir
-      await Promise.allSettled([
-        setDoc(doc(db, 'orders', orderDocId), recordData, { merge: true }),
-        setDoc(doc(db, 'stores', cleanStoreId, 'orders', orderDocId), recordData, { merge: true })
-      ]);
+      // Écriture Supabase SQL
+      try {
+        await supabase.from('orders').upsert({
+          order_number: orderNum,
+          customer_name: 'Prospect Wameet',
+          customer_phone: payload.customerPhone || '',
+          delivery_address: 'Wameet Direct',
+          total_amount: total,
+          currency: 'XOF',
+          payment_method: 'Discussion Wameet Direct',
+          payment_status: 'UNPAID',
+          fulfillment_status: 'w_initiated',
+          metadata: recordData
+        }, { onConflict: 'order_number' });
+
+        await supabase.from('app_registry').upsert({
+          key: `order_${orderDocId}`,
+          tenant_id: cleanStoreId,
+          module_key: 'orders',
+          config_json: recordData
+        }, { onConflict: 'key' });
+      } catch (sbErr) {
+        console.warn('[SUPABASE] W lead tracking notice :', sbErr);
+      }
     } catch (err) {
-      console.warn('[FIRESTORE] W lead tracking background note :', err);
+      console.warn('[WAMEET] W lead tracking background note :', err);
     }
   });
 }

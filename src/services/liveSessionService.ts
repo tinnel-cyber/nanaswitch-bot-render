@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { 
   LiveSession, 
-  LiveSessionMode, 
   LiveSessionStatus,
   LiveChatMessage, 
   LiveQuizQuestion, 
@@ -121,12 +120,45 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
   } catch (err) {
     console.warn('[liveSessionService] Supabase offline or error, using fallback session:', err);
   }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
-  // Fallback propre pour la démonstration
+/**
+ * Convertit un document webinar local en LiveSession complète avec le vrai lien collé
+ */
+function mapWebinarToLiveSession(id: string, w: any): LiveSession {
+  const realUrl = (w.streamUrl || w.meetingUrl || w.socialStreamUrl || '').trim();
+  const plat = String(w.platform || '').toLowerCase();
+  const isMeetingRoom =
+    plat === 'google_meet' ||
+    plat === 'zoom' ||
+    plat === 'google_classroom' ||
+    plat === 'jitsi' ||
+    realUrl.includes('meet.google.com') ||
+    realUrl.includes('zoom.us') ||
+    realUrl.includes('classroom.google.com') ||
+    realUrl.includes('meet.jit.si');
+
   return {
     ...FALLBACK_LIVE_SESSION,
-    sessionSlug: slug,
-    id: `session-${slug}`
+    id,
+    sessionSlug: w.sessionSlug || id,
+    storeId: w.merchantId || w.storeId || FALLBACK_LIVE_SESSION.storeId,
+    storeName: w.storeName || FALLBACK_LIVE_SESSION.storeName,
+    title: w.title || FALLBACK_LIVE_SESSION.title,
+    description: w.description || FALLBACK_LIVE_SESSION.description,
+    sessionMode: w.roomMode === 'CLASSROOM' ? 'interactive_class' : (w.sessionMode || 'live_shopping'),
+    status: 'live',
+    sourceType: plat === 'facebook' ? 'facebook' : (realUrl.endsWith('.mp4') ? 'mp4' : realUrl.endsWith('.m3u8') ? 'hls' : 'youtube'),
+    streamUrl: realUrl || FALLBACK_LIVE_SESSION.streamUrl,
+    coachingRoomUrl: isMeetingRoom ? realUrl : w.coachingRoomUrl,
+    aspectRatio: w.aspectRatio || '16:9',
+    scheduledAt: w.date ? new Date(w.date).getTime() : Date.now(),
+    createdAt: typeof w.createdAt === 'number' ? w.createdAt : Date.now()
   };
 }
 
@@ -217,7 +249,7 @@ export function subscribeLiveSession(
 }
 
 /**
- * Épingler un produit en direct à l'écran chez tous les spectateurs
+ * Épingler un produit en direct à l'écran chez tous les spectateurs (Supabase `public.live_sessions`)
  */
 export async function updatePinnedProduct(
   sessionId: string,
@@ -277,11 +309,11 @@ export async function updateLiveSessionStatus(
 }
 
 /**
- * Crée ou met à jour une session Live
+ * Crée ou met à jour une session Live dans Supabase (`public.live_sessions`)
  */
 export async function createLiveSession(data: Partial<LiveSession>): Promise<LiveSession> {
-  const sessionId = data.id || `live_${Date.now()}`;
-  const slug = data.sessionSlug || data.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || `session-${Date.now()}`;
+  const sessionId = data.id && isUuid(data.id) ? data.id : generateUuid();
+  const slug = data.sessionSlug || sessionId;
 
   const sessionObj: LiveSession = {
     ...FALLBACK_LIVE_SESSION,
@@ -392,10 +424,10 @@ export async function sendLiveChatMessage(
   }
 ): Promise<LiveChatMessage> {
   const newMsg: LiveChatMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     sessionId,
     senderName: message.senderName || 'Participant',
-    senderId: message.senderId,
+    senderId: message.senderId || 'participant',
     senderRole: message.senderRole || 'student',
     text: message.text,
     isQuestion: !!message.isQuestion,
@@ -403,7 +435,6 @@ export async function sendLiveChatMessage(
     avatar: message.avatar
   };
 
-  // Ajout local immédiat
   if (!localChatMemory[sessionId]) localChatMemory[sessionId] = [];
   localChatMemory[sessionId].push(newMsg);
 
@@ -463,7 +494,7 @@ export async function pinLiveChatMessage(sessionId: string, message: LiveChatMes
 }
 
 // =========================================================================
-// 3. LEVÉE DE MAIN EN DIRECT (HAND RAISING)
+// 3. LEVÉE DE MAIN EN DIRECT (HAND RAISING - Supabase `public.live_sessions`)
 // =========================================================================
 
 const localHandRaisedMemory: Record<string, HandRaisedUser[]> = {};
@@ -484,13 +515,10 @@ export async function raiseHandInSession(sessionId: string, user: HandRaisedUser
       payload: user
     });
   } catch (err) {
-    console.warn('[liveSessionService] raiseHandInSession warning:', err);
+    console.warn('[liveSessionService] raiseHandInSession Supabase warning:', err);
   }
 }
 
-/**
- * Baisser la main
- */
 export async function lowerHandInSession(sessionId: string, userId: string): Promise<void> {
   if (localHandRaisedMemory[sessionId]) {
     localHandRaisedMemory[sessionId] = localHandRaisedMemory[sessionId].filter(u => u.id !== userId);
@@ -504,17 +532,14 @@ export async function lowerHandInSession(sessionId: string, userId: string): Pro
       payload: { userId }
     });
   } catch (err) {
-    console.warn('[liveSessionService] lowerHandInSession warning:', err);
+    console.warn('[liveSessionService] lowerHandInSession Supabase warning:', err);
   }
 }
 
 // =========================================================================
-// 4. QUIZ EN DIRECT ÉPINGLÉ (PINNED LIVE QUIZ)
+// 4. QUIZ EN DIRECT ÉPINGLÉ (PINNED LIVE QUIZ - Supabase `public.live_sessions`)
 // =========================================================================
 
-/**
- * Épingle et lance un Quiz en direct chez tous les élèves
- */
 export async function pinLiveQuiz(sessionId: string, quiz: LiveQuizQuestion): Promise<void> {
   const quizPayload = {
     ...quiz,
@@ -536,9 +561,6 @@ export async function pinLiveQuiz(sessionId: string, quiz: LiveQuizQuestion): Pr
   }
 }
 
-/**
- * Clôture le Quiz en direct
- */
 export async function closeLiveQuiz(sessionId: string): Promise<void> {
   try {
     const channel = supabase.channel(`live_quiz_${sessionId}`);
@@ -552,9 +574,6 @@ export async function closeLiveQuiz(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Soumission de réponse élève au Quiz
- */
 export async function submitQuizAnswer(
   sessionId: string,
   quizId: string,
@@ -565,8 +584,9 @@ export async function submitQuizAnswer(
     isCorrect: boolean;
   }
 ): Promise<void> {
+  if (!sessionId || !isUuid(sessionId)) return;
   const respObj: LiveQuizResponse = {
-    id: `resp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     quizId,
     studentName: response.studentName,
     studentId: response.studentId || 'anon',
@@ -583,12 +603,12 @@ export async function submitQuizAnswer(
       payload: respObj
     });
   } catch (err) {
-    console.warn('[liveSessionService] submitQuizAnswer warning:', err);
+    console.warn('[liveSessionService] submitQuizAnswer Supabase warning:', err);
   }
 }
 
 // =========================================================================
-// 5. DEVOIR, SUPPORT PDF & SOUMISSIONS ÉLÈVES (ASSIGNMENTS & SUBMISSIONS)
+// 5. DEVOIR, SUPPORT PDF & SOUMISSIONS ÉLÈVES (Supabase)
 // =========================================================================
 
 const localSubmissionsMemory: Record<string, LiveSubmission[]> = {
@@ -610,9 +630,6 @@ const localSubmissionsMemory: Record<string, LiveSubmission[]> = {
   ]
 };
 
-/**
- * Publie un devoir ou support PDF en direct
- */
 export async function publishLiveAssignment(
   sessionId: string,
   assignment: Omit<LiveAssignment, 'isActive' | 'createdAt' | 'submissionsCount'>
@@ -636,9 +653,6 @@ export async function publishLiveAssignment(
   }
 }
 
-/**
- * Clôture le devoir actif
- */
 export async function closeLiveAssignment(sessionId: string): Promise<void> {
   try {
     const channel = supabase.channel(`live_assign_${sessionId}`);
@@ -652,16 +666,13 @@ export async function closeLiveAssignment(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * Soumission du devoir par l'élève (PDF ou texte)
- */
 export async function submitLiveAssignmentWork(
   sessionId: string,
   submission: Omit<LiveSubmission, 'id' | 'submittedAt' | 'status'>
 ): Promise<LiveSubmission> {
   const subObj: LiveSubmission = {
     ...submission,
-    id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: generateUuid(),
     submittedAt: Date.now(),
     status: 'submitted'
   };
@@ -683,9 +694,6 @@ export async function submitLiveAssignmentWork(
   return subObj;
 }
 
-/**
- * Abonnement en temps réel aux devoirs soumis (côté formateur)
- */
 export function subscribeLiveSubmissions(
   sessionId: string,
   callback: (submissions: LiveSubmission[]) => void
@@ -710,9 +718,6 @@ export function subscribeLiveSubmissions(
   };
 }
 
-/**
- * Noter / corriger un devoir soumis et envoyer feedback
- */
 export async function gradeLiveSubmission(
   sessionId: string,
   submissionId: string,
@@ -725,6 +730,7 @@ export async function gradeLiveSubmission(
       target.grade = grade;
       target.feedback = feedback;
       target.status = 'graded';
+      updatedTarget = target;
     }
   }
 
@@ -736,13 +742,10 @@ export async function gradeLiveSubmission(
       payload: { submissionId, grade, feedback }
     });
   } catch (err) {
-    console.warn('[liveSessionService] gradeLiveSubmission warning:', err);
+    console.warn('[liveSessionService] gradeLiveSubmission Supabase warning:', err);
   }
 }
 
-/**
- * Mise à jour de l'URL de salle de Coaching 1-to-1
- */
 export async function updateCoachingRoom(sessionId: string, roomUrl: string): Promise<void> {
   try {
     await supabase

@@ -38,8 +38,11 @@ import { ElectroHeader } from './ElectroHeader';
 import { ElectroPDP } from './ElectroPDP';
 import { ElectroCatalog } from './ElectroCatalog';
 import { ElectroFooter } from './ElectroFooter';
+import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/AdaptiveHeaderEngine';
+import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
 import { AdminSectionEditTrigger } from '../../components/storeBuilder/AdminSectionEditTrigger';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 
 // Slides du Hero Slider 50/50
 interface HeroSlide {
@@ -201,7 +204,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
   const displayProducts = useMemo(() => {
     if (filteredProducts && filteredProducts.length > 0) return filteredProducts;
     if (allProducts && allProducts.length > 0) return allProducts;
-    return [];
+    return ELECTRO_SHOWCASE_PRODUCTS;
   }, [filteredProducts, allProducts]);
 
   // Ouverture d'une fiche produit (PDP)
@@ -358,42 +361,74 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
           - Blanc sur l'Accueil
           - FOND PLEIN ORANGE (#FF6A00) SUR LES PAGES INTERNES (PDP & CATALOGUE) !
          ========================================================================= */}
-      <div className="relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier l'En-Tête & Navigation ⚡"
-          targetAccordion={1}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        <ElectroHeader
-          storeName={customConfig?.storeName || storeConfig.storeName}
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          selectedCategory={selectedCategory}
-          onSelectCategory={(cat) => {
-            onSelectCategory(cat);
-            setCurrentView('shop');
-          }}
-          cartCount={cartCount}
-          wishlistCount={wishlistCount}
-          compareCount={compareCount}
-          currentView={currentView}
-          onNavigate={(view) => {
-            setCurrentView(view);
-            if (view === 'home') setActiveProduct(null);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onOpenThemeSelector={onOpenThemeSelector}
-          isDepartmentsOpen={isDepartmentsOpen}
-          setIsDepartmentsOpen={setIsDepartmentsOpen}
-          onCartClick={() => {
-            if (displayProducts[0]) handleOpenPDP(displayProducts[0]);
-          }}
-          customConfig={customConfig}
-        />
-      </div>
+      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Navigation ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveHeaderEngine
+            config={customConfig}
+            products={displayProducts}
+            categories={categories}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={handleOpenPDP}
+            onResetToHome={() => {
+              setCurrentView('home');
+              setActiveProduct(null);
+            }}
+            onSelectCategory={(cat) => {
+              onSelectCategory(cat);
+              setCurrentView('shop');
+            }}
+            onSearch={onSearchChange}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier l'En-Tête & Navigation ⚡"
+            targetAccordion={1}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <ElectroHeader
+            storeName={customConfig?.storeName || storeConfig.storeName}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            selectedCategory={selectedCategory}
+            onSelectCategory={(cat) => {
+              onSelectCategory(cat);
+              setCurrentView('shop');
+            }}
+            cartCount={cartCount}
+            wishlistCount={wishlistCount}
+            compareCount={compareCount}
+            currentView={currentView}
+            onNavigate={(view) => {
+              setCurrentView(view);
+              if (view === 'home') setActiveProduct(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onOpenThemeSelector={onOpenThemeSelector}
+            isDepartmentsOpen={isDepartmentsOpen}
+            setIsDepartmentsOpen={setIsDepartmentsOpen}
+            onCartClick={() => {
+              if (displayProducts[0]) handleOpenPDP(displayProducts[0]);
+            }}
+            customConfig={customConfig}
+          />
+        </div>
+      )}
 
       {/* =========================================================================
           2. CONTENU PRINCIPAL SELON LA VUE ACTIVE
@@ -578,17 +613,42 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                     
                     {/* 50% Gauche : Typographie géante & Bouton Orange */}
                     <div className="md:col-span-6 space-y-4 text-left">
-                      <div className="inline-block text-[11px] font-black uppercase tracking-widest text-[#FF6A00] bg-orange-100/70 px-2.5 py-0.5 rounded">
-                        {currentHero.badge}
-                      </div>
+                      <LiveEditable
+                        label="Badge Promo Hero"
+                        field="heroSubtitle"
+                        value={customConfig?.heroSubtitle || currentHero.badge}
+                        targetAccordion={2}
+                        isAdminPreview={isAdminPreview}
+                        isInline={true}
+                      >
+                        <div className="inline-block text-[11px] font-black uppercase tracking-widest text-[#FF6A00] bg-orange-100/70 px-2.5 py-0.5 rounded">
+                          {customConfig?.heroSubtitle || currentHero.badge}
+                        </div>
+                      </LiveEditable>
 
                       <div className="space-y-1">
-                        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light text-slate-800 tracking-tight leading-none">
-                          {currentHero.lightTitle}
-                        </h2>
-                        <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#333E48] tracking-tight leading-tight">
-                          {currentHero.boldSubtitle}
-                        </h3>
+                        <LiveEditable
+                          label="Accroche Légère Hero"
+                          field="heroLightTitle"
+                          value={customConfig?.heroLightTitle || currentHero.lightTitle}
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light text-slate-800 tracking-tight leading-none">
+                            {customConfig?.heroLightTitle || currentHero.lightTitle}
+                          </h2>
+                        </LiveEditable>
+                        <LiveEditable
+                          label="Titre Principal Hero"
+                          field="heroTitle"
+                          value={customConfig?.heroTitle || currentHero.boldSubtitle}
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#333E48] tracking-tight leading-tight">
+                            {customConfig?.heroTitle || currentHero.boldSubtitle}
+                          </h3>
+                        </LiveEditable>
                       </div>
 
                       <div className="pt-2 flex items-baseline gap-2">
@@ -606,42 +666,60 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                       </div>
 
                       <div className="pt-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            playValidationBeep();
-                            setCartCount(prev => prev + 1);
-                            const linked = customConfig?.heroLinkedProductId
-                              ? displayProducts.find(p => p.id === customConfig.heroLinkedProductId)
-                              : displayProducts[0];
-                            if (linked) onBuyNow(linked, 1);
-                          }}
-                          className="electro-hero-btn cursor-pointer"
+                        <LiveEditable
+                          label="Bouton CTA Hero"
+                          field="heroCtaText"
+                          value={customConfig?.heroCtaText || currentHero.ctaText}
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                          isInline={true}
                         >
-                          <span>{currentHero.ctaText}</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playValidationBeep();
+                              setCartCount(prev => prev + 1);
+                              const linked = customConfig?.heroLinkedProductId
+                                ? displayProducts.find(p => p.id === customConfig.heroLinkedProductId)
+                                : displayProducts[0];
+                              if (linked) onBuyNow(linked, 1);
+                            }}
+                            className="electro-hero-btn cursor-pointer"
+                          >
+                            <span>{customConfig?.heroCtaText || currentHero.ctaText}</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </LiveEditable>
                       </div>
                     </div>
 
                     {/* 50% Droite : Image ou Vidéo Produit Phare */}
                     <div className="md:col-span-6 flex items-center justify-center -my-4">
-                      {customConfig?.heroVideoUrl ? (
-                        <video
-                          src={customConfig.heroVideoUrl}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className="max-h-[300px] sm:max-h-[340px] w-auto object-contain rounded-xl"
-                        />
-                      ) : (
-                        <img
-                          src={currentHero.image}
-                          alt={currentHero.boldSubtitle}
-                          className="max-h-[300px] sm:max-h-[340px] w-auto object-contain transform hover:scale-105 transition-transform duration-300"
-                        />
-                      )}
+                      <LiveEditable
+                        label="Visuel Hero Image / Vidéo"
+                        field="heroBannerImageUrl"
+                        value={customConfig?.heroBannerImageUrl || currentHero.image}
+                        type="image"
+                        targetAccordion={2}
+                        isAdminPreview={isAdminPreview}
+                      >
+                        {customConfig?.heroVideoUrl ? (
+                          <video
+                            src={customConfig.heroVideoUrl}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="max-h-[300px] sm:max-h-[340px] w-auto object-contain rounded-xl"
+                          />
+                        ) : (
+                          <img
+                            src={customConfig?.heroBannerImageUrl || currentHero.image}
+                            alt={currentHero.boldSubtitle}
+                            className="max-h-[300px] sm:max-h-[340px] w-auto object-contain transform hover:scale-105 transition-transform duration-300"
+                          />
+                        )}
+                      </LiveEditable>
                     </div>
                   </div>
 
@@ -663,6 +741,172 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                 </div>
               </div>
             </div>
+
+            {/* SOUS-BANNIÈRES SECONDAIRES PERSONNALISÉES (subBanner1 & subBanner2) */}
+            {(customConfig?.subBanner1Title || customConfig?.subBanner1Image || customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+              <div className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(customConfig?.subBanner1Title || customConfig?.subBanner1Image) && (
+                    <div
+                      onClick={() => {
+                        playTapBeep();
+                        setCurrentView('shop');
+                      }}
+                      className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#FF6A00] to-amber-600 text-white p-5 flex items-center justify-between gap-4 cursor-pointer hover:shadow-lg transition-all group"
+                    >
+                      <div className="space-y-1.5 z-10">
+                        {customConfig?.subBanner1Badge && (
+                          <LiveEditable
+                            label="Badge Bannière 1"
+                            field="subBanner1Badge"
+                            value={customConfig.subBanner1Badge}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                            isInline={true}
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-black/20 text-white inline-block">
+                              {customConfig.subBanner1Badge}
+                            </span>
+                          </LiveEditable>
+                        )}
+                        <LiveEditable
+                          label="Titre Bannière 1"
+                          field="subBanner1Title"
+                          value={customConfig.subBanner1Title}
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <h4 className="text-lg font-black leading-tight text-white group-hover:text-amber-100 transition-colors">
+                            {customConfig.subBanner1Title}
+                          </h4>
+                        </LiveEditable>
+                        {customConfig?.subBanner1Subtitle && (
+                          <LiveEditable
+                            label="Sous-titre Bannière 1"
+                            field="subBanner1Subtitle"
+                            value={customConfig.subBanner1Subtitle}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                          >
+                            <p className="text-xs text-white/90 max-w-xs">{customConfig.subBanner1Subtitle}</p>
+                          </LiveEditable>
+                        )}
+                        {customConfig?.subBanner1CtaText && (
+                          <LiveEditable
+                            label="Bouton CTA Bannière 1"
+                            field="subBanner1CtaText"
+                            value={customConfig.subBanner1CtaText}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                            isInline={true}
+                          >
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-white pt-1">
+                              <span>{customConfig.subBanner1CtaText}</span>
+                              <span className="group-hover:translate-x-1 transition-transform">›</span>
+                            </span>
+                          </LiveEditable>
+                        )}
+                      </div>
+                      {customConfig?.subBanner1Image && (
+                        <LiveEditable
+                          label="Image Bannière 1"
+                          field="subBanner1Image"
+                          value={customConfig.subBanner1Image}
+                          type="image"
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <img
+                            src={customConfig.subBanner1Image}
+                            alt={customConfig.subBanner1Title || 'Bannière'}
+                            className="w-24 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                          />
+                        </LiveEditable>
+                      )}
+                    </div>
+                  )}
+                  {(customConfig?.subBanner2Title || customConfig?.subBanner2Image) && (
+                    <div
+                      onClick={() => {
+                        playTapBeep();
+                        setCurrentView('shop');
+                      }}
+                      className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 flex items-center justify-between gap-4 cursor-pointer hover:shadow-lg transition-all group"
+                    >
+                      <div className="space-y-1.5 z-10">
+                        {customConfig?.subBanner2Badge && (
+                          <LiveEditable
+                            label="Badge Bannière 2"
+                            field="subBanner2Badge"
+                            value={customConfig.subBanner2Badge}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                            isInline={true}
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-[#FF6A00] text-white inline-block">
+                              {customConfig.subBanner2Badge}
+                            </span>
+                          </LiveEditable>
+                        )}
+                        <LiveEditable
+                          label="Titre Bannière 2"
+                          field="subBanner2Title"
+                          value={customConfig.subBanner2Title}
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <h4 className="text-lg font-black leading-tight text-white group-hover:text-[#FF6A00] transition-colors">
+                            {customConfig.subBanner2Title}
+                          </h4>
+                        </LiveEditable>
+                        {customConfig?.subBanner2Subtitle && (
+                          <LiveEditable
+                            label="Sous-titre Bannière 2"
+                            field="subBanner2Subtitle"
+                            value={customConfig.subBanner2Subtitle}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                          >
+                            <p className="text-xs text-slate-300 max-w-xs">{customConfig.subBanner2Subtitle}</p>
+                          </LiveEditable>
+                        )}
+                        {customConfig?.subBanner2CtaText && (
+                          <LiveEditable
+                            label="Bouton CTA Bannière 2"
+                            field="subBanner2CtaText"
+                            value={customConfig.subBanner2CtaText}
+                            targetAccordion={2}
+                            isAdminPreview={isAdminPreview}
+                            isInline={true}
+                          >
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-[#FF6A00] pt-1">
+                              <span>{customConfig.subBanner2CtaText}</span>
+                              <span className="group-hover:translate-x-1 transition-transform">›</span>
+                            </span>
+                          </LiveEditable>
+                        )}
+                      </div>
+                      {customConfig?.subBanner2Image && (
+                        <LiveEditable
+                          label="Image Bannière 2"
+                          field="subBanner2Image"
+                          value={customConfig.subBanner2Image}
+                          type="image"
+                          targetAccordion={2}
+                          isAdminPreview={isAdminPreview}
+                        >
+                          <img
+                            src={customConfig.subBanner2Image}
+                            alt={customConfig.subBanner2Title || 'Bannière'}
+                            className="w-24 h-auto object-contain group-hover:scale-105 transition-transform shrink-0"
+                          />
+                        </LiveEditable>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* LES 4 MINI-BANNIÈRES HORIZONTALES */}
             <div className="pt-6">
@@ -1146,9 +1390,17 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
             />
             <div className="flex items-center justify-between mb-6 pb-3 border-b border-[#EAEAEA]">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-black text-[#333E48] tracking-tight uppercase">
-                  {customConfig?.catalogTitle || 'Articles Recommandés & Nouveautés'}
-                </h2>
+                <LiveEditable
+                  label="Titre du Catalogue"
+                  field="catalogTitle"
+                  value={customConfig?.catalogTitle || 'Articles Recommandés & Nouveautés'}
+                  targetAccordion={3}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h2 className="text-xl font-black text-[#333E48] tracking-tight uppercase">
+                    {customConfig?.catalogTitle || 'Articles Recommandés & Nouveautés'}
+                  </h2>
+                </LiveEditable>
                 <span className="text-xs font-bold text-[#FF6A00] bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
                   {displayProducts.length} produits
                 </span>
@@ -1250,26 +1502,57 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
           - Footer 4 colonnes #F8F8F8 avec hotline, catégories et service client
           - Sous-footer avec Copyright et badges de paiement
          ========================================================================= */}
-      <div className="relative group">
-        <AdminSectionEditTrigger
-          label="✏️ Modifier le Footer & Contact Hotline ⚡"
-          targetAccordion={5}
-          onSelectSection={onSelectCustomizerSection}
-          isPublicView={isPublicView}
-          isAdminPreview={isAdminPreview}
-          position="top-right"
-        />
-        <ElectroFooter
-          storeName={customConfig?.storeName || storeConfig.storeName}
-          onSelectProduct={handleOpenPDP}
-          onNavigateCategory={(cat) => {
-            onSelectCategory(cat);
-            setCurrentView('shop');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          customConfig={customConfig}
-        />
-      </div>
+      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+        <div className="relative group/footer-section">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Contact Hotline ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <AdaptiveFooterEngine
+            config={customConfig}
+            products={displayProducts}
+            storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
+            categories={categories}
+            onOpenFunnel={onOpenFunnel}
+            onSelectProduct={handleOpenPDP}
+            onResetToHome={() => {
+              setCurrentView('home');
+              setActiveProduct(null);
+            }}
+            onSelectCategory={(cat) => {
+              onSelectCategory(cat);
+              setCurrentView('shop');
+            }}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+          />
+        </div>
+      ) : (
+        <div className="relative group">
+          <AdminSectionEditTrigger
+            label="✏️ Modifier le Footer & Contact Hotline ⚡"
+            targetAccordion={5}
+            onSelectSection={onSelectCustomizerSection}
+            isPublicView={isPublicView}
+            isAdminPreview={isAdminPreview}
+            position="top-right"
+          />
+          <ElectroFooter
+            storeName={customConfig?.storeName || storeConfig.storeName}
+            onSelectProduct={handleOpenPDP}
+            onNavigateCategory={(cat) => {
+              onSelectCategory(cat);
+              setCurrentView('shop');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            customConfig={customConfig}
+          />
+        </div>
+      )}
 
       {/* Toast Notification Flottant */}
       {toastMessage && (

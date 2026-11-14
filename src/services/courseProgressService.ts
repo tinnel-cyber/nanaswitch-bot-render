@@ -106,7 +106,7 @@ export async function saveCourseProgress(
     }
     console.warn('[COURSE PROGRESS API] Échec réponse HTTP :', response.status);
   } catch (fetchErr: any) {
-    console.warn('[COURSE PROGRESS API NOTICE] Erreur réseau API backend, bascule Firestore direct :', fetchErr.message);
+    console.warn('[COURSE PROGRESS API NOTICE] Erreur réseau API backend, bascule storage direct :', fetchErr.message);
   }
 
   // 3. Fallback direct Firestore si le backend Express est en veille ou injoignable
@@ -160,7 +160,7 @@ export async function saveCourseProgress(
       };
     }
   } catch (fsErr: any) {
-    console.error('[COURSE PROGRESS FIRESTORE ERROR]', fsErr);
+    console.error('[COURSE PROGRESS storage ERROR]', fsErr);
   }
 
   // Si tout échoue, on renvoie le statut basé sur le cache local
@@ -210,7 +210,7 @@ export async function fetchCourseProgress(
       }
     }
   } catch (err) {
-    console.warn('[FETCH PROGRESS FIRESTORE NOTICE]', err);
+    console.warn('[FETCH PROGRESS storage NOTICE]', err);
   }
 
   // 3. Fallback LocalStorage

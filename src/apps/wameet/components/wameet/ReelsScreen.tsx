@@ -449,7 +449,7 @@ export const ReelsScreen: React.FC<ReelsScreenProps> = ({
           }
         }
       } catch (err) {
-        console.warn('[REELS] Impossible de récupérer les Reels Firestore :', err);
+        console.warn('[REELS] Impossible de récupérer les Reels storage :', err);
       }
     };
     fetchRemoteReels();

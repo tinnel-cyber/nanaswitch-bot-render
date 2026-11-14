@@ -1358,7 +1358,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     playValidationBeep();
     const cleanPhone = (store.phone || '').replace(/[^0-9+]/g, '');
     const message = encodeURIComponent(
-      `Bonjour ${store.ownerName}, ici la direction du réseau NaNa POS. Notre analyseur de rentabilité a détecté que vous avez prélevé ${formatCFA(store.personalExpensesAmount)} (${store.personalExpensesRate}% de votre CA) en dépenses personnelles ce mois-ci. Ce niveau met votre caisse grossiste en danger. Nous vous recommandons de vous verser un salaire fixe de 180 000 F CFA pour sécuriser vos approvisionnements.`
+      `Bonjour ${store.ownerName}, ici la direction du réseau Nanasore. Notre analyseur de rentabilité a détecté que vous avez prélevé ${formatCFA(store.personalExpensesAmount)} (${store.personalExpensesRate}% de votre CA) en dépenses personnelles ce mois-ci. Ce niveau met votre caisse grossiste en danger. Nous vous recommandons de vous verser un salaire fixe de 180 000 F CFA pour sécuriser vos approvisionnements.`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
     showToast(`Conseil de gestion trésorerie envoyé à ${store.ownerName} !`);
@@ -1723,7 +1723,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base font-extrabold text-white tracking-tight">NaNa POS PLATFORME</h1>
+                  <h1 className="text-base font-extrabold text-white tracking-tight">Nanasore PLATFORME</h1>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 uppercase tracking-wider">
                     SUPER-ADMIN / FONDATEUR
                   </span>
@@ -2276,7 +2276,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             <div>
               <h2 className="text-sm font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <Globe2 className="w-4 h-4 text-indigo-400" />
-                Métrique Globale du Réseau Nana POS
+                Métrique Globale du Réseau Nanasore
               </h2>
               <p className="text-xs text-slate-400">
                 Performance agrégée en temps réel de l'ensemble des points de vente abonnés
@@ -3847,7 +3847,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                           {/* Contact WhatsApp */}
                           <td className="p-3.5">
                             <a
-                              href={`https://api.whatsapp.com/send?phone=${encodeURIComponent(req.whatsappPhone.replace(/[^0-9+]/g, ''))}&text=${encodeURIComponent(`Bonjour ${req.managerFullName}, concernant votre dossier de certification KYC pour ${req.storeName} sur NaNa POS :`)}`}
+                              href={`https://api.whatsapp.com/send?phone=${encodeURIComponent(req.whatsappPhone.replace(/[^0-9+]/g, ''))}&text=${encodeURIComponent(`Bonjour ${req.managerFullName}, concernant votre dossier de certification KYC pour ${req.storeName} sur Nanasore :`)}`}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-bold underline"
@@ -4005,7 +4005,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             <div>
               <div className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
                 <Users className="w-4 h-4 text-amber-400" />
-                Règles du Programme d'Affiliation NaNa POS
+                Règles du Programme d'Affiliation Nanasore
               </div>
               <p className="text-xs text-slate-400 mt-1">
                 Taux de commission reversé automatiquement aux boutiquiers apportant de nouveaux points de vente.
@@ -4127,7 +4127,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               type="button"
               onClick={handleResetDefaultLegal}
               className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
-              title="Restaurer les textes légaux par défaut de Nana POS"
+              title="Restaurer les textes légaux par défaut de Nanasore"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Valeurs par défaut</span>
@@ -4192,7 +4192,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
               value={tickerTextEdit}
               onChange={(e) => setTickerTextEdit(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 focus:border-blue-400 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 outline-none transition font-medium"
-              placeholder="Ex: © 2026 NaNa POS. Tous droits réservés. • Mentions Légales • Politique de Confidentialité..."
+              placeholder="Ex: © 2026 Nanasore. Tous droits réservés. • Mentions Légales • Politique de Confidentialité..."
             />
             <p className="text-[11px] text-slate-500 mt-1.5">
               💡 Astuce : Les termes <strong className="text-blue-400">"Mentions Légales"</strong> et <strong className="text-emerald-400">"Politique de Confidentialité"</strong> sont automatiquement détectés et transformés en boutons interactifs ouvrant les modales dédiées.

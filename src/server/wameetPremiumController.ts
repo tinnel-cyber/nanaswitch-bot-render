@@ -116,7 +116,7 @@ export async function initiateWameetConsultation(params: {
       await setDoc(doc(collection(db, 'wameet_consultations'), wameetId), consultation);
     }
   } catch (err) {
-    console.warn('[WAMEET CONSULTATION] Écriture Firestore en fallback local :', err);
+    console.warn('[WAMEET CONSULTATION] Écriture storage en fallback local :', err);
   }
 
   return consultation;
@@ -150,7 +150,7 @@ export async function handlePaymentWebhook(payload: {
         consultation = snap.data() as WameetConsultationRecord;
       }
     } catch (e) {
-      console.warn('[WEBHOOK WAMEET] Lecture consultation Firestore:', e);
+      console.warn('[WEBHOOK WAMEET] Lecture consultation storage:', e);
     }
   }
 
@@ -190,7 +190,7 @@ export async function handlePaymentWebhook(payload: {
       console.log(`[TRANSACTIONS BDD] Transaction enregistrée pour Wameet ${wameetId} : ${txId}`);
     }
   } catch (err) {
-    console.warn('[TRANSACTIONS BDD] Écriture transaction Firestore en fallback local :', err);
+    console.warn('[TRANSACTIONS BDD] Écriture transaction storage en fallback local :', err);
   }
 
   // RÈGLE STRICTE DU CAHIER DES CHARGES :
@@ -273,7 +273,7 @@ export async function getVerifiedJitsiRoom(wameetId: string, userId: string): Pr
         consultation = snap.data() as WameetConsultationRecord;
       }
     } catch (e) {
-      console.warn('[VERIFY JITSI ROOM] Erreur lecture consultation Firestore:', e);
+      console.warn('[VERIFY JITSI ROOM] Erreur lecture consultation storage:', e);
     }
   }
 
@@ -303,7 +303,7 @@ export async function getVerifiedJitsiRoom(wameetId: string, userId: string): Pr
       const snap = await getDocs(q);
       hasValidTx = !snap.empty;
     } catch (e) {
-      console.warn('[VERIFY JITSI ROOM] Erreur vérification transaction Firestore:', e);
+      console.warn('[VERIFY JITSI ROOM] Erreur vérification transaction storage:', e);
     }
   }
 

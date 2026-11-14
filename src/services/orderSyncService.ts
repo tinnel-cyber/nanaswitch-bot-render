@@ -123,7 +123,7 @@ export async function saveCustomerOrderEverywhere(
     await persistCustomerOrder(order, storeId);
     return true;
   } catch (err) {
-    console.warn('[orderSyncService] Erreur persistance Firestore (mise en file offlineSyncQueue):', err);
+    console.warn('[orderSyncService] Erreur persistance storage (mise en file offlineSyncQueue):', err);
     queueOfflineMutation({
       type: 'CREATE_ORDER',
       storeId,
@@ -174,7 +174,7 @@ export async function updateCustomerOrderStatus(
       try {
         await persistCustomerOrder(updatedOrder, storeId);
       } catch (e) {
-        console.warn('[orderSyncService] Erreur update Firestore, mise en file offlineSyncQueue:', e);
+        console.warn('[orderSyncService] Erreur update storage, mise en file offlineSyncQueue:', e);
         queueOfflineMutation({
           type: 'UPDATE_ORDER',
           storeId,
@@ -213,7 +213,7 @@ export async function deleteCustomerOrderEverywhere(
     try {
       await deleteCustomerOrder(orderId, storeId);
     } catch (e) {
-      console.warn('[orderSyncService] Erreur delete Firestore, mise en file offlineSyncQueue:', e);
+      console.warn('[orderSyncService] Erreur delete storage, mise en file offlineSyncQueue:', e);
       queueOfflineMutation({
         type: 'DELETE_ORDER',
         storeId,

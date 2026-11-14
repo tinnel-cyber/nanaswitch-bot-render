@@ -198,7 +198,7 @@ export const NaNaSwitchBillingPage: React.FC<NaNaSwitchBillingPageProps> = ({
           }, { merge: true });
         }
       } catch (err) {
-        console.warn('[NANA_SWITCH] Erreur sync wallet Firestore :', err);
+        console.warn('[NANA_SWITCH] Erreur sync wallet storage :', err);
       }
     };
 

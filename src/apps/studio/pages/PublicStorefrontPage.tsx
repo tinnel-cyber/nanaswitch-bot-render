@@ -6,8 +6,6 @@ import { ProductDetailModal } from '../../../components/storeBuilder/ProductDeta
 import { UltimateCheckout, CheckoutProductSummary } from '../../../components/payment/UltimateCheckout';
 import { ShoppingBag, CreditCard } from 'lucide-react';
 import { formatCFA, playTapBeep } from '../../../utils/audio';
-import { db } from '../../../firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
 import { ensureMandatoryProductSlug } from '../../../utils/slugEngine';
 import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/StoreLegalAndTrackingModals';
@@ -110,7 +108,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   }, []);
 
   const activeInitialTheme = useMemo(() => {
-    return urlPreviewTheme || urlThemeFromPath || 'theme-blank-custom';
+    return urlPreviewTheme || urlThemeFromPath || undefined;
   }, [urlPreviewTheme, urlThemeFromPath]);
 
   // 1.1 Détection du mode Sandbox Admin (ex: /et/sandbox, /se/sandbox, ou ?sandbox=true)
@@ -253,28 +251,40 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     if (isSandboxMode) return; // Mode Sandbox : les données proviennent du brouillon admin local
     const storeIdToUse = actualStoreId || targetStoreId;
     if (!storeIdToUse) return;
-    const storeRef = doc(db, 'stores', storeIdToUse);
-    
-    // Chargement unique des données storeConfig sans connexion d'écouteur persistant Firebase
+    const storeLookupIds = Array.from(new Set([
+      storeIdToUse,
+      resolvedStoreSlug,
+      `store-${resolvedStoreSlug}`,
+      targetStoreId,
+      actualStoreId
+    ].filter(Boolean) as string[]));
+
+    // 1. Chargement prioritaire depuis Supabase SQL (tables app_registry & tenants)
     let isCancelled = false;
-    getDoc(storeRef).then((snap) => {
-      if (!isCancelled && snap.exists()) {
-        const data = snap.data();
-        setStoreConfig(prev => {
-          const nextConfig = {
-            ...prev,
-            ...data,
-            storeName: data.storeName || prev.storeName,
-            slug: data.storeSlug || data.slug || prev.slug,
-            active_theme_id: urlPreviewTheme || data.activeThemeId || data.active_theme_id || prev.active_theme_id,
-            activeThemeId: urlPreviewTheme || data.activeThemeId || data.active_theme_id || prev.activeThemeId,
-            themeCustomization: data.themeCustomization || (prev as any).themeCustomization
-          };
-          writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });
-          return nextConfig;
-        });
-      }
-    }).catch(() => {});
+    supabase
+      .from('app_registry')
+      .select('*')
+      .in('tenant_id', storeLookupIds)
+      .eq('module_key', 'theme_config')
+      .limit(1)
+      .then(({ data: appRegRows }) => {
+        const appRegData = appRegRows && appRegRows.length > 0 ? appRegRows[0] : null;
+        if (!isCancelled && appRegData?.config_json) {
+          const cfg = appRegData.config_json as any;
+          setStoreConfig(prev => {
+            const nextConfig = {
+              ...prev,
+              storeName: cfg.customConfig?.storeName || prev.storeName,
+              slug: cfg.storeSlug || prev.slug,
+              active_theme_id: urlPreviewTheme || cfg.activeThemeId || cfg.active_theme_id || prev.active_theme_id,
+              activeThemeId: urlPreviewTheme || cfg.activeThemeId || cfg.active_theme_id || prev.activeThemeId,
+              themeCustomization: cfg.customConfig || (prev as any).themeCustomization
+            };
+            writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });
+            return nextConfig;
+          });
+        }
+      }).catch(() => {});
 
     // Écouteur Supabase Realtime sur app_registry (Synchronisation instantanée du thème)
     const themeChannelName = `public_theme_${storeIdToUse}_${Math.random().toString(36).substring(7)}`;
@@ -303,6 +313,17 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
                 writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });
                 return nextConfig;
               });
+            }
+          }
+          if (payload.new && (payload.new as any).module_key === 'products') {
+            const cfg = (payload.new as any).config_json;
+            if (cfg?.products && Array.isArray(cfg.products)) {
+              mergeProductsFromData(cfg.products);
+              if (productMap.size > 0) {
+                const loaded = Array.from(productMap.values());
+                setProducts(loaded);
+                writeFastStoreCache(resolvedStoreSlug, { products: loaded });
+              }
             }
           }
         }
@@ -366,26 +387,49 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
       }
     } catch {}
 
-    // 2. Requêtes parallèles vers les sources Firestore : stores/.../products, tenants/.../products, stores/.../inventory
-    Promise.allSettled([
-      getDocs(collection(db, 'stores', storeIdToUse, 'products')),
-      getDocs(collection(db, 'tenants', storeIdToUse, 'products')),
-      getDocs(collection(db, 'stores', storeIdToUse, 'inventory'))
-    ]).then((results) => {
-      results.forEach((res) => {
-        if (res.status === 'fulfilled' && !res.value.empty) {
-          const docsData = res.value.docs.map(d => ({ ...d.data(), id: d.id }));
-          mergeProductsFromData(docsData);
+    // 2. Requête prioritaire Supabase app_registry (produits synchronisés cloud)
+    supabase
+      .from('app_registry')
+      .select('config_json')
+      .in('tenant_id', storeLookupIds)
+      .eq('module_key', 'products')
+      .then(({ data: regDataList }) => {
+        if (Array.isArray(regDataList) && regDataList.length > 0) {
+          regDataList.forEach(regData => {
+            if (regData?.config_json?.products && Array.isArray(regData.config_json.products)) {
+              mergeProductsFromData(regData.config_json.products);
+            }
+          });
+          if (productMap.size > 0) {
+            const loaded = Array.from(productMap.values());
+            setProducts(loaded);
+            writeFastStoreCache(resolvedStoreSlug, { products: loaded });
+          }
         }
-      });
-      if (productMap.size > 0) {
-        const loaded = Array.from(productMap.values());
-        setProducts(loaded);
-        writeFastStoreCache(resolvedStoreSlug, { products: loaded });
-      }
-    }).catch(err => {
-      console.warn('[PublicStorefrontPage] Erreur lecture catalogue unifié:', err);
-    });
+      })
+      .catch(() => {});
+
+    // 3. Requête Supabase SQL table public.products (Sécurisée contre erreur 22P02 UUID)
+    const validUuids = storeLookupIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    let prodQuery = supabase.from('products').select('*');
+    if (validUuids.length > 0) {
+      prodQuery = prodQuery.or(`tenant_id.in.(${validUuids.join(',')}),vendor_id.in.(${storeLookupIds.map(id => `"${id}"`).join(',')})`);
+    } else {
+      prodQuery = prodQuery.in('vendor_id', storeLookupIds);
+    }
+    prodQuery
+      .limit(60)
+      .then(({ data: supaProds }) => {
+        if (supaProds && supaProds.length > 0) {
+          mergeProductsFromData(supaProds);
+          if (productMap.size > 0) {
+            const loaded = Array.from(productMap.values());
+            setProducts(loaded);
+            writeFastStoreCache(resolvedStoreSlug, { products: loaded });
+          }
+        }
+      })
+      .catch(() => {});
 
     return () => {
       isCancelled = true;
@@ -393,12 +437,16 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     };
   }, [actualStoreId, targetStoreId, resolvedStoreSlug, urlPreviewTheme]);
 
+  const effectiveAllProducts = useMemo(() => {
+    return products.length > 0 ? products : FALLBACK_STUDIO_PRODUCTS;
+  }, [products]);
+
   // Résolution 0ms immédiate du produit cible (via prop ou Deep-Link URL ?product= / ?produit= / #product-)
   useEffect(() => {
-    if (products.length === 0) return;
+    if (effectiveAllProducts.length === 0) return;
     let foundTarget: StoreProductItem | undefined = undefined;
     if (initialProductId) {
-      foundTarget = products.find(p => p.id === initialProductId || p.slug === initialProductId);
+      foundTarget = effectiveAllProducts.find(p => p.id === initialProductId || p.slug === initialProductId);
     }
     if (!foundTarget && typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -406,7 +454,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
       const hashParam = window.location.hash ? window.location.hash.replace(/^#product-/, '') : null;
       const target = slugParam || hashParam;
       if (target) {
-        foundTarget = products.find(p => 
+        foundTarget = effectiveAllProducts.find(p => 
           (p.slug && p.slug.toLowerCase() === target.toLowerCase()) ||
           (p.productSlug && p.productSlug.toLowerCase() === target.toLowerCase()) ||
           p.id === target
@@ -416,23 +464,23 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     if (foundTarget) {
       setSelectedProduct(prev => prev?.id === foundTarget?.id ? prev : foundTarget);
     }
-  }, [products, initialProductId]);
+  }, [effectiveAllProducts, initialProductId]);
 
   const categories = useMemo(() => {
     const set = new Set<string>(['Tous les produits']);
-    products.forEach(p => {
+    effectiveAllProducts.forEach(p => {
       if (p.category) set.add(p.category);
     });
     return Array.from(set);
-  }, [products]);
+  }, [effectiveAllProducts]);
 
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    return effectiveAllProducts.filter(p => {
       const matchCat = selectedCategory === 'Tous les produits' || p.category === selectedCategory;
       const matchSearch = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-  }, [products, selectedCategory, searchQuery]);
+  }, [effectiveAllProducts, selectedCategory, searchQuery]);
 
   // Synchronisation popstate (Bouton retour physique/mobile pour la modale produit)
   useEffect(() => {
@@ -598,8 +646,8 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         customConfig={isSandboxMode && sandboxDraftConfig ? sandboxDraftConfig : (storeConfig as any).themeCustomization}
         storeTheme="light"
         whiteLabelConfig={whiteLabelConfig}
-        allProducts={products.length > 0 ? products : (isSandboxMode ? FALLBACK_STUDIO_PRODUCTS : [])}
-        filteredProducts={filteredProducts.length > 0 ? filteredProducts : (isSandboxMode ? FALLBACK_STUDIO_PRODUCTS : [])}
+        allProducts={effectiveAllProducts}
+        filteredProducts={filteredProducts}
         categories={categories}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}

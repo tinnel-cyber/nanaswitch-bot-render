@@ -57,23 +57,75 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
 
   if (!isOpen) return null;
 
+  const detectProviderFromUrl = (rawUrl: string): LivePlatformProvider | null => {
+    const lower = rawUrl.trim().toLowerCase();
+    if (!lower) return null;
+    if (lower.includes('meet.google.com') || lower.includes('g.co/meet')) return 'GOOGLE_MEET';
+    if (lower.includes('zoom.us') || lower.includes('zoom.com')) return 'ZOOM';
+    if (lower.includes('jit.si') || lower.includes('jitsi')) return 'JITSI';
+    if (lower.includes('daily.co')) return 'DAILY';
+    return null;
+  };
+
+  const handleMeetingUrlChange = (rawUrl: string) => {
+    setMeetingUrl(rawUrl);
+    const detected = detectProviderFromUrl(rawUrl);
+    if (detected && detected !== provider) {
+      setProvider(detected);
+    }
+    const trimmed = rawUrl.trim();
+    if (trimmed) {
+      if (detected === 'GOOGLE_MEET') {
+        const match = trimmed.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+        if (match?.[1]) setMeetingId(match[1]);
+      } else if (detected === 'ZOOM') {
+        const match = trimmed.match(/\/(?:j|wc|s)\/(\d+)/i);
+        if (match?.[1]) setMeetingId(match[1]);
+      } else if (detected === 'JITSI') {
+        try {
+          const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+          setJitsiServerDomain(parsed.hostname || 'meet.jit.si');
+          const room = parsed.pathname.replace(/^\/+/, '');
+          if (room) {
+            setJitsiRoomName(room);
+            setMeetingId(room);
+          }
+        } catch {
+          // ignore invalid partial url
+        }
+      }
+    }
+  };
+
   const handleGenerateMeeting = async () => {
     playTapBeep();
     setIsGenerating(true);
 
     try {
-      const generated = await generateLiveMeeting(provider, {
+      const trimmedExisting = meetingUrl.trim();
+      const detectedFromExisting = detectProviderFromUrl(trimmedExisting);
+      const effectiveProvider = detectedFromExisting || provider;
+      if (detectedFromExisting && detectedFromExisting !== provider) {
+        setProvider(detectedFromExisting);
+      }
+
+      const generated = await generateLiveMeeting(effectiveProvider, {
         title: title || 'Session Directe',
         scheduledAt,
         durationMinutes,
         instructorId: 'telecom-master-instructor'
       });
 
-      setMeetingUrl(generated.meetingUrl || '');
-      setMeetingId(generated.meetingId || '');
-      setPasscode(generated.passcode || '');
-      if (generated.jitsiServerDomain) setJitsiServerDomain(generated.jitsiServerDomain);
-      if (generated.jitsiRoomName) setJitsiRoomName(generated.jitsiRoomName);
+      // Si l'utilisateur a déjà collé son propre lien (ex: Google Meet, Zoom, etc.), on le conserve !
+      const hasCustomPastedUrl =
+        trimmedExisting.length > 0 &&
+        !trimmedExisting.includes('konkobo-telecom.daily.co');
+
+      setMeetingUrl(hasCustomPastedUrl ? trimmedExisting : (generated.meetingUrl || ''));
+      setMeetingId(meetingId.trim() || generated.meetingId || '');
+      setPasscode(passcode.trim() || generated.passcode || '');
+      if (!hasCustomPastedUrl && generated.jitsiServerDomain) setJitsiServerDomain(generated.jitsiServerDomain);
+      if (!hasCustomPastedUrl && generated.jitsiRoomName) setJitsiRoomName(generated.jitsiRoomName);
       if (generated.isAutoRecordEnabled !== undefined) setIsAutoRecord(generated.isAutoRecordEnabled);
 
       playValidationBeep();
@@ -86,15 +138,18 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
     e.preventDefault();
     playTapBeep();
 
+    const trimmedUrl = meetingUrl.trim();
+    const detectedProvider = detectProviderFromUrl(trimmedUrl) || provider;
+
     const finalConfig: LiveSessionConfig = {
-      provider,
+      provider: detectedProvider,
       scheduledAt,
       durationMinutes,
-      meetingUrl: meetingUrl || `https://konkobo-telecom.daily.co/live-${Date.now().toString().slice(-4)}`,
-      meetingId: meetingId || `meet-${Date.now().toString().slice(-4)}`,
+      meetingUrl: trimmedUrl || `https://konkobo-telecom.daily.co/live-${Date.now().toString().slice(-4)}`,
+      meetingId: meetingId.trim() || `meet-${Date.now().toString().slice(-4)}`,
       passcode: passcode || 'nana2026',
-      jitsiServerDomain: provider === 'JITSI' ? jitsiServerDomain : undefined,
-      jitsiRoomName: provider === 'JITSI' ? jitsiRoomName : undefined,
+      jitsiServerDomain: detectedProvider === 'JITSI' ? jitsiServerDomain : undefined,
+      jitsiRoomName: detectedProvider === 'JITSI' ? jitsiRoomName : undefined,
       isAutoRecordEnabled: isAutoRecord,
       autoMarkCompletedOnEnd: autoMarkCompleted
     };
@@ -289,8 +344,8 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
                 <input
                   type="url"
                   value={meetingUrl}
-                  onChange={(e) => setMeetingUrl(e.target.value)}
-                  placeholder={`Lien généré pour ${provider}...`}
+                  onChange={(e) => handleMeetingUrlChange(e.target.value)}
+                  placeholder="Collez votre lien (Google Meet, Zoom, Jitsi, Daily.co) ou cliquez sur Générer..."
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs font-mono focus:border-emerald-500 focus:outline-none transition"
                 />
               </div>

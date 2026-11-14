@@ -14,9 +14,7 @@ import {
   SmartTransactionData
 } from '../components/wameet/SmartTransactionBubble';
 import { playTapBeep, playValidationBeep } from '../utils/audio';
-import { doc, setDoc, collection, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
-import { db } from '../firebase';
 
 // ============================================================================
 // TYPES ET INTERFACES DU HOOK useSmartTransactions
@@ -442,50 +440,60 @@ export function useSmartTransactions(
         console.log('[SMART HOOK NOTICE] Socket en attente, diffusion de secours activée.');
       }
 
-      // 4. PERSISTANCE EN ARRIÈRE-PLAN DANS FIRESTORE (Non-bloquante)
+      // 4. PERSISTANCE EN ARRIÈRE-PLAN DANS SUPABASE (Non-bloquante)
       try {
-        const messageDocRef = doc(db, 'wameet_chats', chatId, 'messages', tempMessageId);
-        setDoc(messageDocRef, {
-          id: tempMessageId,
-          chatId,
-          senderId: userId,
-          senderName: userName,
-          type: 'transaction',
-          transactionType: normalizedType,
-          transactionId: newTransactionId,
-          amount: numericAmount,
-          currency: payload.currency || 'FCFA',
-          status: 'pending',
-          title: resolvedTitle,
-          text: payload.message || '',
-          data: optimisticMessage.data,
-          createdAt: formattedTime,
-          createdAtServer: serverTimestamp()
-        }, { merge: true }).catch((err) => {
-          console.warn('[SMART HOOK] Notice sauvegarde Firestore :', err.message);
-        });
-
-        // Si c'est un séquestre Escrow, enregistrement dans la collection d'audit wameet_escrow_transactions
-        if (normalizedType === 'escrow') {
-          const escrowDocRef = doc(db, 'wameet_escrow_transactions', newTransactionId);
-          setDoc(escrowDocRef, {
-            transactionId: newTransactionId,
+        supabase.from('app_registry').upsert({
+          key: `wameet_msg_${tempMessageId}`,
+          name: `wameet_msg_${tempMessageId}`,
+          module_key: 'wameet_messages',
+          config_json: {
+            id: tempMessageId,
             chatId,
-            messageId: tempMessageId,
-            sellerId: userId,
-            sellerName: userName,
-            buyerId: payload.recipientId || '',
-            buyerName: payload.recipientName || '',
+            senderId: userId,
+            senderName: userName,
+            type: 'transaction',
+            transactionType: normalizedType,
+            transactionId: newTransactionId,
             amount: numericAmount,
-            currency: 'FCFA',
-            escrowStatus: 'pending',
+            currency: payload.currency || 'FCFA',
             status: 'pending',
             title: resolvedTitle,
-            createdAtServer: serverTimestamp()
-          }, { merge: true }).catch(() => {});
+            text: payload.message || '',
+            data: optimisticMessage.data,
+            createdAt: formattedTime,
+            createdAtServer: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        }).catch((err: any) => {
+          console.warn('[SMART HOOK] Notice sauvegarde Supabase :', err?.message);
+        });
+
+        // Si c'est un séquestre Escrow, enregistrement dans app_registry sous le module wameet_escrow
+        if (normalizedType === 'escrow') {
+          supabase.from('app_registry').upsert({
+            key: `escrow_${newTransactionId}`,
+            name: `escrow_${newTransactionId}`,
+            module_key: 'wameet_escrow',
+            config_json: {
+              transactionId: newTransactionId,
+              chatId,
+              messageId: tempMessageId,
+              sellerId: userId,
+              sellerName: userName,
+              buyerId: payload.recipientId || '',
+              buyerName: payload.recipientName || '',
+              amount: numericAmount,
+              currency: 'FCFA',
+              escrowStatus: 'pending',
+              status: 'pending',
+              title: resolvedTitle,
+              createdAtServer: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          }).catch(() => {});
         }
       } catch (e) {
-        console.warn('[SMART HOOK] Notice Firestore non-bloquante :', e);
+        console.warn('[SMART HOOK] Notice Supabase non-bloquante :', e);
       }
 
       setIsProcessingAction(false);

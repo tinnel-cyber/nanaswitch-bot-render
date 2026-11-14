@@ -58,7 +58,7 @@ export async function saveEscrowProject(project: EscrowProject): Promise<void> {
     const publicDocRef = doc(db, 'public_projects', project.id);
     await setDoc(publicDocRef, updatedProject, { merge: true });
   } catch (err) {
-    console.warn('Erreur Firestore saveEscrowProject :', err);
+    console.warn('Erreur storage saveEscrowProject :', err);
   }
 }
 
@@ -83,7 +83,7 @@ export async function getEscrowProject(
       return publicSnap.data() as EscrowProject;
     }
   } catch (err) {
-    console.warn('Erreur lecture Firestore getEscrowProject :', err);
+    console.warn('Erreur lecture storage getEscrowProject :', err);
   }
 
   // 2. Repli cache local
@@ -319,7 +319,7 @@ export async function sendEscrowChatMessage(
       await setDoc(storeMsgRef, message);
     }
   } catch (err) {
-    console.warn('Erreur Firestore sendEscrowChatMessage :', err);
+    console.warn('Erreur storage sendEscrowChatMessage :', err);
   }
 }
 

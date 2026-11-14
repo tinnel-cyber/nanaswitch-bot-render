@@ -264,7 +264,7 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
         } catch {}
       }
     } catch (err) {
-      console.warn('Erreur requête Firestore batch matching:', err);
+      console.warn('Erreur requête storage batch matching:', err);
       // Fallback gracieux en cas d'index ou réseau
       setMatchedUsers(RECOMMENDED_WAMEET_MEMBERS);
       setPhase('empty');
@@ -381,7 +381,7 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
           });
         }
       } catch (e) {
-        console.warn('Erreur écriture connexion Firestore:', e);
+        console.warn('Erreur écriture connexion storage:', e);
       }
     }
   };
