@@ -290,7 +290,7 @@ export const NaNaSwitchConnectorsPage: React.FC<NaNaSwitchConnectorsPageProps> =
         connectors: updatedMap
       }, { merge: true });
     } catch (e) {
-      console.warn('[NANA_SWITCH] Synchronisation Firestore switch_connectors :', e);
+      console.warn('[NANA_SWITCH] Synchronisation storage switch_connectors :', e);
     }
   }, []);
 
@@ -349,7 +349,7 @@ export const NaNaSwitchConnectorsPage: React.FC<NaNaSwitchConnectorsPageProps> =
           saveConnectorsState(tenantId, initialMap);
         }
       } catch (err) {
-        console.warn('[NANA_SWITCH] Erreur sync Firestore :', err);
+        console.warn('[NANA_SWITCH] Erreur sync storage :', err);
       } finally {
         if (isMounted) setIsLoading(false);
       }

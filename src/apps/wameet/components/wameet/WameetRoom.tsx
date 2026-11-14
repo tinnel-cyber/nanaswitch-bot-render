@@ -267,7 +267,7 @@ export const WameetRoom: React.FC<WameetRoomProps> = ({
         }, { merge: true });
       }
     } catch (dbErr) {
-      console.warn('[KILL SWITCH] Enregistrement Firestore :', dbErr);
+      console.warn('[KILL SWITCH] Enregistrement storage :', dbErr);
     }
 
     // C. Requête API backend de réplication

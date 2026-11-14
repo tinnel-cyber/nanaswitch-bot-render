@@ -240,7 +240,7 @@ export class EmailLinkAuthService {
     } else if (url.includes('/finishSignUp')) {
       // Lien d'authentification Firebase Email Link
       // Firebase Auth web SDK gérera cela automatiquement
-      console.log('[EmailLinkAuth] Lien d\'authentification Firebase détecté');
+      console.log('[EmailLinkAuth] Lien d\'authentification storage détecté');
     }
   }
 }

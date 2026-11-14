@@ -224,7 +224,7 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
           startedAt: Date.now()
         });
       } catch (e) {
-        console.warn("Mise à jour Firestore de démarrage live:", e);
+        console.warn("Mise à jour storage de démarrage live:", e);
       }
     }
   };
@@ -242,7 +242,7 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
           endedAt: Date.now()
         });
       } catch (e) {
-        console.warn("Mise à jour Firestore de fin de live:", e);
+        console.warn("Mise à jour storage de fin de live:", e);
       }
     }
   };
@@ -267,7 +267,7 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
           pinnedProduct: newPinned
         });
       } catch (e) {
-        console.warn("Sync Firestore pinned product:", e);
+        console.warn("Sync storage pinned product:", e);
       }
     }
   };

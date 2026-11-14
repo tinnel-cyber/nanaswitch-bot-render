@@ -102,7 +102,7 @@ export async function registerResonance(
       resonanceId = docRef.id;
     }
   } catch (err) {
-    console.warn('[RESONANCE BDD] Écriture Firestore en fallback local :', err);
+    console.warn('[RESONANCE BDD] Écriture storage en fallback local :', err);
   }
 
   // Enregistrement dans le store local
@@ -130,7 +130,7 @@ export async function registerResonance(
       hasMatch = !querySnap.empty;
     }
   } catch (err) {
-    console.warn('[RESONANCE MATCH] Requête Firestore inverse en fallback local :', err);
+    console.warn('[RESONANCE MATCH] Requête storage inverse en fallback local :', err);
   }
 
   // Vérification également dans le store local

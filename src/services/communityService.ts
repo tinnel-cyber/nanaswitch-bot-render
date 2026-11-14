@@ -560,7 +560,7 @@ export async function createCommunityPost(
     const postRef = doc(db, 'course_communities', courseId, 'posts', newPost.id);
     await setDoc(postRef, newPost);
   } catch (err) {
-    console.warn('[COMMUNITY] Firestore indisponible, enregistrement local :', err);
+    console.warn('[COMMUNITY] storage indisponible, enregistrement local :', err);
   }
 
   // 2. Mise à jour cache local
@@ -612,7 +612,7 @@ export async function toggleLikePost(
         : (post?.likedBy || []).filter(id => id !== userId)
     });
   } catch (e) {
-    console.warn('[COMMUNITY] Firestore like update offline fallback', e);
+    console.warn('[COMMUNITY] storage like update offline fallback', e);
   }
 
   return { likesCount: newLikesCount, isLiked };
@@ -704,7 +704,7 @@ export async function addPostComment(
       commentsCount: increment(1)
     });
   } catch (e) {
-    console.warn('[COMMUNITY] Firestore comment error, seed fallback', e);
+    console.warn('[COMMUNITY] storage comment error, seed fallback', e);
   }
 
   if (!SEED_COMMENTS[postId]) SEED_COMMENTS[postId] = [];
@@ -733,7 +733,7 @@ export async function endorseCommentByInstructor(
       endorsedByInstructorName: instructorName
     });
   } catch (e) {
-    console.warn('[COMMUNITY] Endorsement error Firestore fallback', e);
+    console.warn('[COMMUNITY] Endorsement error storage fallback', e);
   }
 
   // Bonus de réputation majeur (+30 points) pour réponse validée par l'enseignant !
@@ -754,7 +754,7 @@ export async function endorsePost(
       endorsedByInstructorName: instructorName
     });
   } catch (e) {
-    console.warn('[COMMUNITY] Post endorsement error Firestore fallback', e);
+    console.warn('[COMMUNITY] Post endorsement error storage fallback', e);
   }
 }
 
@@ -826,7 +826,7 @@ export async function updateLearnerProfile(
     const profRef = doc(db, 'learner_profiles', userId);
     await updateDoc(profRef, updates);
   } catch (e) {
-    console.warn('[COMMUNITY] Profil update Firestore fallback', e);
+    console.warn('[COMMUNITY] Profil update storage fallback', e);
   }
 
   if (SEED_PROFILES[userId]) {

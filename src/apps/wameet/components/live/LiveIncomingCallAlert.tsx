@@ -138,7 +138,7 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
         sellerId: auth.currentUser?.uid || 'merchant-owner'
       });
     } catch (e) {
-      console.warn('[ACCEPT FIRESTORE UPDATE ERROR]', e);
+      console.warn('[ACCEPT storage UPDATE ERROR]', e);
     }
   };
 
@@ -159,7 +159,7 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
         rejectedAt: serverTimestamp()
       });
     } catch (e) {
-      console.warn('[REJECT FIRESTORE UPDATE ERROR]', e);
+      console.warn('[REJECT storage UPDATE ERROR]', e);
     }
   };
 

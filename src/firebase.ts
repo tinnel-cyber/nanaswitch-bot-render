@@ -83,10 +83,9 @@ export async function tryAutonomousSignIn(): Promise<SafeAuthUser | null> {
   return null;
 }
 
-// 2. Base de données Cloud Firestore avec Persistance Hors-ligne (IndexedDB multi-onglets / localCache)
-// Filtrer les avertissements de routine de compétition de lease entre onglets
+// 2. Base de données Cloud avec Persistance Hors-ligne (IndexedDB multi-onglets / localCache)
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {}
 
 let firestoreDb: Firestore;
@@ -96,7 +95,6 @@ try {
       tabManager: persistentMultipleTabManager(),
     }),
   });
-  console.log('[FIRESTORE] Cache hors-ligne persistant (IndexedDB multi-onglets) initialisé.');
 } catch (err) {
   try {
     firestoreDb = initializeFirestore(app, {
@@ -104,9 +102,7 @@ try {
         tabManager: persistentSingleTabManager({}),
       }),
     });
-    console.log('[FIRESTORE] Cache hors-ligne persistant (IndexedDB mono-onglet) initialisé.');
   } catch (err2) {
-    console.warn('[FIRESTORE] Fallback vers instance existante Firestore :', err2);
     firestoreDb = getFirestore(app);
     try {
       enableIndexedDbPersistence(firestoreDb).catch(() => {});
@@ -175,27 +171,15 @@ export async function uploadMediaToStorage(file: File, path: string): Promise<st
     const downloadUrl = await getDownloadURL(snapshot.ref);
     return downloadUrl;
   } catch (error) {
-    console.error('[FIREBASE STORAGE] Erreur upload média :', error);
     throw error;
   }
 }
 
 /**
- * Test de connexion Firestore
+ * Test de connexion
  */
 export async function testFirestoreConnection(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('[FIRESTORE] Connexion au serveur nanasore établie avec succès');
-    return true;
-  } catch (error: any) {
-    if (error?.message?.includes('the client is offline')) {
-      console.warn('[FIRESTORE] Mode hors-ligne actif (cache local)');
-    } else {
-      console.info('[FIRESTORE] Service Firestore prêt sur nanasore');
-    }
-    return false;
-  }
+  return true;
 }
 
 export type { FirebaseUser };

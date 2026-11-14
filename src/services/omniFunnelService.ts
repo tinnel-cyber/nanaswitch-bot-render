@@ -690,7 +690,7 @@ export async function registerSubdomainInFirebase(subdomain: string, title?: str
     console.log(`[OMNI-FUNNEL] Tunnel '${cleanSub}' (${linkPrefix}) enregistré avec succès !`);
     return true;
   } catch (err) {
-    console.warn('[OMNI-FUNNEL] registerSubdomainInFirebase fallback local:', err);
+    console.warn('[OMNI-FUNNEL] registerSubdomainInstorage fallback local:', err);
     try {
       localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(payload));
       if (linkPrefix === 't') {

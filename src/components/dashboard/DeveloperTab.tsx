@@ -137,7 +137,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
             updated_at: serverTimestamp()
           });
         } catch (rulesErr) {
-          console.warn('[FIRESTORE CLIENT UPDATE NOTICE]', (rulesErr as Error).message);
+          console.warn('[storage CLIENT UPDATE NOTICE]', (rulesErr as Error).message);
         }
       }
 
@@ -198,7 +198,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
             updated_at: serverTimestamp()
           });
         } catch (fsErr) {
-          console.warn('[RECHARGE FIRESTORE CLIENT NOTICE]', (fsErr as Error).message);
+          console.warn('[RECHARGE storage CLIENT NOTICE]', (fsErr as Error).message);
         }
       }
 

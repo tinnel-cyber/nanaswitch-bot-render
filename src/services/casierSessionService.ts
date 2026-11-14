@@ -53,7 +53,7 @@ export function getOrCreateTabCasierSession(
             parsed.sellerRole = activeCashier.role;
             sessionStorage.setItem(tabStorageKey, JSON.stringify(parsed));
             // Sync async Firestore
-            syncCasierSessionToFirestore(parsed).catch(console.warn);
+            syncCasierSessionTostorage(parsed).catch(console.warn);
           }
           return parsed;
         }
@@ -109,7 +109,7 @@ export function getOrCreateTabCasierSession(
 
   // 5. Enregistrement Firestore sous stores/{storeId}/casierSessions/{sessionId}
   syncCasierSessionToFirestore(newSession).catch((err) => {
-    console.warn('Sauvegarde session casier Firestore reportée (mode offline) :', err);
+    console.warn('Sauvegarde session casier storage reportée (mode offline) :', err);
   });
 
   return newSession;

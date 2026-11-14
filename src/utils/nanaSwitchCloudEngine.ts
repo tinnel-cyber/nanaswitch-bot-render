@@ -401,7 +401,7 @@ export async function executeCloudSwitchRoute(
         remainingCredits = 250;
       }
     } catch (walletErr) {
-      console.warn('[NANASWITCH CLOUD] Lecture wallet Firestore :', walletErr);
+      console.warn('[NANASWITCH CLOUD] Lecture wallet storage :', walletErr);
     }
 
     // Blocage strict Coupe-Circuit si solde à zéro
@@ -465,7 +465,7 @@ export async function executeCloudSwitchRoute(
         fallbackConnector = defaultRule.fallback;
       }
     } catch (rulesErr) {
-      console.warn('[NANASWITCH CLOUD] Lecture règles Firestore :', rulesErr);
+      console.warn('[NANASWITCH CLOUD] Lecture règles storage :', rulesErr);
       const defaultRule = DEFAULT_COUNTRY_ROUTING[country] || DEFAULT_COUNTRY_ROUTING.BF;
       primaryConnector = defaultRule.primary;
       fallbackConnector = defaultRule.fallback;
@@ -602,7 +602,7 @@ async function recordSwitchLog(data: {
       nodeRegion: 'eu-west-1 (Static IP 194.163.148.22)'
     });
   } catch (logErr) {
-    console.warn('[NANASWITCH CLOUD] Écriture switch_logs Firestore :', logErr);
+    console.warn('[NANASWITCH CLOUD] Écriture switch_logs storage :', logErr);
   }
 }
 

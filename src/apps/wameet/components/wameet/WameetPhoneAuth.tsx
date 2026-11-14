@@ -158,7 +158,7 @@ export const WameetPhoneAuth: React.FC<WameetPhoneAuthProps> = ({
       setIsTestModeActive(false);
       playValidationBeep();
     } catch (err: any) {
-      console.warn('Erreur Firebase signInWithPhoneNumber:', err);
+      console.warn('Erreur storage signInWithPhoneNumber:', err);
       const code = err?.code || '';
 
       // Gestion intelligente si quota dépassé ou environnement restreint

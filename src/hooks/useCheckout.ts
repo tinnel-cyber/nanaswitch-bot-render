@@ -144,7 +144,7 @@ export function useCheckout(onPaymentCompleted?: (tx: CheckoutTransaction) => vo
           ussdPushTriggered: true
         };
       } catch (err: any) {
-        console.error('Erreur initialisation transaction Firestore:', err);
+        console.error('Erreur initialisation transaction storage:', err);
         // Tolérance hors-ligne / fallback local
         localStorage.setItem(`nana_pending_tx_${txId}`, JSON.stringify(transactionPayload));
         setActiveTransaction(transactionPayload);

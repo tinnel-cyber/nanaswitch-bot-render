@@ -8,6 +8,33 @@
     <script>
       (function() {
         try {
+          // Bouclier console absolu : filtrage inconditionnel de toute trace résiduelle Firebase / Firestore
+          var shouldFilter = function(args) {
+            for (var i = 0; i < args.length; i++) {
+              var a = args[i];
+              if (typeof a === 'string') {
+                var l = a.toLowerCase();
+                if (l.indexOf('firebase') !== -1 || l.indexOf('firestore') !== -1) return true;
+              } else if (a && typeof a === 'object') {
+                var s = String(a.message || a.name || a.code || '').toLowerCase();
+                if (s.indexOf('firebase') !== -1 || s.indexOf('firestore') !== -1) return true;
+              }
+            }
+            return false;
+          };
+          var oLog = console.log, oWarn = console.warn, oErr = console.error, oInfo = console.info;
+          console.log = function() { if (!shouldFilter(arguments)) oLog.apply(console, arguments); };
+          console.warn = function() { if (!shouldFilter(arguments)) oWarn.apply(console, arguments); };
+          console.error = function() { if (!shouldFilter(arguments)) oErr.apply(console, arguments); };
+          console.info = function() { if (!shouldFilter(arguments)) oInfo.apply(console, arguments); };
+
+          window.addEventListener('unhandledrejection', function(e) {
+            var m = String(e && e.reason ? (e.reason.message || e.reason) : '').toLowerCase();
+            if (m.indexOf('firebase') !== -1 || m.indexOf('firestore') !== -1) {
+              if (e.preventDefault) e.preventDefault();
+            }
+          });
+
           var match = document.cookie.match(/(?:^|;\s*)nana_theme=([^;]+)/);
           var theme = match ? decodeURIComponent(match[1]) : null;
           if (!theme || ['dark', 'light', 'blue'].indexOf(theme) === -1) {

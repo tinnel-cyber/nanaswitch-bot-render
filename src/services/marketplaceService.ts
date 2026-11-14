@@ -265,7 +265,7 @@ export async function publishCourseToFirestore(
     const docRef = doc(db, 'courses', courseId);
     await setDoc(docRef, fullCourse, { merge: true });
   } catch (err) {
-    console.warn('Sauvegarde Firestore distante impossible, persistance locale prioritaire:', err);
+    console.warn('Sauvegarde storage distante impossible, persistance locale prioritaire:', err);
   }
 
   // Mise à jour du cache local réactif
@@ -311,7 +311,7 @@ export async function recordMobileMoneyEnrollment(params: {
       createdAt: now
     });
   } catch (e) {
-    console.warn('Persistance Firestore enrollment:', e);
+    console.warn('Persistance storage enrollment:', e);
   }
 
   // Active immédiatement l'accès étudiant en local

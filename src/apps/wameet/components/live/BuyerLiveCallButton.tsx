@@ -369,7 +369,7 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
           endedAt: serverTimestamp()
         });
       } catch (e) {
-        console.warn('[HANGUP FIRESTORE ERROR]', e);
+        console.warn('[HANGUP storage ERROR]', e);
       }
     }
 

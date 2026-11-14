@@ -483,7 +483,7 @@ export const HubBuilderPage = () => {
           }
         }
       } catch (fsErr) {
-        console.warn('Initial Firestore fetch error:', fsErr);
+        console.warn('Initial storage fetch error:', fsErr);
       }
 
       try {
@@ -1104,7 +1104,7 @@ export const HubBuilderPage = () => {
   const saveToFirebase = async () => {
     setIsSaving(true);
     try {
-      console.log('Enregistrement dans Firebase RTDB (/central_hub_config) :', hubData);
+      console.log('Enregistrement dans storage RTDB (/central_hub_config) :', hubData);
 
       // Générer une version enrichie avec rétro-compatibilité et purge stricte Unsplash
       const exportableData = hubData.map(row => ({
@@ -1252,7 +1252,7 @@ export const HubBuilderPage = () => {
           firestoreSuccess = true;
         }
       } catch (fsErr) {
-        console.warn('[HubBuilder] Erreur Firestore sync (non-bloquante) :', fsErr);
+        console.warn('[HubBuilder] Erreur storage sync (non-bloquante) :', fsErr);
       }
 
       // 4. LocalStorage & Événements locaux (Garantie temps-réel avec Omnibar et App Registry)

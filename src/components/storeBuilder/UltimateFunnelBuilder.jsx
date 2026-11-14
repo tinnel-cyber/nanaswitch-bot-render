@@ -837,7 +837,7 @@ export const UltimateFunnelBuilder = ({
       await registerSubdomainInFirebase(targetSubdomain, funnelPayload.title, funnelPayload);
       await saveFunnelConfig(funnelPayload);
     } catch (saveErr) {
-      console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur enregistrement sous-domaine Firestore:', saveErr);
+      console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur enregistrement sous-domaine storage:', saveErr);
     }
 
     if (onSave) {
@@ -1173,7 +1173,7 @@ export const UltimateFunnelBuilder = ({
         });
       }
     } catch (e) {
-      console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur Firestore handleSave:', e);
+      console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur storage handleSave:', e);
     }
 
     setSaveStatus('saved');

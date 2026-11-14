@@ -243,7 +243,7 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
 
     // Sauvegarde asynchrone dans Firestore (sans bloquer la fermeture)
     updateLessonBranding('telecom-fintech-masterclass', nodeId, hideBranding, youtubeUrl).catch(err => {
-      console.warn("Mise à jour Firestore en tâche de fond:", err);
+      console.warn("Mise à jour storage en tâche de fond:", err);
     });
 
     onSave(nodeId, config);

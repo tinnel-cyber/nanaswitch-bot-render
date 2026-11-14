@@ -112,7 +112,7 @@ export async function submitKycRequest(data: KycSubmission): Promise<void> {
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (e) {
-    console.info('Firestore KYC sync notice (fonctionne en local):', e);
+    console.info('storage KYC sync notice (fonctionne en local):', e);
   }
 }
 
@@ -288,7 +288,7 @@ export async function updateKycRequestStatus(
       updatedAt: reviewedAt
     }, { merge: true });
   } catch (e) {
-    console.info('Firestore updateKyc notice:', e);
+    console.info('storage updateKyc notice:', e);
   }
 }
 
@@ -388,7 +388,7 @@ export async function saveIdentificationChain(chain: IdentificationChain): Promi
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (e) {
-    console.info('Firestore saveIdentificationChain notice:', e);
+    console.info('storage saveIdentificationChain notice:', e);
   }
 }
 
@@ -485,7 +485,7 @@ export async function submitKycSubmission(submission: KycSubmission & { userId: 
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (userErr) {
-    console.info('Firestore user kycStatus notice:', userErr);
+    console.info('storage user kycStatus notice:', userErr);
   }
 }
 
@@ -521,7 +521,7 @@ export async function getPendingKycSubmissions(): Promise<KycSubmission[]> {
       }
     }
   } catch (e) {
-    console.info('Firestore getPendingKycSubmissions notice (offline fallback):', e);
+    console.info('storage getPendingKycSubmissions notice (offline fallback):', e);
   }
 
   return list;
@@ -554,7 +554,7 @@ export async function getAllKycSubmissions(): Promise<KycSubmission[]> {
       localStorage.setItem('nana_kyc_submissions', JSON.stringify(list));
     }
   } catch (e) {
-    console.info('Firestore getAllKycSubmissions notice:', e);
+    console.info('storage getAllKycSubmissions notice:', e);
   }
 
   return list;
@@ -622,7 +622,7 @@ export async function approveKycSubmission(
       reviewedBy: reviewerEmail
     }, { merge: true });
   } catch (e) {
-    console.warn('Firestore kyc_submissions approve error:', e);
+    console.warn('storage kyc_submissions approve error:', e);
   }
 
   // 4. Firestore : /users/{userId} -> role: 'vendor', kycStatus: 'approved'
@@ -635,7 +635,7 @@ export async function approveKycSubmission(
       updatedAt: reviewedAt
     }, { merge: true });
   } catch (e) {
-    console.warn('Firestore user approve error:', e);
+    console.warn('storage user approve error:', e);
   }
 
   // 5. Firestore : /stores/{storeId} si présent
@@ -648,7 +648,7 @@ export async function approveKycSubmission(
         updatedAt: reviewedAt
       }, { merge: true });
     } catch (e) {
-      console.warn('Firestore store approve error:', e);
+      console.warn('storage store approve error:', e);
     }
   }
 }
@@ -730,7 +730,7 @@ export async function rejectKycSubmission(
       ifuDocPhotoUrl: ''
     }, { merge: true });
   } catch (e) {
-    console.warn('Firestore kyc_submissions reject error:', e);
+    console.warn('storage kyc_submissions reject error:', e);
   }
 
   // 4. Firestore : /users/{userId} -> kycStatus: 'rejected'
@@ -742,7 +742,7 @@ export async function rejectKycSubmission(
       updatedAt: reviewedAt
     }, { merge: true });
   } catch (e) {
-    console.warn('Firestore user reject error:', e);
+    console.warn('storage user reject error:', e);
   }
 
   // 5. Firestore : /stores/{storeId} si présent
@@ -755,7 +755,7 @@ export async function rejectKycSubmission(
         updatedAt: reviewedAt
       }, { merge: true });
     } catch (e) {
-      console.warn('Firestore store reject error:', e);
+      console.warn('storage store reject error:', e);
     }
   }
 }

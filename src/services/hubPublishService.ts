@@ -114,7 +114,7 @@ export async function publishHubBlock(blockId: string, blockData: HubBlockConfig
 
       // 2. criture atomique dans Firebase RTDB (crasement de l'ancienne version)
       await set(rtdbRef, targetPayload);
-      console.log(`[Hub Builder] Succs : Bloc ${blockId} enregistr dans Firebase RTDB sous /central_hub_config/${blockId}.`);
+      console.log(`[Hub Builder] Succs : Bloc ${blockId} enregistr dans storage RTDB sous /central_hub_config/${blockId}.`);
     }
 
     // 3. Mise  jour de l'App Registry (stockage local / mmoire de l'application)

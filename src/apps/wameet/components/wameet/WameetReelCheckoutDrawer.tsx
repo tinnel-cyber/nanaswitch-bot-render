@@ -136,7 +136,7 @@ export const WameetReelCheckoutDrawer: React.FC<WameetReelCheckoutDrawerProps> =
         }
       }
     } catch (err) {
-      console.warn('Erreur Firestore order (mode local):', err);
+      console.warn('Erreur storage order (mode local):', err);
     }
 
     try {

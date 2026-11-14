@@ -140,7 +140,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       })) || []
     }
   };
-  console.error('[FIRESTORE ERROR]', JSON.stringify(errInfo));
+  console.error('[STORAGE ERROR]', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -416,7 +416,7 @@ export async function fetchStoreCollection<T extends { id: string; storeId: stri
     });
     return results;
   } catch (error) {
-    console.warn(`[FIRESTORE FETCH] Lecture ${pathForError} :`, error);
+    console.warn(`[STORAGE FETCH] Lecture ${pathForError} :`, error);
     return [];
   }
 }
@@ -615,9 +615,9 @@ export async function saveStoreDocument<T extends { id: string }>(
   // 3. Sauvegarde miroir Firestore de secours si disponible
   try {
     await setDoc(doc(db, 'stores', tenantId, subcollection, docId), securedPayload, { merge: true });
-    console.log(`[FIRESTORE WRITE] Enregistré dans /${pathForWrite}`);
+    console.log(`[STORAGE WRITE] Enregistré dans /${pathForWrite}`);
   } catch (error) {
-    console.warn(`[FIRESTORE WRITE NOTICE] Sauvegarde ${pathForWrite} en attente (mise en file offlineSyncQueue) :`, error);
+    console.warn(`[STORAGE WRITE NOTICE] Sauvegarde ${pathForWrite} en attente (mise en file offlineSyncQueue) :`, error);
     if (collectionName === 'inventory' || collectionName === 'products') {
       queueOfflineMutation({
         type: 'SAVE_PRODUCT',
@@ -745,14 +745,14 @@ export async function commitFirestoreBatch(
 
   try {
     await batch.commit();
-    console.log(`[FirestoreBatch] Succès : Lot de ${validBatchItems.length} opérations validé en 1 seule écriture !`);
+    console.log(`[StorageBatch] Succès : Lot de ${validBatchItems.length} opérations validé en 1 seule écriture !`);
     return {
       success: true,
       syncedIds: validBatchItems.map(i => i.id),
       failedIds: []
     };
   } catch (err: any) {
-    console.error('[FirestoreBatch] Erreur lors du commit du batch :', err);
+    console.error('[StorageBatch] Erreur lors du commit du batch :', err);
     return {
       success: false,
       syncedIds: [],
@@ -819,7 +819,7 @@ export async function deleteStoreDocument(
         } catch (e) {}
       }
     } catch (error) {
-      console.warn(`[FIRESTORE DELETE NOTICE] ${pathForDelete} (mise en file offlineSyncQueue):`, error);
+      console.warn(`[STORAGE DELETE NOTICE] ${pathForDelete} (mise en file offlineSyncQueue):`, error);
       if (collectionName === 'inventory' || collectionName === 'products') {
         queueOfflineMutation({
           type: 'DELETE_PRODUCT',
@@ -876,7 +876,7 @@ export async function persistCompletedSale(
   // Mise à jour de la session de caisse (Casier) concurrente
   if (securedSale.casierSessionId) {
     recordSaleInCasierSession(resolvedStoreId, securedSale.casierSessionId, securedSale).catch((err) => {
-      console.warn('Erreur mise à jour de la session casier Firestore:', err);
+      console.warn('Erreur mise à jour de la session casier storage:', err);
     });
   }
 
@@ -994,7 +994,7 @@ export async function persistInventoryProduct(
       }
     }
   } catch (err) {
-    console.warn('[FIRESTORE] Mirror product save deferred:', err);
+    console.warn('[STORAGE] Mirror product save deferred:', err);
   }
 
   return res;
@@ -1097,7 +1097,7 @@ export async function getMonthlySummaries(storeId: string): Promise<MonthlySumma
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => d.data() as MonthlySummary);
   } catch (error) {
-    console.warn('[FIRESTORE] Erreur lecture monthly_summaries :', error);
+    console.warn('[STORAGE] Erreur lecture monthly_summaries :', error);
     return [];
   }
 }
@@ -1240,7 +1240,7 @@ export async function updateMerchantSubscription(
       { merge: true }
     );
   } catch (err) {
-    console.warn('[FIRESTORE] updateMerchantSubscription :', err);
+    console.warn('[STORAGE] updateMerchantSubscription :', err);
   }
 }
 
@@ -1325,7 +1325,7 @@ export async function updateStoreSubscription(
         }),
         { merge: true }
       );
-      console.log(`[FIRESTORE] Abonnement '${subscription.plan}' & quotas synchronisés dans users/${targetUserId}`);
+      console.log(`[STORAGE] Abonnement '${subscription.plan}' & quotas synchronisés dans users/${targetUserId}`);
 
       // Si le storeId est différent du targetUserId et existe dans users/, synchroniser également
       if (cleanStoreId && cleanStoreId !== targetUserId && !cleanStoreId.startsWith('store-')) {
@@ -1343,7 +1343,7 @@ export async function updateStoreSubscription(
         ).catch(() => {});
       }
     } catch (userErr) {
-      console.warn('[FIRESTORE] Erreur synchronisation users/' + targetUserId + ' :', userErr);
+      console.warn('[STORAGE] Erreur synchronisation users/' + targetUserId + ' :', userErr);
     }
   }
 
@@ -1440,7 +1440,7 @@ export async function getStoreSubscription(storeId: string, forceServer = false)
     }
   } catch (err: any) {
     if (!isOfflineOrUnavailableError(err)) {
-      console.warn('[FIRESTORE] getStoreSubscription :', err);
+      console.warn('[STORAGE] getStoreSubscription :', err);
     }
   }
   return null;
@@ -1545,7 +1545,7 @@ export function subscribeToUserProfile(
       }
     } catch (err: any) {
       if (!isOfflineOrUnavailableError(err)) {
-        console.warn('[FIRESTORE] Lecture profil user :', err);
+        console.warn('[STORAGE] Lecture profil user :', err);
       }
     }
   };
@@ -1680,7 +1680,7 @@ export async function getPrivacyPolicy(): Promise<PrivacyPolicyConfig> {
       return policyDoc.data() as PrivacyPolicyConfig;
     }
   } catch (err) {
-    console.warn('[FIRESTORE] Chargement de la politique par défaut :', err);
+    console.warn('[STORAGE] Chargement de la politique par défaut :', err);
   }
 
   return {
@@ -1751,7 +1751,7 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
     }
   } catch (err: any) {
     if (!isOfflineOrUnavailableError(err)) {
-      console.warn('[FIRESTORE] Lecture users/' + uid + ' :', err);
+      console.warn('[STORAGE] Lecture users/' + uid + ' :', err);
     }
   }
   return null;
@@ -1846,9 +1846,9 @@ export async function saveUserProfile(uid: string, profileData: Record<string, a
 
   try {
     await setDoc(userRef, payload, { merge: true });
-    console.log('[FIRESTORE] Profil, plan et PIN enregistrés dans users/' + uid);
+    console.log('[STORAGE] Profil, plan et PIN enregistrés dans users/' + uid);
   } catch (err) {
-    console.warn('[FIRESTORE] Sauvegarde users/' + uid + ' notice :', err);
+    console.warn('[STORAGE] Sauvegarde users/' + uid + ' notice :', err);
   }
 
   // Cache local de secours
@@ -1913,7 +1913,7 @@ export async function updateSellerModeInFirestore(
       await setDoc(doc(db, 'stores', targetStoreId), updates, { merge: true }).catch(() => {});
     }
   } catch (err) {
-    console.warn('[FIRESTORE] updateSellerModeInFirestore notice :', err);
+    console.warn('[STORAGE] updateSellerModeInstorage notice :', err);
   }
 }
 
@@ -1950,7 +1950,7 @@ export async function getUserCredits(uid: string): Promise<number> {
     }
   } catch (e: any) {
     if (!isOfflineOrUnavailableError(e)) {
-      console.warn('[FIRESTORE] Erreur lecture crédits users/' + uid + ' :', e);
+      console.warn('[STORAGE] Erreur lecture crédits users/' + uid + ' :', e);
     }
     try {
       const cached = localStorage.getItem(`nana_user_credits_${uid}`);
@@ -2088,7 +2088,7 @@ export async function deductUserCredits(
       };
     });
   } catch (error: any) {
-    console.warn('[FIRESTORE] deductUserCredits transaction notice, repli avec atomic increment :', error);
+    console.warn('[STORAGE] deductUserCredits transaction notice, repli avec atomic increment :', error);
     try {
       await updateDoc(userRef, {
         credits: increment(-amount),
@@ -2101,7 +2101,7 @@ export async function deductUserCredits(
       } catch {}
       return { success: true, newBalance };
     } catch (err2: any) {
-      console.error('[FIRESTORE] deductUserCredits error :', err2);
+      console.error('[STORAGE] deductUserCredits error :', err2);
       return { success: false, newBalance: 0, error: err2?.message || 'TRANSACTION_FAILED' };
     }
   }
@@ -2136,7 +2136,7 @@ export async function addUserCredits(
     } catch {}
     return newBalance;
   } catch (e) {
-    console.error('[FIRESTORE] addUserCredits error :', e);
+    console.error('[STORAGE] addUserCredits error :', e);
     throw e;
   }
 }
@@ -2424,7 +2424,7 @@ export async function getPlatformSubscriptions(): Promise<PlatformSubscriptionCo
       return sanitized;
     }
   } catch (e) {
-    console.warn('[FIRESTORE] getPlatformSubscriptions error :', e);
+    console.warn('[STORAGE] getPlatformSubscriptions error :', e);
   }
   return fallback;
 }
@@ -2440,7 +2440,7 @@ export async function updateSubscriptionPlan(
 ): Promise<SubscriptionPlanConfig> {
   if (!planId || typeof planId !== 'string') {
     const err = new Error('Identifiant du plan (planId) invalide ou manquant.');
-    console.error('[FIRESTORE] updateSubscriptionPlan error :', err);
+    console.error('[STORAGE] updateSubscriptionPlan error :', err);
     throw err;
   }
 
@@ -2463,7 +2463,7 @@ export async function updateSubscriptionPlan(
     try {
       await setDoc(planRef, cleanData, { merge: true });
     } catch (setErr: any) {
-      console.error(`[FIRESTORE] Erreur écriture subscription_plans/${targetDocId} :`, setErr);
+      console.error(`[STORAGE] Erreur écriture subscription_plans/${targetDocId} :`, setErr);
       throw setErr;
     }
   }
@@ -2537,7 +2537,7 @@ export async function updateSubscriptionPlan(
     await setDoc(globalRef, updatedGlobalPayload, { merge: true });
     return mergedPlan;
   } catch (globalErr: any) {
-    console.error('[FIRESTORE] Erreur mise à jour globale platform_settings/subscriptions :', globalErr);
+    console.error('[STORAGE] Erreur mise à jour globale platform_settings/subscriptions :', globalErr);
     throw globalErr;
   }
 }
@@ -2568,7 +2568,7 @@ export async function savePlatformSubscriptions(config: PlatformSubscriptionConf
               updatedAt: Date.now(),
             });
             await setDoc(planRef, planData, { merge: true }).catch((err) => {
-              console.error(`[FIRESTORE] Erreur écriture individuelle subscription_plans/${planDocId} :`, err);
+              console.error(`[STORAGE] Erreur écriture individuelle subscription_plans/${planDocId} :`, err);
             });
           }
         })
@@ -2580,10 +2580,10 @@ export async function savePlatformSubscriptions(config: PlatformSubscriptionConf
       ...payload.paymentSettings,
       updatedAt: Date.now()
     }), { merge: true }).catch((err) => {
-      console.error('[FIRESTORE] Erreur synchronisation parametres/paiement :', err);
+      console.error('[STORAGE] Erreur synchronisation parametres/paiement :', err);
     });
   } catch (err: any) {
-    console.error('[FIRESTORE] Échec de la fonction savePlatformSubscriptions :', err);
+    console.error('[STORAGE] Échec de la fonction savePlatformSubscriptions :', err);
     throw err;
   }
 }
@@ -2675,7 +2675,7 @@ export async function getCentralPaymentConfig(): Promise<CentralPaymentConfig> {
       };
     }
   } catch (e) {
-    console.warn('[FIRESTORE] getCentralPaymentConfig error :', e);
+    console.warn('[STORAGE] getCentralPaymentConfig error :', e);
   }
   return fallback;
 }
@@ -2831,7 +2831,7 @@ export async function getPlatformLegal(): Promise<PlatformLegalConfig> {
     }
   } catch (err: any) {
     if (!isOfflineOrUnavailableError(err)) {
-      console.warn('[FIRESTORE] getPlatformLegal fallback :', err);
+      console.warn('[STORAGE] getPlatformLegal fallback :', err);
     }
   }
 
@@ -2853,9 +2853,9 @@ export async function savePlatformLegal(config: Partial<PlatformLegalConfig>): P
   // Enregistre dans Firestore
   try {
     await setDoc(doc(db, 'platform_settings', 'legal'), payload, { merge: true });
-    console.log('[FIRESTORE] platform_settings/legal mis à jour avec succès');
+    console.log('[STORAGE] platform_settings/legal mis à jour avec succès');
   } catch (err) {
-    console.warn('[FIRESTORE] Erreur écriture platform_settings/legal :', err);
+    console.warn('[STORAGE] Erreur écriture platform_settings/legal :', err);
   }
 
   // Met à jour le cache local
@@ -3020,9 +3020,9 @@ export async function requestMerchantSubscriptionActivation(
       { merge: true }
     );
 
-    console.log(`[FIRESTORE] Demande d'activation enregistrée pour ${merchantId} / ${targetStoreId}`);
+    console.log(`[STORAGE] Demande d'activation enregistrée pour ${merchantId} / ${targetStoreId}`);
   } catch (err) {
-    console.warn('[FIRESTORE] requestMerchantSubscriptionActivation notice :', err);
+    console.warn('[STORAGE] requestMerchantSubscriptionActivation notice :', err);
   }
 
   // Cache local pour résilience
@@ -3155,7 +3155,7 @@ export async function getLandingPageConfig(): Promise<LandingPageConfig> {
     }
   } catch (err: any) {
     if (!isOfflineOrUnavailableError(err)) {
-      console.warn('[FIRESTORE] getLandingPageConfig notice :', err);
+      console.warn('[STORAGE] getLandingPageConfig notice :', err);
     }
   }
 
@@ -3420,14 +3420,14 @@ export async function recordUnifiedOrder(payload: UnifiedOrderPayload): Promise<
   try {
     await setDoc(doc(db, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
-    console.warn('[FIRESTORE] Global order save note :', err);
+    console.warn('[STORAGE] Global order save note :', err);
   }
 
   // 3. Écriture sous `stores/{cleanStoreId}/orders/{orderDocId}`
   try {
     await setDoc(doc(db, 'stores', cleanStoreId, 'orders', orderDocId), recordData, { merge: true });
   } catch (err) {
-    console.warn('[FIRESTORE] Store tenant order save note :', err);
+    console.warn('[STORAGE] Store tenant order save note :', err);
   }
 
   // 3. Cache local de secours

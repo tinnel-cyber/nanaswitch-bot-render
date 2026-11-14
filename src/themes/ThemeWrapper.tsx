@@ -128,7 +128,7 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
           }
         }
       } catch (err) {
-        console.error("Erreur résolution boutique/thème Firestore :", err);
+        console.error("Erreur résolution boutique/thème storage :", err);
         if (!isCancelled && !directForcedTheme) {
           const fallback = props.storeConfig?.active_theme_id || 'theme-blank-custom';
           setResolvedThemeId((fallback && isValidTheme(fallback)) ? normalizeThemeId(fallback) : 'theme-blank-custom');

@@ -255,7 +255,7 @@ export const NaNaSwitchSecurityPage: React.FC<NaNaSwitchSecurityPageProps> = ({
           }
         }
       } catch (err) {
-        console.warn('[NANA_SWITCH] Erreur sync security Firestore :', err);
+        console.warn('[NANA_SWITCH] Erreur sync security storage :', err);
       }
     };
 

@@ -2222,7 +2222,7 @@ const tr = (x, h) => {
                   { merge: !0 },
                 );
               } catch (B) {
-                console.warn("Enregistrement logo Firestore différé :", B);
+                console.warn("Enregistrement logo storage différé :", B);
               }
               (oe(), b("Logo de la boutique mis à jour avec succès !"));
             }
@@ -4606,7 +4606,7 @@ const tr = (x, h) => {
                 const d = ne(ee, "stores", l);
                 await ve(d, a, { merge: !0 });
               } catch (d) {
-                console.warn("Erreur sauvegarde Firestore du bandeau", d);
+                console.warn("Erreur sauvegarde storage du bandeau", d);
               }
               b("Bandeau promotionnel et moyens de paiement mis à jour !");
             },

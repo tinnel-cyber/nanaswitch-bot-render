@@ -152,7 +152,7 @@ export async function generateAIMedia(params: {
       };
     }
   } catch (error: any) {
-    console.warn('[AI STUDIO] Callable Cloud Function non joignable, activation du moteur résilient Firestore :', error?.message);
+    console.warn('[AI STUDIO] Callable Cloud Function non joignable, activation du moteur résilient storage :', error?.message);
   }
 
   // 2. Moteur AWS Lambda officiel (Replicate centralisé : Texte, Image, Vidéo)
@@ -306,7 +306,7 @@ export async function generateAIMedia(params: {
         createdAt: serverTimestamp()
       });
     } catch (saveErr) {
-      console.warn('[AI STUDIO] Impossible d\'enregistrer dans Firestore :', saveErr);
+      console.warn('[AI STUDIO] Impossible d\'enregistrer dans storage :', saveErr);
     }
   }
 
@@ -464,7 +464,7 @@ export async function startVidnozVideoGeneration(params: {
       };
     }
   } catch (fnErr: any) {
-    console.warn('[AI STUDIO] Cloud Function generateVidnozVideo non joignable, bascule sur création directe Firestore :', fnErr?.message);
+    console.warn('[AI STUDIO] Cloud Function generateVidnozVideo non joignable, bascule sur création directe storage :', fnErr?.message);
   }
 
   // 2. Moteur de secours résilient Firestore (Direct Write dans /video_generations)

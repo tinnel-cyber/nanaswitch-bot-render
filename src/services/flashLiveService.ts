@@ -68,7 +68,7 @@ export async function createFlashLiveRequest(params: {
     const docRef = doc(db, 'flash_requests', id);
     await setDoc(docRef, request);
   } catch (err) {
-    console.warn('[FLASH_LIVE] Firestore write fallback to local event bus:', err);
+    console.warn('[FLASH_LIVE] storage write fallback to local event bus:', err);
   }
 
   return request;

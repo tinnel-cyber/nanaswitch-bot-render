@@ -685,7 +685,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           }
         }, { merge: true });
       } catch (fbErr) {
-        console.warn('[NANASWITCH FIRESTORE SAVE]', (fbErr as Error).message);
+        console.warn('[NANASWITCH storage SAVE]', (fbErr as Error).message);
       }
     }
   };
@@ -756,7 +756,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           } : {})
         });
       } catch (err) {
-        console.warn('[SUPER ADMIN UPDATE FIRESTORE]', (err as Error).message);
+        console.warn('[SUPER ADMIN UPDATE storage]', (err as Error).message);
       }
     }
 

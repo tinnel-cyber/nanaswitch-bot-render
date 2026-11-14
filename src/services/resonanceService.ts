@@ -151,7 +151,7 @@ class ResonanceService {
         }
       }
     } catch (firestoreErr) {
-      console.info('[RESONANCE FIRESTORE FALLBACK] Utilisation du moteur local résilient :', firestoreErr);
+      console.info('[RESONANCE storage FALLBACK] Utilisation du moteur local résilient :', storageErr);
     }
 
     // 4. Si Match Synergique détecté (local ou Firestore)

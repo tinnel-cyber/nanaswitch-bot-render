@@ -463,7 +463,7 @@ export const WameetReelsView: React.FC<WameetReelsViewProps> = ({
           }
         }
       } catch (err) {
-        console.warn('[REELS VIEW] Impossible de récupérer les Reels Firestore :', err);
+        console.warn('[REELS VIEW] Impossible de récupérer les Reels storage :', err);
       }
     };
     fetchRemoteReels();
@@ -1088,7 +1088,7 @@ export const WameetReelsView: React.FC<WameetReelsViewProps> = ({
         recipientBadge: targetReel.authorBadge,
         type: 'text',
         text: textToSend
-      }).catch(err => console.warn('[WAMEET REELS DM] Sync Firestore:', err));
+      }).catch(err => console.warn('[WAMEET REELS DM] Sync storage:', err));
     }
 
     setTimeout(() => {

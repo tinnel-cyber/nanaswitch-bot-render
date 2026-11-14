@@ -452,7 +452,7 @@ export const AiStudioView: React.FC<AiStudioViewProps> = ({
                 createdAt: serverTimestamp()
               });
             } catch (saveErr) {
-              console.warn('[AI STUDIO] Notice enregistrement Firestore :', saveErr);
+              console.warn('[AI STUDIO] Notice enregistrement storage :', saveErr);
             }
           }
 

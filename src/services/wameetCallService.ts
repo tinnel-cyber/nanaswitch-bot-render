@@ -170,7 +170,7 @@ export async function cleanupCallData(callId: string): Promise<void> {
     // 3. Suppression du document racine de l'appel
     await deleteDoc(callDocRef);
   } catch (err) {
-    console.warn('[WAMEET WEBRTC] Nettoyage signalisation Firestore ignoré ou déjà purgé :', err);
+    console.warn('[WAMEET WEBRTC] Nettoyage signalisation storage ignoré ou déjà purgé :', err);
   }
 }
 

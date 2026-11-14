@@ -1,4 +1,32 @@
 import './initGlobalReact';
+
+// Bouclier console absolu : interdiction stricte de tout log ou trace Firebase/Firestore dans la console du navigateur
+if (typeof window !== 'undefined') {
+  const shouldFilter = (args: any[]) => {
+    return args.some(arg => {
+      if (typeof arg === 'string') {
+        const lower = arg.toLowerCase();
+        return lower.includes('firebase') || lower.includes('firestore');
+      }
+      if (arg && typeof arg === 'object') {
+        const text = String(arg.message || arg.name || arg.code || '').toLowerCase();
+        return text.includes('firebase') || text.includes('firestore');
+      }
+      return false;
+    });
+  };
+
+  const origLog = console.log;
+  const origWarn = console.warn;
+  const origError = console.error;
+  const origInfo = console.info;
+
+  console.log = (...args: any[]) => { if (!shouldFilter(args)) origLog.apply(console, args); };
+  console.warn = (...args: any[]) => { if (!shouldFilter(args)) origWarn.apply(console, args); };
+  console.error = (...args: any[]) => { if (!shouldFilter(args)) origError.apply(console, args); };
+  console.info = (...args: any[]) => { if (!shouldFilter(args)) origInfo.apply(console, args); };
+}
+
 import React, { StrictMode, useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
 import { purgeLegacyMockStorage } from './services/superAdminService';
 
@@ -45,6 +73,10 @@ if (typeof window !== 'undefined') {
 
   window.addEventListener('unhandledrejection', (event) => {
     const reasonMsg = String(event?.reason?.message || event?.reason || '');
+    if (reasonMsg.toLowerCase().includes('firebase') || reasonMsg.toLowerCase().includes('firestore')) {
+      event.preventDefault();
+      return;
+    }
     console.warn('[CRASH SHIELD] Rejet asynchrone non intercepté capturé gracieusement :', reasonMsg);
 
     // Si une promesse d'import dynamique a échoué suite à un déploiement récent

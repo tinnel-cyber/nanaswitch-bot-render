@@ -381,7 +381,7 @@ export const SmartSlideOutCartDrawer: React.FC<SmartSlideOutCartDrawerProps> = (
         total: finalTotal
       });
     } catch (err) {
-      console.error('Erreur sauvegarde commande Firestore :', err);
+      console.error('Erreur sauvegarde commande storage :', err);
       // Fallback gracieux si hors-ligne
       const orderNum = `CMD-${Date.now().toString().slice(-6)}`;
       setOrderSuccessData({

@@ -134,7 +134,7 @@ export async function approveAssignmentAndUnlockNext(params: ApproveAssignmentPa
 
     return true;
   } catch (error) {
-    console.error("Erreur validation devoir Firestore:", error);
+    console.error("Erreur validation devoir storage:", error);
     // En cas d'erreur réseau / hors-ligne, on persiste dans localStorage
     localStorage.setItem(`nana_assignment_graded_${assignmentId}`, JSON.stringify({
       status: 'GRADED',
@@ -194,7 +194,7 @@ export async function requestAssignmentRevision(params: RequestRevisionParams): 
 
     return true;
   } catch (err) {
-    console.error("Erreur demande révision devoir Firestore:", err);
+    console.error("Erreur demande révision devoir storage:", err);
     localStorage.setItem(`nana_assignment_graded_${assignmentId}`, JSON.stringify({
       status: 'NEEDS_REVISION',
       feedback,
@@ -227,7 +227,7 @@ export async function updateModuleBranding(courseId: string, moduleId: string, h
     localStorage.setItem(`nana_module_branding_${courseId}_${moduleId}`, JSON.stringify({ hideBranding }));
     return true;
   } catch (err) {
-    console.warn("Erreur mise à jour branding module Firestore, fallback local:", err);
+    console.warn("Erreur mise à jour branding module storage, fallback local:", err);
     localStorage.setItem(`nana_module_branding_${courseId}_${moduleId}`, JSON.stringify({ hideBranding }));
     return true;
   }
@@ -259,7 +259,7 @@ export async function updateLessonBranding(courseId: string, lessonId: string, h
     localStorage.setItem(`nana_lesson_branding_${courseId}_${lessonId}`, JSON.stringify({ hideBranding, youtubeUrl }));
     return true;
   } catch (err) {
-    console.warn("Erreur mise à jour branding leçon Firestore, fallback local:", err);
+    console.warn("Erreur mise à jour branding leçon storage, fallback local:", err);
     localStorage.setItem(`nana_lesson_branding_${courseId}_${lessonId}`, JSON.stringify({ hideBranding, youtubeUrl }));
     return true;
   }
@@ -294,7 +294,7 @@ export async function saveCourseStructure(
     }));
     return true;
   } catch (err) {
-    console.warn("Erreur sauvegarde structure cours Firestore, fallback local:", err);
+    console.warn("Erreur sauvegarde structure cours storage, fallback local:", err);
     localStorage.setItem(`nana_course_structure_${courseId}`, JSON.stringify({
       modules,
       nodes,
@@ -431,7 +431,7 @@ export async function saveCourseGlobalSettings(
     localStorage.setItem(`nana_course_settings_${courseId}`, JSON.stringify(settings));
     return true;
   } catch (err) {
-    console.warn("Erreur sauvegarde paramètres cours Firestore, fallback local:", err);
+    console.warn("Erreur sauvegarde paramètres cours storage, fallback local:", err);
     localStorage.setItem(`nana_course_settings_${courseId}`, JSON.stringify(settings));
     return true;
   }
@@ -467,7 +467,7 @@ export async function validateCourseAccessPassword(
     }
     return false;
   } catch (err) {
-    console.warn("Erreur vérification mot de passe Firestore:", err);
+    console.warn("Erreur vérification mot de passe storage:", err);
     return true; // Évite de bloquer complètement si hors-ligne
   }
 }
@@ -582,7 +582,7 @@ export async function uploadContentBankFile(
       uploadedAt: Date.now()
     });
   } catch (err) {
-    console.warn("Erreur sauvegarde métadonnées Firestore Content Bank:", err);
+    console.warn("Erreur sauvegarde métadonnées storage Content Bank:", err);
   }
 
   // Sauvegarde dans le cache local
@@ -624,7 +624,7 @@ export async function getContentBankFiles(courseId: string): Promise<LessonResou
       return combined;
     }
   } catch (err) {
-    console.warn("Lecture Firestore content_bank impossible, utilisation cache local:", err);
+    console.warn("Lecture storage content_bank impossible, utilisation cache local:", err);
   }
 
   // Données initiales si vide
@@ -667,7 +667,7 @@ export async function deleteContentBankFile(courseId: string, resourceId: string
     const contentBankRef = doc(db, 'courses', courseId, 'content_bank', resourceId);
     await deleteDoc(contentBankRef);
   } catch (err) {
-    console.warn("Suppression Firestore content_bank non bloquante:", err);
+    console.warn("Suppression storage content_bank non bloquante:", err);
   }
 
   const localKey = `nana_content_bank_${courseId}`;

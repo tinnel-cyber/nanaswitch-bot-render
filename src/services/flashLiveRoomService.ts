@@ -96,7 +96,7 @@ export async function initFlashLiveRoom(
       if (data.room) return data.room;
     }
   } catch (err: any) {
-    console.warn('[FLASH ROOM INIT API NOTICE] Erreur API, fallback Firestore direct :', err.message);
+    console.warn('[FLASH ROOM INIT API NOTICE] Erreur API, fallback storage direct :', err.message);
   }
 
   // Fallback Firestore direct
@@ -123,7 +123,7 @@ export async function initFlashLiveRoom(
       }, { merge: true });
     }
   } catch (fsErr) {
-    console.warn('[FLASH ROOM INIT FIRESTORE ERROR]', fsErr);
+    console.warn('[FLASH ROOM INIT storage ERROR]', fsErr);
   }
 
   return defaultRoom;
@@ -149,7 +149,7 @@ export async function pushLiveProduct(
       return true;
     }
   } catch (err: any) {
-    console.warn('[PUSH PRODUCT API NOTICE] Fallback direct Firestore :', err.message);
+    console.warn('[PUSH PRODUCT API NOTICE] Fallback direct storage :', err.message);
   }
 
   // 2. Fallback Firestore direct
@@ -172,7 +172,7 @@ export async function pushLiveProduct(
       return true;
     }
   } catch (err) {
-    console.error('[PUSH PRODUCT FIRESTORE ERROR]', err);
+    console.error('[PUSH PRODUCT storage ERROR]', err);
   }
 
   return false;
@@ -199,7 +199,7 @@ export async function closeFlashLiveRoom(
       return { success: true, farewellMessage: defaultFarewell };
     }
   } catch (err: any) {
-    console.warn('[CLOSE ROOM API NOTICE] Fallback direct Firestore :', err.message);
+    console.warn('[CLOSE ROOM API NOTICE] Fallback direct storage :', err.message);
   }
 
   try {
@@ -223,7 +223,7 @@ export async function closeFlashLiveRoom(
       return { success: true, farewellMessage: defaultFarewell };
     }
   } catch (err) {
-    console.error('[CLOSE ROOM FIRESTORE ERROR]', err);
+    console.error('[CLOSE ROOM storage ERROR]', err);
   }
 
   return { success: true, farewellMessage: defaultFarewell };

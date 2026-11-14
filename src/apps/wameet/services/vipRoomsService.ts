@@ -198,7 +198,7 @@ export async function getVipRooms(): Promise<VipRoom[]> {
           }, { merge: true });
         }
       } catch (seedErr) {
-        console.warn('[VIP ROOMS SERVICE] Note: Seeding Firestore optionnel non bloquant :', seedErr);
+        console.warn('[VIP ROOMS SERVICE] Note: Seeding storage optionnel non bloquant :', seedErr);
       }
       return DEFAULT_VIP_ROOMS;
     }
@@ -232,7 +232,7 @@ export async function getVipRooms(): Promise<VipRoom[]> {
 
     return rooms;
   } catch (error) {
-    console.warn('[VIP ROOMS SERVICE] Erreur lecture Firestore, utilisation des données locales :', error);
+    console.warn('[VIP ROOMS SERVICE] Erreur lecture storage, utilisation des données locales :', error);
     return DEFAULT_VIP_ROOMS;
   }
 }
@@ -348,7 +348,7 @@ export async function getVipRoomById(roomId: string): Promise<VipRoom | null> {
       };
     }
   } catch (err) {
-    console.warn('[VIP ROOMS SERVICE] Erreur getVipRoomById Firestore :', err);
+    console.warn('[VIP ROOMS SERVICE] Erreur getVipRoomById storage :', err);
   }
 
   return defaultFound || null;

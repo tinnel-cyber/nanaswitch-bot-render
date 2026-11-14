@@ -642,7 +642,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
     try {
       await addUserCredits(effectiveUid, selectedPack.credits, txRef);
     } catch (err) {
-      console.warn('[RECHARGE FIRESTORE]', err);
+      console.warn('[RECHARGE storage]', err);
     }
 
     const newTotal = smsConfig.remainingCredits + selectedPack.credits;
