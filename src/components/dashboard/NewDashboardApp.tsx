@@ -322,13 +322,23 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onOpenCreateUniverse = () => {
-      // Ouvre directement le formulaire sans imposer le nom d'une application comme nom d'univers
+    const onOpenCreateUniverse = (e: any) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (selectedApp?.status === 'PENDING_KYC') {
+        showToast("Votre dossier est en cours de validation par la conformité. Vos modules sous plan commission seront activés dès validation !", "warning");
+        return;
+      }
+      if (detail?.name) {
+        setKycForm((prev: any) => ({
+          ...prev,
+          sector: prev.sector || detail.name
+        }));
+      }
       setIsKycModalOpen(true);
     };
     window.addEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
     return () => window.removeEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
-  }, []);
+  }, [selectedApp, showToast]);
 
   const handleOpenRegistryModule = useCallback((target: string | CanonicalModule | AppRegistryItem | any) => {
     if (!target) return;
@@ -1053,11 +1063,14 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             onNavigate={handleOpenRegistryModule}
             onOpenApp={handleOpenRegistryModule}
             onOpenCreateUniverse={(modInfo) => {
+              if (selectedApp?.status === 'PENDING_KYC') {
+                showToast("Votre dossier est en cours de validation par la conformité. Vos modules sous plan commission seront activés dès validation !", "warning");
+                return;
+              }
               if (modInfo?.name) {
                 setKycForm((prev: any) => ({
                   ...prev,
-                  sector: prev.sector || modInfo.name,
-                  appName: prev.appName || `Univers ${modInfo.name}`
+                  sector: prev.sector || modInfo.name
                 }));
               }
               setIsKycModalOpen(true);
