@@ -66,6 +66,17 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSimulateFileUpload = (type: 'id_card' | 'photo_capture' | 'legal_doc') => {
@@ -159,38 +170,51 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-[#1E1E2E] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
+    <div 
+      className="fixed inset-0 z-[9999999] overflow-y-auto bg-slate-950/85 backdrop-blur-md p-3 sm:p-6 flex items-start sm:items-center justify-center animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div 
+        className="relative w-full max-w-2xl bg-[#1E1E2E] border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[88vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Modal - Fixe et visible en permanence */}
+        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-[#161623] shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[#4169E1]">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 Ouvrir mon compte Nanasore
                 {targetModuleName && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-500/30">
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-500/30">
                     Pour : {targetModuleName}
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] text-slate-400">
                 Licence contextuelle & validation d’accès aux modules métiers
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+            aria-label="Fermer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Corps défilable */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+        {/* Corps défilable sans gel : flex-1 min-h-0 + scroll fluide */}
+        <div 
+          className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 min-h-0 text-slate-200 overscroll-contain scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/40"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {error && (
             <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 flex items-center gap-2 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
