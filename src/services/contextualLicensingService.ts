@@ -132,11 +132,27 @@ export function saveLocalUserLicense(license: UserContextualLicense): void {
 }
 
 /**
+ * Retourne la mention exacte et adaptée au type d'entité :
+ * - SERVICE : "Ouvrir un univers pour utiliser ce service"
+ * - APPLICATION : "Ouvrir un univers pour utiliser cette application"
+ * - OUTIL : "Ouvrir un univers pour utiliser cet outil"
+ * - MODULE : "Ouvrir un univers pour utiliser ce module"
+ */
+export function getUniverseRequiredCta(type?: string): string {
+  const t = (type || 'MODULE').toUpperCase();
+  if (t === 'SERVICE') return 'Ouvrir un univers pour utiliser ce service';
+  if (t === 'APPLICATION' || t === 'APP') return 'Ouvrir un univers pour utiliser cette application';
+  if (t === 'OUTIL' || t === 'TOOL') return 'Ouvrir un univers pour utiliser cet outil';
+  return 'Ouvrir un univers pour utiliser ce module';
+}
+
+/**
  * Évalue contextuellement si un module est en lecture seule ou actif
  */
 export function evaluateClientModuleAccess(
   moduleKey: string,
-  licenseProp?: Partial<UserContextualLicense> | null
+  licenseProp?: Partial<UserContextualLicense> | null,
+  moduleType?: string
 ): ModuleAccessInfo {
   const license = { ...getLocalUserLicense(), ...(licenseProp || {}) };
   const cleanKey = (moduleKey || '').toLowerCase();
@@ -185,7 +201,7 @@ export function evaluateClientModuleAccess(
       readOnly: true,
       requiresAccountOpening: true,
       isPayPerUse: false,
-      ctaMessage: 'Identification juridique requise pour encaisser avec ce module'
+      ctaMessage: getUniverseRequiredCta(moduleType)
     };
   }
 

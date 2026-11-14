@@ -35,8 +35,8 @@ import {
   getLocalUserLicense,
   consumeWalletForPayPerUse,
   buyModuleAlaCarte,
+  getUniverseRequiredCta,
 } from '../src/services/contextualLicensingService';
-import { AccountActivationModal } from '../src/components/licensing/AccountActivationModal';
 
 export interface HubCardItem {
   id: string;
@@ -98,6 +98,7 @@ export const Link: React.FC<LinkProps> = ({ to = '#', onClick, children, classNa
 export interface CentralHubOmnibarProps {
   onNavigate?: (view: string) => void;
   onOpenApp?: (app: any) => void;
+  onOpenCreateUniverse?: (moduleInfo?: { id: string; name: string; type?: string }) => void;
   className?: string;
   placeholder?: string;
 }
@@ -1311,6 +1312,7 @@ export function getSuccessionSuggestions(
 export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   onNavigate,
   onOpenApp,
+  onOpenCreateUniverse,
   className = '',
   placeholder
 }) => {
@@ -1330,9 +1332,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // États pour le système de licence contextuelle & ouverture de compte KYC
-  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
-  const [activationTargetModule, setActivationTargetModule] = useState<{ id: string; name: string } | null>(null);
+  // État pour la licence contextuelle
   const [licenseState, setLicenseState] = useState(() => getLocalUserLicense(currentTenantId));
   const [walletFeedback, setWalletFeedback] = useState<string | null>(null);
 
@@ -1346,9 +1346,16 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     return () => window.removeEventListener('nana_license_updated', handleLicenseUpdated);
   }, []);
 
-  const handleOpenActivationModal = (moduleId: string, moduleName: string) => {
-    setActivationTargetModule({ id: moduleId, name: moduleName });
-    setIsActivationModalOpen(true);
+  const handleOpenCreateUniverse = (moduleId: string, moduleName: string, moduleType?: string) => {
+    setIsOpen(false);
+    if (onOpenCreateUniverse) {
+      onOpenCreateUniverse({ id: moduleId, name: moduleName, type: moduleType });
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nanasore_open_create_universe', {
+        detail: { id: moduleId, name: moduleName, type: moduleType }
+      }));
+    }
   };
 
   const handlePayPerUseConsume = async (e: React.MouseEvent, moduleId: string, moduleName: string) => {
@@ -2523,13 +2530,13 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleOpenActivationModal(m.id, m.name);
+                                    handleOpenCreateUniverse(m.id, m.name, m.taxonomy || m.type);
                                   }}
                                   className="px-2.5 py-1 bg-amber-500/90 hover:bg-amber-500 text-slate-950 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
-                                  title="Ouvrir mon compte pour débloquer l'écriture sur ce module"
+                                  title={getUniverseRequiredCta(m.taxonomy || m.type)}
                                 >
                                   <ShieldAlert className="w-3 h-3 text-slate-950" />
-                                  <span>Ouvrir mon compte pour utiliser ce module</span>
+                                  <span>{getUniverseRequiredCta(m.taxonomy || m.type)}</span>
                                 </button>
                               ) : access.isPayPerUse ? (
                                 <div className="flex items-center gap-1">
@@ -2738,18 +2745,24 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                             const primAccess = evaluateClientModuleAccess(structuredOutput.primaryModule.id, licenseState);
                             
                             if (primAccess.readOnly) {
+                              const moduleType = structuredOutput.primaryModule.taxonomy || structuredOutput.primaryModule.type;
+                              const ctaText = getUniverseRequiredCta(moduleType);
                               return (
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleOpenActivationModal(structuredOutput.primaryModule.id, structuredOutput.primaryModule.title);
+                                      handleOpenCreateUniverse(
+                                        structuredOutput.primaryModule.id,
+                                        structuredOutput.primaryModule.title,
+                                        moduleType
+                                      );
                                     }}
                                     className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5 cursor-pointer"
                                   >
                                     <ShieldAlert className="w-3.5 h-3.5" />
-                                    <span>Ouvrir mon compte pour utiliser ce module</span>
+                                    <span>{ctaText}</span>
                                   </button>
                                   <button
                                     type="button"
@@ -3161,20 +3174,6 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         </div>,
         document.body
       )}
-
-      {/* Tunnel d'Ouverture de Compte & KYC Contextuel */}
-      <AccountActivationModal
-        isOpen={isActivationModalOpen}
-        onClose={() => setIsActivationModalOpen(false)}
-        targetModuleId={activationTargetModule?.id}
-        targetModuleName={activationTargetModule?.name}
-        userId={currentTenantId}
-        onSuccess={(res) => {
-          setIsActivationModalOpen(false);
-          setWalletFeedback("✓ Compte configuré avec succès ! Vos modules sont maintenant à jour.");
-          setTimeout(() => setWalletFeedback(null), 5000);
-        }}
-      />
     </>
   );
 };

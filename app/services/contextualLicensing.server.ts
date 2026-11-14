@@ -93,11 +93,27 @@ export function isDigitalFormationModule(moduleKey: string): boolean {
 }
 
 /**
+ * Retourne la mention exacte et adaptée au type d'entité :
+ * - SERVICE : "Ouvrir un univers pour utiliser ce service"
+ * - APPLICATION : "Ouvrir un univers pour utiliser cette application"
+ * - OUTIL : "Ouvrir un univers pour utiliser cet outil"
+ * - MODULE : "Ouvrir un univers pour utiliser ce module"
+ */
+export function getUniverseRequiredCta(type?: string): string {
+  const t = (type || 'MODULE').toUpperCase();
+  if (t === 'SERVICE') return 'Ouvrir un univers pour utiliser ce service';
+  if (t === 'APPLICATION' || t === 'APP') return 'Ouvrir un univers pour utiliser cette application';
+  if (t === 'OUTIL' || t === 'TOOL') return 'Ouvrir un univers pour utiliser cet outil';
+  return 'Ouvrir un univers pour utiliser ce module';
+}
+
+/**
  * Évalue contextuellement le droit d'accès et le statut read_only d'un module
  */
 export function evaluateModuleAccess(
   profile: Partial<Profile> | null | undefined,
-  moduleKey: string
+  moduleKey: string,
+  moduleType?: string
 ): ModuleAccessEvaluation {
   const cleanKey = (moduleKey || '').toLowerCase();
   const pricingModel: PricingModelTier = profile?.pricing_model || 'pay_per_use';
@@ -146,7 +162,7 @@ export function evaluateModuleAccess(
       isPayPerUse: false,
       pricingModel,
       kycStatus,
-      ctaMessage: 'Ouvrir mon compte pour utiliser ce module',
+      ctaMessage: getUniverseRequiredCta(moduleType),
       allowedThemes: ['theme-default', 'theme-electro-tech']
     };
   }

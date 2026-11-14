@@ -313,6 +313,23 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     return () => window.removeEventListener('nana_show_toast', onShowToast);
   }, [showToast]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onOpenCreateUniverse = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.name) {
+        setKycForm((prev: any) => ({
+          ...prev,
+          sector: prev.sector || detail.name,
+          appName: prev.appName || `Univers ${detail.name}`
+        }));
+      }
+      setIsKycModalOpen(true);
+    };
+    window.addEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
+    return () => window.removeEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
+  }, []);
+
   const handleOpenRegistryModule = useCallback((target: string | CanonicalModule | AppRegistryItem | any) => {
     if (!target) return;
 
@@ -842,6 +859,16 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
             className="w-full"
             onNavigate={handleOpenRegistryModule}
             onOpenApp={handleOpenRegistryModule}
+            onOpenCreateUniverse={(modInfo) => {
+              if (modInfo?.name) {
+                setKycForm((prev: any) => ({
+                  ...prev,
+                  sector: prev.sector || modInfo.name,
+                  appName: prev.appName || `Univers ${modInfo.name}`
+                }));
+              }
+              setIsKycModalOpen(true);
+            }}
           />
         </div>
 
@@ -3279,39 +3306,59 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
           <>
           {/* STEP 1: Type Selection (Entreprise vs Particulier) */}
           <div className="space-y-3">
-            <label className="font-bold text-slate-900 block text-sm">1. Type de Compte Partenaire</label>
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-900 block text-sm">1. Type de Compte Partenaire & Plafond Réglementaire</label>
+              <span className="text-[10px] text-slate-500 font-semibold">Conformité KYC</span>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
-                onClick={() => setKycForm({ ...kycForm, type: 'entreprise' })}
-                className={`p-4 rounded-2xl border text-left transition ${
-                  kycForm.type === 'entreprise' 
-                    ? 'border-[#1E40AF] bg-blue-50/50 text-blue-900 ring-2 ring-blue-600/20 shadow-sm' 
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                }`}
-              >
-                <Building2 className="w-6 h-6 text-[#1E40AF] mb-2" />
-                <p className="font-bold text-sm">Compte Entreprise</p>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  SARL, SA, EURL avec RCCM, IFU d'entreprise et représentant légal (Plafond 5M XOF/mois).
-                </p>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setKycForm({ ...kycForm, type: 'particulier' })}
-                className={`p-4 rounded-2xl border text-left transition ${
+                className={`p-4 rounded-2xl border text-left transition cursor-pointer ${
                   kycForm.type === 'particulier' 
                     ? 'border-[#1E40AF] bg-blue-50/50 text-blue-900 ring-2 ring-blue-600/20 shadow-sm' 
                     : 'border-slate-200 hover:border-slate-300 text-slate-600'
                 }`}
               >
-                <UserCheck className="w-6 h-6 text-[#1E40AF] mb-2" />
+                <div className="flex items-center justify-between mb-2">
+                  <UserCheck className="w-6 h-6 text-[#1E40AF]" />
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Plafond 1M XOF/mois
+                  </span>
+                </div>
                 <p className="font-bold text-sm">Compte Particulier</p>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  Indépendant, freelance ou créateur. CNIB Recto/Verso et Selfie visage (Plafond 1M XOF/mois).
+                  Commerçants physiques (caisse POS, boutique), formateurs, vendeurs en ligne et indépendants. CNIB/Passeport + Selfie (Sans RCCM).
                 </p>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setKycForm({ ...kycForm, type: 'entreprise' })}
+                className={`p-4 rounded-2xl border text-left transition cursor-pointer ${
+                  kycForm.type === 'entreprise' 
+                    ? 'border-[#1E40AF] bg-blue-50/50 text-blue-900 ring-2 ring-blue-600/20 shadow-sm' 
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <Building2 className="w-6 h-6 text-[#1E40AF]" />
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                    Plafond 5M XOF/mois
+                  </span>
+                </div>
+                <p className="font-bold text-sm">Compte Entreprise</p>
+                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                  Sociétés formelles (SARL, SA, SAS, Établissements). Extrait RCCM officiel, IFU et représentant légal.
+                </p>
+              </button>
+            </div>
+            
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Information conformité :</strong> L'ouverture de l'univers avec KYC fixe votre plafond mensuel légal d'encaissement (1M ou 5M FCFA). Elle ne constitue pas une souscription payante et ne dispense pas des conditions propres aux modules payants.
+              </span>
             </div>
           </div>
 

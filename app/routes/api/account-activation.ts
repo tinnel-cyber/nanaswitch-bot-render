@@ -38,7 +38,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Évaluation globale de tous les modules du registre canonique
     const modulesEvaluations: Record<string, any> = {};
     for (const mod of CANONICAL_APP_REGISTRY) {
-      modulesEvaluations[mod.id] = evaluateModuleAccess(profile, mod.id);
+      modulesEvaluations[mod.id] = evaluateModuleAccess(profile, mod.id, mod.type);
     }
 
     return json({
