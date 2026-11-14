@@ -16,10 +16,8 @@ import {
 import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 import { supabase } from '../lib/supabase';
-import { auth, db, RTDB_DEFAULT_URL } from '../firebase';
+import { db, RTDB_DEFAULT_URL } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { User as FirebaseUser } from 'firebase/auth';
-import { supabase } from '../lib/supabase';
 
 export const RTDB_SUPER_ADMIN_URL = '';
 export const RTDB_MERCHANTS_BASE_URL = '';
@@ -73,14 +71,6 @@ let memoryCache: SuperAdminSettings | null = null;
  * Obtient le jeton d'authentification Firebase Auth pour autoriser les requêtes RTDB sans erreur 401
  */
 export async function getRtdbAuthToken(): Promise<string | null> {
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      return await user.getIdToken();
-    }
-  } catch (err) {
-    console.warn('[SUPER_ADMIN_SERVICE] Impossible d\'obtenir le jeton Auth RTDB:', err);
-  }
   return null;
 }
 
@@ -183,11 +173,7 @@ export function isSuperAdminLocally(user?: { id?: string; uid?: string; email?: 
     } catch {}
   }
 
-  // Fallback Firebase Auth si actif
-  if (!targetEmail && auth.currentUser) {
-    targetUid = targetUid || auth.currentUser.uid;
-    targetEmail = (auth.currentUser.email || '').toLowerCase();
-  }
+
 
   // 3. Validation par liste blanche officielle Supabase
   if (

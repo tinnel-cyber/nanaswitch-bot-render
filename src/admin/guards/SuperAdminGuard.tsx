@@ -13,8 +13,6 @@ import {
   KNOWN_SUPERADMIN_EMAILS,
   promoteSuperAdminLocally
 } from '../../services/superAdminService';
-import { auth } from '../../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
 import { supabase } from '../../lib/supabase';
 
 export interface SuperAdminGuardProps {
@@ -99,16 +97,6 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({
       }
     });
 
-    // 3. Fallback d'écoute Firebase si encore présent
-    const unsubscribeFb = onAuthStateChanged(auth, async (fbUser) => {
-      if (isCancelled) return;
-      if (fbUser?.email && KNOWN_SUPERADMIN_EMAILS.includes(fbUser.email.toLowerCase())) {
-        promoteSuperAdminLocally(fbUser.uid || 'pousbila04-superadmin');
-        setIsAuthorized(true);
-        setIsVerifying(false);
-      }
-    });
-
     // Délai de grâce pour permettre à Supabase d'hydrater la session
     const timerFallback = setTimeout(async () => {
       if (!isCancelled) {
@@ -133,7 +121,6 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({
       isCancelled = true;
       clearTimeout(timerFallback);
       sbSub?.unsubscribe();
-      unsubscribeFb();
       window.removeEventListener('superAdminStatusVerified', handleStatusUpdate);
     };
   }, [currentUser]);

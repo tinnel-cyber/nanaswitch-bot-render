@@ -39,13 +39,7 @@ import {
 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, signInWithGoogle } from '../../../services/supabaseAuthService';
 import { supabase } from '../../../lib/supabase';
-import { auth, db } from '../../../firebase';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signInWithPopup,
-  User as FirebaseUser
-} from 'firebase/auth';
+import { db } from '../../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { hashPin } from '../../../utils/nanaSwitchPinCrypto';

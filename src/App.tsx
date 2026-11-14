@@ -49,7 +49,8 @@ import { PosSearchBar } from './components/PosSearchBar';
 import { PinKeypadModal } from './components/PinKeypadModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { isCashierSession } from './utils/managerSecurityService';
-import { auth, logoutUser, onSupabaseAuthStateChange } from './firebase';
+import { logoutUser, onSupabaseAuthStateChange } from './services/supabaseAuthService';
+import { auth } from './firebase';
 import { GoogleFlowToast } from './components/GoogleFlowToast';
 import { ClassroomErrorBoundary } from './components/lms/ClassroomErrorBoundary';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
@@ -250,6 +251,8 @@ import {
 const SUPERADMIN_EMAILS = KNOWN_SUPERADMIN_EMAILS;
 
 export type AppView =
+  | 'AUTH'
+  | 'auth'
   | 'EMAILING'
   | 'emailing' 
   | 'HOME'
@@ -447,7 +450,17 @@ export default function App() {
   // Current view: 'POS', 'INVENTORY', 'REPORTS', 'DEBT_BOOK', or 'VOICE_TEST'
   const [currentView, setCurrentView] = useState<AppView>(() => {
     if (typeof window !== 'undefined') {
-      const pathname = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      if (
+        pathname === '/login' ||
+        pathname === '/register' ||
+        pathname === '/signup' ||
+        pathname === '/auth' ||
+        params.get('auth') === 'login' ||
+        params.get('auth') === 'register'
+      ) {
+        return 'AUTH';
+      }
       if (pathname === '/test-supabase' || pathname.startsWith('/test-supabase')) {
         return 'TEST_SUPABASE';
       }
@@ -457,7 +470,6 @@ export default function App() {
       if (pathname === '/pos' || pathname.startsWith('/pos')) {
         return 'POS';
       }
-      const params = new URLSearchParams(window.location.search);
       const isBoutiquePath =
         pathname === '/s' ||
         pathname.startsWith('/s/') ||
@@ -2234,12 +2246,8 @@ export default function App() {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       if (
-        pathname === '/dashboard' ||
-        pathname.startsWith('/dashboard') ||
         pathname === '/academic/upload' ||
-        pathname.startsWith('/academic/') ||
-        pathname === '/hub' ||
-        pathname.startsWith('/hub')
+        pathname.startsWith('/academic/')
       ) {
         return true;
       }
@@ -6097,13 +6105,15 @@ export default function App() {
     );
   }
 
-  // 2. Écran de Connexion / Inscription
+  // 2. Écran de Connexion / Inscription Supabase Auth Officiel
   if (
     !currentUser &&
-    !isAuthScreenExplicitlyBypassed &&
-    currentView !== 'NANA_SWITCH_APP' &&
-    currentView !== 'nana_switch_app' &&
-    currentView !== 'MASTER_HUB' &&
+    (
+      isEmailAuthScreenOpen ||
+      currentView === 'AUTH' ||
+      currentView === 'auth' ||
+      (!isAuthScreenExplicitlyBypassed && !publicBoutiqueParams.isBoutique)
+    ) &&
     currentView !== 'ACADEMIC_UPLOAD' &&
     currentView !== 'academic_upload'
   ) {
