@@ -15,23 +15,35 @@ export interface ReceiptItem {
   quantity: number;
   price: number;
   total: number;
+  isDigital?: boolean;
+  downloadUrl?: string;
+  fileKey?: string;
+  category?: string;
 }
 
 export interface ReceiptData {
   storeName: string;
   storePhone?: string;
+  storeEmail?: string;
   storeAddress?: string;
   cashierName?: string;
   customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   saleId: string;
   date: string;
   items: ReceiptItem[];
   total: number;
-  paymentMethod: 'CASH' | 'CREDIT' | 'WAVE' | 'ORANGE_MONEY';
+  paymentMethod: 'CASH' | 'CREDIT' | 'WAVE' | 'ORANGE_MONEY' | 'SEBPAY' | 'MOBILE_MONEY' | string;
   amountGiven?: number;
   changeReturned?: number;
   paperWidth?: '80mm' | '58mm';
   notes?: string;
+  // Digital products access & client space
+  hasDigitalProducts?: boolean;
+  digitalAccessUrl?: string;
+  clientDashboardUrl?: string;
+  expiresInSeconds?: number;
   // Multi-seller traceability and signature
   sellerId?: string;
   sellerName?: string;
@@ -326,6 +338,31 @@ function generateThermalReceiptPdf(receipt: ReceiptData, widthMm: number, jsPDF:
   doc.text(sigStamp, margin, y);
   y += 3.5;
 
+  // Section Accès Produits Numériques si applicable
+  if (receipt.hasDigitalProducts || receipt.digitalAccessUrl || receipt.items.some((i) => i.isDigital)) {
+    y += 2;
+    doc.setLineDashPattern([1, 1], 0);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y, widthMm - margin, y);
+    y += 3.5;
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(widthMm === 58 ? 6.5 : 7.5);
+    doc.text('* ACCES PRODUITS NUMERIQUES *', centerX, y, { align: 'center' });
+    y += 3.5;
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(widthMm === 58 ? 5.5 : 6.5);
+    const dUrl = receipt.digitalAccessUrl || `/download/${receipt.saleId}`;
+    const cUrl = receipt.clientDashboardUrl || '/client/dashboard';
+    doc.text(`Telechargement : ${dUrl}`, margin, y);
+    y += 3;
+    doc.text(`Espace Client   : ${cUrl}`, margin, y);
+    y += 3;
+    doc.text(`Lien pre-signe securise (validite 3600s)`, margin, y);
+    y += 3.5;
+  }
+
   // Footer notes & barcode imitation
   y += 1;
   doc.setLineDashPattern([1, 1], 0);
@@ -442,7 +479,8 @@ function generateA4InvoicePdf(receipt: ReceiptData, jsPDF: any) {
       doc.setFillColor(248, 250, 252);
       doc.rect(margin, y, 180, 7, 'F');
     }
-    doc.text(item.name, margin + 3, y + 5);
+    const displayName = item.isDigital ? `[Numérique] ${item.name}` : item.name;
+    doc.text(displayName, margin + 3, y + 5);
     doc.text(item.quantity.toString(), 115, y + 5, { align: 'center' });
     doc.text(`${item.price.toLocaleString('fr-FR')} F`, 145, y + 5, { align: 'right' });
     doc.text(`${item.total.toLocaleString('fr-FR')} F`, 190, y + 5, { align: 'right' });
@@ -487,7 +525,32 @@ function generateA4InvoicePdf(receipt: ReceiptData, jsPDF: any) {
   doc.text('NET À PAYER : ', 125, y + 21);
   doc.text(`${receipt.total.toLocaleString('fr-FR')} F CFA`, 190, y + 21, { align: 'right' });
 
-  y += 38;
+  y += 36;
+
+  // Section Accès Produits Numériques & Liens de téléchargement pré-signés
+  if (receipt.hasDigitalProducts || receipt.digitalAccessUrl || receipt.items.some((i) => i.isDigital)) {
+    doc.setFillColor(238, 242, 255); // indigo-50
+    doc.setDrawColor(199, 210, 254); // indigo-200
+    doc.roundedRect(margin, y, 180, 24, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 58, 138); // blue-900
+    doc.text('ACCÈS SÉCURISÉ AUX PRODUITS NUMÉRIQUES / TÉLÉCHARGEMENT', margin + 4, y + 5.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    const dUrl = receipt.digitalAccessUrl || `/download/${receipt.saleId}`;
+    const cUrl = receipt.clientDashboardUrl || '/client/dashboard';
+    doc.text(`Lien de téléchargement direct : ${dUrl}`, margin + 4, y + 11);
+    doc.text(`Espace Client & Bibliothèque de Contenus : ${cUrl}`, margin + 4, y + 16);
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Lien pré-signé sécurisé (validité 3 600s). Accès permanent renouvelable depuis votre Espace Client.`, margin + 4, y + 21);
+
+    y += 28;
+  }
 
   // Footer notes
   doc.setFont('helvetica', 'italic');

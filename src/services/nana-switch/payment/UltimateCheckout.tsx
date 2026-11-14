@@ -24,7 +24,11 @@ import {
   AlertCircle,
   AlertTriangle,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Download,
+  FileText,
+  Store,
+  Receipt
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +39,12 @@ import {
 } from '../../../services/paymentApiService';
 import { getOperatorLogo } from '../../../utils/operatorLogos';
 import { ALL_20_COUNTRIES_CONFIG, detectCountryFromPhone, CountryPaymentConfigItem, getDynamicFailoverNotice } from '../../../utils/countryPaymentConfig';
+import {
+  DigitalReceiptPayload,
+  downloadDigitalReceiptPdf,
+  getDigitalReceiptWhatsAppUrl,
+  sendDigitalReceiptViaApi
+} from '../../digitalReceiptService';
 
 // =============================================================================
 // TYPES DU CHECKOUT FINTECH ULTIME
@@ -746,21 +756,66 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     }
   };
 
+  // Détection si l'article commandé est un produit numérique
+  const isDigitalProduct = Boolean(
+    (resolvedProduct as any)?.is_digital ||
+    (resolvedProduct as any)?.category?.toLowerCase?.().includes('digital') ||
+    (resolvedProduct as any)?.category?.toLowerCase?.().includes('numérique') ||
+    (resolvedProduct as any)?.category?.toLowerCase?.().includes('e-book') ||
+    (resolvedProduct as any)?.category?.toLowerCase?.().includes('pdf') ||
+    (resolvedProduct as any)?.category?.toLowerCase?.().includes('formation') ||
+    resolvedProduct.name?.toLowerCase?.().includes('.pdf') ||
+    resolvedProduct.name?.toLowerCase?.().includes('.zip') ||
+    resolvedProduct.name?.toLowerCase?.().includes('.mp4')
+  );
+
+  const digitalReceiptPayload: DigitalReceiptPayload = useMemo(() => ({
+    orderId,
+    transactionId: completedDetails?.transactionId || orderId,
+    customerName: customerName.trim() || 'Client',
+    customerPhone: paymentPhone.trim() || deliveryPhone.trim(),
+    customerEmail: customerEmail.trim() || undefined,
+    deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
+    storeName: effectiveStoreName,
+    storePhone: effectiveWPhone,
+    storeAddress: `${city.trim()} • Boutique Agréée`,
+    items: resolvedProduct.items && resolvedProduct.items.length > 0
+      ? resolvedProduct.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity || 1,
+          price: i.price,
+          total: (i.quantity || 1) * i.price,
+          isDigital: isDigitalProduct,
+          downloadUrl: `/download/${orderId}`
+        }))
+      : [
+          {
+            name: resolvedProduct.name,
+            quantity: 1,
+            price: finalTotal,
+            total: finalTotal,
+            isDigital: isDigitalProduct,
+            downloadUrl: `/download/${orderId}`
+          }
+        ],
+    totalAmount: finalTotal,
+    currency,
+    paymentMethod: completedDetails?.paymentMethod === 'CASH_ON_DELIVERY' ? 'Paiement à la livraison' : (selectedOperator.name || 'Mobile Money'),
+    downloadUrl: `/download/${orderId}`,
+    clientDashboardUrl: `/client/dashboard`,
+    expiresInSeconds: 3600
+  }), [orderId, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, city, deliveryAddress, effectiveStoreName, effectiveWPhone, resolvedProduct, isDigitalProduct, finalTotal, currency, selectedOperator]);
+
+  // Envoi automatique et audit du reçu côté API
+  useEffect(() => {
+    if (currentStep === 'STEP_3' && orderId) {
+      sendDigitalReceiptViaApi(digitalReceiptPayload).catch(() => {});
+    }
+  }, [currentStep, orderId, digitalReceiptPayload]);
+
   // Message W formaté pour le bouton post-paiement
   const getWReceiptUrl = () => {
-    const cleanNumber = effectiveWPhone.replace(/[^0-9]/g, '');
-    const msg = encodeURIComponent(
-      `Bonjour *${effectiveStoreName}* ! 🛍️\n\n` +
-      `Je viens de valider ma commande avec succès :\n` +
-      `• *Réf. Commande :* ${orderId}\n` +
-      `• *Article :* ${resolvedProduct.name}\n` +
-      `• *Montant :* ${formatCFA(finalTotal)}\n` +
-      `• *Mode :* ${completedDetails?.paymentMethod === 'CASH_ON_DELIVERY' ? 'Paiement à la livraison' : selectedOperator.name}\n` +
-      `• *Client :* ${customerName.trim()} (${deliveryPhone.trim()})\n` +
-      `• *Adresse :* ${city.trim()}, ${deliveryAddress.trim()}\n\n` +
-      `Merci de confirmer la bonne prise en compte et l'expédition ! 🚀`
-    );
-    return `https://api.whatsapp.com/send?phone=${cleanNumber}&text=${msg}`;
+    return getDigitalReceiptWhatsAppUrl(digitalReceiptPayload, effectiveWPhone);
   };
 
   // =============================================================================
@@ -1606,19 +1661,45 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             </p>
           </div>
 
+          {/* Coordonnées de la boutique concernée */}
+          <div className="max-w-md mx-auto p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-left flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                <Store className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-900">{effectiveStoreName}</h4>
+                <p className="text-[11px] text-slate-600">
+                  {city.trim() ? `${city.trim()} • ` : ''}Tél / WhatsApp : {effectiveWPhone}
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+              Boutique Certifiée
+            </span>
+          </div>
+
           {/* Récapitulatif de commande propre */}
           <div className="max-w-md mx-auto p-5.5 rounded-3xl bg-slate-50 border-2 border-slate-200 text-left space-y-3.5 text-xs sm:text-sm">
             <div className="flex justify-between items-center text-slate-700 font-semibold">
-              <span>Référence commande :</span>
+              <span className="flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-slate-400" />
+                Référence commande :
+              </span>
               <span className="font-mono font-black text-blue-600">
-                {completedDetails?.transactionId || orderId}
+                #{completedDetails?.transactionId || orderId}
               </span>
             </div>
 
             <div className="flex justify-between items-center text-slate-700 font-semibold">
               <span>Article commandé :</span>
-              <span className="font-black text-slate-950 truncate max-w-[200px]">
-                {resolvedProduct.name}
+              <span className="font-black text-slate-950 truncate max-w-[200px] flex items-center gap-1.5">
+                <span>{resolvedProduct.name}</span>
+                {isDigitalProduct && (
+                  <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-100 text-blue-800 font-bold border border-blue-200">
+                    Numérique
+                  </span>
+                )}
               </span>
             </div>
 
@@ -1653,20 +1734,74 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             </div>
           </div>
 
-          {/* ACTIONS POST-PAIEMENT (BOUTONS SECONDAIRES) */}
-          <div className="max-w-md mx-auto pt-2 flex flex-col sm:flex-row items-center gap-3.5">
+          {/* SECTION ACCÈS PRODUITS NUMÉRIQUES & LIENS PRÉ-SIGNÉS */}
+          {isDigitalProduct && (
+            <div className="max-w-md mx-auto p-4.5 rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-blue-200 text-left space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                    Vos Accès Produits Numériques
+                  </h4>
+                  <p className="text-[11px] text-blue-700 font-semibold">
+                    Lien pré-signé sécurisé Cloudflare R2 • Expire dans 1 heure (3600s)
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <a
+                  href={`/download/${orderId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-3 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition hover:scale-[1.01]"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Télécharger Directement</span>
+                </a>
+
+                <a
+                  href="/client/dashboard"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-3 px-3.5 rounded-xl bg-white hover:bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition hover:scale-[1.01]"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Mon Espace Client</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* ACTIONS POST-PAIEMENT : ENVOI ET TÉLÉCHARGEMENT DU REÇU */}
+          <div className="max-w-md mx-auto pt-2 space-y-2.5">
             
-            {/* Bouton "Contacter sur Wameet Direct" avec icône verte */}
+            {/* Bouton "Recevoir mon Reçu sur WhatsApp" */}
             <a
               href={getWReceiptUrl()}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => playValidationBeep()}
-              className="w-full sm:flex-1 py-4 px-5 rounded-2xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              className="w-full py-3.5 px-5 rounded-2xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition hover:scale-[1.01] active:scale-[0.98] cursor-pointer"
             >
               <MessageCircle className="w-5 h-5 fill-current" />
-              <span>Contacter sur Wameet Direct</span>
+              <span>Recevoir mon Reçu & Liens sur WhatsApp</span>
             </a>
+
+            {/* Bouton "Télécharger mon Reçu Officiel (PDF)" */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                downloadDigitalReceiptPdf(digitalReceiptPayload, 'a4');
+              }}
+              className="w-full py-3 px-4 rounded-xl border-2 border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <FileText className="w-4 h-4 text-blue-600" />
+              <span>Télécharger mon Reçu Officiel (PDF A4)</span>
+            </button>
 
             {/* Bouton "Retour à la boutique" pour inciter à racheter */}
             <button
@@ -1677,9 +1812,9 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 else if (onCancel) onCancel();
                 else if (typeof window !== 'undefined') window.location.href = '/';
               }}
-              className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-950 border-2 border-slate-300 font-black text-xs sm:text-sm transition hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border-2 border-slate-200 font-black text-xs sm:text-sm transition cursor-pointer"
             >
-              <span>Retour à la boutique</span>
+              <span>Retourner à la boutique</span>
             </button>
 
           </div>
