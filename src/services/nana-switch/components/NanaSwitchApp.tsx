@@ -11,7 +11,7 @@
  * - Composant Racine Réutilisable : <NanaSwitchApp slug="nanaswitch" />
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Camera, Mail, User, Cpu, ArrowRight,
@@ -3186,6 +3186,21 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
 }) {
   const isParticulier = kycForm.type === 'particulier';
   const isByok = kycForm.integration_mode === 'BYOK';
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // S'assurer que le formulaire démarre tout en haut à l'ouverture pour afficher le header
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+    // Bloquer le scroll du body en arrière-plan pendant que la modale est active
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   // Helper pour simuler la sélection d'un fichier et mettre à jour le nom
   const handleFileChange = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3195,19 +3210,27 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[9999999] bg-slate-950/80 backdrop-blur-md flex items-start sm:items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-2xl rounded-3xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-8">
+    <div 
+      ref={modalScrollRef}
+      className="fixed inset-0 z-[9999999] bg-slate-950/80 backdrop-blur-md overflow-y-auto overscroll-contain flex justify-center items-start p-3 sm:p-6"
+    >
+      <div className="bg-white w-full max-w-2xl rounded-3xl border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 mt-2 mb-12 sm:mt-6 sm:mb-16 relative">
         
         {/* Modal Header */}
-        <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
-          <div>
+        <div className="bg-slate-900 text-white p-5 sm:p-6 flex items-center justify-between sticky top-0 z-30 shadow-md">
+          <div className="pr-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Nouvel Univers Marchand</span>
             <h2 className="text-xl font-bold mt-0.5">Créer un Univers</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               Configurez un univers d'encaissement dédié selon votre appellation commerciale (Mode, Cosmétiques, High-Tech, Restauration...).
             </p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-full transition">
+          <button 
+            type="button"
+            onClick={onClose} 
+            className="p-2 text-slate-400 hover:text-white rounded-full transition hover:bg-slate-800 shrink-0"
+            title="Fermer"
+          >
             <XCircle className="w-6 h-6" />
           </button>
         </div>

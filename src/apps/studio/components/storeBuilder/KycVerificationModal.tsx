@@ -201,8 +201,8 @@ export const KycVerificationModal: React.FC<KycVerificationModalProps> = ({
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-[9999999] flex items-start sm:items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="w-full max-w-lg bg-card border border-theme rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl relative text-body my-auto max-h-[calc(100vh-2rem)] sm:max-h-[92vh] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-700">
+    <div className="fixed inset-0 z-[9999999] flex items-start justify-center bg-black/85 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in duration-200">
+      <div className="w-full max-w-lg bg-card border border-theme rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl relative text-body mt-3 mb-8 sm:mt-6 sm:mb-12 max-h-[calc(100vh-2rem)] sm:max-h-[92vh] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-700">
         
         {/* En-tête avec bouton fermer */}
         <div className="flex items-start justify-between border-b border-theme pb-4">
