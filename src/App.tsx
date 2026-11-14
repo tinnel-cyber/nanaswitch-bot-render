@@ -138,7 +138,6 @@ const CheckoutReturnView = React.lazy(() => import('./components/payment/Checkou
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
 const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
-const AcademicUploadView = React.lazy(() => import('./components/upload/AcademicUploadView').then(m => ({ default: m.AcademicUploadView || m.default })));
 import { getMarketplaceCourseById } from './services/marketplaceService';
 import { AuthProvider } from './context/AuthContext';
 import { useTenant } from './context/TenantContext';
@@ -377,9 +376,19 @@ export default function App() {
   }>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
-      const urlParams = new URLSearchParams(window.location.search);
-      if (pathname === '/dashboard/marketing/emailing' || pathname.startsWith('/dashboard/marketing/emailing') || pathname === '/marketing/emailing' || pathname === '/emailing' || urlParams.get('view') === 'emailing' || urlParams.get('page') === 'emailing') {
-        return 'EMAILING';
+      if (
+        pathname === '/dashboard/marketing/emailing' ||
+        pathname.startsWith('/dashboard/marketing/emailing') ||
+        pathname === '/marketing/emailing' ||
+        pathname === '/emailing' ||
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/') ||
+        pathname === '/vendor/upload' ||
+        pathname.startsWith('/vendor/upload') ||
+        urlParams.get('view') === 'emailing' ||
+        urlParams.get('page') === 'emailing'
+      ) {
+        return { isBoutique: false, targetStoreId: null, targetProductId: null };
       }
       if (
         pathname === '/test-supabase' ||
@@ -472,6 +481,24 @@ export default function App() {
       }
       if (pathname === '/pos' || pathname.startsWith('/pos')) {
         return 'POS';
+      }
+      if (
+        pathname === '/academic/upload' ||
+        pathname.startsWith('/academic/upload') ||
+        pathname === '/vendor/upload' ||
+        pathname.startsWith('/vendor/upload') ||
+        params.get('view') === 'academic_upload'
+      ) {
+        return 'ACADEMIC_UPLOAD';
+      }
+      if (
+        pathname === '/dashboard/marketing/emailing' ||
+        pathname.startsWith('/dashboard/marketing/emailing') ||
+        pathname === '/marketing/emailing' ||
+        pathname === '/emailing' ||
+        params.get('view') === 'emailing'
+      ) {
+        return 'EMAILING';
       }
       const isBoutiquePath =
         pathname === '/s' ||
@@ -577,7 +604,13 @@ export default function App() {
           return 'STUDIO';
         }
         if (modName === 'funnel' || modName === 'funnels' || modName === 'tunnels' || modName === 'tunnel') {
+          if (subMod === 'physical' || subMod === 'checkout') return 'PHYSICAL_FUNNEL';
+          if (subMod === 'ultimate') return 'ULTIMATE_FUNNEL';
+          if (subMod === 'modular') return 'MODULAR_FUNNEL';
           return 'PHYSICAL_FUNNEL';
+        }
+        if (modName === 'upload' || modName === 'academic') {
+          return 'ACADEMIC_UPLOAD';
         }
         if (modName === 'inventaire' || modName === 'stock' || modName === 'excel') {
           return 'INVENTORY';
@@ -603,8 +636,15 @@ export default function App() {
         if (modName === 'cv' || modName === 'cvpro') {
           return 'CV_CREATOR';
         }
-        if (modName === 'marketing' || modName === 'lives' || modName === 'webinaires') {
+        if (modName === 'marketing') {
+          if (subMod === 'emailing') return 'EMAILING';
           return 'STUDIO';
+        }
+        if (modName === 'emailing') {
+          return 'EMAILING';
+        }
+        if (modName === 'lives' || modName === 'webinaires') {
+          return 'NANA_SWITCH_APP';
         }
         if (modName === 'courses' && (subMod === 'create' || subMod === 'new')) {
           return 'COURSE_CREATE';
