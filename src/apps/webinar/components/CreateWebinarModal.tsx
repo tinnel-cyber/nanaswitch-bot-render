@@ -583,7 +583,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         registeredCount: 0
       };
 
-      let liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+      liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
 
       // 1. Enregistrement prioritaire dans Supabase SQL (public.live_sessions)
       try {

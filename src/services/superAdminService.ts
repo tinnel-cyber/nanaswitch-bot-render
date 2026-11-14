@@ -248,13 +248,12 @@ export async function verifySuperAdminPrivileges(userArg?: any): Promise<boolean
 
   // 3. Vérification directe dans la table Supabase `super_admins`
   try {
-    const token = await getRtdbAuthToken();
-    const rtdbUrl = `https://nanasore-default-rtdb.firebaseio.com/admins/${uid}.json${token ? `?auth=${encodeURIComponent(token)}` : ''}`;
-    const res = await fetch(rtdbUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store'
-    });
+    if (uid) {
+      const { data: adminRecord } = await supabase
+        .from('super_admins')
+        .select('user_id')
+        .eq('user_id', uid)
+        .maybeSingle();
 
       if (adminRecord) {
         promoteSuperAdminLocally(uid);
