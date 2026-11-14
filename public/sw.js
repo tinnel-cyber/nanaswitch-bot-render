@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v12-supabase-live-generator';
+const CACHE_NAME = 'nanasore-v13-unified-dashboard-appregistry';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

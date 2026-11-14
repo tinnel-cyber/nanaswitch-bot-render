@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ref, onValue } from 'firebase/database';
-import { doc, getDoc } from 'firebase/firestore';
-import { rtdb, db } from '../src/firebase';
+import { supabase } from '../src/lib/supabase';
 import { APPS_REGISTRY, searchAppsRegistry, AppRegistryItem } from '../src/data/appsRegistry';
 import { useActiveOmnibarApps } from '../src/hooks/useActiveOmnibarApps';
 import { toggleModuleStatus } from '../src/services/moduleActivationService';
-import { OFFICIAL_MODULES, getOfficialModuleById, AppModule } from '../src/appRegistry';
+import { OFFICIAL_MODULES, getOfficialModuleById, getModuleByRoute, AppModule } from '../src/config/appRegistry';
 import { 
   Search, 
   X, 
@@ -1463,169 +1461,96 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
   const [blocks, setBlocks] = useState<any[]>(() => {
     try {
-      const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
-      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
-      let combined: any[] = [];
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
-        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
-        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
+      if (typeof window !== 'undefined') {
+        // Purge de l'ancien cache Central Hub conflictuel
+        localStorage.removeItem('central_hub_config');
+        const cachedRegistry = localStorage.getItem('app_registry_cache');
+        if (cachedRegistry) {
+          const regParsed = JSON.parse(cachedRegistry);
+          return Object.values(regParsed).filter(Boolean);
+        }
       }
-      if (cachedRegistry) {
-        const regParsed = JSON.parse(cachedRegistry);
-        const regValues = Object.values(regParsed).filter(Boolean);
-        regValues.forEach((rb: any) => {
-          if (!combined.some(c => c.id === rb.id)) {
-            combined.push(rb);
-          }
-        });
-      }
-      return combined;
     } catch (_) {}
     return [];
   });
 
   const [configRows, setConfigRows] = useState<HubRowItem[]>(() => {
     try {
-      const local = typeof window !== 'undefined' ? localStorage.getItem('central_hub_config') : null;
-      const cachedRegistry = typeof window !== 'undefined' ? localStorage.getItem('app_registry_cache') : null;
-      let combined: any[] = [];
-      if (local) {
-        const parsed = JSON.parse(local);
-        if (Array.isArray(parsed)) combined = parsed.filter(Boolean);
-        else if (parsed.blocks && Array.isArray(parsed.blocks)) combined = parsed.blocks;
-        else if (typeof parsed === 'object') combined = Object.values(parsed).filter(Boolean);
+      if (typeof window !== 'undefined') {
+        const cachedRegistry = localStorage.getItem('app_registry_cache');
+        if (cachedRegistry) {
+          const regParsed = JSON.parse(cachedRegistry);
+          const combined = Object.values(regParsed).filter(Boolean);
+          const normalized = normalizeHubData(combined);
+          if (normalized.length > 0) return normalized;
+        }
       }
-      if (cachedRegistry) {
-        const regParsed = JSON.parse(cachedRegistry);
-        const regValues = Object.values(regParsed).filter(Boolean);
-        regValues.forEach((rb: any) => {
-          if (!combined.some(c => c.id === rb.id)) {
-            combined.push(rb);
-          }
-        });
-      }
-      const normalized = normalizeHubData(combined);
-      if (normalized.length > 0) return normalized;
     } catch (_) {}
     return [];
   });
 
-  // 1. Synchronisation temps-réel avec Firebase RTDB (/central_hub_config) et Local Registry (app_registry_cache)
+  // 1. Synchronisation 100% Supabase (public.app_registry) et Registre Canonique (appRegistry.ts)
   useEffect(() => {
-    const hubConfigRef = ref(rtdb, 'central_hub_config');
+    let isMounted = true;
 
-    const unsubscribe = onValue(hubConfigRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const rawData = snapshot.val();
-        console.log("🔥 [OMNIBAR RTDB RAW DATA]:", rawData);
-
-        let parsedBlocks: any[] = [];
-
-        // 1. Si c'est déjà un tableau
-        if (Array.isArray(rawData)) {
-          parsedBlocks = rawData.filter(Boolean);
-        } 
-        // 2. Si RTDB l'a converti en objet indexé { "0": {...}, "1": {...} } ou avec clés ID personnalisées
-        else if (typeof rawData === 'object' && rawData !== null) {
-          if (rawData.blocks && Array.isArray(rawData.blocks)) {
-            parsedBlocks = rawData.blocks;
-          } else {
-            parsedBlocks = Object.values(rawData).filter(Boolean);
-          }
-        }
-
-        // Fusionner avec le cache local app_registry_cache si existant
-        try {
-          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-          if (cachedRegistryRaw) {
-            const cachedRegistry = JSON.parse(cachedRegistryRaw);
-            const cachedList = Object.values(cachedRegistry).filter(Boolean);
-            cachedList.forEach((cItem: any) => {
-              const existingIdx = parsedBlocks.findIndex(p => p.id === cItem.id);
-              if (existingIdx >= 0) {
-                parsedBlocks[existingIdx] = { ...parsedBlocks[existingIdx], ...cItem };
-              } else {
-                parsedBlocks.push(cItem);
-              }
-            });
-          }
-        } catch (_) {}
-
-        console.log("✅ [OMNIBAR PARSED BLOCKS]:", parsedBlocks);
-        setBlocks(parsedBlocks);
-        const normalized = normalizeHubData(parsedBlocks);
-        setConfigRows(normalized);
-        try {
-          localStorage.setItem('central_hub_config', JSON.stringify(parsedBlocks));
-        } catch (_) {}
-      } else {
-        console.warn("⚠️ [OMNIBAR]: Aucun bloc trouvé sous /central_hub_config");
-        // Vérifier si des éléments existent dans app_registry_cache
-        try {
-          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-          if (cachedRegistryRaw) {
-            const cachedRegistry = JSON.parse(cachedRegistryRaw);
-            const cachedList = Object.values(cachedRegistry).filter(Boolean);
-            if (cachedList.length > 0) {
-              setBlocks(cachedList);
-              setConfigRows(normalizeHubData(cachedList));
-              return;
-            }
-          }
-        } catch (_) {}
-        setBlocks([]);
-      }
-    }, (error) => {
-      console.error("❌ [OMNIBAR RTDB ERROR]:", error);
-    });
-
-    const handleLocalUpdate = () => {
+    const loadFromLocalCache = () => {
       try {
-        const local = localStorage.getItem('central_hub_config');
-        const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
-        let combined: any[] = [];
-
-        if (local) {
-          const parsed = JSON.parse(local);
-          if (Array.isArray(parsed)) {
-            combined = parsed.filter(Boolean);
-          } else if (typeof parsed === 'object' && parsed !== null) {
-            if (parsed.blocks && Array.isArray(parsed.blocks)) {
-              combined = parsed.blocks;
-            } else {
-              combined = Object.values(parsed).filter(Boolean);
-            }
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('central_hub_config');
+          const cachedRegistryRaw = localStorage.getItem('app_registry_cache');
+          let combined: any[] = [];
+          if (cachedRegistryRaw) {
+            const regParsed = JSON.parse(cachedRegistryRaw);
+            combined = Object.values(regParsed).filter(Boolean);
+          }
+          if (isMounted) {
+            setBlocks(combined);
+            setConfigRows(normalizeHubData(combined));
           }
         }
-
-        if (cachedRegistryRaw) {
-          const regParsed = JSON.parse(cachedRegistryRaw);
-          const regValues = Object.values(regParsed).filter(Boolean);
-          regValues.forEach((rb: any) => {
-            const existingIdx = combined.findIndex((c: any) => c.id === rb.id);
-            if (existingIdx >= 0) {
-              combined[existingIdx] = { ...combined[existingIdx], ...rb };
-            } else {
-              combined.push(rb);
-            }
-          });
-        }
-
-        setBlocks(combined);
-        const normalized = normalizeHubData(combined);
-        setConfigRows(normalized);
       } catch (_) {}
     };
 
-    const handleRegistryUpdate = (event?: any) => {
-      console.log('🔄 [OMNIBAR] Événement hub_registry_updated capté avec succès :', event?.detail);
-      handleLocalUpdate();
+    const syncFromSupabaseRegistry = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('app_registry')
+          .select('*')
+          .order('updated_at', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const registryMap: Record<string, any> = {};
+          const activeList: any[] = [];
+          data.forEach((row: any) => {
+            if (row && row.id && row.is_active !== false) {
+              registryMap[row.id] = row;
+              activeList.push(row);
+            }
+          });
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('app_registry_cache', JSON.stringify(registryMap));
+            }
+          } catch (_) {}
+          if (isMounted) {
+            setBlocks(activeList);
+            setConfigRows(normalizeHubData(activeList));
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('[OMNIBAR SUPABASE REGISTRY FALLBACK]:', err);
+      }
+      loadFromLocalCache();
     };
 
-    window.addEventListener('storage', handleLocalUpdate);
-    window.addEventListener('central_hub_config_updated', handleLocalUpdate);
+    syncFromSupabaseRegistry();
+
+    const handleRegistryUpdate = () => {
+      loadFromLocalCache();
+    };
+
+    window.addEventListener('storage', handleRegistryUpdate);
     window.addEventListener('hub_registry_updated', handleRegistryUpdate);
     const handleOpenOmnibar = () => {
       setIsOpen(true);
@@ -1634,9 +1559,8 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     window.addEventListener('nanasore_open_omnibar', handleOpenOmnibar);
 
     return () => {
-      unsubscribe();
-      window.removeEventListener('storage', handleLocalUpdate);
-      window.removeEventListener('central_hub_config_updated', handleLocalUpdate);
+      isMounted = false;
+      window.removeEventListener('storage', handleRegistryUpdate);
       window.removeEventListener('hub_registry_updated', handleRegistryUpdate);
       window.removeEventListener('nanasore_open_omnibar', handleOpenOmnibar);
     };
@@ -1880,72 +1804,36 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
     return Array.from(expanded);
   };
 
-  // Catalogue complet unifié (RTDB + OFFICIAL_MODULES + APPS_REGISTRY) mémorisé
+  // Catalogue complet unifié (OFFICIAL_MODULES + APPS_REGISTRY + Supabase app_registry) mémorisé
   const allAvailableCards = useMemo(() => {
-    const rtdbCardsWithContext: any[] = [];
+    const customBlocksById = new Map<string, any>();
+    const standaloneCustomCards: any[] = [];
+
     if (blocks && Array.isArray(blocks)) {
       blocks.forEach((row: any, rIdx: number) => {
         if (!row || typeof row !== 'object') return;
-        const rowTitle = String(row?.rowTitle || row?.title || `Section ${rIdx + 1}`);
-        const rawCards = Array.isArray(row?.cards)
-          ? row.cards.filter(Boolean)
-          : row?.cards && typeof row.cards === 'object'
-          ? Object.values(row.cards).filter(Boolean)
-          : [];
+        const card = getCardDetails(row);
+        const matchedOfficial =
+          getOfficialModuleById(String(card.id || '')) ||
+          getOfficialModuleById(String(card.title || '')) ||
+          (card.routeUrl ? getModuleByRoute(String(card.routeUrl)) : undefined);
 
-        if (rawCards.length > 0) {
-          const extractedRowCards = rawCards.map((c: any, cIdx: number) => {
-            const card = getCardDetails(c);
-            return {
-              ...card,
-              id: String(card.id || `card-${rIdx}-${cIdx}`),
-              title: String(card.title || 'Module Nanasore'),
-              rowTitle,
-              category: card.subtitle || rowTitle,
-              altCategory: rowTitle,
-              isRtdb: true
-            };
-          });
-
-          extractedRowCards.forEach((c: any) => {
-            rtdbCardsWithContext.push({
-              ...c,
-              allRowCards: extractedRowCards
-            });
-          });
-        } else if (row.id || row.title || row.type) {
-          // Ignorer les rangées vides et les sous-blocs techniques isolés (image_slider sans route)
-          if (row.rowTitle && (!row.cards || Object.keys(row.cards).length === 0)) {
-            return;
-          }
-          if (row.type === 'image_slider' && (!row.title || row.title === 'Slide Module Block')) {
-            return;
-          }
-          const card = getCardDetails(row);
-          const singleCard = {
+        if (matchedOfficial) {
+          customBlocksById.set(matchedOfficial.id.toLowerCase(), card);
+        } else if (row.id && row.title && row.type !== 'image_slider') {
+          standaloneCustomCards.push({
             ...card,
             id: String(card.id || `block-${rIdx}`),
             title: String(card.title || row.title || 'Module Nanasore'),
             rowTitle: String(row.category || row.rowTitle || 'Modules Publiés'),
             category: String(row.category || card.subtitle || 'Modules Publiés'),
             altCategory: String(row.rowTitle || ''),
-            isRtdb: true
-          };
-          rtdbCardsWithContext.push({
-            ...singleCard,
-            allRowCards: [singleCard]
+            isRtdb: false,
+            allRowCards: []
           });
         }
       });
     }
-
-    const publishedIds = new Set<string>();
-    const publishedTitles = new Set<string>();
-
-    rtdbCardsWithContext.forEach((c) => {
-      if (c.id) publishedIds.add(String(c.id).toLowerCase());
-      if (c.title) publishedTitles.add(String(c.title).toLowerCase().trim());
-    });
 
     const isCardExcluded = (idLower: string, titleLower: string) =>
       Boolean(
@@ -1961,18 +1849,13 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
           titleLower.includes('crm & automation')
       );
 
-    // Normaliser les solutions officielles (OFFICIAL_MODULES) enrichies avec APPS_REGISTRY
+    // 1. Source de vérité primaire : Les 27 modules canoniques d'OFFICIAL_MODULES (src/config/appRegistry.ts)
     const officialCatalogCards: any[] = [];
     OFFICIAL_MODULES.forEach((official) => {
       const idLower = String(official.id || '').toLowerCase();
       const titleLower = String(official.name || '').toLowerCase().trim();
 
-      const isOverwrittenByBlockBuilder =
-        publishedIds.has(idLower) ||
-        publishedTitles.has(titleLower) ||
-        (official.aliases && official.aliases.some((a) => publishedIds.has(String(a).toLowerCase())));
-
-      if (isOverwrittenByBlockBuilder || isCardExcluded(idLower, titleLower)) {
+      if (isCardExcluded(idLower, titleLower)) {
         return;
       }
 
@@ -1980,23 +1863,30 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         (a) =>
           String(a.id || '').toLowerCase() === idLower ||
           String(a.appName || '').toLowerCase().trim() === titleLower ||
-          (official.aliases && official.aliases.some((al) => String(al).toLowerCase() === String(a.id || '').toLowerCase()))
+          (official.aliases && official.aliases.some((al) => String(al).toLowerCase() === String(a.id || '').toLowerCase())) ||
+          getOfficialModuleById(a.id)?.id === official.id
       );
 
+      const customOverride = customBlocksById.get(idLower);
       const active = isModuleActive(official.id);
+
       officialCatalogCards.push({
         id: String(official.id),
-        title: String(official.name || 'Module Nanasore'),
+        title: String(customOverride?.title || official.name || 'Module Nanasore'),
         subtitle: matchingRegistryApp?.category || official.category || '',
         category: official.category || '',
-        altCategory: matchingRegistryApp?.category || '',
-        description: String(official.description || matchingRegistryApp?.shortDescription || ''),
-        palmares: active ? '✅ Module Actif' : official.defaultActive ? 'Inclus' : 'Disponible',
-        trialBadge: active ? 'Actif' : "Prêt à l'emploi",
-        mediaUrl: getCardMediaUrl(official),
-        mediaType: 'image' as const,
+        altCategory: matchingRegistryApp?.category || customOverride?.subtitle || '',
+        description: String(customOverride?.description || official.description || matchingRegistryApp?.shortDescription || ''),
+        palmares: active
+          ? '✅ Module Actif'
+          : customOverride?.palmares || matchingRegistryApp?.badgePalmares || (official.defaultActive ? 'Inclus' : 'Disponible'),
+        trialBadge: active ? 'Actif' : customOverride?.trialBadge || matchingRegistryApp?.trialLabel || "Prêt à l'emploi",
+        mediaUrl: customOverride?.mediaUrl || getCardMediaUrl(official),
+        mediaType: customOverride?.mediaType || ('image' as const),
+        // Route et vue canoniques TOUJOURS garanties par appRegistry.ts
         routeUrl: official.route || `/dashboard/apps/${official.id}`,
-        targetView: official.view,
+        targetView: official.view || official.actionId,
+        actionId: official.actionId,
         taxonomyType:
           official.taxonomy === 'APPLICATION'
             ? 'Application'
@@ -2011,25 +1901,42 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
           official.id === 'app-pos' || official.id === 'pos'
             ? ['inventory', 'debts', 'scanner', 'mod-inventory', 'mod-debts', 'tool-scanner']
             : [],
-        keywords: Array.from(new Set([...(official.keywords || []), ...(matchingRegistryApp?.keywords || [])])),
+        keywords: Array.from(
+          new Set([
+            ...(official.keywords || []),
+            ...(matchingRegistryApp?.keywords || []),
+            ...(customOverride?.keywords || [])
+          ])
+        ),
         isOfficialCatalog: true,
         isActive: active,
-        blocks: [],
-        slides: []
+        blocks: customOverride?.blocks || [],
+        slides: customOverride?.slides || [],
+        slideSettings: customOverride?.slideSettings
       });
     });
 
-    // Normaliser le catalogue étendu (APPS_REGISTRY) sans doublons
+    // 2. Modules complémentaires d'APPS_REGISTRY (sans aucun doublon avec OFFICIAL_MODULES)
     const registryCards: any[] = [];
     APPS_REGISTRY.forEach((app) => {
       const idLower = String(app.id || '').toLowerCase();
       const titleLower = String(app.appName || '').toLowerCase().trim();
 
       if (isCardExcluded(idLower, titleLower)) return;
-      if (publishedIds.has(idLower) || publishedTitles.has(titleLower)) return;
+
+      // Si ce module correspond déjà à un module canonique (par ID, alias ou nom), il est déjà enrichi ci-dessus
+      const matchedCanonical =
+        getOfficialModuleById(app.id) ||
+        getOfficialModuleById(app.appName) ||
+        (app.route ? getModuleByRoute(app.route) : undefined);
+
+      if (matchedCanonical) return;
       if (
         officialCatalogCards.some(
-          (c) => String(c.id || '').toLowerCase() === idLower || String(c.title || '').toLowerCase().trim() === titleLower
+          (c) =>
+            String(c.id || '').toLowerCase() === idLower ||
+            String(c.title || '').toLowerCase().trim() === titleLower ||
+            (app.targetView && c.targetView === app.targetView)
         )
       ) {
         return;
@@ -2053,19 +1960,20 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         isRootApp: false,
         linkedModuleIds: [],
         keywords: Array.isArray(app.keywords) ? app.keywords : [],
+        isOfficialCatalog: false,
         isRtdb: false,
         blocks: [],
         slides: []
       });
     });
 
-    const filteredRtdbCards = rtdbCardsWithContext.filter((c) => {
+    const filteredCustomCards = standaloneCustomCards.filter((c) => {
       const idL = String(c.id || '').toLowerCase();
       const titleL = String(c.title || '').toLowerCase();
       return !isCardExcluded(idL, titleL);
     });
 
-    return [...filteredRtdbCards, ...officialCatalogCards, ...registryCards];
+    return [...officialCatalogCards, ...registryCards, ...filteredCustomCards];
   }, [blocks, activeModules]);
 
   // Vérifie si une carte appartient à une catégorie (exacte ou par tokens/synonymes métiers)
@@ -2191,8 +2099,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       if (p.includes(q)) score += 80;
       if (s.includes(q)) score += 60;
       if (card.isRootApp) score += 100;
-      if (card.isOfficialCatalog) score += 200;
-      if (card.isRtdb) score += 300;
+      if (card.isOfficialCatalog) score += 250;
 
       if (score > 0) {
         scoredMatches.push({ card, score });
@@ -2285,9 +2192,19 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const handleActivateModule = async (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
     e.stopPropagation();
 
+    // Résolution canonique via src/config/appRegistry.ts
+    const official =
+      getOfficialModuleById(card.id) ||
+      getOfficialModuleById(card.title || '') ||
+      (card.targetView ? getOfficialModuleById(card.targetView) : undefined) ||
+      (card.routeUrl ? getModuleByRoute(card.routeUrl) : undefined);
+
+    const canonicalId = official?.id || card.id;
+    const idLower = (canonicalId || '').toLowerCase();
+
     // 0. Modules en construction ou désactivés de l'appel
-    const idLower = (card.id || '').toLowerCase();
     const isUnderConstruction = Boolean(
+      official?.isUnderConstruction ||
       (card as any).isUnderConstruction ||
       idLower === 'nana-switch' ||
       idLower === 'crm-automation' ||
@@ -2302,7 +2219,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         window.dispatchEvent(new CustomEvent('nana_show_toast', {
           detail: {
             title: 'Module en construction',
-            message: `Le module "${card.title || 'Sélectionné'}" est actuellement en cours de développement et sera disponible prochainement.`,
+            message: `Le module "${card.title || official?.name || 'Sélectionné'}" est actuellement en cours de développement et sera disponible prochainement.`,
             type: 'info'
           }
         }));
@@ -2310,64 +2227,61 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       return;
     }
 
-    // 1. Persistance dynamique dans Firebase RTDB : /tenants/{tenantId}/modules/{moduleId}
+    // 1. Persistance dynamique dans Supabase (organization_blocks) & LocalStorage
     try {
-      await toggleModule(card.id, true);
+      await toggleModule(canonicalId, true);
       if (activatedSubModuleIds && activatedSubModuleIds.length > 0) {
         for (const subId of activatedSubModuleIds) {
-          await toggleModule(subId, true);
+          const subOff = getOfficialModuleById(subId);
+          await toggleModule(subOff?.id || subId, true);
         }
       }
     } catch (err) {
-      console.warn('[OMNIBAR] Erreur écriture Firebase RTDB module :', err);
+      console.warn('[OMNIBAR] Erreur activation module Supabase :', err);
     }
 
     setIsOpen(false);
 
-    // 2. Déblocage immédiat de la route sans rechargement de page
-    const route = card.routeUrl || (card as any).route;
-    if (route && route !== '#') {
-      window.history.pushState({}, '', route);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: route } }));
+    // 2. Résolution de la route et de la vue canoniques (AppRegistry)
+    const canonicalRoute = official?.route || card.routeUrl || (card as any).route || `/dashboard/apps/${canonicalId}`;
+    const canonicalView = official?.view || official?.actionId || card.targetView || (card as any).actionId;
+
+    if (canonicalRoute && canonicalRoute !== '#') {
+      try {
+        window.history.pushState({}, '', canonicalRoute);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch (_) {}
+      window.dispatchEvent(
+        new CustomEvent('app_navigate', {
+          detail: {
+            path: canonicalRoute,
+            view: canonicalView,
+            actionId: official?.actionId,
+            moduleId: canonicalId
+          }
+        })
+      );
     }
 
     if (onOpenApp) {
-      onOpenApp({ ...card, activatedSubModuleIds, isActivated: true });
+      onOpenApp({
+        ...card,
+        id: canonicalId,
+        routeUrl: canonicalRoute,
+        targetView: canonicalView,
+        activatedSubModuleIds,
+        isActivated: true
+      });
       return;
     }
 
     if (onNavigate) {
-      if (card.targetView) {
-        onNavigate(card.targetView);
+      if (canonicalView) {
+        onNavigate(canonicalView);
         return;
       }
-      const titleLower = (card.title || '').toLowerCase();
-      const routeLower = (card.routeUrl || '').toLowerCase();
-      const idLower = (card.id || '').toLowerCase();
-
-      if (titleLower.includes('caisse') || routeLower.includes('pos') || idLower.includes('pos')) {
-        onNavigate('POS');
-        return;
-      }
-      if (titleLower.includes('stock') || titleLower.includes('inventaire') || routeLower.includes('inventory')) {
-        onNavigate('INVENTORY');
-        return;
-      }
-      if (titleLower.includes('factur') || titleLower.includes('devis') || routeLower.includes('invoice')) {
-        onNavigate('INVOICES');
-        return;
-      }
-      if (titleLower.includes('dette') || titleLower.includes('credit') || routeLower.includes('debt')) {
-        onNavigate('DEBT_BOOK');
-        return;
-      }
-      if (titleLower.includes('crm') || routeLower.includes('crm')) {
-        onNavigate('CRM');
-        return;
-      }
-      if (route && route !== '#') {
-        onNavigate(route);
+      if (canonicalRoute && canonicalRoute !== '#') {
+        onNavigate(canonicalRoute);
         return;
       }
     }

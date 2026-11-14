@@ -27,6 +27,15 @@ import { DeveloperTab } from '../../../components/dashboard/DeveloperTab';
 import { KycVolumeLimitCard } from '../../../components/dashboard/KycVolumeLimitCard';
 import { CentralHubOmnibar } from '../../../components/CentralHubOmnibar';
 import { APPS_REGISTRY, AppRegistryItem } from '../../../data/appsRegistry';
+import {
+  CANONICAL_APP_REGISTRY,
+  getOfficialModuleById,
+  getModuleByRoute,
+  CanonicalModule,
+  ModuleType
+} from '../../../config/appRegistry';
+import { useActiveOmnibarApps } from '../../../hooks/useActiveOmnibarApps';
+import { ProFeaturesModal, ProFeatureTab } from '../../../shell/modals/ProFeaturesModal';
 import { db, auth } from '../../../firebase';
 import { supabase } from '../../../lib/supabase';
 import { 
@@ -283,11 +292,110 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
+  const [proFeatureModalTab, setProFeatureModalTab] = useState<ProFeatureTab | null>(null);
+  const [registryFilterType, setRegistryFilterType] = useState<'ALL' | ModuleType>('ALL');
+  const { modules: omnibarModules, activeModules: activeOmnibarModules, isModuleActive, toggleModule } = useActiveOmnibarApps();
 
   const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onShowToast = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.message) {
+        showToast(detail.message, detail.type || 'warning');
+      }
+    };
+    window.addEventListener('nana_show_toast', onShowToast);
+    return () => window.removeEventListener('nana_show_toast', onShowToast);
+  }, [showToast]);
+
+  const handleOpenRegistryModule = useCallback((target: string | CanonicalModule | AppRegistryItem | any) => {
+    if (!target) return;
+
+    const rawKey = typeof target === 'string'
+      ? target
+      : (target.id || target.targetView || target.view || target.actionId || target.route || '');
+
+    const official = getOfficialModuleById(rawKey)
+      || (typeof target === 'object' && target.route ? getModuleByRoute(target.route) : undefined)
+      || (typeof target === 'string' && target.startsWith('/') ? getModuleByRoute(target) : undefined);
+
+    if (official?.status === 'UNDER_CONSTRUCTION' || (typeof target === 'object' && target.status === 'UNDER_CONSTRUCTION')) {
+      showToast(
+        `🚧 Le module "${official?.name || target.name || rawKey}" est actuellement en chantier et sera disponible prochainement.`,
+        'warning'
+      );
+      return;
+    }
+
+    // Activation automatique dans Supabase + cache local si le module est inactif
+    if (official && !isModuleActive(official.id)) {
+      toggleModule(official.id, true).catch(() => {});
+    }
+
+    const viewOrAction = (
+      official?.view ||
+      official?.actionId ||
+      (typeof target === 'object' ? (target.targetView || target.view || target.actionId) : target) ||
+      ''
+    ).toString();
+
+    const viewUpper = viewOrAction.toUpperCase();
+    const viewLower = viewOrAction.toLowerCase();
+
+    // 1. Onglets internes du Dashboard Marchand
+    const knownTabs = [
+      'dashboard', 'wallet', 'transactions', 'links', 'checkout', 'customers',
+      'analytics', 'payouts', 'developer', 'webhooks', 'webhook_logs',
+      'disputes', 'pricing', 'support', 'settings'
+    ];
+    if (knownTabs.includes(viewLower)) {
+      setActiveTab(viewLower);
+      return;
+    }
+
+    // 2. Modales ProFeatures directes (RH & Caissiers, Passerelle Souveraine, Tracking Pixels CRM)
+    if (viewUpper === 'EMPLOYEE_MANAGEMENT' || official?.id === 'team-employees') {
+      setProFeatureModalTab('EMPLOYEE_MANAGEMENT');
+      return;
+    }
+    if (viewUpper === 'SOVEREIGN_GATEWAY' || official?.id === 'gateway') {
+      setProFeatureModalTab('SOVEREIGN_GATEWAY');
+      return;
+    }
+    if (viewUpper === 'TRACKING_PIXELS_CRM' || viewUpper === 'TRACKING_CRM' || official?.id === 'pixels-crm') {
+      setProFeatureModalTab('TRACKING_PIXELS_CRM');
+      return;
+    }
+
+    // 3. Résolution de la route et déclenchement du routeur global (src/App.tsx ou Next.js)
+    const finalRoute = official?.route || (typeof target === 'object' ? target.route : (viewOrAction.startsWith('/') ? viewOrAction : ''));
+
+    if (typeof window !== 'undefined') {
+      if (finalRoute && finalRoute.startsWith('/')) {
+        try {
+          window.history.pushState({}, '', finalRoute);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        } catch {
+          // ignore
+        }
+      }
+      window.dispatchEvent(
+        new CustomEvent('app_navigate', {
+          detail: {
+            path: finalRoute || viewOrAction,
+            view: viewUpper || viewOrAction,
+            actionId: official?.actionId || viewUpper,
+            moduleId: official?.id || rawKey
+          }
+        })
+      );
+    }
+  }, [isModuleActive, toggleModule, showToast]);
 
   const handleUpdateApp = useCallback((updated: NanaMerchantApp) => {
     setSelectedApp(updated);
@@ -728,18 +836,8 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           <CentralHubOmnibar 
             placeholder="Rechercher un univers, module, outil, service ou commande (Ctrl+K)..."
             className="w-full"
-            onNavigate={(view) => {
-              if (!view) return;
-              const viewLower = view.toLowerCase();
-              const knownTabs = ['dashboard', 'wallet', 'transactions', 'links', 'checkout', 'customers', 'analytics', 'payouts', 'developer', 'webhooks', 'webhook_logs', 'disputes', 'pricing', 'support', 'settings'];
-              if (knownTabs.includes(viewLower)) {
-                setActiveTab(viewLower);
-              } else if (view.startsWith('/') || view.startsWith('http')) {
-                window.location.href = view;
-              } else {
-                window.dispatchEvent(new CustomEvent('app_navigate', { detail: { path: view } }));
-              }
-            }}
+            onNavigate={handleOpenRegistryModule}
+            onOpenApp={handleOpenRegistryModule}
           />
         </div>
 
@@ -766,19 +864,24 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Retour Hub</span>
+              <span className="hidden sm:inline">Retour</span>
             </button>
           )}
 
-          {/* Hub Central (Direction Générale / 27 Modules) */}
-          <a 
-            href="/hub"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs"
-            title="Accéder au Hub Central des 27 Modules (Direction Générale)"
+          {/* Bouton Catalogue AppRegistry & Omnibar Direct */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+              }
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
+            title="Ouvrir le Catalogue AppRegistry des 27 Modules (Ctrl+K)"
           >
             <Layers className="w-4 h-4 text-indigo-600" />
-            <span className="hidden sm:inline">Hub Central</span>
-          </a>
+            <span className="hidden sm:inline">Modules ({activeOmnibarModules.length}/{CANONICAL_APP_REGISTRY.length})</span>
+          </button>
 
           {/* Doc Publique Externe Link (100% Hors Application Protégée) */}
           <a 
@@ -923,6 +1026,39 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   );
                 })}
               </nav>
+
+              {/* MODULES ACTIFS (APPREGISTRY CONNECTÉ) */}
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="px-3 flex items-center justify-between">
+                  <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Modules Actifs ({activeOmnibarModules.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+                      }
+                    }}
+                    className="text-[10px] font-bold text-[#1E40AF] hover:underline cursor-pointer"
+                  >
+                    + Gérer
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                  {activeOmnibarModules.map((mod) => (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => handleOpenRegistryModule(mod)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-blue-50/70 hover:text-[#1E40AF] transition cursor-pointer group"
+                    >
+                      <span className="truncate">{mod.name}</span>
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1E40AF] shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Merchant Footer Info */}
@@ -1181,8 +1317,122 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
             </div>
           </div>
+
+          {/* CATALOGUE OFFICIEL APPREGISTRY CONNECTÉ AU NOUVEAU DASHBOARD (27 MODULES) */}
+          <div className="mt-12 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-extrabold mb-1.5">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>AppRegistry Unifié • Supabase Realtime</span>
+                </div>
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  Modules, Applications, Services & Outils ({omnibarModules.length})
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Tous vos modules de l'Omnibar sont directement connectés à ce tableau de bord. Cliquez sur « Ouvrir » pour lancer un module ou activez-le en un clic.
+                </p>
+              </div>
+
+              {/* Filter Tabs by ModuleType */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
+                {[
+                  { key: 'ALL', label: `Tous (${omnibarModules.length})` },
+                  { key: 'APPLICATION', label: 'Applications' },
+                  { key: 'SERVICE', label: 'Services' },
+                  { key: 'MODULE', label: 'Modules' },
+                  { key: 'OUTIL', label: 'Outils' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setRegistryFilterType(tab.key as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      registryFilterType === tab.key
+                        ? 'bg-[#1E40AF] text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {omnibarModules
+                .filter((m) => registryFilterType === 'ALL' || m.type === registryFilterType)
+                .map((mod) => {
+                  const isUnderConstruction = mod.status === 'UNDER_CONSTRUCTION';
+                  return (
+                    <div
+                      key={mod.id}
+                      className={`bg-white rounded-2xl p-5 border transition flex flex-col justify-between gap-4 shadow-xs ${
+                        isUnderConstruction
+                          ? 'border-amber-200/80 bg-amber-50/10'
+                          : mod.enabled
+                          ? 'border-slate-200/90 hover:border-blue-400 hover:shadow-md'
+                          : 'border-slate-200/60 opacity-85 hover:opacity-100'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2.5">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-[#1E40AF] border border-blue-200">
+                            {mod.type} • {mod.category}
+                          </span>
+                          {isUnderConstruction ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              🚧 En chantier
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => toggleModule(mod.id, !mod.enabled)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${
+                                mod.enabled
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                              }`}
+                              title={mod.enabled ? 'Module actif (cliquer pour désactiver)' : 'Cliquer pour activer'}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${mod.enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                              {mod.enabled ? 'Actif' : 'Inactif'}
+                            </button>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-extrabold text-slate-900 mb-1">{mod.name}</h3>
+                        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{mod.description}</p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="font-mono text-[10px] text-slate-400 truncate">{mod.route}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRegistryModule(mod)}
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            isUnderConstruction
+                              ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                              : 'bg-[#1E40AF] hover:bg-[#1E3A8A] text-white shadow-xs'
+                          }`}
+                        >
+                          <span>{isUnderConstruction ? 'Infos' : 'Ouvrir'}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
         </main>
       )}
+
+      {/* PRO FEATURES MODAL (RH & Caissiers, Passerelle Souveraine, Tracking Pixels CRM) */}
+      <ProFeaturesModal
+        isOpen={Boolean(proFeatureModalTab)}
+        initialTab={proFeatureModalTab || 'EMPLOYEE_MANAGEMENT'}
+        onClose={() => setProFeatureModalTab(null)}
+      />
 
       {/* DYNAMIC MULTI-STEP KYC MODAL */}
       {isKycModalOpen && (
