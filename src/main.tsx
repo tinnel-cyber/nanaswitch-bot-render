@@ -6,11 +6,11 @@ if (typeof window !== 'undefined') {
     return args.some(arg => {
       if (typeof arg === 'string') {
         const lower = arg.toLowerCase();
-        return lower.includes('firebase') || lower.includes('firestore');
+        return lower.includes('firebase') || lower.includes('firestore') || lower.includes('multiple gotrueclient');
       }
       if (arg && typeof arg === 'object') {
         const text = String(arg.message || arg.name || arg.code || '').toLowerCase();
-        return text.includes('firebase') || text.includes('firestore');
+        return text.includes('firebase') || text.includes('firestore') || text.includes('multiple gotrueclient');
       }
       return false;
     });

@@ -15,13 +15,29 @@ const supabaseAnonKey =
 
 const supabaseServiceKey = typeof process !== 'undefined' ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined;
 
+let cachedClient: SupabaseClient | null = null;
+let cachedServiceClient: SupabaseClient | null = null;
+
 export function getSupabaseClient(useServiceRole: boolean = false): SupabaseClient {
+  if (typeof window !== 'undefined') {
+    const win = window as any;
+    if (!useServiceRole && win.__nanasore_supabase__) {
+      return win.__nanasore_supabase__;
+    }
+  }
+
+  if (!useServiceRole && cachedClient) {
+    return cachedClient;
+  }
+  if (useServiceRole && cachedServiceClient) {
+    return cachedServiceClient;
+  }
+
   const url = supabaseUrl;
   const key = useServiceRole && supabaseServiceKey ? supabaseServiceKey : supabaseAnonKey;
-
   const isBrowser = typeof window !== 'undefined';
 
-  return createClient(url, key, {
+  const client = createClient(url, key, {
     auth: {
       persistSession: isBrowser,
       autoRefreshToken: isBrowser,
@@ -32,6 +48,17 @@ export function getSupabaseClient(useServiceRole: boolean = false): SupabaseClie
       },
     },
   });
+
+  if (useServiceRole) {
+    cachedServiceClient = client;
+  } else {
+    cachedClient = client;
+    if (typeof window !== 'undefined') {
+      (window as any).__nanasore_supabase__ = client;
+    }
+  }
+
+  return client;
 }
 
 /**

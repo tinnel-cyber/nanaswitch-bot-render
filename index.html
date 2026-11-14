@@ -14,10 +14,10 @@
               var a = args[i];
               if (typeof a === 'string') {
                 var l = a.toLowerCase();
-                if (l.indexOf('firebase') !== -1 || l.indexOf('firestore') !== -1) return true;
+                if (l.indexOf('firebase') !== -1 || l.indexOf('firestore') !== -1 || l.indexOf('multiple gotrueclient') !== -1) return true;
               } else if (a && typeof a === 'object') {
                 var s = String(a.message || a.name || a.code || '').toLowerCase();
-                if (s.indexOf('firebase') !== -1 || s.indexOf('firestore') !== -1) return true;
+                if (s.indexOf('firebase') !== -1 || s.indexOf('firestore') !== -1 || s.indexOf('multiple gotrueclient') !== -1) return true;
               }
             }
             return false;

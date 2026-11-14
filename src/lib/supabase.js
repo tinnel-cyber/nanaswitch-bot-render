@@ -25,17 +25,23 @@ const isBrowser = typeof window !== 'undefined';
 /**
  * Client Supabase standard réactif (Realtime & Auth)
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: isBrowser,
-    autoRefreshToken: isBrowser,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export const supabase = (isBrowser && window.__nanasore_supabase__) 
+  ? window.__nanasore_supabase__
+  : createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: isBrowser,
+        autoRefreshToken: isBrowser,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    });
+
+if (isBrowser && !window.__nanasore_supabase__) {
+  window.__nanasore_supabase__ = supabase;
+}
 
 export function getSupabaseClient() {
   return supabase;
