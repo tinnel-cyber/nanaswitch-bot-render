@@ -19,7 +19,7 @@
  *       -> KYC Entreprise : Exige nom de l'entreprise et documents légaux.
  */
 
-export type KycStatusTier = 'none' | 'light' | 'full';
+export type KycStatusTier = 'none' | 'pending' | 'pending_approval' | 'pending_verification' | 'light' | 'full' | 'verified' | 'approved';
 export type AccountTypeTier = 'particulier' | 'entreprise';
 export type PricingModelTier = 'pay_per_use' | 'commission' | 'subscription';
 export type SubscriptionOptionTier = 'training' | 'caisse_vitrine' | 'all_inclusive';
@@ -41,6 +41,8 @@ export interface ModuleAccessInfo {
   hasAccess: boolean;
   readOnly: boolean;
   requiresAccountOpening: boolean;
+  isPendingValidation?: boolean;
+  isSubscriptionRequired?: boolean;
   isPayPerUse: boolean;
   ctaMessage?: string;
 }
@@ -67,8 +69,49 @@ export const PAY_AS_YOU_GO_PRICES = {
   WHATSAPP_MSG: 35     // 35 FCFA par notification WhatsApp
 } as const;
 
-// Modules Gratuits inclus d'office (PAS de theme-builder, accessible en preview)
-export const FREE_MODULES = ['nanamarket', 'scanner', 'nana-switch', 'academic-upload'] as const;
+// Modules Gratuits inclus d'office (EXCLUT STRICTEMENT LA CAISSE POS ET L'ECOMMERCE PHYSIQUE)
+export const FREE_MODULES = ['nanamarket', 'scanner', 'nana-switch'] as const;
+
+// Modules strictement soumis au Plan Abonnement (Commerce physique, Caisse POS tactile pro, Formations pro)
+export const SUBSCRIPTION_PLAN_MODULES = [
+  'pos',
+  'pos-caisse-core',
+  'caisse',
+  'mod_pos_closing',
+  'mod_cashier_sessions',
+  'mod_receipt_printer',
+  'store_builder',
+  'ecommerce-physique',
+  'boutique',
+  'boutique-physique',
+  'cours-forge',
+  'course-create',
+  'academy-support',
+  'wameet',
+  'webinar',
+  'inventory',
+  'debts',
+  'team-employees'
+] as const;
+
+// Modules soumis au Plan Commission (Produits numériques, téléchargements, affiliation, upload vendeur)
+export const COMMISSION_PLAN_MODULES = [
+  'downloads',
+  'product_downloads',
+  'download',
+  'telechargement',
+  'academic-upload',
+  'academic_upload',
+  'vendor-upload',
+  'vendor_upload',
+  'digital-products',
+  'digital',
+  'affiliates',
+  'partenaire',
+  'affiliation',
+  'links',
+  'checkout'
+] as const;
 
 // Thèmes inclus dans l'Offre Gratuite : Le thème Electro pro et le thème Élite Default
 export const FREE_THEMES = ['theme-default', 'theme-electro-tech'] as const;
@@ -80,6 +123,30 @@ export const PHYSICAL_COMMERCE_MODULES = ['pos', 'studio', 'inventory', 'scanner
 export const DIGITAL_FORMATION_MODULES = ['cours-forge', 'course-create', 'academy-support', 'wameet', 'webinar'] as const;
 
 const LOCAL_LICENSE_KEY = 'nana_contextual_license_v1';
+
+/**
+ * Détecte si un module relève strictement du Plan Abonnement
+ */
+export function isSubscriptionPlanModule(moduleKey: string): boolean {
+  const k = (moduleKey || '').toLowerCase();
+  if (k.includes('pos') || k.includes('caisse')) return true;
+  if (k.includes('store_builder') || k.includes('ecommerce-physique') || k.includes('boutique-physique')) return true;
+  if (k.includes('cours-forge') || k.includes('course-create') || k.includes('academy-support') || k.includes('wameet') || k.includes('webinar')) return true;
+  return SUBSCRIPTION_PLAN_MODULES.some(subKey => k === subKey || k.includes(subKey) || subKey.includes(k));
+}
+
+/**
+ * Détecte si un module relève du Plan Commission (accessible dès validation du compte)
+ */
+export function isCommissionPlanModule(moduleKey: string): boolean {
+  const k = (moduleKey || '').toLowerCase();
+  if (isSubscriptionPlanModule(k)) return false;
+  if (k.includes('download') || k.includes('telechargement') || k.includes('digital') || k.includes('numerique')) return true;
+  if (k.includes('upload') || k.includes('vendor') || k.includes('academic')) return true;
+  if (k.includes('affiliate') || k.includes('partenaire')) return true;
+  if (k.includes('link') || k.includes('checkout')) return true;
+  return COMMISSION_PLAN_MODULES.some(commKey => k === commKey || k.includes(commKey) || commKey.includes(k));
+}
 
 /**
  * Récupère la licence locale avec valeurs par défaut
@@ -132,7 +199,7 @@ export function saveLocalUserLicense(license: UserContextualLicense): void {
 }
 
 /**
- * Retourne la mention exacte et adaptée au type d'entité :
+ * Retourne la mention d'ouverture d'univers adaptée au type d'entité :
  * - SERVICE : "Ouvrir un univers pour utiliser ce service"
  * - APPLICATION : "Ouvrir un univers pour utiliser cette application"
  * - OUTIL : "Ouvrir un univers pour utiliser cet outil"
@@ -144,6 +211,28 @@ export function getUniverseRequiredCta(type?: string): string {
   if (t === 'APPLICATION' || t === 'APP') return 'Ouvrir un univers pour utiliser cette application';
   if (t === 'OUTIL' || t === 'TOOL') return 'Ouvrir un univers pour utiliser cet outil';
   return 'Ouvrir un univers pour utiliser ce module';
+}
+
+/**
+ * Retourne la mention pour les modules en attente de validation du compte :
+ */
+export function getPendingValidationCta(type?: string): string {
+  const t = (type || 'MODULE').toUpperCase();
+  if (t === 'SERVICE') return 'En attente de validation pour accéder à ce service';
+  if (t === 'APPLICATION' || t === 'APP') return 'En attente de validation pour accéder à cette application';
+  if (t === 'OUTIL' || t === 'TOOL') return 'En attente de validation pour accéder à cet outil';
+  return 'En attente de validation pour accéder à ce module';
+}
+
+/**
+ * Retourne la mention pour les modules soumis au plan abonnement :
+ */
+export function getSubscriptionRequiredCta(type?: string): string {
+  const t = (type || 'MODULE').toUpperCase();
+  if (t === 'SERVICE') return 'Abonnement requis pour débloquer ce service';
+  if (t === 'APPLICATION' || t === 'APP') return 'Abonnement requis pour débloquer cette application';
+  if (t === 'OUTIL' || t === 'TOOL') return 'Abonnement requis pour débloquer cet outil';
+  return 'Abonnement requis pour débloquer ce module';
 }
 
 /**
@@ -180,8 +269,9 @@ export function evaluateClientModuleAccess(
     };
   }
 
-  // 3. Modules Gratuits
-  const isFree = FREE_MODULES.some(k => cleanKey.includes(k) || k.includes(cleanKey));
+  // 3. Modules Gratuits (EXCLUT STRICTEMENT LA CAISSE POS ET L'ECOMMERCE PHYSIQUE)
+  const isCaisseOrPos = cleanKey.includes('pos') || cleanKey.includes('caisse');
+  const isFree = !isCaisseOrPos && FREE_MODULES.some(k => cleanKey === k || cleanKey.includes(k) || k.includes(cleanKey));
   if (isFree) {
     return {
       moduleKey: cleanKey,
@@ -192,9 +282,12 @@ export function evaluateClientModuleAccess(
     };
   }
 
-  // 4. Utilisateur sans KYC / Sans compte validé (Accès Général)
-  // RÈGLE : Mode Lecture / Preview pour les Modules Métiers jusqu'à identification légale
-  if (!license.kycStatus || license.kycStatus === 'none') {
+  const kycStatus = license.kycStatus || 'none';
+  const isPending = kycStatus === 'pending' || kycStatus === 'pending_approval' || kycStatus === 'pending_verification';
+  const isApproved = kycStatus === 'verified' || kycStatus === 'approved' || kycStatus === 'full';
+
+  // 4. Utilisateur sans KYC / Sans univers soumis
+  if (kycStatus === 'none') {
     return {
       moduleKey: cleanKey,
       hasAccess: true,
@@ -205,18 +298,75 @@ export function evaluateClientModuleAccess(
     };
   }
 
-  // 5. Compte Particulier ou Entreprise validé :
-  // Le titulaire est juridiquement identifié et autorisé à opérer
-  // (commerce physique avec caisse POS et boutique, vente en ligne, académie et cours, etc.)
-  // dans la limite de son plafond mensuel d'encaissement (1 000 000 FCFA pour Particulier, 5 000 000 FCFA pour Entreprise).
-  // L'ouverture de compte n'étant pas une souscription tarifaire, elle ne restreint pas l'accès
-  // d'un particulier au commerce physique s'il choisit cette activité.
+  // 5. Compte en cours de validation (dossier transmis au Super Admin)
+  if (isPending) {
+    if (isCommissionPlanModule(cleanKey)) {
+      return {
+        moduleKey: cleanKey,
+        hasAccess: true,
+        readOnly: true,
+        requiresAccountOpening: false,
+        isPendingValidation: true,
+        isPayPerUse: false,
+        ctaMessage: getPendingValidationCta(moduleType)
+      };
+    }
+
+    // Modules soumis au Plan Abonnement (commerce physique, caisse tactile POS pro, formation pro)
+    return {
+      moduleKey: cleanKey,
+      hasAccess: true,
+      readOnly: true,
+      requiresAccountOpening: false,
+      isSubscriptionRequired: true,
+      isPayPerUse: false,
+      ctaMessage: getSubscriptionRequiredCta(moduleType)
+    };
+  }
+
+  // 6. Compte approuvé & validé
+  if (isApproved) {
+    // Si c'est un module Plan Commission : TOUS ACCESSIBLES DIRECTEMENT SANS ABONNEMENT !
+    if (isCommissionPlanModule(cleanKey)) {
+      return {
+        moduleKey: cleanKey,
+        hasAccess: true,
+        readOnly: false,
+        requiresAccountOpening: false,
+        isPayPerUse: false
+      };
+    }
+
+    // Si c'est un module Plan Abonnement (commerce physique, caisse tactile POS pro, formations pro)
+    const hasActiveSubscription = license.pricingModel === 'subscription';
+    if (hasActiveSubscription) {
+      return {
+        moduleKey: cleanKey,
+        hasAccess: true,
+        readOnly: false,
+        requiresAccountOpening: false,
+        isPayPerUse: false
+      };
+    }
+
+    return {
+      moduleKey: cleanKey,
+      hasAccess: true,
+      readOnly: true,
+      requiresAccountOpening: false,
+      isSubscriptionRequired: true,
+      isPayPerUse: false,
+      ctaMessage: getSubscriptionRequiredCta(moduleType)
+    };
+  }
+
   return {
     moduleKey: cleanKey,
     hasAccess: true,
-    readOnly: false,
-    requiresAccountOpening: false,
-    isPayPerUse: false
+    readOnly: true,
+    requiresAccountOpening: true,
+    isPayPerUse: false,
+    ctaMessage: getUniverseRequiredCta(moduleType)
   };
 }
 

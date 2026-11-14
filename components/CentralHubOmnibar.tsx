@@ -114,7 +114,7 @@ export const OFFICIAL_POS_CORE_APP: HubCardItem & { subtitle?: string; rowTitle?
   mediaUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=800&auto=format&fit=crop&q=80',
   routeUrl: '/dashboard/apps/pos',
   targetView: 'POS',
-  trialBadge: 'Inclus • Illimité',
+  trialBadge: 'Plan Abonnement',
   isRootApp: true,
   rowTitle: 'Commerce & Caisse (POS)',
   linkedModuleIds: [
@@ -136,7 +136,7 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     mediaUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
     routeUrl: '/dashboard/apps/pos-closing',
     targetView: 'POS',
-    trialBadge: 'Inclus'
+    trialBadge: 'Plan Abonnement'
   },
   {
     id: 'mod_receipt_printer',
@@ -2533,10 +2533,10 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                     handleOpenCreateUniverse(m.id, m.name, m.taxonomy || m.type);
                                   }}
                                   className="px-2.5 py-1 bg-amber-500/90 hover:bg-amber-500 text-slate-950 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
-                                  title={getUniverseRequiredCta(m.taxonomy || m.type)}
+                                  title={access.ctaMessage || getUniverseRequiredCta(m.taxonomy || m.type)}
                                 >
                                   <ShieldAlert className="w-3 h-3 text-slate-950" />
-                                  <span>{getUniverseRequiredCta(m.taxonomy || m.type)}</span>
+                                  <span>{access.ctaMessage || getUniverseRequiredCta(m.taxonomy || m.type)}</span>
                                 </button>
                               ) : access.isPayPerUse ? (
                                 <div className="flex items-center gap-1">
@@ -2746,7 +2746,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                             
                             if (primAccess.readOnly) {
                               const moduleType = structuredOutput.primaryModule.taxonomy || structuredOutput.primaryModule.type;
-                              const ctaText = getUniverseRequiredCta(moduleType);
+                              const ctaText = primAccess.ctaMessage || getUniverseRequiredCta(moduleType);
                               return (
                                 <div className="flex items-center gap-2">
                                   <button

@@ -22,7 +22,7 @@ import {
   ExternalLink, FileText, ChevronRight, LogOut, RefreshCw, Filter, Download,
   Send, ShieldAlert, BookOpen, Layers, Lock, Sparkles, AlertCircle, Upload, FileCheck, ArrowLeft,
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
-  TrendingUp, Activity, DollarSign, Zap, Maximize2, Info
+  TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
@@ -39,6 +39,9 @@ import { useActiveOmnibarApps } from '../../hooks/useActiveOmnibarApps';
 import { ProFeaturesModal, ProFeatureTab } from '../../shell/modals/ProFeaturesModal';
 import { db, auth } from '../../firebase';
 import { supabase } from '../../lib/supabase';
+import { submitKycSubmission } from '../../utils/kycService';
+import { KycSubmission } from '../../types';
+import { saveLocalUserLicense, getLocalUserLicense } from '../../services/contextualLicensingService';
 import { 
   collection, 
   doc, 
@@ -576,13 +579,104 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     const target = appId || initialAppId;
     if (target) {
       const match = apps.find(a => a.id === target);
-      if (match && match.status === 'VERIFIED') {
+      if (match) {
         setSelectedApp(match);
       }
     }
   }, [appId, initialAppId, apps]);
 
-  // Soumission d'un nouvel Univers (avec persistance Supabase & Firestore)
+  // Écoute directe Supabase Realtime & événements de validation du Super Admin
+  useEffect(() => {
+    const handleKycStatusChanged = (e: any) => {
+      const detail = e?.detail;
+      const storeId = detail?.storeId || detail?.id;
+      const newStatus = detail?.status;
+      if (newStatus === 'verified' || newStatus === 'approved' || newStatus === 'APPROVED' || newStatus === 'VERIFIED') {
+        setSelectedApp(prev => (prev && (!storeId || prev.id === storeId)) ? { ...prev, status: 'VERIFIED' } : prev);
+        setApps(prev => prev.map(a => (!storeId || a.id === storeId) ? { ...a, status: 'VERIFIED' } : a));
+        saveLocalUserLicense({
+          ...getLocalUserLicense(),
+          kycStatus: 'full',
+          pricingModel: 'commission'
+        });
+        showToast("🎉 Félicitations ! Votre univers a été validé par le Super Admin.", "success");
+      }
+    };
+
+    window.addEventListener('nana_kyc_status_changed', handleKycStatusChanged);
+    window.addEventListener('nana_kyc_submission_updated', handleKycStatusChanged);
+
+    // Écoute directe canal Supabase Realtime pour validation instantanée par le Super Admin
+    let supaChannel: any = null;
+    if (supabase) {
+      supaChannel = supabase.channel('tenant-approval-realtime-sub')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'account_activations'
+        }, (payload: any) => {
+          const rec = payload?.new;
+          if (rec && (rec.status === 'approved' || rec.status === 'verified')) {
+            const orgId = rec.organization_id;
+            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
+            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
+            saveLocalUserLicense({
+              ...getLocalUserLicense(),
+              kycStatus: 'full',
+              pricingModel: 'commission'
+            });
+            showToast("🎉 Compte approuvé en direct par le Super Admin !", "success");
+          }
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'organizations'
+        }, (payload: any) => {
+          const rec = payload?.new;
+          if (rec && (rec.status === 'ACTIVE' || rec.status === 'APPROVED')) {
+            const orgId = rec.id;
+            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
+            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
+            saveLocalUserLicense({
+              ...getLocalUserLicense(),
+              kycStatus: 'full',
+              pricingModel: 'commission'
+            });
+            showToast("🎉 Tenant activé par le Super Admin !", "success");
+          }
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'universes'
+        }, (payload: any) => {
+          const rec = payload?.new;
+          if (rec && (rec.status === 'VERIFIED' || rec.status === 'ACTIVE')) {
+            const orgId = rec.id;
+            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
+            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
+            saveLocalUserLicense({
+              ...getLocalUserLicense(),
+              kycStatus: 'full',
+              pricingModel: 'commission'
+            });
+            showToast("🎉 Univers validé par le Super Admin !", "success");
+          }
+        })
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('nana_kyc_status_changed', handleKycStatusChanged);
+      window.removeEventListener('nana_kyc_submission_updated', handleKycStatusChanged);
+      if (supaChannel && supabase) {
+        supabase.removeChannel(supaChannel);
+      }
+    };
+  }, [selectedApp?.id, currentUser?.id]);
+
+  // Soumission d'un nouvel Univers (avec persistance Super Admin Supabase & Firestore)
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const isByokMode = kycForm.integration_mode === 'BYOK';
@@ -634,18 +728,103 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       }
     };
 
+    // 1. Sauvegarde et mise à jour immédiate de la licence locale contextuelle
+    saveLocalUserLicense({
+      userId: currentUser?.id || newId,
+      walletBalance: 0,
+      kycStatus: isByokMode ? 'full' : 'pending',
+      accountType: kycForm.type === 'entreprise' ? 'entreprise' : 'particulier',
+      monthlyLimit: kycForm.type === 'entreprise' ? 5000000 : 1000000,
+      pricingModel: 'commission',
+      enabledThemes: ['theme-default', 'theme-electro-tech'],
+      injectedCarteModules: []
+    });
+
+    // 2. Mise à jour de l'état local et ouverture immédiate du dashboard
     setApps([newApp, ...apps]);
     setSelectedApp(newApp);
     setIsKycModalOpen(false);
     showToast(
       isByokMode
         ? 'Univers BYOK Express créé et activé ! Clés API générées (0.02 XOF/req).'
-        : 'Dossier Univers soumis avec succès ! En attente de validation Super Admin.',
+        : 'Dossier transmis avec succès ! En attente de validation par la conformité Super Admin.',
       'success'
     );
 
-    // 1. Sauvegarde dans Supabase public.universes
-    if (supabase && currentUser?.id) {
+    // 3. Soumission officielle au Super Admin (collection Firestore /kyc_submissions)
+    try {
+      const kycSub: KycSubmission & { userId: string } = {
+        id: `kyc-sub-${newId}-${Date.now()}`,
+        userId: currentUser?.id || newId,
+        storeId: newId,
+        storeName: appDisplayName,
+        managerFullName: kycForm.fullName || kycForm.managerName || appDisplayName,
+        managerPhotoUrl: kycForm.photoCaptureUrl || '',
+        whatsappPhone: kycForm.whatsappPhone || kycForm.managerPhone || '',
+        documentType: (kycForm.documentType || 'CNIB') as any,
+        documentPhotoUrl: kycForm.idCardUrl || '',
+        status: isByokMode ? 'verified' : 'pending',
+        submittedAt: new Date().toISOString(),
+        businessData: kycForm.type === 'entreprise' ? {
+          companyName: kycForm.companyName || appDisplayName,
+          rccmNumber: kycForm.rccm || '',
+          ifuNumber: kycForm.ifuCompany || '',
+          companyAddress: kycForm.address || '',
+          companyEmail: kycForm.companyEmail || '',
+          activitySector: sectorChosen,
+          sectorDescription: kycForm.sectorDescription || ''
+        } : undefined,
+        individualData: kycForm.type === 'particulier' ? {
+          fullName: kycForm.fullName || appDisplayName,
+          activitySector: sectorChosen,
+          sectorDescription: kycForm.sectorDescription || '',
+          monthlyLimit: 1000000
+        } : undefined
+      };
+      await submitKycSubmission(kycSub);
+    } catch (kycErr) {
+      console.warn('[KYC SUBMISSION FIREBASE NOTICE]:', kycErr);
+    }
+
+    // 4. Destination Super Admin Supabase (account_activations, organizations & universes)
+    if (supabase) {
+      try {
+        await supabase.from('account_activations').upsert({
+          organization_id: newId,
+          user_id: currentUser?.id || newId,
+          status: isByokMode ? 'approved' : 'pending',
+          pricing_model: 'commission',
+          kyc_data: {
+            ...kycForm,
+            appName: appDisplayName,
+            companyName: kycForm.type === 'entreprise' ? kycForm.companyName : undefined,
+            fullName: kycForm.fullName || kycForm.managerName || appDisplayName,
+            paymentNumber: kycForm.whatsappPhone || kycForm.managerPhone || '',
+            sector: sectorChosen,
+            sectorDescription: kycForm.sectorDescription || '',
+            monthlyLimit: kycForm.type === 'entreprise' ? 5000000 : 1000000,
+            idCardUrl: kycForm.idCardUrl || '',
+            photoCaptureUrl: kycForm.photoCaptureUrl || ''
+          },
+          submitted_at: new Date().toISOString()
+        });
+      } catch (actErr) {
+        console.warn('[SUPABASE account_activations notice]:', (actErr as Error).message);
+      }
+
+      try {
+        await supabase.from('organizations').upsert({
+          id: newId,
+          name: appDisplayName,
+          slug: `${(appDisplayName || 'univ').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
+          status: isByokMode ? 'ACTIVE' : 'PENDING_APPROVAL',
+          country: 'Zone UEMOA',
+          created_at: new Date().toISOString()
+        });
+      } catch (orgErr) {
+        console.warn('[SUPABASE organizations notice]:', (orgErr as Error).message);
+      }
+
       try {
         const slugBase = (appDisplayName || 'univers')
           .toLowerCase()
@@ -654,8 +833,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           .replace(/^-+|-+$/g, '') || 'univers';
         const uniqueSlug = `${slugBase}-${Date.now().toString(36)}`;
 
-        await supabase.from('universes').insert({
-          user_id: currentUser.id,
+        await supabase.from('universes').upsert({
+          id: newId,
+          user_id: currentUser?.id || newId,
           name: appDisplayName,
           slug: uniqueSlug,
           appellation: sectorChosen,
@@ -673,7 +853,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             managerName: kycForm.type === 'entreprise' ? kycForm.managerName : undefined,
             companyEmail: kycForm.type === 'entreprise' ? kycForm.companyEmail : undefined,
             fullName: kycForm.fullName || kycForm.managerName || appDisplayName,
-            sector: sectorChosen
+            sector: sectorChosen,
+            sectorDescription: kycForm.sectorDescription || ''
           }
         });
       } catch (supaSaveErr) {
@@ -681,7 +862,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       }
     }
 
-    // 2. Sauvegarde asynchrone dans Firestore si disponible
+    // 5. Sauvegarde asynchrone dans Firestore si disponible
     if (db) {
       try {
         await setDoc(doc(db, 'merchants', newId), {
@@ -832,13 +1013,26 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition shadow-xs cursor-pointer"
                   title="Changer d'univers"
                 >
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <div className={`w-2 h-2 rounded-full ${selectedApp.status === 'PENDING_KYC' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shrink-0`} />
                   <span className="font-extrabold text-slate-900">{selectedApp.name}</span>
-                  <span className="font-mono text-[10px] text-slate-400 font-semibold px-1.5 py-0.5 bg-white rounded border border-slate-200">
+                  <span className="font-mono text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-white rounded border border-slate-200">
                     {selectedApp.id}
                   </span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
+
+                {/* Badge Statut Validation au niveau de l'ID du compte */}
+                {selectedApp.status === 'PENDING_KYC' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300 shadow-xs">
+                    <Loader2 className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
+                    <span>En cours de validation</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Compte approuvé</span>
+                  </span>
+                )}
                 
                 {/* Appellation d'activité Badge à côté du numéro de compte */}
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-blue-50 text-[#1E40AF] border border-blue-200/90 shadow-xs">
@@ -1001,7 +1195,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                     {selectedApp.id}
                   </span>
                 </div>
-                <h3 className="text-xs font-black text-slate-900 truncate tracking-tight">{selectedApp.name}</h3>
                 <div className="pt-1 flex flex-col gap-0.5">
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Domaine d'activité :</span>
                   <div className="flex items-center gap-1.5">
@@ -1101,10 +1294,17 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <p className="text-xs font-bold text-slate-900 truncate">
                     {selectedApp.kyc?.companyName || selectedApp.kyc?.fullName || merchantDisplayName || 'Compte Marchand'}
                   </p>
-                  <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Vérifié
-                  </p>
+                  {selectedApp.status === 'PENDING_KYC' ? (
+                    <p className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      En validation
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Vérifié
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1112,6 +1312,28 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
           {/* DASHBOARD CONTENT AREA */}
           <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto">
+            {/* Reassuring Banner for Pending KYC */}
+            {selectedApp.status === 'PENDING_KYC' && (
+              <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-50/70 to-yellow-50 border border-amber-300 shadow-xs flex items-start gap-3.5 animate-in fade-in duration-300">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-sm font-black text-amber-900 uppercase tracking-wide">
+                      Dossier reçu & en cours de validation par la conformité
+                    </h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-800 border border-amber-300">
+                      En attente d'approbation
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-amber-900/90 leading-relaxed font-medium">
+                    Vos informations et pièces justificatives ont bien été transmises au service conformité Nanasore. Un peu de patience, nos équipes valident votre dossier sous peu. En attendant, vos <strong>services, applications, modules et outils de base restent entièrement utilisables</strong> pour démarrer votre activité en toute fluidité avant le déblocage des services soumis au plan commission.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'dashboard' && <TabDashboard app={selectedApp} copyToClipboard={copyToClipboard} setActiveTab={setActiveTab} onUpgradeClick={() => setIsKycModalOpen(true)} />}
             {activeTab === 'wallet' && <TabWallet app={selectedApp} showToast={showToast} />}
             {activeTab === 'transactions' && <TabTransactions />}
@@ -1383,10 +1605,7 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2.5 mb-1">
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{app.name}</h1>
-            <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
-              {app.id}
-            </span>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Vue d'ensemble</h1>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-blue-50 text-[#1E40AF] border border-blue-200 shadow-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-[#1E40AF]" />
               <span className="text-[10px] uppercase font-bold text-blue-500/80">Domaine :</span>
