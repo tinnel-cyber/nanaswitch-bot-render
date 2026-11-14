@@ -41,21 +41,16 @@ export default function ProductsScreen() {
     fetchProducts();
 
     // Abonnement Supabase Realtime pour synchronisation instantanée caisse & boutique
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
     let channel: any = null;
 
-    if (supabaseUrl && supabaseKey) {
-      import("@supabase/supabase-js").then(({ createClient }) => {
-        const client = createClient(supabaseUrl, supabaseKey);
-        channel = client
-          .channel("realtime-products-sync")
-          .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => {
-            fetchProducts();
-          })
-          .subscribe();
-      }).catch(() => {});
-    }
+    import("../../../lib/supabase").then(({ supabase }) => {
+      channel = supabase
+        .channel("realtime-products-sync")
+        .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => {
+          fetchProducts();
+        })
+        .subscribe();
+    }).catch(() => {});
 
     return () => {
       if (channel) {

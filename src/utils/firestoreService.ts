@@ -84,6 +84,16 @@ export {
 };
 
 /**
+ * Détecte si une erreur Firestore provient du fonctionnement normal hors-ligne / indisponibilité temporaire
+ */
+function isOfflineOrUnavailableError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return msg.includes('offline') || msg.includes('client is offline') || code.includes('unavailable') || code.includes('failed-precondition');
+}
+
+/**
  * Types et gestion d'erreurs normalisées selon les directives de sécurité Firestore
  */
 export enum OperationType {
@@ -1428,8 +1438,10 @@ export async function getStoreSubscription(storeId: string, forceServer = false)
         };
       }
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getStoreSubscription :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[FIRESTORE] getStoreSubscription :', err);
+    }
   }
   return null;
 }
@@ -1531,8 +1543,10 @@ export function subscribeToUserProfile(
       } else {
         onUpdate(null);
       }
-    } catch (err) {
-      console.warn('[FIRESTORE] Lecture profil user :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[FIRESTORE] Lecture profil user :', err);
+      }
     }
   };
 
@@ -1735,8 +1749,10 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
       }
       return data;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] Lecture users/' + uid + ' :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[FIRESTORE] Lecture users/' + uid + ' :', err);
+    }
   }
   return null;
 }
@@ -1932,8 +1948,10 @@ export async function getUserCredits(uid: string): Promise<number> {
       }, { merge: true });
       return DEFAULT_FREE_CREDITS;
     }
-  } catch (e) {
-    console.warn('[FIRESTORE] Erreur lecture crédits users/' + uid + ' :', e);
+  } catch (e: any) {
+    if (!isOfflineOrUnavailableError(e)) {
+      console.warn('[FIRESTORE] Erreur lecture crédits users/' + uid + ' :', e);
+    }
     try {
       const cached = localStorage.getItem(`nana_user_credits_${uid}`);
       if (cached !== null) return parseInt(cached, 10);
@@ -2811,8 +2829,10 @@ export async function getPlatformLegal(): Promise<PlatformLegalConfig> {
       localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
       return resolved;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getPlatformLegal fallback :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[FIRESTORE] getPlatformLegal fallback :', err);
+    }
   }
 
   return DEFAULT_PLATFORM_LEGAL;
@@ -2893,8 +2913,10 @@ export function subscribeToPlatformLegal(
         localStorage.setItem(LOCAL_LEGAL_CACHE_KEY, JSON.stringify(resolved));
         onUpdate(resolved);
       }
-    } catch (err) {
-      console.warn('[LEGAL] Lecture platform_legal notice :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[LEGAL] Lecture platform_legal notice :', err);
+      }
     }
   };
 
@@ -3131,8 +3153,10 @@ export async function getLandingPageConfig(): Promise<LandingPageConfig> {
       } catch (e) {}
       return merged;
     }
-  } catch (err) {
-    console.warn('[FIRESTORE] getLandingPageConfig notice :', err);
+  } catch (err: any) {
+    if (!isOfflineOrUnavailableError(err)) {
+      console.warn('[FIRESTORE] getLandingPageConfig notice :', err);
+    }
   }
 
   // 2. Cache local de secours
@@ -3238,8 +3262,10 @@ export function subscribeToLandingPageConfig(
       } else {
         onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
       }
-    } catch (err) {
-      console.warn('[LANDING] Lecture platform_settings/landing notice :', err);
+    } catch (err: any) {
+      if (!isOfflineOrUnavailableError(err)) {
+        console.warn('[LANDING] Lecture platform_settings/landing notice :', err);
+      }
       onUpdate(DEFAULT_LANDING_PAGE_CONFIG);
     }
   };

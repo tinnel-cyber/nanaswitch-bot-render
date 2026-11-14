@@ -72,7 +72,8 @@ export async function syncAuthProfileWithSupabase(params: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        firebaseUid,
+        userId: resolvedUid,
+        firebaseUid: resolvedUid,
         email,
         fullName: fullName || '',
         whatsapp: whatsapp || ''
