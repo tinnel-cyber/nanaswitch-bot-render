@@ -37,21 +37,7 @@ import {
 } from '../../../config/appRegistry';
 import { useActiveOmnibarApps } from '../../../hooks/useActiveOmnibarApps';
 import { ProFeaturesModal, ProFeatureTab } from '../../../shell/modals/ProFeaturesModal';
-import { db, auth } from '../../../firebase';
 import { supabase } from '../../../lib/supabase';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  serverTimestamp 
-} from 'firebase/firestore';
 
 export interface NanaSwitchAppProps {
   slug?: string;
@@ -445,13 +431,12 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
   }, [showToast]);
 
-  // Synchronisation des Univers (Supabase + Firestore fallback) au chargement
+  // Synchronisation des Univers (100% Supabase + cache local)
   useEffect(() => {
     let isMounted = true;
     async function loadMerchantUniverses() {
       setIsSyncing(true);
       try {
-        // 1. Priorité Supabase : table public.universes
         if (supabase) {
           try {
             const { data: supaUniverses, error } = await supabase
@@ -512,86 +497,10 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           }
         }
 
-        // 2. Fallback Firestore si Supabase n'a pas encore de données
-        if (db) {
-          const merchantsRef = collection(db, 'merchants');
-          const snap = await getDocs(query(merchantsRef, limit(20)));
-          if (!snap.empty && isMounted) {
-            const loaded: NanaMerchantApp[] = [];
-            snap.forEach((docSnap) => {
-              const data = docSnap.data();
-              loaded.push({
-                id: docSnap.id,
-                name: data.business_name || data.name || 'Univers Marchand',
-                sector: data.sector || 'Commerce Général & Services',
-                type: data.account_type === 'INTERNAL' || data.account_type === 'AGREGATED' ? 'entreprise' : (data.type || 'entreprise'),
-                status: data.status === 'ACTIVE' || data.status === 'VERIFIED' ? 'VERIFIED' : (data.status || 'PENDING_KYC'),
-                createdAt: data.created_at ? String(data.created_at).slice(0, 10) : '2026-10-26',
-                balances: {
-                  XOF: data.financials?.wallet_balance_xof ?? 0,
-                  USD: 0,
-                  XAF: 0,
-                  GNF: 0,
-                  GHS: 0
-                },
-                keys: data.nanaswitch_keys ? {
-                  pk: data.nanaswitch_keys.public_key,
-                  skHash: data.nanaswitch_keys.secret_key_hash || '$2a$10$...hidden',
-                  whSecret: data.webhook_config?.secret_key || 'ns_whsec_master_2026'
-                } : undefined,
-                webhook_config: data.webhook_config,
-                integration_mode: data.integration_config?.mode || data.integration_mode || 'AGREGATED',
-                integration_config: data.integration_config || {
-                  mode: data.integration_mode || 'AGREGATED',
-                  custom_credentials: data.custom_credentials || {}
-                },
-                custom_credentials: data.integration_config?.custom_credentials || data.custom_credentials || {},
-                api_credits_balance: data.api_pricing_config?.api_credits_balance ?? data.switch_wallets?.api_credits_balance ?? 5000,
-                api_pricing_config: data.api_pricing_config || {
-                  cost_per_request_xof: 0.02,
-                  api_credits_balance: 5000,
-                  low_balance_threshold: 500
-                },
-                monthly_usage: data.monthly_usage || {
-                  month: '2026-10',
-                  volume_xof: data.type === 'particulier' ? 850000 : 3850000,
-                  transaction_count: 24
-                },
-                kyc_limits: {
-                  tier: data.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
-                  max_monthly_volume_xof: data.custom_monthly_limit_xof || (data.type === 'particulier' ? 1000000 : 5000000),
-                  description: data.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
-                },
-                custom_monthly_limit_xof: data.custom_monthly_limit_xof,
-                kyc: {
-                  companyName: data.business_name,
-                  rccm: data.rccm,
-                  ifu: data.ifu,
-                  fullName: data.business_name
-                }
-              });
-            });
-
-            const localCached = getStoredUniverses();
-            const mergedMap = new Map<string, NanaMerchantApp>();
-            localCached.forEach(a => mergedMap.set(a.id, a));
-            loaded.forEach(a => mergedMap.set(a.id, a));
-            const allApps = Array.from(mergedMap.values());
-            setApps(allApps);
-            try {
-              localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(allApps));
-            } catch (_) {}
-          } else {
-            const localCached = getStoredUniverses();
-            if (localCached.length > 0) {
-              setApps(localCached);
-            }
-          }
-        } else {
-          const localCached = getStoredUniverses();
-          if (localCached.length > 0) {
-            setApps(localCached);
-          }
+        // Si Supabase est hors ligne ou vide, utiliser les univers du cache local
+        const localCached = getStoredUniverses();
+        if (localCached.length > 0 && isMounted) {
+          setApps(localCached);
         }
       } catch (err) {
         console.warn('[NANASWITCH APP] Synchronisation silencieuse :', (err as Error).message);
@@ -618,7 +527,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
   }, [appId, initialAppId, apps]);
 
-  // Soumission d'un nouvel Univers (avec persistance Supabase & Firestore)
+  // Soumission d'un nouvel Univers (avec persistance 100% Supabase & cache local)
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const isByokMode = kycForm.integration_mode === 'BYOK';
@@ -683,7 +592,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     );
 
     // 1. Sauvegarde dans Supabase public.universes
-    if (supabase && currentUser?.id) {
+    if (supabase) {
       try {
         const slugBase = (appDisplayName || 'univers')
           .toLowerCase()
@@ -693,7 +602,8 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
         const uniqueSlug = `${slugBase}-${Date.now().toString(36)}`;
 
         await supabase.from('universes').insert({
-          user_id: currentUser.id,
+          id: newId,
+          ...(currentUser?.id ? { user_id: currentUser.id } : {}),
           name: appDisplayName,
           slug: uniqueSlug,
           appellation: sectorChosen,
@@ -716,34 +626,6 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
         });
       } catch (supaSaveErr) {
         console.warn('[NANASWITCH SUPABASE SAVE]', (supaSaveErr as Error).message);
-      }
-    }
-
-    // 2. Sauvegarde asynchrone dans Firestore si disponible
-    if (db) {
-      try {
-        await setDoc(doc(db, 'merchants', newId), {
-          merchant_id: newId,
-          business_name: kycForm.type === 'entreprise' ? (kycForm.companyName || appDisplayName) : (kycForm.fullName || appDisplayName),
-          rccm: (!isByokMode && kycForm.type === 'entreprise') ? (kycForm.rccm || null) : null,
-          ifu: (!isByokMode && kycForm.type === 'entreprise') ? (kycForm.ifuCompany || null) : null,
-          company_email: kycForm.type === 'entreprise' ? (kycForm.companyEmail || null) : null,
-          manager_name: kycForm.type === 'entreprise' ? (kycForm.managerName || null) : null,
-          account_type: isByokMode ? 'EXTERNAL_BYOK' : 'AGREGATED',
-          integration_mode: kycForm.integration_mode || 'AGREGATED',
-          type: kycForm.type,
-          sector: sectorChosen,
-          status: isByokMode ? 'ACTIVE' : 'PENDING_VERIFICATION',
-          storeApprovalStatus: isByokMode ? 'APPROVED' : 'PENDING',
-          created_at: new Date().toISOString(),
-          ...(generatedByokKeys ? { api_keys: generatedByokKeys } : {}),
-          kyc_payload: {
-            ...kycForm,
-            ...(kycForm.type === 'particulier' || isByokMode ? { rccm: null, ifuCompany: null, companyName: null, companyEmail: null } : {})
-          }
-        }, { merge: true });
-      } catch (fbErr) {
-        console.warn('[NANASWITCH storage SAVE]', (fbErr as Error).message);
       }
     }
   };
@@ -801,20 +683,20 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       return a;
     }));
 
-    // Met à jour Firestore si disponible
-    if (db) {
+    // Met à jour Supabase si disponible
+    if (supabase) {
       try {
-        await updateDoc(doc(db, 'merchants', targetAppId), {
+        await supabase.from('universes').update({
           status: status === 'VERIFIED' ? 'ACTIVE' : 'REJECTED',
-          storeApprovalStatus: status === 'VERIFIED' ? 'APPROVED' : 'REJECTED',
           ...(generatedKeys ? {
-            'nanaswitch_keys.public_key': generatedKeys.pk,
-            'webhook_config.secret_key': generatedKeys.whSecret,
-            'webhook_config.is_active': true
+            keys: {
+              publicKey: generatedKeys.pk,
+              webhookSecret: generatedKeys.whSecret
+            }
           } : {})
-        });
+        }).eq('id', targetAppId);
       } catch (err) {
-        console.warn('[SUPER ADMIN UPDATE storage]', (err as Error).message);
+        console.warn('[SUPER ADMIN UPDATE SUPABASE]', (err as Error).message);
       }
     }
 
@@ -2899,7 +2781,7 @@ function LegacyTabDeveloperOld({ app, copyToClipboard, showToast }: { app: NanaM
           <div className="text-xs text-amber-900 space-y-1">
             <p className="font-bold">Protégez votre Clé Secrète (ns_live_sk_...)</p>
             <p className="text-amber-800 leading-relaxed">
-              Ne partagez jamais votre clé secrète dans du code côté client (frontend React, JS mobile). Seul son hash Bcrypt est conservé dans Firestore.
+              Ne partagez jamais votre clé secrète dans du code côté client (frontend React, JS mobile). Seul son hash Bcrypt est conservé dans Supabase.
             </p>
           </div>
         </div>
