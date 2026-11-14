@@ -373,7 +373,7 @@ const INITIAL_AUTOMATION_LOGS: AutomationLogItem[] = [
     connector: 'WooCommerce Store Bridge',
     event: 'order.stock_synced',
     status: '200_OK',
-    payloadPreview: '{ sku: "NANA-POS-TERM-1", stockQty: 14, store: "Ivoire Agro" }'
+    payloadPreview: '{ sku: "NANASORE-TERM-1", stockQty: 14, store: "Ivoire Agro" }'
   },
   {
     id: 'log-4',
@@ -1699,7 +1699,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                       onClick={() => {
                         playTapBeep();
                         if (onNavigateToPos) onNavigateToPos();
-                        else triggerToast('Accès à la Caisse Tactile Omni-Canal NaNa POS', 'info');
+                        else triggerToast('Accès à la Caisse Tactile Omni-Canal Nanasore', 'info');
                       }}
                       className="p-5 rounded-2xl bg-[#0b0f19] border border-slate-800 hover:border-emerald-500/40 transition-all duration-200 hover:-translate-y-1 cursor-pointer group shadow-sm flex flex-col justify-between"
                     >
@@ -3237,7 +3237,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                     {[
                       {
                         id: 'receipt',
-                        title: 'Reçu Caisse NaNa POS',
+                        title: 'Reçu Caisse Nanasore',
                         desc: 'Confirmation de vente & ticket numérique'
                       },
                       {

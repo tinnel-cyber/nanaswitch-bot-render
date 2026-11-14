@@ -241,44 +241,39 @@ export async function generateLiveMeeting(
 
   switch (provider) {
     case 'ZOOM': {
-      const zoomMeetingId = `${Math.floor(800 + Math.random() * 199)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`;
-      const rawId = zoomMeetingId.replace(/\s+/g, '');
-      const pwdHash = Math.random().toString(36).substring(2, 10);
+      // Zoom requiert la création directe depuis le compte Zoom de l'hôte ou OAuth
+      const customMeetingUrl = integrations.ZOOM?.apiKey ? `https://zoom.us/j/${details.instructorId || 'masterclass'}` : '';
       return {
         provider: 'ZOOM',
-        meetingUrl: `https://zoom.us/j/${rawId}?pwd=${pwdHash}`,
-        meetingId: zoomMeetingId,
+        meetingUrl: customMeetingUrl,
+        meetingId: details.instructorId || 'zoom-live',
         passcode: randomPin,
         scheduledAt: scheduledTime,
         durationMinutes: duration,
         isAutoRecordEnabled: integrations.ZOOM?.autoRecord ?? true,
         autoMarkCompletedOnEnd: true,
-        hostEmail: integrations.ZOOM?.accountEmail || 'instructeur@telecom-pousbila.bf'
+        hostEmail: integrations.ZOOM?.accountEmail || ''
       };
     }
 
     case 'GOOGLE_MEET': {
-      const seg1 = Math.random().toString(36).substring(2, 5);
-      const seg2 = Math.random().toString(36).substring(2, 6);
-      const seg3 = Math.random().toString(36).substring(2, 5);
-      const meetCode = `${seg1}-${seg2}-${seg3}`;
       return {
         provider: 'GOOGLE_MEET',
-        meetingUrl: `https://meet.google.com/${meetCode}`,
-        meetingId: meetCode,
+        meetingUrl: '',
+        meetingId: '',
         passcode: randomPin,
         scheduledAt: scheduledTime,
         durationMinutes: duration,
         isAutoRecordEnabled: false,
         autoMarkCompletedOnEnd: true,
-        hostEmail: integrations.GOOGLE_MEET?.accountEmail || 'instructeur@gmail.com'
+        hostEmail: integrations.GOOGLE_MEET?.accountEmail || ''
       };
     }
 
     case 'JITSI': {
       const jitsiDomain = integrations.JITSI?.serverDomain || 'meet.jit.si';
-      const prefix = integrations.JITSI?.roomPrefix || 'nana';
-      const roomName = `${prefix}-${cleanTitle}-${Date.now().toString().slice(-6)}`;
+      const prefix = integrations.JITSI?.roomPrefix || 'nana-lms';
+      const roomName = `${prefix}-${cleanTitle}-${Date.now().toString(36)}`;
       return {
         provider: 'JITSI',
         jitsiServerDomain: jitsiDomain,
@@ -295,10 +290,32 @@ export async function generateLiveMeeting(
 
     case 'DAILY':
     default: {
-      const roomName = `telecom-${cleanTitle}-${Date.now().toString().slice(-4)}`;
+      const roomName = `lms-${cleanTitle}-${Date.now().toString(36)}`;
+      let finalRoomUrl = `https://nanasore.daily.co/${roomName}`;
+
+      try {
+        const resp = await fetch('/api/daily/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomName,
+            durationSeconds: duration * 60
+          })
+        });
+
+        if (resp.ok) {
+          const roomData = await resp.json();
+          if (roomData.url) {
+            finalRoomUrl = roomData.url;
+          }
+        }
+      } catch (callErr) {
+        console.warn('[LMS DAILY] Échec appel direct /api/daily/room, utilisation URL conventionnelle:', callErr);
+      }
+
       return {
         provider: 'DAILY',
-        meetingUrl: `https://nanasore.daily.co/${roomName}`,
+        meetingUrl: finalRoomUrl,
         meetingId: roomName,
         passcode: randomPin,
         scheduledAt: scheduledTime,

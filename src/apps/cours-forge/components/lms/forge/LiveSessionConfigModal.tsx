@@ -238,26 +238,36 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
             </div>
 
             {/* Bouton Magique : Génération Automatique des Liens */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-slate-950 border border-indigo-500/30 flex items-center justify-between gap-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-slate-950 border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-1.5 text-indigo-300 text-xs font-black">
                   <Sparkles className="w-4 h-4 text-indigo-400" />
-                  <span>Génération Automatique API</span>
+                  <span>
+                    {provider === 'DAILY' || provider === 'JITSI' 
+                      ? 'Génération Instantanée Salle Sécurisée' 
+                      : `Connexion Compte ${provider}`}
+                  </span>
                 </div>
-                <p className="text-[11px] text-slate-400 truncate">
-                  Génère le lien de réunion et le code d'accès avec vos identifiants {provider}
+                <p className="text-[11px] text-slate-400">
+                  {provider === 'DAILY'
+                    ? "Crée une salle active sur l'infrastructure souveraine Daily.co avec jeton cryptographique."
+                    : provider === 'JITSI'
+                    ? "Provisionne une salle Jitsi Meet chiffrée de bout en bout sans installation requise."
+                    : `Pour ${provider}, collez votre lien de réunion créé depuis votre compte officiel.`}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleGenerateMeeting}
-                disabled={isGenerating}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white font-black text-xs transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
-                <span>{isGenerating ? 'Génération...' : 'Générer Réunion'}</span>
-              </button>
+              {(provider === 'DAILY' || provider === 'JITSI') && (
+                <button
+                  type="button"
+                  onClick={handleGenerateMeeting}
+                  disabled={isGenerating}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-black text-xs transition shadow-md shadow-emerald-600/30 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+                  <span>{isGenerating ? 'Création de la salle...' : 'Créer la Salle Live'}</span>
+                </button>
+              )}
             </div>
 
             {/* Détails de la Réunion Générée */}

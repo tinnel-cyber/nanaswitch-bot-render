@@ -100,7 +100,7 @@ export const SIMULATED_SOURCES = {
   webinar: {
     id: 'webinar-live-sales',
     type: 'webinar',
-    title: 'Grand Live Interactif : Clôturer 50 Ventes par Jour avec NaNa POS & Funnels',
+    title: 'Grand Live Interactif : Clôturer 50 Ventes par Jour avec Nanasore & Funnels',
     subtitle: 'Démo en direct sans filtre, questions/réponses ouvertes et bonus VIP offert aux participants.',
     instructor: 'Aïcha Diallo & Mamadou Konaté • Experts Conversion',
     instructorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',

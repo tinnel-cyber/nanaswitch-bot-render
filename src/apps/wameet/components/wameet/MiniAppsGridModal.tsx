@@ -22,7 +22,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime } from '../../../../utils/audio';
-import { NANA_POS_GIFT_CATALOG } from '../../../../types/cagnotte';
+import { NANASORE_GIFT_CATALOG } from '../../../../types/cagnotte';
 
 export interface SampleGiftItem {
   id: string;
@@ -44,7 +44,7 @@ export const SAMPLE_GIFT_PRODUCTS: SampleGiftItem[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Pâtisserie Douceur Divine • NaNa POS',
+    merchantName: 'Pâtisserie Douceur Divine • Nanasore',
     category: 'Pâtisserie',
     deliveryEta: '15 - 20 min',
     description: 'Confection artisanale sur-mesure pour célébrer une occasion spéciale.'
@@ -56,7 +56,7 @@ export const SAMPLE_GIFT_PRODUCTS: SampleGiftItem[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1569864358642-9d1684040f43?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Maison du Macaron • NaNa POS',
+    merchantName: 'Maison du Macaron • Nanasore',
     category: 'Confiserie',
     deliveryEta: '25 - 30 min',
     description: 'Sélection raffinée vanille Bourbon, pistache, caramel beurre salé.'
@@ -68,7 +68,7 @@ export const SAMPLE_GIFT_PRODUCTS: SampleGiftItem[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1523293182086-7651a899d37f?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Parfumerie Royale • NaNa POS',
+    merchantName: 'Parfumerie Royale • Nanasore',
     category: 'Luxe & Beauté',
     deliveryEta: '30 - 45 min',
     description: 'Fragrance précieuse emballée dans son écrin velours.'
@@ -109,8 +109,8 @@ export interface MiniAppsGridModalProps {
   walletBalanceFcfa?: number;
 }
 
-// Données d'inventaire NaNa POS pour le partage de produit direct
-export const SAMPLE_NANA_POS_INVENTORY = [
+// Données d'inventaire Nanasore pour le partage de produit direct
+export const SAMPLE_NANASORE_INVENTORY = [
   {
     id: 'prod-wax-deluxe',
     name: 'Robe Wax Royale Soirée',
@@ -166,7 +166,7 @@ export const SAMPLE_NANA_POS_INVENTORY = [
  * 2. 🎯 Tontine Flash (Fond Vert Émeraude)
  * 3. 🎁 Cadeau Mystère (Fond Rose/Violet)
  * 4. 💰 Cagnotte (Fond Bleu)
- * 5. 🛒 Produit NaNa POS (Fond Bleu Marine) -> Partager un article de son inventaire direct
+ * 5. 🛒 Produit Nanasore (Fond Bleu Marine) -> Partager un article de son inventaire direct
  * 6. 📍 Swarm Delivery (Fond Menthe/Cyan)
  * 7. 👑 Salon VIP (Fond Bronze/Or)
  * 8. 🎙️ Farotage Vocal (Fond Rouge/Corail)
@@ -202,8 +202,8 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
   const [selectedCagnotteGiftId, setSelectedCagnotteGiftId] = useState<string>('gift_iphone_15_pro_max');
   const [cagnotteEventDate, setCagnotteEventDate] = useState<string>('Samedi 24 Octobre à 19h30');
 
-  // 5. État Produit NaNa POS
-  const [selectedPosProductId, setSelectedPosProductId] = useState<string>(SAMPLE_NANA_POS_INVENTORY[0].id);
+  // 5. État Produit Nanasore
+  const [selectedPosProductId, setSelectedPosProductId] = useState<string>(SAMPLE_NANASORE_INVENTORY[0].id);
 
   if (!isOpen) return null;
 
@@ -246,7 +246,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
     {
       id: 'nana_product' as MiniAppType,
       label: 'Produit NaNa',
-      badgeText: '🛒 Produit NaNa POS',
+      badgeText: '🛒 Produit Nanasore',
       colorBg: 'bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 shadow-md shadow-slate-900/40',
       icon: ShoppingBag,
       description: 'Article du stock en direct'
@@ -345,14 +345,14 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
   const handleConfirmCagnotte = (e: React.FormEvent) => {
     e.preventDefault();
     playValidationBeep();
-    const gift = NANA_POS_GIFT_CATALOG.find((g) => g.id === selectedCagnotteGiftId) || NANA_POS_GIFT_CATALOG[0];
+    const gift = NANASORE_GIFT_CATALOG.find((g) => g.id === selectedCagnotteGiftId) || NANASORE_GIFT_CATALOG[0];
     onSelectAction({
       type: 'cagnotte',
       title: cagnotteTitle,
       subtitle: `Cadeau visé : ${gift.name} (${gift.price.toLocaleString('fr-FR')} FCFA)`,
       amountFcfa: gift.price,
       imageUrl: gift.imageUrl,
-      badge: '💰 Cagnotte Phygitale NaNa POS',
+      badge: '💰 Cagnotte Phygitale Nanasore',
       meta: {
         giftName: gift.name,
         merchantName: gift.merchantName,
@@ -364,7 +364,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
     onClose();
   };
 
-  const handleConfirmNanaProduct = (product: typeof SAMPLE_NANA_POS_INVENTORY[0]) => {
+  const handleConfirmNanaProduct = (product: typeof SAMPLE_NANASORE_INVENTORY[0]) => {
     playValidationBeep();
     onSelectAction({
       type: 'nana_product',
@@ -372,7 +372,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
       subtitle: `${product.priceFcfa.toLocaleString('fr-FR')} FCFA • En stock chez ${product.merchantName}`,
       amountFcfa: product.priceFcfa,
       imageUrl: product.imageUrl,
-      badge: '🛒 Produit Certifié NaNa POS',
+      badge: '🛒 Produit Certifié Nanasore',
       meta: {
         sku: product.sku,
         category: product.category,
@@ -752,7 +752,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
 
             <div>
               <label className="text-[11px] font-bold text-slate-700 block mb-1.5">
-                Choisissez le cadeau chez un commerçant NaNa POS :
+                Choisissez le cadeau chez un commerçant Nanasore :
               </label>
               <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                 {SAMPLE_GIFT_PRODUCTS.map((prod, idx) => (
@@ -840,7 +840,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
                 Créer une Cagnotte pour {chatRecipientName}
               </h4>
               <p className="text-xs text-slate-500">
-                Tous les participants cotisent pour commander le cadeau chez un marchand NaNa POS
+                Tous les participants cotisent pour commander le cadeau chez un marchand Nanasore
               </p>
             </div>
 
@@ -859,10 +859,10 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
 
             <div>
               <label className="text-[11px] font-bold text-slate-700 block mb-1.5">
-                Cadeau cible (NaNa POS) :
+                Cadeau cible (Nanasore) :
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                {NANA_POS_GIFT_CATALOG.slice(0, 4).map((gift) => (
+                {NANASORE_GIFT_CATALOG.slice(0, 4).map((gift) => (
                   <button
                     key={gift.id}
                     type="button"
@@ -919,7 +919,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
         )}
 
         {/* ===================================================================
-            SOUS-VUE 5 : 🛒 PRODUIT NANA POS (Fond Bleu Marine)
+            SOUS-VUE 5 : 🛒 PRODUIT NANASORE (Fond Bleu Marine)
            =================================================================== */}
         {activeSubView === 'nana_product' && (
           <div className="space-y-4">
@@ -935,7 +935,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
                 <ArrowLeft className="w-4 h-4" />
                 <span>Retour</span>
               </button>
-              <span className="text-xs font-black text-slate-900">🛒 Catalogue NaNa POS</span>
+              <span className="text-xs font-black text-slate-900">🛒 Catalogue Nanasore</span>
             </div>
 
             <div className="text-center py-1">
@@ -951,7 +951,7 @@ export const MiniAppsGridModal: React.FC<MiniAppsGridModalProps> = ({
             </div>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {SAMPLE_NANA_POS_INVENTORY.map((item) => (
+              {SAMPLE_NANASORE_INVENTORY.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => handleConfirmNanaProduct(item)}

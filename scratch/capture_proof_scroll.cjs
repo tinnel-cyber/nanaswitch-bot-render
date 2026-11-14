@@ -17,7 +17,7 @@ async function main() {
     '--disable-web-security',
     '--no-first-run',
     '--no-default-browser-check',
-    'https://pos-app-1759a.web.app/'
+    'https://nanasore.web.app/'
   ]);
 
   let targets = null;
@@ -88,7 +88,7 @@ async function main() {
 
   // Navigate to Dashboard
   console.log('Navigating to /dashboard ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/?view=dashboard' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/?view=dashboard' });
   await new Promise(r => setTimeout(r, 5000));
 
   // Dismiss welcome showcase if present

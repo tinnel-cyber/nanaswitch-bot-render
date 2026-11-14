@@ -9,7 +9,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config();
 
-// Suppression expresse de tout proxy global pour empêcher Firebase, les logs ou les pings de passer par Fixie
+// Suppression expresse de tout proxy global pour empêcher les services externes ou les pings de passer par Fixie
 delete process.env.HTTP_PROXY;
 delete process.env.HTTPS_PROXY;
 delete process.env.http_proxy;
@@ -83,10 +83,10 @@ const {
 
 const app = express();
 const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'konkobo_telecom_webhook_secret_key_2026';
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'pos-app-1759a';
+const PROJECT_ID = process.env.PROJECT_ID || 'nanasore';
 
 // 1. Initialisation résiliente de Firebase Admin SDK
-let isFirebaseInitialized = false;
+let isDatabaseInitialized = false;
 let db = null;
 
 try {
@@ -94,24 +94,24 @@ try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      projectId: FIREBASE_PROJECT_ID
+      projectId: PROJECT_ID
     });
     db = admin.firestore();
-    isFirebaseInitialized = true;
+    isDatabaseInitialized = true;
     console.log('[FIREBASE ADMIN] Connecté avec succès via FIREBASE_SERVICE_ACCOUNT.');
   } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     admin.initializeApp();
     db = admin.firestore();
-    isFirebaseInitialized = true;
+    isDatabaseInitialized = true;
     console.log('[FIREBASE ADMIN] Connecté via GOOGLE_APPLICATION_CREDENTIALS.');
   } else {
     // Mode autonome / Cloud standard
     admin.initializeApp({
-      projectId: FIREBASE_PROJECT_ID
+      projectId: PROJECT_ID
     });
     db = admin.firestore();
-    isFirebaseInitialized = true;
-    console.log(`[FIREBASE ADMIN] Initialisé en mode projet par défaut (${FIREBASE_PROJECT_ID}).`);
+    isDatabaseInitialized = true;
+    console.log(`[FIREBASE ADMIN] Initialisé en mode projet par défaut (${PROJECT_ID}).`);
   }
 } catch (fbErr) {
   console.warn('[FIREBASE ADMIN NOTICE] Initialisation sans clé de service :', fbErr.message);
@@ -130,7 +130,7 @@ if (db) {
 let wssInstance = null;
 const chatRooms = new Map(); // Map<chatId, Set<WebSocketClient>>
 
-// Moteur Live Commerce Wameet x NaNa POS
+// Moteur Live Commerce Wameet x Nanasore
 const liveCommerceEngine = new LiveCommerceEngine({ db, fetchViaFixie });
 
 function initWebSocketServer(httpServer) {
@@ -327,7 +327,7 @@ app.get(['/', '/health', '/api/health', '/healthz', '/ping', '/api/ping'], (req,
       sebpay: Boolean(process.env.SEBPAY_PUBLIC_KEY && process.env.SEBPAY_SECRET_KEY),
       saspay: Boolean(process.env.SASPAY_SECRET_KEY || process.env.SASPAY_API_KEY)
     },
-    firebaseConnected: isFirebaseInitialized,
+    databaseConnected: isDatabaseInitialized,
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
@@ -506,7 +506,7 @@ app.use('/api/chat-finance', createChatFinanceRouter({
 
 // ============================================================================
 // ROUTEUR MOTEUR LIVE COMMERCE & SYNCHRONISATION PHYGITALE (WAMEET LIVE)
-// POST /api/live/stock-update (Webhook Caisse NaNa POS -> phygital_scarcity_alert)
+// POST /api/live/stock-update (Webhook Caisse Nanasore -> phygital_scarcity_alert)
 // POST /api/live/push-product (Pousse un produit en direct)
 // POST /api/live/buy-fast     (Achat rapide Smart Escrow 1-clic)
 // GET  /api/live/rooms/:roomId

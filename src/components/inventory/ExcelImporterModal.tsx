@@ -496,7 +496,7 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Articles');
-    XLSX.writeFile(wb, 'modele_import_nana_pos.xlsx');
+    XLSX.writeFile(wb, 'modele_import_nanasore.xlsx');
   };
 
   // Export JSON immédiat

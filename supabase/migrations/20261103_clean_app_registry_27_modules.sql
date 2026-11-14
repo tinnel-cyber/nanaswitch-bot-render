@@ -1,7 +1,7 @@
 -- =======================================================================
 -- MIGRATION SUPABASE : Nettoyage et Scellement Strict des 27 Modules Canoniques
 -- Table cible : public.app_registry & public.organization_blocks
--- Écosystème  : Nanasore SaaS / NaNa POS
+-- Écosystème  : Nanasore SaaS / Nanasore
 -- Date        : 2026-11-03
 -- =======================================================================
 

@@ -14,7 +14,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 @CapacitorPlugin(name = "EmailLinkAuth")
 class EmailLinkPlugin : Plugin() {
 
-    private val PREFS_NAME = "NanaPosPrefs"
+    private val PREFS_NAME = "NanasorePrefs"
     private val KEY_PENDING_EMAIL = "pending_email"
     private val KEY_CONFIRMATION_URL = "confirmation_url"
 

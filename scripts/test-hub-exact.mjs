@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import WebSocket from 'ws';
 
 const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const targetUrl = 'https://pos-app-1759a.web.app/?view=hub_builder';
+const targetUrl = 'https://nanasore.web.app/?view=hub_builder';
 const port = 9229;
 
 async function run() {

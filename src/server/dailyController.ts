@@ -15,7 +15,11 @@ import type { Request, Response, Express } from 'express';
 const DAILY_API_ENDPOINT = 'https://api.daily.co/v1';
 
 function getDailyApiKey(): string {
-  return process.env.DAILY_API_KEY || 'd634d78b3b85d597fdf020db9ba08497c3e923651e17d3d5ff537c3f43a2a7e6';
+  const key = process.env.DAILY_API_KEY || '';
+  if (!key) {
+    console.warn('[dailyController] DAILY_API_KEY non configurée dans process.env (Render / .env local)');
+  }
+  return key;
 }
 
 function getDailyDomain(): string {

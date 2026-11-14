@@ -4,8 +4,8 @@ import {
   BookOpen, Sliders, Share2, Sparkles, Home, Download
 } from 'lucide-react';
 import { Course } from '../../../types';
-import { DEFAULT_MASTERCLASS_COURSE } from '../../../components/lms/mockCourses';
-import { CertificateGenerator } from '../../../components/lms/CertificateGenerator';
+import { DEFAULT_MASTERCLASS_COURSE } from '../components/lms/mockCourses';
+import { CertificateGenerator } from '../components/lms/CertificateGenerator';
 import { playTapBeep } from '../../../utils/audio';
 
 interface CertificatePageProps {

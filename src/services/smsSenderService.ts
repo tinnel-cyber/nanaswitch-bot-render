@@ -1,6 +1,6 @@
 /**
  * Service d'envoi de SMS transactionnels et de vérification OTP
- * Passerelle Hybride NanaPOS :
+ * Passerelle Hybride Nanasore :
  * - Relais via proxy backend (/api/sms/send)
  * - Support direct Brevo REST API v3 & Twilio
  * - Gestion automatique des crédits marchands

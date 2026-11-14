@@ -32,6 +32,7 @@ interface VideoEngineModalProps {
   isOpen: boolean;
   nodeId: string;
   nodeTitle: string;
+  courseId?: string;
   initialConfig?: VideoLessonNodeConfig;
   onClose: () => void;
   onSave: (nodeId: string, config: VideoLessonNodeConfig) => void;
@@ -68,6 +69,7 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
   isOpen,
   nodeId,
   nodeTitle,
+  courseId = 'telecom-fintech-masterclass',
   initialConfig,
   onClose,
   onSave,
@@ -110,8 +112,11 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
   const [aiVoiceTone, setAiVoiceTone] = useState<'PROFESSIONAL' | 'DYNAMIC' | 'ACADEMIC'>(
     initialConfig?.aiVoiceTone || 'PROFESSIONAL'
   );
-  const [aiRenderStatus, setAiRenderStatus] = useState<'IDLE' | 'GENERATING' | 'READY'>(
+  const [aiRenderStatus, setAiRenderStatus] = useState<'IDLE' | 'GENERATING' | 'READY' | 'ERROR'>(
     initialConfig?.aiRenderStatus || (initialConfig?.aiVideoUrl ? 'READY' : 'IDLE')
+  );
+  const [aiErrorMessage, setAiErrorMessage] = useState<string | null>(
+    initialConfig?.aiErrorMessage || null
   );
   const [aiStepIndex, setAiStepIndex] = useState(0);
   const [aiVideoUrl, setAiVideoUrl] = useState(
@@ -178,7 +183,7 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
     }
   };
 
-  // Pipeline de Synthèse Avatar IA connecté à la Callable Function Firebase
+  // Pipeline de Synthèse Avatar IA connecté à la Callable Function Firebase & Replicate
   const handleStartAiGeneration = async () => {
     if (!aiScript.trim()) {
       alert("Veuillez saisir le texte ou script que l'avatar vidéo doit énoncer.");
@@ -187,11 +192,12 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
 
     playTapBeep();
     setAiRenderStatus('GENERATING');
+    setAiErrorMessage(null);
     setAiStepIndex(0);
 
     const stepInterval = setInterval(() => {
       setAiStepIndex(prev => Math.min(prev + 1, 3));
-    }, 1200);
+    }, 1500);
 
     try {
       const result = await generateAIMedia({
@@ -204,15 +210,20 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
       });
 
       clearInterval(stepInterval);
-      setAiStepIndex(3);
-      setAiVideoUrl(result.mediaUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
-      setAiRenderStatus('READY');
-      playValidationBeep();
+      if (result && result.mediaUrl) {
+        setAiStepIndex(3);
+        setAiVideoUrl(result.mediaUrl);
+        setAiRenderStatus('READY');
+        setAiErrorMessage(null);
+        playValidationBeep();
+      } else {
+        throw new Error("Le moteur de génération n'a retourné aucune URL vidéo valide.");
+      }
     } catch (err: any) {
       clearInterval(stepInterval);
-      console.warn("Repli sur avatar vidéo local suite à l'erreur :", err);
-      setAiVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
-      setAiRenderStatus('READY');
+      console.error("Échec de la génération de l'avatar vidéo :", err);
+      setAiRenderStatus('ERROR');
+      setAiErrorMessage(err?.message || "La synthèse vidéo par avatar IA n'a pas pu être finalisée. Veuillez vérifier vos accès API ou réessayer.");
     }
   };
 
@@ -239,10 +250,11 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
       aiVoiceTone,
       aiRenderStatus,
       aiVideoUrl: finalVideoUrl,
+      aiErrorMessage: aiErrorMessage || undefined,
     };
 
     // Sauvegarde asynchrone dans Firestore (sans bloquer la fermeture)
-    updateLessonBranding('telecom-fintech-masterclass', nodeId, hideBranding, youtubeUrl).catch(err => {
+    updateLessonBranding(courseId, nodeId, hideBranding, youtubeUrl).catch(err => {
       console.warn("Mise à jour Firestore en tâche de fond:", err);
     });
 
@@ -792,6 +804,48 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
                       controls
                       className="w-full h-full object-cover"
                     />
+                  </div>
+                </div>
+              )}
+
+              {aiRenderStatus === 'ERROR' && (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-rose-300">
+                        Échec de la synthèse de l'avatar vidéo
+                      </h5>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        {aiErrorMessage || "Le service de rendu IA n'a pu générer la vidéo. Aucun fichier factice arbitraire n'a été substitué."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleStartAiGeneration}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-md shadow-rose-900/30 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Réessayer la synthèse</span>
+                    </button>
+
+                    <div className="flex-1 min-w-[240px]">
+                      <input
+                        type="url"
+                        value={aiVideoUrl}
+                        onChange={e => {
+                          setAiVideoUrl(e.target.value);
+                          if (e.target.value.trim().startsWith('http')) {
+                            setAiRenderStatus('READY');
+                          }
+                        }}
+                        placeholder="Ou collez l'URL directe d'un avatar déjà généré..."
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:border-rose-500 outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

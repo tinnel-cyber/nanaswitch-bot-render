@@ -8,7 +8,7 @@ const chrome = spawn(chromePath, [
   '--remote-debugging-port=9228',
   '--no-first-run',
   '--no-default-browser-check',
-  'https://pos-app-1759a.web.app/?view=dashboard'
+  'https://nanasore.web.app/?view=dashboard'
 ]);
 
 setTimeout(async () => {

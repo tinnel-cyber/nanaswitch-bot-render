@@ -1,13 +1,3 @@
-import { db } from '../firebaseConfig';
-import { 
-  collection, 
-  getDocs,
-  query, 
-  orderBy, 
-  doc, 
-  setDoc,
-  serverTimestamp 
-} from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { AssignmentSubmission, StudentRosterItem, InstructorKpiMetrics } from '../types';
 
@@ -70,7 +60,7 @@ export function clearInstructorLocalCaches(): void {
 }
 
 /**
- * Abonnement en temps réel aux inscriptions (enrollments) réelles depuis Firestore
+ * Abonnement en temps réel aux inscriptions (enrollments) réelles depuis Supabase SQL & Realtime
  */
 export function subscribeToEnrollments(
   callback: (enrollments: EnrollmentRecord[]) => void,
@@ -90,49 +80,44 @@ export function subscribeToEnrollments(
     callback([]);
   }
 
-  // 2. Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+  // 2. Requête et écouteur Supabase Realtime
   try {
     const fetchEnrollments = async () => {
       try {
-        const colRef = collection(db, 'enrollments');
-        const q = query(colRef);
-        const snapshot = await getDocs(q);
-        const list: EnrollmentRecord[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (options?.instructorId && data.instructorId && data.instructorId !== options.instructorId) {
-            return;
-          }
-          if (options?.courseIds && options.courseIds.length > 0 && !options.courseIds.includes(data.courseId)) {
-            return;
-          }
-          list.push({
-            id: docSnap.id,
-            courseId: data.courseId || '',
-            studentName: data.studentName || 'Apprenant',
-            phoneNumber: data.phoneNumber || '',
-            email: data.email || '',
-            provider: data.provider || 'MOBILE_MONEY',
-            amount: Number(data.amount) || 0,
-            currency: data.currency || 'FCFA',
-            status: data.status || 'PAID',
-            createdAt: typeof data.createdAt === 'number' ? data.createdAt : Date.now()
-          });
-        });
+        let query = supabase.from('enrollments').select('*');
+        if (options?.courseIds && options.courseIds.length > 0) {
+          query = query.in('course_id', options.courseIds);
+        }
 
-        try {
-          if (typeof window !== 'undefined') {
-            if (list.length === 0) {
-              localStorage.removeItem(cacheKey);
-            } else {
-              localStorage.setItem(cacheKey, JSON.stringify(list));
+        const { data, error } = await query;
+        if (!error && data) {
+          const list: EnrollmentRecord[] = data.map((d: any) => ({
+            id: d.id,
+            courseId: d.course_id || '',
+            studentName: d.user_email?.split('@')[0] || d.user_id || 'Apprenant',
+            phoneNumber: d.phone_number || '',
+            email: d.user_email || '',
+            provider: d.provider || 'MOBILE_MONEY',
+            amount: Number(d.amount) || 0,
+            currency: d.currency || 'FCFA',
+            status: d.status?.toUpperCase() === 'ACTIVE' || d.status === 'completed' ? 'PAID' : (d.status || 'PAID'),
+            createdAt: d.enrolled_at ? new Date(d.enrolled_at).getTime() : (d.created_at ? new Date(d.created_at).getTime() : Date.now())
+          }));
+
+          try {
+            if (typeof window !== 'undefined') {
+              if (list.length === 0) {
+                localStorage.removeItem(cacheKey);
+              } else {
+                localStorage.setItem(cacheKey, JSON.stringify(list));
+              }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
 
-        callback(list);
+          callback(list);
+        }
       } catch (err) {
-        console.warn('[INSTRUCTOR DATA] Erreur lecture enrollments :', err);
+        console.warn('[INSTRUCTOR DATA] Erreur lecture enrollments Supabase:', err);
       }
     };
 
@@ -267,7 +252,7 @@ export function computeFinancialAnalytics(
 }
 
 /**
- * Abonnement en temps réel aux soumissions de devoirs (assignments)
+ * Abonnement en temps réel aux soumissions de devoirs (assignments) via Supabase Realtime
  */
 export function subscribeToSubmissions(
   callback: (submissions: AssignmentSubmission[]) => void,
@@ -288,56 +273,55 @@ export function subscribeToSubmissions(
   try {
     const fetchSubmissions = async () => {
       try {
-        const colRef = collection(db, 'assignment_submissions');
-        const snapshot = await getDocs(colRef);
-        const list: AssignmentSubmission[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (options?.instructorId && data.instructorId && data.instructorId !== options.instructorId) {
-            return;
-          }
-          list.push({
-            id: docSnap.id,
-            assignmentId: data.assignmentId || docSnap.id,
-            assignmentTitle: data.assignmentTitle || 'Devoir',
-            studentId: data.studentId || '',
-            studentName: data.studentName || 'Étudiant',
-            studentEmail: data.studentEmail || '',
-            studentAvatarUrl: data.studentAvatarUrl || '',
-            courseId: data.courseId || '',
-            courseTitle: data.courseTitle || '',
-            lessonId: data.lessonId || '',
-            lessonTitle: data.lessonTitle || '',
-            fileName: data.fileName || 'Devoir.pdf',
-            fileSize: data.fileSize || 0,
-            fileUrl: data.fileUrl || '',
-            fileType: data.fileType || 'PDF',
-            submittedAt: data.submittedAt || Date.now(),
-            status: data.status || 'PENDING',
-            grade: data.grade,
-            maxScore: data.maxScore || 20,
-            passed: data.passed,
-            feedback: data.feedback,
-            voiceFeedbackUrl: data.voiceFeedbackUrl,
-            voiceDurationSeconds: data.voiceDurationSeconds,
-            gradedAt: data.gradedAt,
-            gradedByName: data.gradedByName
-          });
-        });
+        let query = supabase.from('assignment_submissions').select('*');
+        if (options?.courseIds && options.courseIds.length > 0) {
+          query = query.in('course_id', options.courseIds);
+        }
 
-        try {
-          if (typeof window !== 'undefined') {
-            if (list.length === 0) {
-              localStorage.removeItem(cacheKey);
-            } else {
-              localStorage.setItem(cacheKey, JSON.stringify(list));
+        const { data, error } = await query;
+        if (!error && data) {
+          const list: AssignmentSubmission[] = data.map((d: any) => ({
+            id: d.id,
+            assignmentId: d.assignment_id || d.id,
+            assignmentTitle: d.assignment_title || 'Devoir',
+            studentId: d.student_id || '',
+            studentName: d.student_name || 'Étudiant',
+            studentEmail: d.student_email || '',
+            studentAvatarUrl: d.student_avatar_url || '',
+            courseId: d.course_id || '',
+            courseTitle: d.course_title || '',
+            lessonId: d.lesson_id || '',
+            lessonTitle: d.lesson_title || '',
+            fileName: d.file_name || 'Devoir.pdf',
+            fileSize: Number(d.file_size) || 0,
+            fileUrl: d.file_url || '',
+            fileType: d.file_type || 'PDF',
+            submittedAt: d.submitted_at ? new Date(d.submitted_at).getTime() : Date.now(),
+            status: d.status || 'PENDING',
+            grade: d.grade != null ? Number(d.grade) : undefined,
+            maxScore: Number(d.max_score) || 20,
+            passed: d.passed != null ? Boolean(d.passed) : undefined,
+            feedback: d.feedback,
+            voiceFeedbackUrl: d.voice_feedback_url,
+            voiceDurationSeconds: d.voice_duration_seconds ? Number(d.voice_duration_seconds) : undefined,
+            gradedAt: d.graded_at ? new Date(d.graded_at).getTime() : undefined,
+            gradedByName: d.graded_by_name
+          }));
+
+          try {
+            if (typeof window !== 'undefined') {
+              if (list.length === 0) {
+                localStorage.removeItem(cacheKey);
+              } else {
+                localStorage.setItem(cacheKey, JSON.stringify(list));
+              }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
 
-        callback(list);
+          callback(list);
+        }
       } catch (err) {
-        console.warn('[INSTRUCTOR DATA] Erreur lecture submissions:', err);
+        console.warn('[INSTRUCTOR DATA] Erreur lecture submissions Supabase:', err);
       }
     };
 
@@ -351,7 +335,7 @@ export function subscribeToSubmissions(
         {
           event: '*',
           schema: 'public',
-          table: 'enrollments',
+          table: 'assignment_submissions',
         },
         () => {
           fetchSubmissions();
@@ -363,13 +347,13 @@ export function subscribeToSubmissions(
       supabase.removeChannel(channel);
     };
   } catch (err) {
-    console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute submissions:', err);
+    console.warn('[INSTRUCTOR DATA] Impossible d\'initialiser l\'écoute submissions Supabase:', err);
     return () => {};
   }
 }
 
 /**
- * Abonnement en temps réel aux apprenants inscrits (Student Roster)
+ * Abonnement en temps réel aux apprenants inscrits (Student Roster) via Supabase Realtime
  * Construit à partir des inscriptions et synchronisé
  */
 export function subscribeToStudentRoster(
@@ -391,52 +375,51 @@ export function subscribeToStudentRoster(
   try {
     const fetchRoster = async () => {
       try {
-        const colRef = collection(db, 'enrollments');
-        const snapshot = await getDocs(colRef);
-        const studentMap = new Map<string, StudentRosterItem>();
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data();
-          if (options?.instructorId && d.instructorId && d.instructorId !== options.instructorId) {
-            return;
-          }
-          if (options?.courseIds && options.courseIds.length > 0 && !options.courseIds.includes(d.courseId)) {
-            return;
-          }
-          const key = d.phoneNumber || d.email || d.studentName || docSnap.id;
-          if (!studentMap.has(key)) {
-            studentMap.set(key, {
-              studentId: docSnap.id,
-              studentName: d.studentName || 'Apprenant Nanasore',
-              studentEmail: d.email || d.phoneNumber || 'Contact Mobile Money',
-              studentAvatarUrl: d.studentAvatarUrl || undefined,
-              enrolledAt: d.createdAt || Date.now(),
-              progressPercentage: Number(d.progressPercentage) || 0,
-              completedLessonsCount: Number(d.completedLessonsCount) || 0,
-              totalLessonsCount: Number(d.totalLessonsCount) || 6,
-              averageQuizScore: Number(d.averageQuizScore) || 0,
-              pendingAssignmentsCount: Number(d.pendingAssignmentsCount) || 0,
-              status: 'ONLINE',
-              lastActiveAt: d.lastActiveAt || d.createdAt || Date.now(),
-              certificateIssued: Boolean(d.certificateIssued),
-              currentLessonTitle: d.currentLessonTitle || 'Module 1 : Démarrage du cursus'
-            });
-          }
-        });
+        let query = supabase.from('enrollments').select('*');
+        if (options?.courseIds && options.courseIds.length > 0) {
+          query = query.in('course_id', options.courseIds);
+        }
 
-        const list = Array.from(studentMap.values());
-        try {
-          if (typeof window !== 'undefined') {
-            if (list.length === 0) {
-              localStorage.removeItem(cacheKey);
-            } else {
-              localStorage.setItem(cacheKey, JSON.stringify(list));
+        const { data, error } = await query;
+        if (!error && data) {
+          const studentMap = new Map<string, StudentRosterItem>();
+          data.forEach((d: any) => {
+            const key = d.user_email || d.user_id || d.id;
+            if (!studentMap.has(key)) {
+              studentMap.set(key, {
+                studentId: d.user_id || d.id,
+                studentName: d.user_email?.split('@')[0] || 'Apprenant Nanasore',
+                studentEmail: d.user_email || 'Contact Mobile Money',
+                studentAvatarUrl: d.student_avatar_url || undefined,
+                enrolledAt: d.enrolled_at ? new Date(d.enrolled_at).getTime() : Date.now(),
+                progressPercentage: Number(d.progress_percent) || 0,
+                completedLessonsCount: Array.isArray(d.completed_lessons) ? d.completed_lessons.length : 0,
+                totalLessonsCount: 6,
+                averageQuizScore: 0,
+                pendingAssignmentsCount: 0,
+                status: 'ONLINE',
+                lastActiveAt: d.last_accessed_at ? new Date(d.last_accessed_at).getTime() : Date.now(),
+                certificateIssued: Number(d.progress_percent) >= 100,
+                currentLessonTitle: 'Module en cours d\'apprentissage'
+              });
             }
-          }
-        } catch (e) {}
+          });
 
-        callback(list);
+          const list = Array.from(studentMap.values());
+          try {
+            if (typeof window !== 'undefined') {
+              if (list.length === 0) {
+                localStorage.removeItem(cacheKey);
+              } else {
+                localStorage.setItem(cacheKey, JSON.stringify(list));
+              }
+            }
+          } catch (e) {}
+
+          callback(list);
+        }
       } catch (err) {
-        console.warn('[INSTRUCTOR DATA] Erreur lecture student roster :', err);
+        console.warn('[INSTRUCTOR DATA] Erreur lecture student roster Supabase:', err);
       }
     };
 

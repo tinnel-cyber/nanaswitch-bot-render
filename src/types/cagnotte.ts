@@ -1,10 +1,10 @@
 /**
  * @file cagnotte.ts
  * @description Types et Modèle de Données pour la "Cagnotte Phygitale Automatisée" Wameet
- * Intégrée à l'inventaire des marchands NaNa POS avec exécution par Contrat Intelligent.
+ * Intégrée à l'inventaire des marchands Nanasore avec exécution par Contrat Intelligent.
  */
 
-export interface NaNaPosGiftItem {
+export interface NanasoreGiftItem {
   id: string;
   name: string;
   category: string;
@@ -17,7 +17,7 @@ export interface NaNaPosGiftItem {
   merchantName: string; // Ex: "iStore Ouaga 2000", "Sahel Voyages", "Sublime Parfumerie"
   merchantLocation: string; // Ex: "Avenue Pascal Zagre, Ouaga 2000"
   merchantPhone: string;
-  merchantWalletId: string; // Wallet interne Wameet du marchand NaNa POS
+  merchantWalletId: string; // Wallet interne Wameet du marchand Nanasore
   estimatedDeliveryMinutes: number;
   badge?: string;
 }
@@ -59,7 +59,7 @@ export interface CagnotteSmartContract {
 export interface CagnotteSession {
   id: string;
   groupId: string;
-  productId: string; // lié à l'inventaire NaNa POS
+  productId: string; // lié à l'inventaire Nanasore
   targetAmount: number;
   currentAmount: number; // défaut 0
   status: 'funding' | 'completed';
@@ -75,7 +75,7 @@ export interface CagnotteGroupState {
   beneficiaryAvatar?: string;
   creatorId: string;
   creatorName: string;
-  gift: NaNaPosGiftItem;
+  gift: NanasoreGiftItem;
   targetAmount: number; // Prix du cadeau (ex: 650 000 FCFA)
   collectedAmount: number; // Total cumulé
   progressPercentage: number; // 0 à 100%
@@ -112,7 +112,7 @@ export interface ContributeCagnottePayload {
   note?: string;
 }
 
-export const NANA_POS_GIFT_CATALOG: NaNaPosGiftItem[] = [
+export const NANASORE_GIFT_CATALOG: NanasoreGiftItem[] = [
   {
     id: 'gift_iphone_15_pro_max',
     name: 'Apple iPhone 15 Pro Max (256 Go Titane Naturel)',

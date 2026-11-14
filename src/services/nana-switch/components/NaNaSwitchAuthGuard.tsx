@@ -15,7 +15,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { auth, db } from '../../../firebase';
-import { onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signOut as firebaseSignOut, User as SupabaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Zap, ShieldCheck, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { playTapBeep } from '../../../utils/audio';
@@ -38,7 +38,7 @@ export interface SwitchAccountData {
 }
 
 export interface SwitchAccountContextValue {
-  user: FirebaseUser | null;
+  user: SupabaseUser | null;
   switchAccount: SwitchAccountData | null;
   loading: boolean;
   error: string | null;
@@ -85,7 +85,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   // 1. DÉCLARATION STRICTE DES HOOKS AU SOMMET (RÈGLE REACT HOOK #310)
   // =========================================================================
 
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(() => auth.currentUser);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(() => auth.currentUser);
   const [switchAccount, setSwitchAccount] = useState<SwitchAccountData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +120,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
     playTapBeep();
     try {
       await firebaseSignOut(auth);
-      setFirebaseUser(null);
+      setSupabaseUser(null);
       setSwitchAccount(null);
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('nanaswitch_auth_notice');
@@ -138,7 +138,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   // Surveillance Firebase Auth & Validation du document switch_accounts/{uid}
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
+      setSupabaseUser(user);
       if (!user) {
         setSwitchAccount(null);
         setLoading(false);
@@ -176,13 +176,13 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
 
   // Valeur mémorisée du contexte
   const contextValue = useMemo<SwitchAccountContextValue>(() => ({
-    user: firebaseUser,
+    user: supabaseUser,
     switchAccount,
     loading,
     error,
     refreshSwitchAccount,
     signOutSwitch
-  }), [firebaseUser, switchAccount, loading, error, refreshSwitchAccount, signOutSwitch]);
+  }), [supabaseUser, switchAccount, loading, error, refreshSwitchAccount, signOutSwitch]);
 
   // =========================================================================
   // 2. ÉCRAN DE CHARGEMENT ZERO-TRUST
@@ -215,7 +215,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   }
 
   // Si non authentifié ou sans compte d'organisation Cloud, ne rien rendre (la redirection est déclenchée)
-  if (!firebaseUser || !switchAccount) {
+  if (!supabaseUser || !switchAccount) {
     return null;
   }
 

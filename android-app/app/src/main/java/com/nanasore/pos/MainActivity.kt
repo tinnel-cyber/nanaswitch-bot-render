@@ -11,7 +11,7 @@ import com.google.firebase.ktx.Firebase
 
 /**
  * MainActivity gère l'authentification par lien e-mail (Email Link Authentication)
- * et les Android App Links pour Nana POS.
+ * et les Android App Links pour Nanasore.
  *
  * Fonctionnalités :
  * - Interception des liens HTTPS de nanasore.com
@@ -25,7 +25,7 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
 
     // Clé SharedPreferences pour stocker l'email temporairement
-    private val PREFS_NAME = "NanaPosPrefs"
+    private val PREFS_NAME = "NanasorePrefs"
     private val KEY_PENDING_EMAIL = "pending_email"
 
     override fun onCreate(savedInstanceState: Bundle?) {

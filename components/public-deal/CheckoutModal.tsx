@@ -74,7 +74,7 @@ export default function CheckoutModal({
 
       // Sauvegarde locale du token pour consultation hors-ligne à la caisse
       try {
-        const storedOrders = JSON.parse(localStorage.getItem('nana_pos_tokens') || '[]');
+        const storedOrders = JSON.parse(localStorage.getItem('nanasore_tokens') || '[]');
         storedOrders.unshift({
           token,
           tenantId,
@@ -87,7 +87,7 @@ export default function CheckoutModal({
           customerName: customerName || 'Client anonyme',
           customerPhone: customerPhone || 'Non renseigné'
         });
-        localStorage.setItem('nana_pos_tokens', JSON.stringify(storedOrders));
+        localStorage.setItem('nanasore_tokens', JSON.stringify(storedOrders));
       } catch (err) {
         console.warn('Erreur stockage local token caisse:', err);
       }

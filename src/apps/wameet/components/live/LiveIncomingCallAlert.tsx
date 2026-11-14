@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
-import { db, auth } from '../../../../firebase';
 import { 
   PhoneCall, PhoneOff, Video, ShoppingBag, ShieldCheck, 
   Maximize2, Minimize2, Loader2, Sparkles, X, AlertCircle 
@@ -129,16 +127,16 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
     setActiveProductName(prodName);
     setIncomingCall(null);
 
-    // Mettre à jour le document Firestore -> 'connected'
+    // Mettre à jour le message Supabase -> 'connected'
     try {
-      const requestDocRef = doc(db, 'live_requests', reqId);
-      await updateDoc(requestDocRef, {
-        status: 'connected',
-        acceptedAt: serverTimestamp(),
-        sellerId: auth.currentUser?.uid || 'merchant-owner'
-      });
+      await supabase
+        .from('wameet_messages')
+        .update({
+          status: 'connected'
+        })
+        .eq('id', reqId);
     } catch (e) {
-      console.warn('[ACCEPT FIRESTORE UPDATE ERROR]', e);
+      console.warn('[ACCEPT SUPABASE UPDATE ERROR]', e);
     }
   };
 
@@ -153,13 +151,14 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
     setIncomingCall(null);
 
     try {
-      const requestDocRef = doc(db, 'live_requests', reqId);
-      await updateDoc(requestDocRef, {
-        status: 'rejected',
-        rejectedAt: serverTimestamp()
-      });
+      await supabase
+        .from('wameet_messages')
+        .update({
+          status: 'rejected'
+        })
+        .eq('id', reqId);
     } catch (e) {
-      console.warn('[REJECT FIRESTORE UPDATE ERROR]', e);
+      console.warn('[REJECT SUPABASE UPDATE ERROR]', e);
     }
   };
 
@@ -217,7 +216,7 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
 
         await callFrame.join({
           url: activeCallRoomUrl,
-          userName: auth.currentUser?.displayName || 'Vendeur (Ordinateur)'
+          userName: 'Vendeur (Ordinateur)'
         });
       } catch (err) {
         console.error('[HOST DAILY MOUNT ERROR]', err);
@@ -251,11 +250,12 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
 
     if (activeRequestId) {
       try {
-        const reqRef = doc(db, 'live_requests', activeRequestId);
-        await updateDoc(reqRef, {
-          status: 'completed',
-          endedAt: serverTimestamp()
-        });
+        await supabase
+          .from('wameet_messages')
+          .update({
+            status: 'completed'
+          })
+          .eq('id', activeRequestId);
       } catch (e) {}
     }
 

@@ -112,7 +112,7 @@ export const VipQuizEngine: React.FC<VipQuizEngineProps> = ({
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
               {hasPassed
-                ? 'Vous maîtrisez les concepts clés du cours. Votre score a été enregistré dans votre dossier étudiant NaNa POS.'
+                ? 'Vous maîtrisez les concepts clés du cours. Votre score a été enregistré dans votre dossier étudiant Nanasore.'
                 : 'Prenez le temps de revoir les leçons vidéo du Chapitre 1 avant de repasser le QCM.'}
             </p>
           </div>

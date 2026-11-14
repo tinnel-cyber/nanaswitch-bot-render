@@ -4,7 +4,7 @@ import { supabase } from "../../utils/supabase.server";
 
 /**
  * Route GET /api/auth-profile?uid=...
- * Récupère le profil Supabase d'un utilisateur par son UID Firebase
+ * Récupère le profil Supabase d'un utilisateur par son UID Supabase
  */
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -15,11 +15,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   try {
-    // 1. Recherche par firebase_uid
+    // 1. Recherche par auth_uid
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("firebase_uid", uid)
+      .eq("auth_uid", uid)
       .maybeSingle();
 
     if (!error && profile) {
@@ -40,7 +40,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return json({
       success: true,
       profile: {
-        firebase_uid: uid,
+        auth_uid: uid,
         kyc_status: "none",
         pricing_model: "none",
         wallet_balance: 0,
@@ -64,19 +64,19 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const body = await request.json();
-    const { firebaseUid, email, fullName, whatsapp } = body;
+    const { authUid, email, fullName, whatsapp } = body;
 
-    if (!firebaseUid) {
-      return json({ success: false, error: "firebaseUid est obligatoire" }, { status: 400 });
+    if (!authUid) {
+      return json({ success: false, error: "authUid est obligatoire" }, { status: 400 });
     }
 
     const cleanEmail = String(email || "").trim().toLowerCase();
     const cleanName = String(fullName || "").trim();
     const cleanWhatsapp = String(whatsapp || "").trim();
 
-    // 1. Appel RPC Supabase sync_firebase_profile si disponible
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("sync_firebase_profile", {
-      p_firebase_uid: firebaseUid,
+    // 1. Appel RPC Supabase sync_supabase_profile si disponible
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("sync_supabase_profile", {
+      p_auth_uid: authUid,
       p_email: cleanEmail,
       p_full_name: cleanName,
       p_whatsapp: cleanWhatsapp
@@ -94,7 +94,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const { data: existingProfiles } = await supabase
       .from("profiles")
       .select("*")
-      .or(`firebase_uid.eq.${firebaseUid},email.eq.${cleanEmail}`)
+      .or(`auth_uid.eq.${authUid},email.eq.${cleanEmail}`)
       .limit(1);
 
     if (existingProfiles && existingProfiles.length > 0) {
@@ -103,7 +103,7 @@ export async function action({ request }: ActionFunctionArgs) {
         success: true,
         profile: {
           ...existing,
-          firebase_uid: firebaseUid,
+          auth_uid: authUid,
           email: existing.email || cleanEmail,
           full_name: existing.full_name || cleanName,
           whatsapp_number: existing.whatsapp_number || cleanWhatsapp
@@ -114,7 +114,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     // 3. Fallback neutre en attendant la migration SQL
     const defaultNeutralProfile = {
-      firebase_uid: firebaseUid,
+      auth_uid: authUid,
       email: cleanEmail,
       full_name: cleanName,
       whatsapp_number: cleanWhatsapp,

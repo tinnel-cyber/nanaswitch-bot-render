@@ -37,7 +37,7 @@ export const NanasoreLiveCommerceOverlay: React.FC<NanasoreLiveCommerceOverlayPr
   const [isCheckoutDrawerOpen, setIsCheckoutDrawerOpen] = useState<boolean>(false);
   const [showHostPanel, setShowHostPanel] = useState<boolean>(false);
 
-  // 1. Écouteur Firestore temps réel sur /live_events/{liveId}/
+  // 1. Écouteur de synchronisation temps réel de session (Produit épinglé)
   useEffect(() => {
     if (!liveId) return;
 
@@ -53,6 +53,48 @@ export const NanasoreLiveCommerceOverlay: React.FC<NanasoreLiveCommerceOverlayPr
     );
 
     return () => unsubscribe();
+  }, [liveId]);
+
+  // 2. Écouteur WebSocket Phygital (Caisse Physique -> Live Shopping)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Écouteur sur les événements de synchronisation physique émis par le contrôleur POS
+    const handlePhygitalSale = (e: any) => {
+      const data = e.detail || e;
+      if (!data) return;
+
+      setActiveProduct(current => {
+        if (!current || (data.productId && current.id !== data.productId)) return current;
+        const newStock = typeof data.newStock === 'number' ? data.newStock : Math.max(0, (current.stockLeft ?? 1) - (data.quantitySold || 1));
+        return {
+          ...current,
+          stockLeft: newStock
+        };
+      });
+    };
+
+    const handleLockSales = (e: any) => {
+      const data = e.detail || e;
+      if (!data) return;
+
+      setActiveProduct(current => {
+        if (!current || (data.productId && current.id !== data.productId)) return current;
+        return {
+          ...current,
+          stockLeft: 0
+        };
+      });
+    };
+
+    window.addEventListener('physical_store_sale' as any, handlePhygitalSale);
+    window.addEventListener('lock_product_sales' as any, handleLockSales);
+
+    // Écouteur également sur le canal Supabase Realtime de la boutique
+    return () => {
+      window.removeEventListener('physical_store_sale' as any, handlePhygitalSale);
+      window.removeEventListener('lock_product_sales' as any, handleLockSales);
+    };
   }, [liveId]);
 
   // =========================================================================

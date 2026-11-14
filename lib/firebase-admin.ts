@@ -2,7 +2,7 @@ import * as adminModule from 'firebase-admin';
 
 const admin = (adminModule as any).default || adminModule;
 
-const projectId = process.env.FIREBASE_PROJECT_ID || 'pos-app-1759a';
+const projectId = process.env.FIREBASE_PROJECT_ID || 'nanasore';
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
 const privateKey = rawPrivateKey ? rawPrivateKey.replace(/\\n/g, '\n') : undefined;
@@ -23,7 +23,7 @@ if (!admin.apps.length) {
       admin.initializeApp({
         projectId,
       });
-      console.log('[FIREBASE_ADMIN] Initialisé en mode projet ID (environnement pos-app-1759a).');
+      console.log('[FIREBASE_ADMIN] Initialisé en mode projet ID (environnement nanasore).');
     }
   } catch (error) {
     console.warn('[FIREBASE_ADMIN_WARN] Erreur initialisation Firebase Admin:', error);

@@ -260,20 +260,22 @@ export function useVoiceAI(
 
     // Appel au backend en streaming sub-800ms
     try {
-      const response = await fetch('/api/ai/voice-simulation/chat', {
+      const response = await fetch('/api/ai/voice-simulation/turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userTranscript: spokenText,
+          scenario,
           scenarioContext: scenario,
-          conversationHistory: updatedHistory
+          conversationHistory: updatedHistory,
+          conversationTranscript: updatedHistory
         })
       });
 
       const contentType = response.headers.get("content-type") || "";
       if (response.ok && contentType.includes("application/json")) {
         const data = await response.json();
-        const aiText = data.aiResponseText || 'D\'accord, voyons ce que vous me proposez concrètement pour régler ça.';
+        const aiText = data.text || data.aiResponseText || 'D\'accord, voyons ce que vous me proposez concrètement pour régler ça.';
         
         const aiTurn: VoiceSimulationTurn = {
           id: `turn-ai-${Date.now()}`,
@@ -333,7 +335,9 @@ export function useVoiceAI(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          scenario,
           scenarioContext: scenario,
+          conversationHistory,
           conversationTranscript: conversationHistory,
           studentId,
           courseId,
@@ -343,7 +347,8 @@ export function useVoiceAI(
 
       const contentType = response.headers.get("content-type") || "";
       if (response.ok && contentType.includes("application/json")) {
-        const report = await response.json();
+        const rawData = await response.json();
+        const report = rawData.report || rawData;
         return report as VoiceSimulationReport;
       }
     } catch (err) {

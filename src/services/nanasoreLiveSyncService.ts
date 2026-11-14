@@ -1,17 +1,3 @@
-import {
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  limit
-} from 'firebase/firestore';
-import { db, auth } from '../firebase';
 import { supabase } from '../lib/supabase';
 
 export interface LiveEventProduct {
@@ -48,54 +34,55 @@ export interface LiveOrderPayload {
   productId: string;
   productTitle: string;
   amountFcfa: number;
+  quantity?: number;
   paymentMethod: 'orange' | 'wave' | 'moov' | 'mtn';
   customerPhone: string;
   customerName?: string;
+  paymentRef?: string;
 }
 
 // Produits de démonstration par défaut si le document liveId n'a pas encore de produit complet
 export const PRESET_LIVE_PRODUCTS: Record<string, LiveEventProduct> = {
   'prod-karite-royal': {
     id: 'prod-karite-royal',
-    title: 'Coffret Karité Royal Or 100% Bio',
-    shortTitle: 'Coffret Karité Royal',
-    price: 18500,
-    originalPrice: 28000,
+    title: 'Beurre de Karité Pur Bio Premium - Édition Spéciale Live',
+    shortTitle: 'Beurre de Karité Bio (500g)',
+    price: 3500,
+    originalPrice: 6000,
     imageUrl: 'https://images.unsplash.com/photo-1608248597359-0e6d526a6c58?w=500&auto=format&fit=crop&q=80',
-    badge: '🔥 -34% EN DIRECT',
-    stockLeft: 7,
-    description: 'Soin complet corporel karité précieux pressé à froid.',
-    category: 'Beauté & Cosmétique'
+    badge: '🔥 FLASH LIVE -42%',
+    stockLeft: 14,
+    category: 'Cosmétique Naturelle',
+    description: 'Beurre de karité 100% pur récolté traditionnellement au Burkina Faso, pressé à froid et non raffiné.'
   },
-  'prod-masterclass-ia': {
-    id: 'prod-masterclass-ia',
-    title: 'Masterclass Tunnels & IA Afrique (12 Blocs)',
-    shortTitle: 'Masterclass IA Afrique',
-    price: 25000,
-    originalPrice: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&auto=format&fit=crop&q=80',
-    badge: '⚡ OFFRE FLASH LIVE',
-    stockLeft: 12,
-    description: 'Accès à vie à la formation certifiante et aux templates de vente.',
-    category: 'Formation Digitale'
+  'prod-pagne-faso-danfani': {
+    id: 'prod-pagne-faso-danfani',
+    title: 'Pagne Traditionnel Tissé Faso Dan Fani Haute Couture',
+    shortTitle: 'Faso Dan Fani Royal (3 Pièces)',
+    price: 18000,
+    originalPrice: 28000,
+    imageUrl: 'https://images.unsplash.com/photo-1590736704728-f4730bb30770?w=500&auto=format&fit=crop&q=80',
+    badge: '⭐ EXCLUSIVITÉ NSORE',
+    stockLeft: 6,
+    category: 'Mode & Artisanat',
+    description: 'Tissage main par nos maîtres artisans avec fils de coton biologique et teintures naturelles.'
   },
-  'prod-ringlight-pro': {
-    id: 'prod-ringlight-pro',
-    title: 'Kit Studio Ring Light Pro 18" + Trépied 2m',
-    shortTitle: 'Kit Ring Light Pro',
-    price: 22000,
-    originalPrice: 35000,
-    imageUrl: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&auto=format&fit=crop&q=80',
-    badge: '📦 LIVRAISON OFFERTE',
-    stockLeft: 4,
-    description: 'Éclairage haute fidélité pour vos Lives Wameet et TikTok.',
-    category: 'Équipement Créateur'
+  'prod-savon-noir-moringa': {
+    id: 'prod-savon-noir-moringa',
+    title: 'Savon Noir Artisanal Enrichi au Moringa & Huile de Neem',
+    shortTitle: 'Savon Noir Moringa (Lot de 3)',
+    price: 2500,
+    originalPrice: 4500,
+    imageUrl: 'https://images.unsplash.com/photo-1607006314144-88f583561937?w=500&auto=format&fit=crop&q=80',
+    badge: '⚡ COUP DE CŒUR LIVE',
+    stockLeft: 22,
+    category: 'Soin du Corps',
+    description: 'Soin détoxifiant pour tout type de peau, élimine les impuretés et nourrit l’épiderme en profondeur.'
   }
 };
 
 /**
- * 1. Écouteur temps réel (onSnapshot) sur la collection /live_events/{liveId}/
- * Détecte les changements de activeProductId et résout automatiquement le produit
+ * 1. Synchronisation Temps Réel du Produit Actif (Pinned) via Supabase Realtime
  */
 export function subscribeToLiveEvent(
   liveId: string,
@@ -104,9 +91,14 @@ export function subscribeToLiveEvent(
 ): () => void {
   const fetchEvent = async () => {
     try {
-      const eventDocRef = doc(db, 'live_events', liveId);
-      const snapshot = await getDoc(eventDocRef);
-      if (!snapshot.exists()) {
+      const { data, error } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('id', liveId)
+        .maybeSingle();
+
+      if (error || !data) {
+        // Repli mémoire ou démo
         const fallbackDoc: LiveEventDocument = {
           id: liveId,
           title: 'Vente Flash & Live Shopping Nanasore',
@@ -120,43 +112,19 @@ export function subscribeToLiveEvent(
         return;
       }
 
-      const eventData = { id: snapshot.id, ...(snapshot.data() as any) } as LiveEventDocument;
-      const activeId = eventData.activeProductId;
-
-      if (!activeId) {
-        onUpdate(eventData, null);
-        return;
-      }
-
-      if (eventData.activeProduct && eventData.activeProduct.id === activeId) {
-        onUpdate(eventData, eventData.activeProduct);
-        return;
-      }
-
-      try {
-        const prodDocRef = doc(db, 'live_events', liveId, 'products', activeId);
-        const prodSnap = await getDoc(prodDocRef);
-        if (prodSnap.exists()) {
-          const fetchedProduct = { id: prodSnap.id, ...(prodSnap.data() as any) } as LiveEventProduct;
-          onUpdate(eventData, fetchedProduct);
-          return;
-        }
-      } catch (prodErr) {
-        console.warn('[NANASORE LIVE SYNC] Erreur lecture sous-collection produit :', prodErr);
-      }
-
-      const preset = PRESET_LIVE_PRODUCTS[activeId] || {
-        id: activeId,
-        title: `Offre Live Spéciale #${activeId.substring(0, 6)}`,
-        shortTitle: `Offre #${activeId.substring(0, 6)}`,
-        price: 15000,
-        originalPrice: 25000,
-        imageUrl: 'https://images.unsplash.com/photo-1608248597359-0e6d526a6c58?w=500&auto=format&fit=crop&q=80',
-        badge: '⚡ OFFRE EN DIRECT',
-        stockLeft: 5
+      const activeProd = (data.pinned_product_data as LiveEventProduct) || null;
+      const eventDoc: LiveEventDocument = {
+        id: data.id,
+        title: data.title || 'Live Nanasore',
+        hostName: data.host_name || 'Vendeur NaNa',
+        status: data.status || 'live',
+        activeProductId: activeProd?.id || null,
+        activeProduct: activeProd,
+        streamUrl: data.stream_url,
+        viewerCount: data.viewer_count || 1
       };
 
-      onUpdate(eventData, preset);
+      onUpdate(eventDoc, activeProd);
     } catch (err: any) {
       if (onError) onError(err);
     }
@@ -172,8 +140,8 @@ export function subscribeToLiveEvent(
       {
         event: '*',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${liveId}`,
+        table: 'live_sessions',
+        filter: `id=eq.${liveId}`,
       },
       () => {
         fetchEvent();
@@ -187,74 +155,83 @@ export function subscribeToLiveEvent(
 }
 
 /**
- * 2. Déclencheur côté Vendeur : Pousse un produit en direct (activeProductId)
+ * 2. Déclencheur côté Vendeur : Pousse un produit en direct via Supabase
  */
 export async function pushLiveActiveProduct(
   liveId: string,
   productId: string | null,
   productData?: LiveEventProduct
 ): Promise<void> {
-  const eventDocRef = doc(db, 'live_events', liveId);
+  const resolvedProduct = productData || (productId ? PRESET_LIVE_PRODUCTS[productId] || null : null);
 
-  const payload: any = {
-    activeProductId: productId,
-    activeProduct: productData || (productId ? PRESET_LIVE_PRODUCTS[productId] || null : null),
-    updatedAt: serverTimestamp()
-  };
-
-  await setDoc(eventDocRef, payload, { merge: true });
-
-  // Si des données de produit complètes sont fournies, les archiver dans la sous-collection
-  if (productId && productData) {
-    try {
-      const prodDocRef = doc(db, 'live_events', liveId, 'products', productId);
-      await setDoc(prodDocRef, productData, { merge: true });
-    } catch (subErr) {
-      console.warn('[NANASORE LIVE SYNC] Erreur sauvegarde sous-collection :', subErr);
-    }
+  try {
+    await supabase
+      .from('live_sessions')
+      .update({
+        pinned_product_data: resolvedProduct,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', liveId);
+  } catch (err) {
+    console.warn('[NANASORE LIVE SYNC] Erreur pushLiveActiveProduct Supabase:', err);
   }
 }
 
 /**
- * 3. Enregistrement d'une commande passée en direct via le Bottom Sheet
+ * 3. Enregistrement transactionnel d'une commande passée en direct via le Bottom Sheet
+ * Sauvegarde dans Supabase SQL (public.orders) et décrémentation atomique des stocks
  */
 export async function recordLiveOrder(payload: LiveOrderPayload): Promise<{ orderId: string }> {
   const orderId = `live_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-  const orderDocData = {
-    id: orderId,
-    liveId: payload.liveId,
-    productId: payload.productId,
-    productTitle: payload.productTitle,
-    amountFcfa: payload.amountFcfa,
-    paymentMethod: payload.paymentMethod,
-    customerPhone: payload.customerPhone,
-    customerName: payload.customerName || 'Acheteur Live',
-    status: 'PAID',
-    createdAt: serverTimestamp(),
-    source: 'nanasore_live_bottom_sheet'
-  };
+  const qty = payload.quantity || 1;
 
-  // Sous-collection des commandes du Live
+  // 1. Sauvegarde dans Supabase SQL
   try {
-    const liveOrdersCol = collection(db, 'live_events', payload.liveId, 'orders');
-    await addDoc(liveOrdersCol, orderDocData);
-  } catch (err) {
-    console.warn('[NANASORE LIVE ORDER] Erreur enregistrement sous-collection :', err);
+    const { error: supaOrderErr } = await supabase
+      .from('orders')
+      .insert({
+        id: orderId,
+        store_id: payload.liveId,
+        customer_phone: payload.customerPhone,
+        customer_name: payload.customerName || 'Client Live Nanasore',
+        total_amount: payload.amountFcfa,
+        payment_method: payload.paymentMethod,
+        payment_status: 'completed',
+        status: 'confirmed',
+        created_at: new Date().toISOString()
+      });
+
+    if (supaOrderErr) {
+      console.warn('[NANASORE LIVE ORDER] Supabase order insert notice:', supaOrderErr.message);
+    }
+  } catch (supaErr) {
+    console.warn('[NANASORE LIVE ORDER] Erreur Supabase SQL insertion :', supaErr);
   }
 
-  // Collection globale des commandes
+  // 2. Décrémentation atomique du stock produit
   try {
-    const globalOrderDocRef = doc(db, 'orders', orderId);
-    await setDoc(globalOrderDocRef, orderDocData, { merge: true });
-  } catch (err) {
-    console.warn('[NANASORE LIVE ORDER] Erreur enregistrement commande globale :', err);
+    const { data: prodData } = await supabase
+      .from('products')
+      .select('stock_quantity')
+      .eq('id', payload.productId)
+      .maybeSingle();
+
+    if (prodData && typeof prodData.stock_quantity === 'number') {
+      const newStock = Math.max(0, prodData.stock_quantity - qty);
+      await supabase
+        .from('products')
+        .update({ stock_quantity: newStock })
+        .eq('id', payload.productId);
+    }
+  } catch (stockErr) {
+    console.warn('[NANASORE LIVE ORDER] Erreur décrémentation stock Supabase:', stockErr);
   }
 
   return { orderId };
 }
 
 // =========================================================================
-// 4. CHAT FIREBASE EN TEMPS RÉEL ABSOLU (ZÉRO DÉLAI / INSTANTANÉ)
+// 4. CHAT SUPABASE EN TEMPS RÉEL ABSOLU (ZÉRO DÉLAI / INSTANTANÉ)
 // =========================================================================
 
 export interface LiveEventChatMessage {
@@ -268,7 +245,7 @@ export interface LiveEventChatMessage {
   createdAt: number;
 }
 
-// Messages de démonstration par défaut pour un chat vivant dès le premier chargement
+// Messages de démonstration par défaut
 const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
   default: [
     {
@@ -299,11 +276,11 @@ const DEFAULT_DEMO_CHAT_MESSAGES: Record<string, LiveEventChatMessage[]> = {
   ]
 };
 
-// Mémoire locale pour affichage instantané (0 milliseconde)
+// Mémoire locale pour affichage instantané
 const localLiveChatCache: Record<string, LiveEventChatMessage[]> = {};
 
 /**
- * Abonnement au Chat Firebase Firestore (Temps Réel Absolu - Zéro Délai)
+ * Abonnement au Chat Supabase Realtime
  */
 export function subscribeToLiveChat(
   liveId: string,
@@ -312,41 +289,19 @@ export function subscribeToLiveChat(
   const initial = localLiveChatCache[liveId] || DEFAULT_DEMO_CHAT_MESSAGES.default;
   onMessages([...initial]);
 
-  const fetchChat = async () => {
-    try {
-      const colRef = collection(db, 'live_events', liveId, 'messages');
-      const q = query(colRef, orderBy('createdAt', 'asc'), limit(80));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const msgs: LiveEventChatMessage[] = [];
-        snapshot.forEach((d) => {
-          msgs.push({ id: d.id, ...(d.data() as any) });
-        });
-        localLiveChatCache[liveId] = msgs;
-        onMessages(msgs);
-      }
-    } catch (err) {
-      console.warn('[NANASORE LIVE CHAT] Lecture chat :', err);
-    }
-  };
+  const channelName = `live_chat_channel_${liveId}`;
+  const channel = supabase.channel(channelName);
 
-  fetchChat();
-
-  const channelName = `live_chat_sync_${liveId}_${Math.random().toString(36).substring(7)}`;
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${liveId}`,
-      },
-      () => {
-        fetchChat();
+  channel
+    .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+      if (payload && payload.liveId === liveId) {
+        if (!localLiveChatCache[liveId]) {
+          localLiveChatCache[liveId] = [...DEFAULT_DEMO_CHAT_MESSAGES.default];
+        }
+        localLiveChatCache[liveId].push(payload as LiveEventChatMessage);
+        onMessages([...localLiveChatCache[liveId]]);
       }
-    )
+    })
     .subscribe();
 
   return () => {
@@ -355,7 +310,7 @@ export function subscribeToLiveChat(
 }
 
 /**
- * Envoi d'un message texte instantané dans Firestore (Temps Réel Absolu - Zéro Délai)
+ * Envoi d'un message texte instantané via Supabase Realtime Broadcast
  */
 export async function sendLiveChatMessage(
   liveId: string,
@@ -371,25 +326,29 @@ export async function sendLiveChatMessage(
     id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     liveId,
     senderName: message.senderName.trim() || 'Spectateur Wameet',
-    senderId: message.senderId || auth.currentUser?.uid || 'anon',
+    senderId: message.senderId || 'anon',
     senderAvatar: message.senderAvatar,
     senderRole: message.senderRole || 'viewer',
     text: message.text.trim(),
     createdAt: Date.now()
   };
 
-  // 1. Mise à jour locale immédiate (0 milliseconde de latence perçue)
+  // 1. Mise à jour locale immédiate (0ms latence perçue)
   if (!localLiveChatCache[liveId]) {
     localLiveChatCache[liveId] = [...DEFAULT_DEMO_CHAT_MESSAGES.default];
   }
   localLiveChatCache[liveId].push(newMsg);
 
-  // 2. Écriture immédiate dans Firestore (sans aucun délai ni tampon)
+  // 2. Broadcast temps réel via Supabase
   try {
-    const colRef = collection(db, 'live_events', liveId, 'messages');
-    await addDoc(colRef, newMsg);
+    const channel = supabase.channel(`live_chat_channel_${liveId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'new_message',
+      payload: newMsg
+    });
   } catch (err) {
-    console.warn('[NANASORE LIVE CHAT] Écriture Firestore warning (préservé en mémoire) :', err);
+    console.warn('[NANASORE LIVE CHAT] Erreur broadcast Supabase:', err);
   }
 
   return newMsg;

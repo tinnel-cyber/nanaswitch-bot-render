@@ -6,7 +6,7 @@ export interface CagnotteHeaderTrackerProps {
   targetAmount: number;
   /** Montant actuellement collecté (ex: 150000) */
   currentAmount: number;
-  /** Image du produit réel issu du stock NaNa POS */
+  /** Image du produit réel issu du stock Nanasore */
   productImage: string;
   /** Nom du produit réel (ex: "iPhone 15") */
   productName: string;
@@ -69,7 +69,7 @@ export const CagnotteHeaderTracker: React.FC<CagnotteHeaderTrackerProps> = ({
   return (
     <div className="sticky top-0 z-40 w-full bg-white/80 dark:bg-slate-900/85 backdrop-blur-md border-b border-gray-100 dark:border-slate-800 transition-colors">
       <div className="max-w-4xl mx-auto px-4 py-2.5 sm:py-3 flex items-center gap-3 sm:gap-4">
-        {/* 1. Miniature (Thumbnail) ronde du produit réel NaNa POS */}
+        {/* 1. Miniature (Thumbnail) ronde du produit réel Nanasore */}
         <div className="relative shrink-0">
           <img
             src={productImage}

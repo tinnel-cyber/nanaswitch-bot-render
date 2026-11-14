@@ -530,11 +530,11 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
                       <span className="text-[10px] uppercase font-mono text-blue-400 font-bold">1. Enregistrement CNAME (Recommandé)</span>
                       <p className="text-[11px] text-slate-300 font-mono">Hôte : <span className="text-amber-300">boutique</span> (ou sous-domaine)</p>
                       <p className="text-[11px] text-slate-300 font-mono flex items-center justify-between">
-                        <span>Cible : <span className="text-emerald-400">cname.nanapos.app</span></span>
+                        <span>Cible : <span className="text-emerald-400">cname.nanasore.com</span></span>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText('cname.nanapos.app');
+                            navigator.clipboard.writeText('cname.nanasore.com');
                             setCopiedCname(true);
                             setTimeout(() => setCopiedCname(false), 2000);
                           }}

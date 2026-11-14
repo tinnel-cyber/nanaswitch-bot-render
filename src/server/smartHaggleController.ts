@@ -43,7 +43,7 @@ export function sanitizeProductForFrontend(product: NaNaProduct): SafeFrontendPr
 }
 
 /**
- * Catalogue Produits NaNa POS (Base de données interne NaNa POS)
+ * Catalogue Produits Nanasore (Base de données interne Nanasore)
  */
 export const NANA_PRODUCT_CATALOG: Map<string, NaNaProduct> = new Map([
   [
@@ -256,7 +256,7 @@ export async function handleHaggleOffer(
   const startTime = Date.now();
   const { clientId = 'anonymous', timeoutMs = 1800 } = options;
 
-  // 1. Récupération du produit dans la base de données NaNa POS
+  // 1. Récupération du produit dans la base de données Nanasore
   const product = NANA_PRODUCT_CATALOG.get(productId);
   if (!product) {
     throw new Error(`Produit introuvable (ID: ${productId})`);

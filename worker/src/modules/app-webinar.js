@@ -7,7 +7,7 @@
 export async function handleWebinarModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.com");
 
   // 1. Vérification du Cache Edge pour les pages de webinaires publiques ou métadonnées (GET)
   if (request.method === "GET" && (path.startsWith("/webinar/") || path.includes("/api/webinar/metadata"))) {

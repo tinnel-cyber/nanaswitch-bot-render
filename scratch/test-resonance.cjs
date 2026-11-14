@@ -56,8 +56,8 @@ setTimeout(async () => {
       await send('Page.enable');
       await send('Runtime.enable');
 
-      console.log("1. Navigating to https://pos-app-1759a.web.app/wameet ...");
-      await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/wameet' });
+      console.log("1. Navigating to https://nanasore.web.app/wameet ...");
+      await send('Page.navigate', { url: 'https://nanasore.web.app/wameet' });
       await new Promise(r => setTimeout(r, 4000));
 
       console.log("2. Switching to Reels Screen...");

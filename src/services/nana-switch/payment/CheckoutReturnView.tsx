@@ -327,7 +327,7 @@ export const CheckoutReturnView: React.FC<CheckoutReturnViewProps> = ({ onBackTo
         {/* Pied de page s├®curis├® */}
         <div className="pt-6 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span>Passerelle S├®curis├®e NaNa POS &bull; Cryptage TLS 256-bit</span>
+          <span>Passerelle S├®curis├®e Nanasore &bull; Cryptage TLS 256-bit</span>
         </div>
 
       </div>

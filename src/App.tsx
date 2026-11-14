@@ -131,6 +131,7 @@ const WameetRoomView = React.lazy(() => import('./components/wameet/WameetRoomVi
 const CertificatePage = React.lazy(() => import('./pages/CertificatePage').then(m => ({ default: m.CertificatePage || m.default })));
 const StudentDashboardPage = React.lazy(() => import('./pages/StudentDashboardPage').then(m => ({ default: m.StudentDashboardPage || m.default })));
 const CashierConnectPage = React.lazy(() => import('./pages/CashierConnectPage').then(m => ({ default: m.CashierConnectPage || m.default })));
+const AcademicUploadView = React.lazy(() => import('./components/upload/AcademicUploadView').then(m => ({ default: m.AcademicUploadView || m.default })));
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
@@ -1000,10 +1001,11 @@ export default function App() {
         if (parts[1]) return parts[1].split('/')[0].split('?')[0];
       }
       if (pathname === '/classroom') {
-        return 'telecom-fintech-masterclass';
+        const queryCourse = new URLSearchParams(window.location.search).get('courseId') || new URLSearchParams(window.location.search).get('course');
+        return queryCourse || localStorage.getItem('nana_active_course_id') || 'telecom-fintech-masterclass';
       }
       const params = new URLSearchParams(window.location.search);
-      return params.get('classroom') || null;
+      return params.get('classroom') || params.get('courseId') || null;
     }
     return null;
   });
@@ -1044,6 +1046,22 @@ export default function App() {
       }
       const params = new URLSearchParams(window.location.search);
       return params.get('instructor') === 'true' || params.get('view') === 'academy';
+    }
+    return false;
+  });
+
+  // Détection URL Espace Formateur Hub (/instructor-hub ou ?hub=instructor)
+  const [isInstructorHubView, setIsInstructorHubView] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (
+        pathname === '/instructor-hub' || pathname.startsWith('/instructor-hub/') ||
+        pathname === '/hub/instructor' || pathname.startsWith('/hub/instructor/')
+      ) {
+        return true;
+      }
+      const params = new URLSearchParams(window.location.search);
+      return params.get('view') === 'instructor_hub' || params.get('hub') === 'instructor';
     }
     return false;
   });
@@ -4870,6 +4888,28 @@ export default function App() {
     );
   }
 
+  // 0.00009 Vue Espace Formateur Hub Dédié (/instructor-hub, /hub/instructor, currentView === 'INSTRUCTOR_HUB')
+  if (isInstructorHubView || currentView === 'instructor_hub' || currentView === 'INSTRUCTOR_HUB') {
+    return (
+      <ModuleErrorBoundary moduleName="LMS - Hub Formateur">
+        <React.Suspense fallback={<LazyModuleFallback label="Connexion au Hub Marketing Formateur..." />}>
+          <InstructorHubView
+            currentUser={currentUser}
+            subscription={subscription}
+            onBackToHub={() => {
+              setIsInstructorHubView(false);
+              setIsInstructorView(true);
+            }}
+            onViewAsStudent={(courseId: string) => {
+              setPublicClassroomId(courseId);
+              setIsInstructorHubView(false);
+            }}
+          />
+        </React.Suspense>
+      </ModuleErrorBoundary>
+    );
+  }
+
   // 0.0001 Vue Espace Formateur & Tableau de Bord (/instructor, /dashboard/academy, /dashboard/courses/create, currentView === 'COURSE_CREATE')
   if (isInstructorView || currentView === 'teacher_dashboard' || currentView === 'TEACHER_DASHBOARD' || currentView === 'COURSE_CREATE' || currentView === 'course_create' || currentView === 'INSTRUCTOR' || currentView === 'instructor') {
     return (
@@ -4999,6 +5039,25 @@ export default function App() {
               }
             }}
             onBackToHome={() => {
+              setCurrentView('MASTER_HUB');
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', '/');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+            }}
+          />
+        </React.Suspense>
+      </ModuleErrorBoundary>
+    );
+  }
+
+  // 0.00094 Vue Espace Upload Académique R2 & Supabase (/academic/upload, currentView === 'ACADEMIC_UPLOAD')
+  if (currentView === 'ACADEMIC_UPLOAD' || currentView === 'academic_upload') {
+    return (
+      <ModuleErrorBoundary moduleName="LMS - Espace Upload Académique R2 & Supabase">
+        <React.Suspense fallback={<LazyModuleFallback label="Chargement de l'Espace Upload Académique..." />}>
+          <AcademicUploadView
+            onClose={() => {
               setCurrentView('MASTER_HUB');
               if (typeof window !== 'undefined') {
                 window.history.pushState({}, '', '/');
@@ -5229,17 +5288,19 @@ export default function App() {
   // 0.0 Vue Publique Client : Live Shopping, Webinaire & Coaching 1-to-1 (/live/:sessionSlug ou ?live=...)
   if (publicWebinarId) {
     return (
-      <React.Suspense fallback={<LazyModuleFallback label="Connexion au Live Studio Nanasore..." />}>
-        <PublicLiveSessionPage
-          sessionSlug={publicWebinarId}
-          onBackToStore={() => {
-            setPublicWebinarId(null);
-            if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/');
-            }
-          }}
-        />
-      </React.Suspense>
+      <ModuleErrorBoundary moduleName="Live Studio - Session Publique Client">
+        <React.Suspense fallback={<LazyModuleFallback label="Connexion au Live Studio Nanasore..." />}>
+          <PublicLiveSessionPage
+            sessionSlug={publicWebinarId}
+            onBackToStore={() => {
+              setPublicWebinarId(null);
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', '/');
+              }
+            }}
+          />
+        </React.Suspense>
+      </ModuleErrorBoundary>
     );
   }
 
@@ -6702,9 +6763,10 @@ export default function App() {
                       return;
                     }
                     if (v === 'CLASSROOM') {
-                      setPublicClassroomId('telecom-fintech-masterclass');
+                      const targetClassId = localStorage.getItem('nana_active_course_id') || 'telecom-fintech-masterclass';
+                      setPublicClassroomId(targetClassId);
                       if (typeof window !== 'undefined') {
-                        window.history.pushState({}, '', '/dashboard/campus/telecom-fintech-masterclass');
+                        window.history.pushState({}, '', `/dashboard/campus/${targetClassId}`);
                         window.dispatchEvent(new PopStateEvent('popstate'));
                       }
                       return;

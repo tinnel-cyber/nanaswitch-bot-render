@@ -108,7 +108,7 @@ export const VipClassroomQnA: React.FC<VipClassroomQnAProps> = ({
         <div className="flex items-center gap-2">
           <Crown className="w-4 h-4 text-amber-500 shrink-0" />
           <span className="font-bold text-slate-800">
-            Espace Q&A Fermé • Réservé exclusivement aux étudiants abonnés NaNa POS
+            Espace Q&A Fermé • Réservé exclusivement aux étudiants abonnés Nanasore
           </span>
         </div>
         <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] shrink-0">

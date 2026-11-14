@@ -1,5 +1,4 @@
-import React from 'react';
-import { InstructorDashboardView, InstructorDashboardViewProps } from '../../../components/lms/InstructorDashboardView';
+import { InstructorDashboardView, InstructorDashboardViewProps } from './lms/InstructorDashboardView';
 
 export type TeacherDashboardProps = InstructorDashboardViewProps;
 

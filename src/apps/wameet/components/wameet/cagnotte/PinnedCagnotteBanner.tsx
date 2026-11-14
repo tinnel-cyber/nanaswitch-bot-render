@@ -58,7 +58,7 @@ export const PinnedCagnotteBanner: React.FC<PinnedCagnotteBannerProps> = ({
       {/* Barre Principale Épinglée */}
       <div className="max-w-4xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3">
         <div className="flex items-center gap-3">
-          {/* Miniature du Cadeau NaNa POS */}
+          {/* Miniature du Cadeau Nanasore */}
           <div className="relative shrink-0 group">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border-2 border-emerald-500/50 bg-slate-800 shadow-md shadow-emerald-500/20">
               <img
@@ -223,7 +223,7 @@ export const PinnedCagnotteBanner: React.FC<PinnedCagnotteBannerProps> = ({
             </div>
             <div className="text-xs space-y-1">
               <div className="font-bold text-emerald-300 flex items-center gap-2">
-                <span>Contrat Intelligent Sécurisé NaNa POS</span>
+                <span>Contrat Intelligent Sécurisé Nanasore</span>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-md font-mono">
                   100% Anti-Détournement
                 </span>
@@ -243,7 +243,7 @@ export const PinnedCagnotteBanner: React.FC<PinnedCagnotteBannerProps> = ({
             </div>
           </div>
 
-          {/* Fiche Technique du Cadeau NaNa POS */}
+          {/* Fiche Technique du Cadeau Nanasore */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-400">
@@ -275,7 +275,7 @@ export const PinnedCagnotteBanner: React.FC<PinnedCagnotteBannerProps> = ({
             {/* Magasin Vendeur Partenaire */}
             <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
               <span className="font-bold text-white flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-amber-400" /> Marchand Certifié NaNa POS
+                <Store className="w-3.5 h-3.5 text-amber-400" /> Marchand Certifié Nanasore
               </span>
               <div className="text-[11px] text-slate-300 space-y-1">
                 <p className="font-semibold text-white">{gift.merchantName}</p>

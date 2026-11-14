@@ -244,13 +244,13 @@ const INITIAL_CONVERSATIONS: ChatConversationItem[] = [
     isOnline: true,
     lastActivityLabel: '15:10',
     unreadCount: 0,
-    lastMessagePreview: 'Rendez-vous calé pour la démo NaNa POS.',
+    lastMessagePreview: 'Rendez-vous calé pour la démo Nanasore.',
     transactionStatus: 'NONE',
     messages: [
       {
         id: 'm-10',
         sender: 'them',
-        text: 'Salut Ibrahim ! La liaison API NaNa POS avec les Reels est prête.',
+        text: 'Salut Ibrahim ! La liaison API Nanasore avec les Reels est prête.',
         createdAt: '15:05',
         type: 'text'
       },
@@ -264,7 +264,7 @@ const INITIAL_CONVERSATIONS: ChatConversationItem[] = [
       {
         id: 'm-12',
         sender: 'them',
-        text: 'Rendez-vous calé pour la démo NaNa POS.',
+        text: 'Rendez-vous calé pour la démo Nanasore.',
         createdAt: '15:10',
         type: 'text'
       }
@@ -672,7 +672,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                       )}
                     </div>
 
-                    {/* Image d'aperçu si présente (Cadeau / Produit NaNa POS) */}
+                    {/* Image d'aperçu si présente (Cadeau / Produit Nanasore) */}
                     {info.imageUrl && (
                       <div className="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100 max-h-36 flex items-center justify-center">
                         <img src={info.imageUrl} alt={info.title} className="w-full h-32 object-cover" />

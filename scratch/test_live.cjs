@@ -13,7 +13,7 @@ async function run() {
     '--user-data-dir=' + tmpDir,
     '--no-first-run',
     '--no-default-browser-check',
-    'https://pos-app-1759a.web.app/'
+    'https://nanasore.web.app/'
   ]);
 
   await new Promise(r => setTimeout(r, 2500));
@@ -72,7 +72,7 @@ async function run() {
   });
 
   // Navigate to dashboard
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/?view=dashboard' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/?view=dashboard' });
 
   // Wait for load
   await new Promise(r => setTimeout(r, 7000));

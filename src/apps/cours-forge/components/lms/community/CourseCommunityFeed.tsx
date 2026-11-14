@@ -29,7 +29,7 @@ import {
   endorsePost,
   ensureStudentInCommunityGroup
 } from '../../../../../services/communityService';
-import { DocumentSnapshot } from 'firebase/firestore';
+
 
 interface CourseCommunityFeedProps {
   courseId: string;
@@ -61,7 +61,7 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
   onOpenDirectMessage
 }) => {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
+  const [lastDoc, setLastDoc] = useState<any | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [activeTopic, setActiveTopic] = useState<CommunityTopicTag | 'ALL'>('ALL');

@@ -17,7 +17,7 @@ async function main() {
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu',
-    'https://pos-app-1759a.web.app/'
+    'https://nanasore.web.app/'
   ]);
 
   let targets = null;
@@ -84,7 +84,7 @@ async function main() {
 
   // 1. NAVIGATE TO HUB BUILDER
   console.log('1. Navigating to /admin/hub-builder ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/admin/hub-builder' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/admin/hub-builder' });
   await new Promise(r => setTimeout(r, 6000));
 
   let scr = await send('Page.captureScreenshot', { format: 'png' });
@@ -133,7 +133,7 @@ async function main() {
 
   // 4. NAVIGATE TO DASHBOARD
   console.log('4. Navigating to /dashboard ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/?view=dashboard' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/?view=dashboard' });
   await new Promise(r => setTimeout(r, 6000));
 
   // 5. OPEN OMNIBAR IN DASHBOARD VIA nanasore_open_omnibar or click

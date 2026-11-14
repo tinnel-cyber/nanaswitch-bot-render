@@ -343,17 +343,28 @@ const INITIAL_EDGES: Edge[] = [
 ];
 
 export interface CourseForgeCanvasProps {
+  courseId?: string;
+  courseTitle?: string;
   currentUser?: StoreUser | null;
   subscription?: StoreSubscription | null;
   isFreeAccount?: boolean;
+  onSaveSuccess?: (courseId: string) => void;
 }
 
 export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
+  courseId,
+  courseTitle = 'Nouveau Cours de Formation Professionnelle',
   currentUser,
   subscription,
-  isFreeAccount = false
+  isFreeAccount = false,
+  onSaveSuccess
 }) => {
   const isFree = isFreeAccount || isFreePlan(subscription || currentUser);
+  const [activeCourseId, setActiveCourseId] = useState<string>(() => {
+    return courseId || `course_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  });
+  const [activeCourseTitle, setActiveCourseTitle] = useState<string>(courseTitle);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [nodes, setNodes] = useState<Node[]>(INITIAL_NODES);
   const [edges, setEdges] = useState<Edge[]>(INITIAL_EDGES);
 
@@ -418,7 +429,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       return n;
     }));
     // Persistance Firestore du module
-    updateModuleBranding('telecom-fintech-masterclass', 'module-core', nextVal);
+    updateModuleBranding(activeCourseId, 'module-core', nextVal);
     setSavedNotification(nextVal 
       ? 'Mode Furtif YouTube activé sur tous les modules (Firestore synchronisé)' 
       : 'Mode Furtif désactivé'
@@ -429,7 +440,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   // Réorganisation Dnd-Kit des modules & leçons
   const handleReorderModules = (newModules: CourseModule[]) => {
     setModules(newModules);
-    saveCourseStructure('telecom-fintech-masterclass', newModules, nodes, edges);
+    saveCourseStructure(activeCourseId, newModules, nodes, edges);
     setSavedNotification('Ordre hiérarchique enregistré dans Firestore !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
@@ -448,18 +459,19 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     };
     const updated = [...modules, newMod];
     setModules(updated);
-    saveCourseStructure('telecom-fintech-masterclass', updated, nodes, edges);
+    saveCourseStructure(activeCourseId, updated, nodes, edges);
     setSavedNotification(`Module ${num} ajouté !`);
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
-  // Ajout de leçon depuis le Dnd Builder
+  // Ajout de leçon depuis le Dnd Builder : synchronise modules ET nodes
   const handleAddLessonToModule = (moduleId: string) => {
     const title = window.prompt('Titre de la nouvelle leçon :');
     if (!title || !title.trim()) return;
 
+    const lessonId = `lesson-${Date.now()}`;
     const newLesson: CourseLesson = {
-      id: `lesson-${Date.now()}`,
+      id: lessonId,
       moduleId,
       title: title.trim(),
       durationMinutes: 15,
@@ -474,15 +486,66 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       return m;
     });
 
+    const newNode: Node = {
+      id: lessonId,
+      type: 'videoLesson',
+      position: { x: 250 + (nodes.length % 3) * 60, y: 120 + nodes.length * 90 },
+      data: {
+        id: lessonId,
+        type: 'videoLesson',
+        title: title.trim(),
+        durationMinutes: 15,
+        videoConfig: {
+          mode: 'YOUTUBE_EMBED',
+          title: title.trim(),
+          durationMinutes: 15,
+          youtubeUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk'
+        }
+      }
+    };
+
+    const nextNodes = [...nodes, newNode];
     setModules(updated);
-    saveCourseStructure('telecom-fintech-masterclass', updated, nodes, edges);
-    setSavedNotification(`Leçon "${title}" créée !`);
+    setNodes(nextNodes);
+    saveCourseStructure(activeCourseId, updated, nextNodes, edges);
+    setSavedNotification(`Leçon "${title}" créée et synchronisée !`);
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
-  // Édition de leçon depuis le Dnd Builder
+  // Édition de leçon depuis le Dnd Builder : garantit que le nœud existe pour la modale
   const handleEditLessonFromDnd = (lesson: CourseLesson) => {
     setActiveEditingNodeId(lesson.id);
+
+    setNodes(nds => {
+      const exists = nds.some(n => n.id === lesson.id);
+      if (exists) return nds;
+      const type: CourseNodeType = lesson.quiz 
+        ? 'interactiveQuiz' 
+        : (lesson.liveSessionConfig || lesson.id.includes('live') ? 'dailyLive' : 'videoLesson');
+      
+      const synthesizedNode: Node = {
+        id: lesson.id,
+        type,
+        position: { x: 250, y: 150 + nds.length * 80 },
+        data: {
+          id: lesson.id,
+          type,
+          title: lesson.title,
+          durationMinutes: lesson.durationMinutes,
+          quizQuestions: lesson.quiz?.questions,
+          quizPassingScore: lesson.quiz?.passingScore || 70,
+          videoConfig: {
+            mode: 'YOUTUBE_EMBED',
+            title: lesson.title,
+            durationMinutes: lesson.durationMinutes,
+            youtubeUrl: lesson.videoUrl
+          },
+          liveSessionConfig: lesson.liveSessionConfig
+        }
+      };
+      return [...nds, synthesizedNode];
+    });
+
     if (lesson.quiz) {
       setIsQuizModalOpen(true);
     } else if (lesson.liveSessionConfig || lesson.id.includes('live')) {
@@ -492,7 +555,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     }
   };
 
-  // Suppression d'une leçon depuis le Dnd Builder
+  // Suppression d'une leçon depuis le Dnd Builder : synchronise modules ET nodes
   const handleDeleteLessonFromDnd = (lessonId: string, moduleId: string) => {
     const updated = modules.map(m => {
       if (m.id === moduleId) {
@@ -501,18 +564,27 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       return m;
     });
     setModules(updated);
-    setNodes(nds => nds.filter(n => n.id !== lessonId));
-    saveCourseStructure('telecom-fintech-masterclass', updated);
-    setSavedNotification('Leçon supprimée.');
+    const nextNodes = nodes.filter(n => n.id !== lessonId);
+    const nextEdges = edges.filter(e => e.source !== lessonId && e.target !== lessonId);
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    saveCourseStructure(activeCourseId, updated, nextNodes, nextEdges);
+    setSavedNotification('Leçon supprimée et synchronisée.');
     setTimeout(() => setSavedNotification(null), 2500);
   };
 
   // Suppression d'un module depuis le Dnd Builder
   const handleDeleteModule = (moduleId: string) => {
     if (!window.confirm('Supprimer définitivement ce module et ses leçons associées ?')) return;
+    const targetModule = modules.find(m => m.id === moduleId);
+    const lessonIdsToRemove = new Set((targetModule?.lessons || []).map(l => l.id));
     const updated = modules.filter(m => m.id !== moduleId);
     setModules(updated);
-    saveCourseStructure('telecom-fintech-masterclass', updated);
+    const nextNodes = nodes.filter(n => !lessonIdsToRemove.has(n.id));
+    const nextEdges = edges.filter(e => !lessonIdsToRemove.has(e.source) && !lessonIdsToRemove.has(e.target));
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    saveCourseStructure(activeCourseId, updated, nextNodes, nextEdges);
     setSavedNotification('Module supprimé.');
     setTimeout(() => setSavedNotification(null), 2500);
   };
@@ -533,7 +605,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       })
     }));
     setModules(updated);
-    saveCourseStructure('telecom-fintech-masterclass', updated);
+    saveCourseStructure(activeCourseId, updated, nodes, edges);
     setSavedNotification(`Ressource "${resource.title}" rattachée à la leçon !`);
     setTimeout(() => setSavedNotification(null), 3000);
   };
@@ -542,7 +614,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   const handleSaveDeliverySettings = (updatedModule: CourseModule) => {
     const updated = modules.map(m => m.id === updatedModule.id ? updatedModule : m);
     setModules(updated);
-    saveCourseStructure('telecom-fintech-masterclass', updated);
+    saveCourseStructure(activeCourseId, updated, nodes, edges);
     setSavedNotification(`Règles de diffusion enregistrées pour "${updatedModule.title}" !`);
     setTimeout(() => setSavedNotification(null), 3000);
   };
@@ -550,7 +622,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   // Sauvegarde des paramètres globaux du cours (Prérequis & Mot de passe)
   const handleSaveAdvancedSettings = (newSettings: any) => {
     setCourseSettings(newSettings);
-    saveCourseGlobalSettings('telecom-fintech-masterclass', newSettings);
+    saveCourseGlobalSettings(activeCourseId, newSettings);
     setSavedNotification('Paramètres avancés & accès enregistrés dans Firestore !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
@@ -558,8 +630,8 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   // Exportation JSON
   const handleExportJson = () => {
     const coursePayload = {
-      id: 'telecom-fintech-masterclass',
-      title: 'Masterclass Systèmes Hybrides & Monétique UEMOA',
+      id: activeCourseId,
+      title: activeCourseTitle,
       modules,
       ...courseSettings
     };
@@ -578,29 +650,24 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       const content = event.target?.result as string;
       const res = parseAndValidateCourseJson(content);
       if (res.success && res.data) {
-        if (res.data.modules && res.data.modules.length > 0) {
-          setModules(res.data.modules);
-        }
-        if (res.data.nodes && res.data.nodes.length > 0) {
-          setNodes(res.data.nodes);
-        }
-        if (res.data.edges && res.data.edges.length > 0) {
-          setEdges(res.data.edges);
-        }
+        if (res.data.modules) setModules(res.data.modules);
+        if (res.data.nodes) setNodes(res.data.nodes as any);
+        if (res.data.edges) setEdges(res.data.edges as any);
+        if (res.data.title) setActiveCourseTitle(res.data.title);
+        if (res.data.id) setActiveCourseId(res.data.id);
         setCourseSettings({
           prerequisiteCourseIds: res.data.prerequisiteCourseIds,
           isPasswordProtected: res.data.isPasswordProtected,
           accessPassword: res.data.accessPassword,
           strictLinearProgression: res.data.strictLinearProgression
         });
-        saveCourseStructure('telecom-fintech-masterclass', res.data.modules || modules, res.data.nodes, res.data.edges);
+        saveCourseStructure(res.data.id || activeCourseId, res.data.modules || modules, res.data.nodes, res.data.edges);
         setSavedNotification(`Cours importé avec succès : ${res.summary?.modulesCount || 0} module(s), ${res.summary?.lessonsCount || 0} leçon(s) !`);
       } else {
         alert(res.error || 'Erreur lors de la lecture du fichier JSON.');
       }
     };
     reader.readAsText(file);
-    if (jsonFileInputRef.current) jsonFileInputRef.current.value = '';
   };
 
   // Gestion des actions d'édition & suppression des nœuds
@@ -717,7 +784,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     []
   );
 
-  // Ajout manuel d'un nœud depuis la barre d'outils
+  // Ajout manuel d'un nœud depuis la barre d'outils : synchronise le graphe et les modules
   const handleAddManualNode = (type: CourseNodeType) => {
     const newId = `node_${type}_${Date.now()}`;
     const xPos = 250 + (nodes.length % 3) * 60;
@@ -746,19 +813,78 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       }
     };
 
-    setNodes(nds => [...nds, newNode]);
+    const newLesson: CourseLesson = {
+      id: newId,
+      moduleId: modules[0]?.id || 'mod-1',
+      title: titles[type],
+      durationMinutes: 15,
+      hideBranding: globalHideBranding,
+      quiz: type === 'interactiveQuiz' ? {
+        id: `quiz-${newId}`,
+        title: titles[type],
+        passingScore: 70,
+        questions: []
+      } : undefined
+    };
+
+    const nextNodes = [...nodes, newNode];
+    setNodes(nextNodes);
+
+    let nextModules: CourseModule[];
+    if (modules.length === 0) {
+      nextModules = [{
+        id: 'mod-1',
+        title: 'Module 1 : Programme Principal',
+        order: 0,
+        hideBranding: globalHideBranding,
+        lessons: [newLesson]
+      }];
+    } else {
+      nextModules = modules.map((m, idx) => 
+        idx === 0 ? { ...m, lessons: [...(m.lessons || []), newLesson] } : m
+      );
+    }
+    setModules(nextModules);
+    saveCourseStructure(activeCourseId, nextModules, nextNodes, edges);
+    setSavedNotification(`Nœud "${titles[type]}" ajouté et synchronisé !`);
+    setTimeout(() => setSavedNotification(null), 3000);
   };
 
   // Réception du graphe généré par Document-to-Course IA
   const handleApplyAiCourse = (generated: GeneratedGraphData) => {
     setNodes(generated.nodes as any);
     setEdges(generated.edges as any);
-    setSavedNotification('Syllabus généré avec succès par NaNa AI !');
+
+    // Synchronisation vers modules
+    const convertedLessons: CourseLesson[] = (generated.nodes || []).map((n) => ({
+      id: n.id,
+      moduleId: 'mod-1',
+      title: n.data?.title || 'Leçon générée',
+      durationMinutes: n.data?.durationMinutes || 15,
+      hideBranding: globalHideBranding,
+      quiz: n.type === 'interactiveQuiz' ? {
+        id: `quiz-${n.id}`,
+        title: n.data?.title || 'Quiz',
+        passingScore: n.data?.quizPassingScore || 70,
+        questions: n.data?.quizQuestions || []
+      } : undefined
+    }));
+
+    const newModules: CourseModule[] = [{
+      id: 'mod-1',
+      title: generated.syllabusTitle || 'Syllabus Généré par IA',
+      order: 0,
+      lessons: convertedLessons
+    }];
+
+    setModules(newModules);
+    saveCourseStructure(activeCourseId, newModules, generated.nodes as any, generated.edges as any);
+    setSavedNotification('Syllabus généré avec succès par NaNa AI et synchronisé !');
     setTimeout(() => setSavedNotification(null), 4000);
     setIsAiModalOpen(false);
   };
 
-  // Sauvegarde des modifications du Quiz Adaptatif
+  // Sauvegarde des modifications du Quiz Adaptatif : synchronise nodes ET modules
   const handleSaveQuiz = (
     nodeId: string,
     questions: AdaptiveQuizQuestion[],
@@ -766,88 +892,127 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     aiEliteGradingEnabled?: boolean,
     aiGradingInstructions?: string
   ) => {
-    setNodes(nds =>
-      nds.map(n => {
-        if (n.id === nodeId) {
+    const nextNodes = nodes.map(n => {
+      if (n.id === nodeId) {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            quizQuestions: questions,
+            quizPassingScore: passingScore,
+            aiEliteGradingEnabled,
+            aiGradingInstructions,
+          }
+        };
+      }
+      return n;
+    });
+    setNodes(nextNodes);
+
+    const nextModules = modules.map(m => ({
+      ...m,
+      lessons: (m.lessons || []).map(l => {
+        if (l.id === nodeId) {
           return {
-            ...n,
-            data: {
-              ...n.data,
-              quizQuestions: questions,
-              quizPassingScore: passingScore,
+            ...l,
+            quiz: {
+              id: `quiz-${nodeId}`,
+              title: l.title,
+              passingScore,
+              questions,
               aiEliteGradingEnabled,
-              aiGradingInstructions,
+              aiGradingInstructions
             }
           };
         }
-        return n;
+        return l;
       })
-    );
-    setSavedNotification('Quiz adaptatif IRT mis à jour avec succès !');
+    }));
+    setModules(nextModules);
+
+    saveCourseStructure(activeCourseId, nextModules, nextNodes, edges);
+    setSavedNotification('Quiz adaptatif IRT mis à jour et synchronisé !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
-  // Sauvegarde des modifications de la Leçon Vidéo
+  // Sauvegarde des modifications de la Leçon Vidéo : synchronise nodes ET modules
   const handleSaveVideoConfig = (nodeId: string, config: VideoLessonNodeConfig) => {
-    setNodes(nds =>
-      nds.map(n => {
-        if (n.id === nodeId) {
+    const nextNodes = nodes.map(n => {
+      if (n.id === nodeId) {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            title: config.title,
+            durationMinutes: config.durationMinutes,
+            videoConfig: config,
+          }
+        };
+      }
+      return n;
+    });
+    setNodes(nextNodes);
+
+    const nextModules = modules.map(m => ({
+      ...m,
+      lessons: (m.lessons || []).map(l => {
+        if (l.id === nodeId) {
           return {
-            ...n,
-            data: {
-              ...n.data,
-              title: config.title,
-              durationMinutes: config.durationMinutes,
-              videoConfig: config,
-            }
+            ...l,
+            title: config.title || l.title,
+            durationMinutes: config.durationMinutes || l.durationMinutes,
+            videoUrl: config.mode === 'YOUTUBE_EMBED' 
+              ? (config.youtubeUrl || l.videoUrl)
+              : (config.manualVideoUrl || config.aiVideoUrl || l.videoUrl),
+            hideBranding: config.hideBranding ?? l.hideBranding
           };
         }
-        return n;
+        return l;
       })
-    );
-    setSavedNotification('Configuration vidéo enregistrée !');
+    }));
+    setModules(nextModules);
+
+    saveCourseStructure(activeCourseId, nextModules, nextNodes, edges);
+    setSavedNotification('Configuration vidéo enregistrée et synchronisée !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
   // Sauvegarde des modifications de la Session Live (Daily, Zoom, Meet, Jitsi)
   const handleSaveLiveSessionConfig = (nodeId: string, updatedTitle: string, config: LiveSessionConfig) => {
-    setNodes(nds =>
-      nds.map(n => {
-        if (n.id === nodeId) {
+    const nextNodes = nodes.map(n => {
+      if (n.id === nodeId) {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            title: updatedTitle,
+            liveSessionConfig: config,
+            dailyScheduledDate: config.scheduledAt,
+            dailyRoomUrl: config.meetingUrl
+          }
+        };
+      }
+      return n;
+    });
+    setNodes(nextNodes);
+
+    const nextModules = modules.map(m => ({
+      ...m,
+      lessons: m.lessons.map(l => {
+        if (l.id === nodeId) {
           return {
-            ...n,
-            data: {
-              ...n.data,
-              title: updatedTitle,
-              liveSessionConfig: config,
-              dailyScheduledDate: config.scheduledAt,
-              dailyRoomUrl: config.meetingUrl
-            }
+            ...l,
+            title: updatedTitle,
+            liveSessionConfig: config,
+            durationMinutes: config.durationMinutes || l.durationMinutes
           };
         }
-        return n;
+        return l;
       })
-    );
+    }));
+    setModules(nextModules);
 
-    // Mettre à jour dans les modules s'il y a une leçon correspondante
-    setModules(prev =>
-      prev.map(m => ({
-        ...m,
-        lessons: m.lessons.map(l => {
-          if (l.id === nodeId) {
-            return {
-              ...l,
-              title: updatedTitle,
-              liveSessionConfig: config,
-              durationMinutes: config.durationMinutes || l.durationMinutes
-            };
-          }
-          return l;
-        })
-      }))
-    );
-
-    saveCourseStructure('telecom-fintech-masterclass', modules, nodes, edges);
+    saveCourseStructure(activeCourseId, nextModules, nextNodes, edges);
     setSavedNotification(`Session Live "${updatedTitle}" (${config.provider}) configurée avec succès !`);
     setTimeout(() => setSavedNotification(null), 3000);
   };
@@ -873,12 +1038,32 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-white tracking-wide">
-                NaNa Course Forge
-              </h2>
+              {isEditingTitle ? (
+                <input
+                  type="text"
+                  value={activeCourseTitle}
+                  onChange={(e) => setActiveCourseTitle(e.target.value)}
+                  onBlur={() => setIsEditingTitle(false)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setIsEditingTitle(false); }}
+                  autoFocus
+                  className="px-2 py-0.5 rounded-lg bg-slate-800 border border-indigo-500 text-xs font-black text-white focus:outline-none"
+                />
+              ) : (
+                <h2 
+                  onClick={() => setIsEditingTitle(true)}
+                  className="text-sm font-black text-white tracking-wide hover:text-indigo-300 transition cursor-pointer flex items-center gap-1.5"
+                  title="Cliquer pour modifier le titre du cours"
+                >
+                  <span>{activeCourseTitle}</span>
+                  <span className="text-[10px] text-slate-500 hover:text-slate-300 font-normal">✎</span>
+                </h2>
+              )}
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                {activeCourseId}
+              </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              Éditeur visuel de parcours pédagogique adaptatif &amp; branching IRT
+              NaNa Course Forge • Éditeur visuel adaptatif &amp; branching IRT
             </p>
           </div>
         </div>
@@ -1068,8 +1253,9 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           <button
             type="button"
             onClick={() => {
-              saveCourseStructure('telecom-fintech-masterclass', modules, nodes, edges);
-              setSavedNotification('Architecture du cours enregistrée dans le cloud Firebase !');
+              saveCourseStructure(activeCourseId, modules, nodes, edges);
+              setSavedNotification(`Architecture du cours "${activeCourseTitle}" enregistrée dans Firestore !`);
+              onSaveSuccess?.(activeCourseId);
               setTimeout(() => setSavedNotification(null), 3500);
             }}
             className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
@@ -1245,6 +1431,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           isOpen={isVideoModalOpen}
           nodeId={activeEditingNode.id}
           nodeTitle={(activeEditingNode.data as any).title || 'Leçon Vidéo'}
+          courseId={activeCourseId}
           initialConfig={(activeEditingNode.data as any).videoConfig}
           onClose={() => {
             setIsVideoModalOpen(false);
@@ -1257,7 +1444,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       {/* 4. Tiroir Banque de Contenu & Fichiers Liés */}
       <ContentBankDrawer
         isOpen={isContentBankOpen}
-        courseId="telecom-fintech-masterclass"
+        courseId={activeCourseId}
         targetLessonTitle={targetLessonForAttachment?.title}
         onClose={() => {
           setIsContentBankOpen(false);
@@ -1280,8 +1467,8 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
       {/* 6. Modal Paramètres Globaux du Cours (Prérequis & Mot de Passe d'Accès) */}
       <AdvancedCourseSettingsModal
         isOpen={isAdvancedSettingsOpen}
-        courseId="telecom-fintech-masterclass"
-        courseTitle="Masterclass Systèmes Hybrides & Monétique UEMOA"
+        courseId={activeCourseId}
+        courseTitle={activeCourseTitle}
         currentSettings={courseSettings}
         onClose={() => setIsAdvancedSettingsOpen(false)}
         onSaveSuccess={handleSaveAdvancedSettings}

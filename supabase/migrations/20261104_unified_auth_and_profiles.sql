@@ -1,6 +1,6 @@
 -- =======================================================================
--- MIGRATION SUPABASE : Authentification Unifiée (Firebase -> Supabase)
--- Table : profiles & RPC sync_firebase_profile
+-- MIGRATION SUPABASE : Authentification Unifiée (Supabase -> Supabase)
+-- Table : profiles & RPC sync_auth_profile
 -- Date : 2026-11-04
 -- =======================================================================
 
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     full_name TEXT,
     email TEXT,
     whatsapp_number TEXT,
-    firebase_uid TEXT UNIQUE,
+    auth_uid TEXT UNIQUE,
     role TEXT DEFAULT 'user',
     wallet_balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (wallet_balance >= 0.00),
     kyc_status TEXT NOT NULL DEFAULT 'none' CHECK (kyc_status IN ('none', 'light', 'full')),
@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Ajout idempotent des colonnes au cas où profiles existe déjà
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'firebase_uid') THEN
-        ALTER TABLE public.profiles ADD COLUMN firebase_uid TEXT UNIQUE;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'auth_uid') THEN
+        ALTER TABLE public.profiles ADD COLUMN auth_uid TEXT UNIQUE;
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'email') THEN
@@ -54,7 +54,7 @@ BEGIN
 END $$;
 
 -- 2. Index de performance
-CREATE INDEX IF NOT EXISTS idx_profiles_firebase_uid ON public.profiles(firebase_uid);
+CREATE INDEX IF NOT EXISTS idx_profiles_auth_uid ON public.profiles(auth_uid);
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 CREATE INDEX IF NOT EXISTS idx_profiles_kyc_status ON public.profiles(kyc_status);
 CREATE INDEX IF NOT EXISTS idx_profiles_pricing_model ON public.profiles(pricing_model);
@@ -72,8 +72,8 @@ DO $$ BEGIN
 END $$;
 
 -- 4. Fonction RPC d'enregistrement et de synchronisation sans KYC à l'entrée
-CREATE OR REPLACE FUNCTION public.sync_firebase_profile(
-    p_firebase_uid TEXT,
+CREATE OR REPLACE FUNCTION public.sync_auth_profile(
+    p_auth_uid TEXT,
     p_email TEXT,
     p_full_name TEXT DEFAULT '',
     p_whatsapp TEXT DEFAULT ''
@@ -86,17 +86,17 @@ DECLARE
     v_profile_id UUID;
     v_existing RECORD;
 BEGIN
-    -- Recherche du profil existant par firebase_uid ou email
+    -- Recherche du profil existant par auth_uid ou email
     SELECT * INTO v_existing 
     FROM public.profiles 
-    WHERE firebase_uid = p_firebase_uid OR (p_email IS NOT NULL AND email = p_email)
+    WHERE auth_uid = p_auth_uid OR (p_email IS NOT NULL AND email = p_email)
     LIMIT 1;
     
     IF v_existing.id IS NOT NULL THEN
         -- Profil existant : préserver kyc_status, pricing_model, wallet_balance et enabled_themes
         UPDATE public.profiles
         SET 
-            firebase_uid = COALESCE(firebase_uid, p_firebase_uid),
+            auth_uid = COALESCE(auth_uid, p_auth_uid),
             email = COALESCE(email, p_email),
             full_name = COALESCE(NULLIF(p_full_name, ''), full_name),
             whatsapp_number = COALESCE(NULLIF(p_whatsapp, ''), whatsapp_number),
@@ -106,7 +106,7 @@ BEGIN
         RETURN jsonb_build_object(
             'success', true,
             'profile_id', v_existing.id,
-            'firebase_uid', p_firebase_uid,
+            'auth_uid', p_auth_uid,
             'email', v_existing.email,
             'full_name', v_existing.full_name,
             'whatsapp_number', v_existing.whatsapp_number,
@@ -120,7 +120,7 @@ BEGIN
         -- Nouvel utilisateur : STRICTEMENT AUCUNE PERMISSION NI KYC À L'ENTRÉE
         -- kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
         INSERT INTO public.profiles (
-            firebase_uid,
+            auth_uid,
             email,
             full_name,
             whatsapp_number,
@@ -132,7 +132,7 @@ BEGIN
             created_at,
             updated_at
         ) VALUES (
-            p_firebase_uid,
+            p_auth_uid,
             p_email,
             p_full_name,
             p_whatsapp,
@@ -149,7 +149,7 @@ BEGIN
         RETURN jsonb_build_object(
             'success', true,
             'profile_id', v_profile_id,
-            'firebase_uid', p_firebase_uid,
+            'auth_uid', p_auth_uid,
             'email', p_email,
             'full_name', p_full_name,
             'whatsapp_number', p_whatsapp,

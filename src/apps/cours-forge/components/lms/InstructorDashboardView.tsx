@@ -48,6 +48,16 @@ const EscrowQuotesView = React.lazy(() =>
 const ResumeBuilderView = React.lazy(() => 
   import('../../../../components/resume/ResumeBuilderView').then(m => ({ default: m.ResumeBuilderView }))
 );
+import { InstructorCohortRealtimeMonitor } from './InstructorCohortRealtimeMonitor';
+const ExternalIntegrationsHub = React.lazy(() => 
+  import('./integrations/ExternalIntegrationsHub').then(m => ({ default: m.ExternalIntegrationsHub }))
+);
+const CampaignConfiguratorModal = React.lazy(() => 
+  import('./promo/CampaignConfiguratorModal').then(m => ({ default: m.CampaignConfiguratorModal }))
+);
+const SocialBlastHub = React.lazy(() => 
+  import('./promo/SocialBlastHub').then(m => ({ default: m.SocialBlastHub }))
+);
 
 // =============================================================================
 // TYPES & INTERFACES
@@ -76,7 +86,7 @@ export interface InstructorDashboardViewProps {
   isSuperAdmin?: boolean;
   currentUser?: StoreUser | null;
   subscription?: StoreSubscription | null;
-  initialTab?: 'DASHBOARD' | 'PROFILE_KYC' | 'COURSE_CREATE' | 'CORRECTIONS';
+  initialTab?: 'DASHBOARD' | 'PROFILE_KYC' | 'COURSE_CREATE' | 'CORRECTIONS' | 'COHORT_REALTIME' | 'VIRAL_FUNNELS' | 'INTEGRATIONS';
   onNavigateModule?: (moduleKey: string) => void;
   onBack?: () => void;
   className?: string;
@@ -1297,8 +1307,8 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
     } catch {}
   }, []);
 
-  // Onglet actif : vue d'ensemble du tableau de bord, atelier Course Forge, espace de correction ou gestion du profil/KYC
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROFILE_KYC' | 'COURSE_CREATE' | 'CORRECTIONS'>(initialTab || 'DASHBOARD');
+  // Onglet actif : vue d'ensemble du tableau de bord, atelier Course Forge, corrections, supervision realtime, tunnels viraux ou intégrations
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROFILE_KYC' | 'COURSE_CREATE' | 'CORRECTIONS' | 'COHORT_REALTIME' | 'VIRAL_FUNNELS' | 'INTEGRATIONS'>(initialTab || 'DASHBOARD');
 
   useEffect(() => {
     if (initialTab) {
@@ -1593,7 +1603,50 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
             Tableau de Bord & Analytique
           </button>
 
-          {/* 4. Profil & KYC */}
+          {/* 4. Supervision Cohorte Realtime Supabase */}
+          <button
+            type="button"
+            onClick={() => { playTapBeep(); setActiveTab('COHORT_REALTIME'); }}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'COHORT_REALTIME'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-950/40'
+                : 'text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-blue-400" />
+            <span>Cohorte Live</span>
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+          </button>
+
+          {/* 5. Tunnels Viraux & Campagnes Promo */}
+          <button
+            type="button"
+            onClick={() => { playTapBeep(); setActiveTab('VIRAL_FUNNELS'); }}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'VIRAL_FUNNELS'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-950/40'
+                : 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30'
+            }`}
+          >
+            <Megaphone className="w-3.5 h-3.5 text-amber-400" />
+            <span>Tunnels &amp; Promo</span>
+          </button>
+
+          {/* 6. Intégrations & Connecteurs LMS */}
+          <button
+            type="button"
+            onClick={() => { playTapBeep(); setActiveTab('INTEGRATIONS'); }}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'INTEGRATIONS'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
+                : 'text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-purple-400" />
+            <span>Connecteurs LMS</span>
+          </button>
+
+          {/* 7. Profil & KYC */}
           <button
             type="button"
             onClick={() => { playTapBeep(); setActiveTab('PROFILE_KYC'); }}
@@ -1603,7 +1656,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <span>Profil & KYC</span>
+            <span>Profil &amp; KYC</span>
             {profile.kycStatus === 'pending_validation' && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             )}
@@ -2184,6 +2237,147 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
               </div>
             );
           })()}
+        </div>
+      ) : activeTab === 'COHORT_REALTIME' ? (
+        /* VUE SUPERVISION COHORTE REALTIME SUPABASE */
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-950/50 shrink-0">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-black text-white">
+                    Supervision Temps Réel de la Cohorte
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10.5px] font-black border border-blue-500/30 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                    SUPABASE REALTIME
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Suivez en direct la progression, les leçons validées et la dernière activité de chaque apprenant inscrit.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-3.5 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-slate-300 font-bold">
+              {students.length} étudiant(s) synchronisé(s)
+            </div>
+          </div>
+
+          {students.length === 0 ? (
+            <div className="p-12 text-center rounded-3xl bg-slate-900/40 border border-dashed border-slate-800 text-slate-400 space-y-3">
+              <Users className="w-10 h-10 text-slate-600 mx-auto" />
+              <p className="text-sm font-bold text-slate-300">Aucun étudiant n'a encore rejoint cette cohorte</p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Partagez le lien de votre vitrine de cours pour enregistrer vos premières inscriptions avec suivi en direct.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {students.map((student) => (
+                <InstructorCohortRealtimeMonitor
+                  key={student.studentId}
+                  userId={student.studentId}
+                  courseId="telecom-fintech-masterclass"
+                  studentName={student.studentName}
+                  studentEmail={student.studentEmail}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'VIRAL_FUNNELS' ? (
+        /* VUE TUNNELS VIRAUX & SOCIAL BLAST */
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-amber-950/50 shrink-0">
+                <Megaphone className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-black text-white">
+                    Tunnels de Vente Viraux &amp; Campagnes Promo
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10.5px] font-black border border-amber-500/30">
+                    MARKETING CONVERSION
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Lancez des ventes flash, configurez des bonus irrésistibles et diffusez en 1-clic sur WhatsApp &amp; réseaux.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setIsFunnelBuilderOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-black text-xs transition shadow-lg shadow-amber-900/40 flex items-center gap-2 cursor-pointer self-start md:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nouveau Tunnel de Vente</span>
+            </button>
+          </div>
+
+          <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
+            <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Chargement du configurateur...</div>}>
+              <SocialBlastHub
+                campaign={{
+                  id: 'camp_demo_masterclass',
+                  courseId: 'telecom-fintech-masterclass',
+                  courseTitle: 'Masterclass Télécom & Fintech UEMOA',
+                  campaignName: 'Vente Flash 48H • Spéciale Rentrée',
+                  headline: 'Maîtrisez les flux Mobile Money et la vente hybride POS',
+                  subheadline: 'Accès instantané avec 4 bonus exclusifs',
+                  originalPrice: 75000,
+                  discountPrice: 45000,
+                  currency: 'FCFA',
+                  deadlineTimestamp: Date.now() + 48 * 3600 * 1000,
+                  ctaType: 'HYBRID',
+                  ctaLabel: 'Rejoindre la promotion maintenant',
+                  bonusItems: [
+                    { id: 'b1', title: 'Pack Code Source Sync Offline', valueCFA: 25000 },
+                    { id: 'b2', title: 'Support VIP WhatsApp 30 jours', valueCFA: 35000 }
+                  ]
+                }}
+                onNavigateToFunnel={() => setIsFunnelBuilderOpen(true)}
+              />
+            </React.Suspense>
+          </div>
+        </div>
+      ) : activeTab === 'INTEGRATIONS' ? (
+        /* VUE INTÉGRATIONS & CONNECTEURS LMS */
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
+          <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-950/50 shrink-0">
+                <Layers className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-black text-white">
+                    Connecteurs LMS &amp; Webhooks Externes
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10.5px] font-black border border-purple-500/30">
+                    AUTOMATION
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Synchronisez vos inscrits avec Google Sheets, Mailchimp, Brevo, Zapier et les Pixels de conversion publicitaires.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Chargement des connecteurs...</div>}>
+            <ExternalIntegrationsHub />
+          </React.Suspense>
         </div>
       ) : (
         /* 5. VUE ONGLET PROFIL & KYC FORMATEUR */

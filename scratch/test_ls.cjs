@@ -10,7 +10,7 @@ const chrome = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe
   '--user-data-dir=' + tmpDir,
   '--disable-web-security',
   '--disable-site-isolation-trials',
-  'https://pos-app-1759a.web.app/'
+  'https://nanasore.web.app/'
 ]);
 
 setTimeout(async () => {
@@ -31,7 +31,7 @@ setTimeout(async () => {
       ws.send(JSON.stringify({ id: mid, method: m, params: p }));
     });
     await new Promise(r => ws.on('open', r));
-    await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/' });
+    await send('Page.navigate', { url: 'https://nanasore.web.app/' });
     await new Promise(r => setTimeout(r, 4000));
     const urlRes = await send('Runtime.evaluate', { expression: 'window.location.href' });
     console.log('Current URL:', urlRes.result.value);

@@ -180,7 +180,7 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
             onClick={onBackToApp}
             className="py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
           >
-            Retour à Nana POS
+            Retour à Nanasore
           </button>
         )}
       </div>
@@ -512,7 +512,7 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
             <div className="space-y-0.5">
               <h3 className="text-base font-black text-white">Mission Validée et Clôturée avec Succès</h3>
               <p className="text-xs text-emerald-300">
-                Les fonds ont été débloqués. Merci d'avoir utilisé la garantie Tiers de Confiance Nana POS.
+                Les fonds ont été débloqués. Merci d'avoir utilisé la garantie Tiers de Confiance Nanasore.
               </p>
             </div>
           </section>
@@ -546,7 +546,7 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
 
         {/* Footer */}
         <footer className="text-center py-4 text-xs text-slate-500 space-y-1">
-          <p>© Nana POS Guarantee • Système de Tiers de Confiance et Séquestre Financier</p>
+          <p>© Nanasore Guarantee • Système de Tiers de Confiance et Séquestre Financier</p>
           <p className="text-[10px]">Toutes les transactions sont chiffrées et protégées.</p>
         </footer>
       </div>

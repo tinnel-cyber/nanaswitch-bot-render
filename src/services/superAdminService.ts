@@ -1,7 +1,7 @@
 /**
  * Service Central Super Admin
  * Gère la persistance synchrone et asynchrone absolue dans Firebase Realtime Database
- * (https://pos-app-1759a-default-rtdb.firebaseio.com/super_admin_settings.json)
+ * (https://nanasore-default-rtdb.firebaseio.com/super_admin_settings.json)
  * ainsi que dans le localStorage et le bus d'événements de l'application (superAdminUpdated).
  */
 
@@ -187,7 +187,7 @@ export async function verifySuperAdminPrivileges(userArg?: FirebaseUser | null):
   // 3. Vérification dans Firebase Realtime Database : /admins/{uid}.json avec jeton sécurisé
   try {
     const token = await getRtdbAuthToken();
-    const rtdbUrl = `https://pos-app-1759a-default-rtdb.firebaseio.com/admins/${uid}.json${token ? `?auth=${encodeURIComponent(token)}` : ''}`;
+    const rtdbUrl = `https://nanasore-default-rtdb.firebaseio.com/admins/${uid}.json${token ? `?auth=${encodeURIComponent(token)}` : ''}`;
     const res = await fetch(rtdbUrl, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },

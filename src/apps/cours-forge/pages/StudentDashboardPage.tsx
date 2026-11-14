@@ -1,5 +1,4 @@
-import React from 'react';
-import { StudentDashboardView } from '../../../components/lms/student/StudentDashboardView';
+import { StudentDashboardView } from '../components/lms/student/StudentDashboardView';
 
 interface StudentDashboardPageProps {
   onBackToApp?: () => void;

@@ -4,7 +4,7 @@ import fs from 'fs';
 
 const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const port = 9228;
-const targetUrl = 'https://pos-app-1759a.web.app/?view=dashboard';
+const targetUrl = 'https://nanasore.web.app/?view=dashboard';
 
 async function run() {
   const chromeProcess = spawn(chromePath, [

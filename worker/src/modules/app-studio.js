@@ -6,7 +6,7 @@
 export async function handleStudioModule(request, env, ctx) {
   const url = new URL(request.url);
   const hostname = url.hostname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.com");
 
   // 1. Détection du mode LECTURE (GET) pour l'Edge Caching (Cache Cloudflare)
   if (request.method === "GET") {

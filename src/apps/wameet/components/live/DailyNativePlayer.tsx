@@ -97,8 +97,36 @@ export const DailyNativePlayer: React.FC<DailyNativePlayerProps> = React.memo(({
               });
           }
 
+          // Récupération dynamique d'un Meeting Token éphémère auprès du backend
+          let meetingToken: string | undefined = undefined;
+          try {
+            const rawRoomName = roomUrl.split('daily.co/')[1]?.split('?')[0] || '';
+            if (rawRoomName) {
+              const tokenRes = await fetch('/api/daily/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  roomName: rawRoomName,
+                  isOwner,
+                  userName,
+                  durationSeconds: 7200
+                })
+              });
+              if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                meetingToken = tokenData.token;
+              }
+            }
+          } catch (tErr) {
+            console.warn('[DAILY] Token éphémère non obtenu, connexion publique directe:', tErr);
+          }
+
           if (callFrame && typeof (callFrame as any).join === 'function') {
-            callFrame.join({ url: roomUrl, userName });
+            const joinOptions: any = { url: roomUrl, userName };
+            if (meetingToken) {
+              joinOptions.token = meetingToken;
+            }
+            callFrame.join(joinOptions);
           }
         } catch (err) {
           console.warn('[DAILY] createFrame error:', err);

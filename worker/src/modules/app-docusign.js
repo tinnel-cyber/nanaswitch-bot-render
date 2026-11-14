@@ -7,7 +7,7 @@
 export async function handleDocuSignModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.com");
 
   // 1. Contrôle du jeton de signature ou vérification d'accès rapide
   if (path.startsWith("/docusign/") || path.startsWith("/api/doc-verify/")) {

@@ -700,7 +700,7 @@ export interface OrangeMoneyBurkinaConfig {
 
 export interface InternationalRecipientConfig {
   phone: string; // e.g. "+226 65 56 58 05"
-  name: string; // e.g. "Nana POS Trésorerie"
+  name: string; // e.g. "Nanasore Trésorerie"
   country: string; // e.g. "Burkina Faso"
 }
 
@@ -1512,8 +1512,9 @@ export interface VideoLessonNodeConfig {
   aiScript?: string;
   aiAvatarModel?: string; // 'ibrahim_konkobo_hd' | 'fintech_instructor_female' | 'telecom_expert_male'
   aiVoiceTone?: 'PROFESSIONAL' | 'DYNAMIC' | 'ACADEMIC';
-  aiRenderStatus?: 'IDLE' | 'GENERATING' | 'READY';
+  aiRenderStatus?: 'IDLE' | 'GENERATING' | 'READY' | 'ERROR';
   aiVideoUrl?: string;
+  aiErrorMessage?: string;
 }
 
 export interface CourseNodeData extends Record<string, unknown> {

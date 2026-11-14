@@ -263,15 +263,9 @@ export async function generateAIMedia(params: {
     }
   }
 
-  // 3. Moteur de repli résilient (Direct Firestore) si le service distant n'a pas répondu
+  // 3. Traitement si le service distant n'a pas répondu
   if (params.type === 'video' && !finalMediaUrl) {
-    provider = 'nana-vidnoz-avatar';
-    const sampleVideos = [
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
-    ];
-    finalMediaUrl = sampleVideos[Math.floor(Math.random() * sampleVideos.length)];
+    throw new Error("Le service de génération vidéo IA n'a retourné aucun fichier média exploitable. Veuillez vérifier la connectivité ou vos quotas API.");
   } else if (params.type === 'text' && !textContent) {
     provider = 'gemini-3.8-flash';
     textContent = `✨ ${params.prompt.trim().toUpperCase()} — Synthèse NaNa Studio IA :\n\n` +

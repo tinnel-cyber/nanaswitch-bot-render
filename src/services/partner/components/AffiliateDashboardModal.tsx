@@ -352,7 +352,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `QRCode_NanaPOS_${affiliateCode}.png`;
+      a.download = `QRCode_Nanasore_${affiliateCode}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -512,7 +512,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Recommandez NaNa POS à vos confrères commerçants et percevez des commissions récurrentes à vie.
+                Recommandez Nanasore à vos confrères commerçants et percevez des commissions récurrentes à vie.
               </p>
             </div>
           </div>
@@ -1050,7 +1050,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                               <button
                                 onClick={() => {
                                   playTapBeep();
-                                  const text = `Bonjour ${store.ownerName}, j'espère que l'utilisation de NaNa POS dans votre boutique "${store.storeName}" se passe bien ! Besoin d'une astuce sur la caisse ou le stock ?`;
+                                  const text = `Bonjour ${store.ownerName}, j'espère que l'utilisation de Nanasore dans votre boutique "${store.storeName}" se passe bien ! Besoin d'une astuce sur la caisse ou le stock ?`;
                                   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
                                 }}
                                 className="p-2 rounded-xl bg-slate-900 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 border border-slate-800 hover:border-emerald-500/40 transition-colors inline-flex items-center justify-center cursor-pointer"
@@ -1196,7 +1196,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                               </td>
 
                               <td className="py-3.5 px-4 text-slate-400 text-[11px] max-w-xs truncate">
-                                {item.adminNotes || 'En cours de validation par la centrale NaNa POS'}
+                                {item.adminNotes || 'En cours de validation par la centrale Nanasore'}
                               </td>
                             </tr>
                           ))}
@@ -1222,7 +1222,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                 <div className="p-3 bg-white rounded-2xl shadow-xl shrink-0 flex flex-col items-center">
                   <img
                     src={qrCodeUrl}
-                    alt="QR Code Parrainage NaNa POS"
+                    alt="QR Code Parrainage Nanasore"
                     className="w-40 h-40 object-contain rounded-lg"
                   />
                   <span className="text-[10px] font-black text-slate-800 mt-2 font-mono">
@@ -1402,7 +1402,7 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                 <div className="max-w-2xl space-y-2">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
                     <BarChart3 className="w-3.5 h-3.5" />
-                    Simulateur de Rente Récurrente NaNa POS
+                    Simulateur de Rente Récurrente Nanasore
                   </div>
                   <h3 className="text-xl sm:text-2xl font-black text-white">
                     Calculez vos revenus mensuels prévisionnels

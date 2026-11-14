@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { db } from '../../../firebaseConfig';
-import { 
-  collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, serverTimestamp 
-} from 'firebase/firestore';
+import { supabase } from '../../../lib/supabase';
 import { 
   X, Video, Radio, Calendar, Sparkles, Share2, Copy, Check, 
   ExternalLink, PhoneCall, Globe, AlertCircle, RefreshCw,
@@ -265,8 +262,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   };
 
-  // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD
-  const handleAutoGenerateRoomUrl = useCallback((targetPlatform: LivePlatform) => {
+  // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD (Daily.co)
+  const handleAutoGenerateRoomUrl = useCallback(async (targetPlatform: LivePlatform) => {
     playTapBeep();
     const roomId = generateUniqueRoomId();
     if (targetPlatform === 'jitsi') {
@@ -274,9 +271,31 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMeetingUrl(url);
       setStreamUrl(url);
     } else if (targetPlatform === 'daily') {
-      const url = `https://nanasore.daily.co/${roomId}`;
-      setMeetingUrl(url);
-      setStreamUrl(url);
+      const roomName = `webinar-${roomId}`;
+      let finalDailyUrl = `https://nanasore.daily.co/${roomName}`;
+
+      try {
+        const resp = await fetch('/api/daily/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomName,
+            durationSeconds: 7200 // 2h pour webinaire
+          })
+        });
+
+        if (resp.ok) {
+          const roomData = await resp.json();
+          if (roomData.url) {
+            finalDailyUrl = roomData.url;
+          }
+        }
+      } catch (callErr) {
+        console.warn("[DAILY] Provisioning via API en repli:", callErr);
+      }
+
+      setMeetingUrl(finalDailyUrl);
+      setStreamUrl(finalDailyUrl);
     }
   }, [generateUniqueRoomId]);
 
@@ -291,14 +310,37 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   const loadMyWebinars = useCallback(async () => {
     setLoadingList(true);
     let loaded: LiveWebinar[] = [];
+
+    // 1. Lecture prioritaire depuis Supabase public.live_sessions
     try {
-      const q = query(collection(db, 'webinars'), where('merchantId', '==', merchantId));
-      const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((docSnap) => {
-        loaded.push({ id: docSnap.id, ...(docSnap.data() as any) } as LiveWebinar);
-      });
-    } catch (e) {
-      console.warn("Lecture Firestore webinars fallback:", e);
+      const { data: supaRows, error: sErr } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .or(`host_id.eq.${merchantId},tenant_id.eq.${merchantId}`)
+        .order('created_at', { ascending: false });
+
+      if (!sErr && supaRows && supaRows.length > 0) {
+        loaded = supaRows.map((row: any) => ({
+          id: row.id,
+          merchantId: row.host_id || merchantId,
+          storeName: storeName || 'Boutique Partenaire',
+          title: row.title,
+          description: row.description || '',
+          date: row.created_at || new Date().toISOString(),
+          platform: 'daily',
+          roomMode: 'WEBINAR',
+          status: row.status as any,
+          socialStreamUrl: row.stream_url,
+          meetingUrl: row.stream_url,
+          isPaid: false,
+          price: 0,
+          currency: 'FCFA',
+          createdAt: new Date(row.created_at).getTime(),
+          registeredCount: row.viewer_count || 0
+        }));
+      }
+    } catch (supaErr) {
+      console.warn("Lecture Supabase live_sessions en repli:", supaErr);
     }
 
     // Récupération du cache local pour résilience
@@ -388,9 +430,10 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setMeetingUrl(url);
       setStreamUrl(url);
     } else if (template.platform === 'daily') {
-      const url = `https://nanasore.daily.co/${generateUniqueRoomId()}`;
-      setMeetingUrl(url);
-      setStreamUrl(url);
+      setMeetingUrl('');
+      setStreamUrl('');
+      // Déclencher le provisionnement réel auprès du serveur
+      handleAutoGenerateRoomUrl('daily');
     } else {
       setMeetingUrl('');
       setStreamUrl('');
@@ -442,13 +485,30 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         registeredCount: 0
       };
 
-      let liveId = '';
+      let liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+
+      // 1. Enregistrement prioritaire dans Supabase SQL (public.live_sessions)
       try {
-        const docRef = await addDoc(collection(db, 'webinars'), newWebinarData);
-        liveId = docRef.id;
-      } catch (fErr: any) {
-        console.warn("[WEBINAR] Enregistrement direct Firestore différé, activation du mode local résilient:", fErr);
-        liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+        const { data: supaData, error: supaErr } = await supabase
+          .from('live_sessions')
+          .insert({
+            host_id: merchantId || 'merchant-default',
+            tenant_id: merchantId || 'tenant-default',
+            title: title.trim(),
+            description: description.trim(),
+            status: 'scheduled',
+            is_live: false,
+            stream_url: finalStreamUrl || finalMeetingUrl,
+            viewer_count: 0
+          })
+          .select('id')
+          .single();
+
+        if (!supaErr && supaData?.id) {
+          liveId = supaData.id;
+        }
+      } catch (sErr) {
+        console.warn("[WEBINAR] Sauvegarde Supabase SQL en repli:", sErr);
       }
 
       // 2. Mise à jour du cache local
@@ -464,10 +524,10 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         localStorage.setItem('nana_merchant_webinars', JSON.stringify(updatedLocalList));
       } catch {}
 
-      // 3. Génération du lien de la Landing Page publique
+      // 3. Génération du lien de la Landing Page publique (Domaine public officiel : nsore.shop)
       const origin = typeof window !== 'undefined' && window.location.origin 
-        ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
-        : 'https://nanasore.com';
+        ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nsore.shop')
+        : 'https://nsore.shop';
       const publicUrl = `${origin}/live/${liveId}`;
       setGeneratedLink(publicUrl);
       playValidationBeep();
@@ -486,8 +546,10 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     playTapBeep();
 
     try {
-      await deleteDoc(doc(db, 'webinars', id));
-    } catch {}
+      await supabase.from('live_sessions').delete().eq('id', id);
+    } catch (delErr) {
+      console.warn("[WEBINAR] Erreur suppression Supabase:", delErr);
+    }
 
     const updated = myWebinars.filter(w => w.id !== id);
     setMyWebinars(updated);
@@ -1503,7 +1565,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {generatedFunnels.map((funnel) => {
-                      const funnelUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${funnel.id}` : `https://nanasore.com/f/${funnel.id}`;
+                      const funnelUrl = typeof window !== 'undefined' ? `${window.location.origin}/f/${funnel.id}` : `https://nsore.shop/f/${funnel.id}`;
 
                       return (
                         <div 

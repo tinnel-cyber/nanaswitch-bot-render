@@ -340,12 +340,33 @@ export async function getTenantCourseBySlug(
       console.warn(`[MultiTenant] Erreur chargement leçons cours '${course.id}':`, lessonsError.message);
     }
 
+    let resolvedLessons: Lesson[] = (lessons || []) as Lesson[];
+    if (resolvedLessons.length === 0 && (course.settings?.modules || course.modules)) {
+      const courseModules = course.settings?.modules || course.modules || [];
+      let pos = 1;
+      courseModules.forEach((m: any) => {
+        (m.lessons || []).forEach((l: any) => {
+          resolvedLessons.push({
+            id: l.id || `l-${pos}`,
+            course_id: course.id,
+            tenant_id: tenantId,
+            title: l.title || `Leçon ${pos}`,
+            video_url: l.videoUrl || l.youtubeUrl || null,
+            content: l.description || l.summary || l.content || null,
+            position: pos++,
+            is_free_preview: Boolean(l.isFreePreview),
+            created_at: course.created_at || new Date().toISOString()
+          });
+        });
+      });
+    }
+
     return {
       course: {
         ...course,
         price: Number(course.price) || 0,
       },
-      lessons: (lessons || []) as Lesson[],
+      lessons: resolvedLessons,
     };
   } catch (err: any) {
     console.error(`[MultiTenant] Exception cours '${courseSlug}':`, err?.message);

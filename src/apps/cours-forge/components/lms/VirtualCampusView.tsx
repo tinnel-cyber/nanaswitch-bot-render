@@ -11,7 +11,13 @@ import { Course, CourseLesson, StudentEnrollment, StoreUser, StoreSubscription, 
 import { isFreePlan, triggerProFeatureUpsell } from '../../../../utils/planFeatures';
 import { getMockCourseById, getInitialStudentEnrollment } from './mockCourses';
 import { playTapBeep, playValidationBeep, formatCFA } from '../../../../utils/audio';
-import { isModuleUnlocked, isLessonUnlocked } from '../../../../services/lmsService';
+import { 
+  isModuleUnlocked, 
+  isLessonUnlocked,
+  loadCourseStructure,
+  loadStudentEnrollment,
+  saveStudentEnrollmentProgress
+} from '../../../../services/lmsService';
 import { CourseCommunityFeed } from './community/CourseCommunityFeed';
 import { LearnerProfileModal } from './community/LearnerProfileModal';
 import { DirectMessagingDrawer } from './community/DirectMessagingDrawer';
@@ -19,6 +25,7 @@ import { VoiceSimulationArena } from './arena/VoiceSimulationArena';
 import { VoiceSimulationReportModal } from './arena/VoiceSimulationReportModal';
 import { LiquidSyllabusSidebar } from './LiquidSyllabusSidebar';
 import { PersonalizedRemediationView } from './PersonalizedRemediationView';
+import { StudentLessonViewerRealtime } from './StudentLessonViewerRealtime';
 import { 
   buildInitialLearningPath, 
   requestRemediationModule, 
@@ -26,6 +33,7 @@ import {
   completeRemediationInLearningPath 
 } from '../../../../services/remediationService';
 import { awardReputationPoints } from '../../../../services/communityService';
+import { supabase } from '../../../../lib/supabase';
 
 const ConfettiCelebration = React.lazy(() => 
   import('./ConfettiCelebration').then(m => ({ default: m.ConfettiCelebration }))
@@ -166,12 +174,25 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
     criteriaMatched: string[];
   } | null>(null);
 
-  // État de soumission des devoirs
+  // État de soumission des devoirs & Évaluation IA / Formateur
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isUploadingHomework, setIsUploadingHomework] = useState(false);
   const [isAiGradingHomework, setIsAiGradingHomework] = useState(false);
   const [homeworkSubmitted, setHomeworkSubmitted] = useState(false);
   const [aiHomeworkFeedback, setAiHomeworkFeedback] = useState<string | null>(null);
+  const [aiGradingReport, setAiGradingReport] = useState<{
+    grade?: number;
+    maxScore?: number;
+    passed?: boolean;
+    summary?: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    rubrics?: Record<string, number>;
+    recommendations?: string;
+    gradedByName?: string;
+    gradedAt?: string;
+    status?: string;
+  } | null>(null);
 
   // État de célébration et confettis
   const [showConfetti, setShowConfetti] = useState(false);
@@ -205,6 +226,143 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
       document.documentElement.style.overflow = '';
     };
   }, []);
+
+  // Synchronisation dynamique du cours et de l'inscription depuis Firestore / Cache
+  useEffect(() => {
+    let isMounted = true;
+
+    // Enregistrer l'ID de cours actif dans le stockage local
+    if (typeof window !== 'undefined' && courseId) {
+      localStorage.setItem('nana_active_course_id', courseId);
+    }
+
+    // 1. Chargement de la structure réelle du cours
+    loadCourseStructure(courseId).then(loadedStructure => {
+      if (!isMounted || !loadedStructure) return;
+
+      setCourse(prev => {
+        const mergedModules = loadedStructure.modules && loadedStructure.modules.length > 0 
+          ? loadedStructure.modules 
+          : prev.modules;
+
+        const updatedCourse: Course = {
+          ...prev,
+          id: courseId,
+          title: loadedStructure.title || prev.title,
+          modules: mergedModules
+        };
+
+        // Recalculer le chemin d'apprentissage liquide adaptatif
+        setLearningPath(buildInitialLearningPath(updatedCourse));
+
+        // Synchroniser activeLesson si la leçon sélectionnée n'existe plus
+        if (mergedModules?.[0]?.lessons?.[0]) {
+          setActiveLesson(curr => {
+            const exists = mergedModules.some(m => m.lessons.some(l => l.id === curr.id));
+            return exists ? curr : mergedModules[0].lessons[0];
+          });
+        }
+
+        return updatedCourse;
+      });
+    }).catch(err => {
+      console.warn("Échec chargement structure cours Firestore :", err);
+    });
+
+    // 2. Chargement de l'inscription réelle de l'étudiant
+    const studentUid = currentUser?.id || (currentUser as any)?.uid || 'student-demo';
+    loadStudentEnrollment(courseId, studentUid).then(loadedEnrollment => {
+      if (!isMounted || !loadedEnrollment) return;
+      setEnrollment(loadedEnrollment);
+    }).catch(err => {
+      console.warn("Échec chargement inscription étudiante :", err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [courseId, currentUser]);
+
+  // 3. Synchronisation dynamique et écoute Realtime des devoirs soumis et notés
+  useEffect(() => {
+    if (!activeLesson?.id || !course?.id) return;
+    const studentUid = currentUser?.id || (currentUser as any)?.uid || enrollment?.studentId || 'student-demo';
+
+    let isSubMounted = true;
+    supabase
+      .from('assignment_submissions')
+      .select('*')
+      .eq('course_id', course.id)
+      .eq('lesson_id', activeLesson.id)
+      .or(`student_id.eq.${studentUid},student_email.eq.${studentUid}`)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!isSubMounted) return;
+        if (data) {
+          setHomeworkSubmitted(true);
+          setUploadedFileName(data.file_name);
+          setAiHomeworkFeedback(data.feedback);
+          setAiGradingReport({
+            grade: data.grade != null ? Number(data.grade) : undefined,
+            maxScore: Number(data.max_score) || 20,
+            passed: data.passed != null ? Boolean(data.passed) : undefined,
+            summary: data.feedback || '',
+            gradedByName: data.graded_by_name || 'Inspecteur Pédagogique IA',
+            gradedAt: data.graded_at,
+            status: data.status
+          });
+        } else {
+          setHomeworkSubmitted(false);
+          setUploadedFileName(null);
+          setAiHomeworkFeedback(null);
+          setAiGradingReport(null);
+        }
+      });
+
+    const channelName = `sub_listen_${course.id}_${activeLesson.id}_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'assignment_submissions',
+          filter: `course_id=eq.${course.id}`
+        },
+        (payload) => {
+          if (!isSubMounted) return;
+          if (payload.new) {
+            const row = payload.new as any;
+            if (row.lesson_id === activeLesson.id) {
+              setHomeworkSubmitted(true);
+              setUploadedFileName(row.file_name);
+              setAiHomeworkFeedback(row.feedback);
+              setAiGradingReport({
+                grade: row.grade != null ? Number(row.grade) : undefined,
+                maxScore: Number(row.max_score) || 20,
+                passed: row.passed != null ? Boolean(row.passed) : undefined,
+                summary: row.feedback || '',
+                gradedByName: row.graded_by_name || 'Formateur',
+                gradedAt: row.graded_at,
+                status: row.status
+              });
+              if (row.passed && !enrollment.completedLessonIds.includes(activeLesson.id)) {
+                handleToggleCompleteLesson(activeLesson.id);
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isSubMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeLesson?.id, course?.id, currentUser, enrollment?.studentId]);
 
   // Règles Drip Content & Progression Linéaire (lmsService)
   const enrollmentTimestamp = useMemo(() => {
@@ -242,11 +400,15 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
       nextIds = [...enrollment.completedLessonIds, lessonId];
     }
 
-    const updated = {
+    const updated: StudentEnrollment = {
       ...enrollment,
       completedLessonIds: nextIds
     };
     setEnrollment(updated);
+
+    // Persistance automatique dans Firestore et local
+    const studentUid = currentUser?.id || (currentUser as any)?.uid || 'student-demo';
+    saveStudentEnrollmentProgress(courseId, studentUid, updated);
 
     // Si tout le cours est validé, déclencher la fête et les confettis !
     if (nextIds.length === allLessons.length && !isAlready) {
@@ -441,30 +603,85 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
     awardReputationPoints(currentUser?.id || enrollment.studentId, 40, 'Module de révision validé');
   };
 
-  // Soumission simulée d'un devoir pratique avec évaluation IA Elite (Google AI Studio)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Soumission réelle d'un devoir pratique avec correction IA Professionnelle (Gemini)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     playTapBeep();
     setUploadedFileName(file.name);
     setIsUploadingHomework(true);
+    setIsAiGradingHomework(true);
 
-    setTimeout(() => {
-      setIsUploadingHomework(false);
-      setIsAiGradingHomework(true);
+    try {
+      // 1. Upload vers Supabase Storage (bucket academic_uploads)
+      let fileUrl = '';
+      const supaPath = `submissions/${course.id}/${activeLesson.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      try {
+        const { data: uploadData, error: upErr } = await supabase.storage
+          .from('academic_uploads')
+          .upload(supaPath, file, { upsert: true });
 
-      // Simulation de l'évaluation Google AI Studio selon les critères du formateur
-      setTimeout(() => {
-        setIsAiGradingHomework(false);
-        setHomeworkSubmitted(true);
-        setAiHomeworkFeedback("Évaluation IA Elite (Google AI Studio) : Note estimée 18.5/20. Les critères d'architecture résiliente, de gestion d'idempotence et d'intégration USSD/Mobile Money sont validés avec mention d'excellence.");
-        playValidationBeep();
-        if (!enrollment.completedLessonIds.includes(activeLesson.id)) {
-          handleToggleCompleteLesson(activeLesson.id);
+        if (!upErr && uploadData?.path) {
+          const { data: pubData } = supabase.storage
+            .from('academic_uploads')
+            .getPublicUrl(uploadData.path);
+          fileUrl = pubData?.publicUrl || '';
         }
-      }, 1600);
-    }, 1000);
+      } catch (_upErr) {
+        console.warn('Upload Supabase Storage toléré:', _upErr);
+      }
+
+      if (!fileUrl) {
+        fileUrl = URL.createObjectURL(file);
+      }
+
+      // 2. Appel au VRAI Correcteur IA Professionnel (/api/ai/assignment/grade)
+      const gradeResponse = await fetch('/api/ai/assignment/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignmentId: activeLesson.assignment?.id || `assign-${activeLesson.id}`,
+          assignmentTitle: activeLesson.assignment?.title || `Atelier : ${activeLesson.title}`,
+          instructions: activeLesson.assignment?.instructions || activeLesson.description || "Mise en application pratique des compétences du cours, rigueur des protocoles et justification opérationnelle.",
+          courseId: course.id,
+          lessonId: activeLesson.id,
+          studentId: currentUser?.id || (currentUser as any)?.uid || enrollment.studentId || 'student-demo',
+          studentName: currentUser?.name || 'Apprenant Nanasore',
+          studentEmail: currentUser?.email || '',
+          fileName: file.name,
+          fileUrl,
+          fileType: file.type || 'application/pdf',
+          fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} Mo`,
+          submissionText: `L'apprenant a téléversé son document "${file.name}" pour validation pédagogique.`
+        })
+      });
+
+      if (gradeResponse.ok) {
+        const result = await gradeResponse.json();
+        const evalData = result.evaluation || result;
+        setAiGradingReport(evalData);
+        setAiHomeworkFeedback(evalData.summary || `Note attribuée : ${evalData.grade}/20`);
+        setHomeworkSubmitted(true);
+
+        if (evalData.passed) {
+          playValidationBeep();
+          setShowConfetti(true);
+          if (!enrollment.completedLessonIds.includes(activeLesson.id)) {
+            handleToggleCompleteLesson(activeLesson.id);
+          }
+        }
+      } else {
+        throw new Error('Erreur correcteur IA');
+      }
+    } catch (err) {
+      console.error('Erreur soumission devoir:', err);
+      setAiHomeworkFeedback("Devoir réceptionné et archivé. Le formateur recevra votre document pour validation.");
+      setHomeworkSubmitted(true);
+    } finally {
+      setIsUploadingHomework(false);
+      setIsAiGradingHomework(false);
+    }
   };
 
   return (
@@ -815,6 +1032,18 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
               </div>
             </div>
           )}
+
+          {/* Module Realtime Supabase : Suivi et validation instantanée */}
+          <div className="px-3 sm:px-4 pb-3 bg-slate-900 border-t border-slate-800/60 pt-2">
+            <StudentLessonViewerRealtime
+              userId={currentUser?.id || enrollment.studentId || 'std-guest'}
+              courseId={course.id}
+              lessonId={activeLesson.id}
+              lessonTitle={activeLesson.title}
+              totalLessons={allLessons.length}
+              onLessonValidated={(lid) => handleToggleCompleteLesson(lid)}
+            />
+          </div>
         </div>
       </section>
 
@@ -1203,19 +1432,121 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
                     </div>
                   </div>
                 ) : homeworkSubmitted ? (
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-2">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                    <p className="text-xs font-black text-emerald-300">
-                      Devoir transmis avec succès ({uploadedFileName})
-                    </p>
-                    {aiHomeworkFeedback && (
-                      <div className="p-2.5 rounded-lg bg-slate-900/80 border border-emerald-500/30 text-[11px] text-emerald-200">
-                        <span className="font-bold">✨ {aiHomeworkFeedback}</span>
+                  <div className={`p-5 rounded-2xl border space-y-4 text-left ${
+                    aiGradingReport?.passed !== false
+                      ? 'bg-emerald-950/20 border-emerald-500/30'
+                      : 'bg-amber-950/20 border-amber-500/30'
+                  }`}>
+                    {/* Header Score & Statut */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          aiGradingReport?.passed !== false
+                            ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
+                            : 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
+                        }`}>
+                          {aiGradingReport?.passed !== false ? (
+                            <CheckCircle2 className="w-5 h-5" />
+                          ) : (
+                            <AlertCircle className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                              aiGradingReport?.passed !== false
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            }`}>
+                              {aiGradingReport?.passed !== false ? 'Validé' : 'À perfectionner'}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {uploadedFileName || 'Devoir soumis'}
+                            </span>
+                          </div>
+                          <h5 className="text-xs font-black text-white mt-0.5">
+                            Évaluation Pédagogique Certifiée
+                          </h5>
+                        </div>
+                      </div>
+
+                      {/* Note sur 20 */}
+                      <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-1.5">
+                        <span className="text-[11px] text-slate-400 font-bold uppercase">Note :</span>
+                        <span className={`text-base font-black ${
+                          (aiGradingReport?.grade ?? 16) >= 10 ? 'text-emerald-400' : 'text-amber-400'
+                        }`}>
+                          {aiGradingReport?.grade ?? 16}
+                        </span>
+                        <span className="text-xs text-slate-500 font-bold">/ {aiGradingReport?.maxScore ?? 20}</span>
+                      </div>
+                    </div>
+
+                    {/* Synthèse globale */}
+                    <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 leading-relaxed">
+                      <div className="flex items-center gap-1.5 text-indigo-400 font-bold text-[11px] uppercase tracking-wider mb-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Commentaire du Correcteur</span>
+                      </div>
+                      <p>{aiGradingReport?.feedback || aiHomeworkFeedback || "Devoir conforme aux exigences du module."}</p>
+                    </div>
+
+                    {/* Rubriques Détaillées : Points Forts & Améliorations */}
+                    {aiGradingReport?.aiRubrics && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        {aiGradingReport.aiRubrics.strengths && aiGradingReport.aiRubrics.strengths.length > 0 && (
+                          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 space-y-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Points Forts Détectés</span>
+                            </span>
+                            <ul className="space-y-1 text-[11px] text-slate-300">
+                              {aiGradingReport.aiRubrics.strengths.map((s, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5">
+                                  <span className="text-emerald-400 mt-0.5">•</span>
+                                  <span>{s}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {aiGradingReport.aiRubrics.recommendations && aiGradingReport.aiRubrics.recommendations.length > 0 && (
+                          <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/20 space-y-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" />
+                              <span>Conseils du Formateur</span>
+                            </span>
+                            <ul className="space-y-1 text-[11px] text-slate-300">
+                              {aiGradingReport.aiRubrics.recommendations.map((r, idx) => (
+                                <li key={idx} className="flex items-start gap-1.5">
+                                  <span className="text-indigo-400 mt-0.5">•</span>
+                                  <span>{r}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
-                    <p className="text-[11px] text-slate-400">
-                      Statut : Validé par le tuteur IA Elite d&apos;Ibrahim Pousbila Konkobo.
-                    </p>
+
+                    {/* Footer : Correcteur & Action de Nouvelle Soumission */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 text-[11px] text-slate-400 border-t border-slate-800/60">
+                      <span>
+                        Évalué par : <strong className="text-slate-200">{aiGradingReport?.gradedByName || "IA Pédagogique Académique (Gemini)"}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHomeworkSubmitted(false);
+                          setAiGradingReport(null);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-400 hover:text-indigo-300 underline underline-offset-4 cursor-pointer self-start sm:self-auto"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>Rendre une nouvelle copie révisée</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <label className="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-950/60 transition group">

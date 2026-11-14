@@ -213,8 +213,8 @@ export const INITIAL_REELS: WameetReelItem[] = [
   // 4. AFFICHE PROMOTIONNELLE DE TEST #2 (9:16)
   {
     id: 'reel-poster-2',
-    authorName: 'NaNa POS Pro • Afrique',
-    authorHandle: '@nanapos.officiel',
+    authorName: 'Nanasore Pro • Afrique',
+    authorHandle: '@nanasore.officiel',
     authorAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=300&auto=format&fit=crop&q=80',
     authorBadge: '🚀 Affiche Promo SaaS',
     isFollowing: false,
@@ -224,9 +224,9 @@ export const INITIAL_REELS: WameetReelItem[] = [
     thumbnailUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=900&auto=format&fit=crop&q=85',
     title: '⚡ AFFICHE PROMO : Digitalisez votre boutique en 3 minutes chrono !',
     description:
-      'Fini les cahiers de dettes perdus et les erreurs de caisse : activez votre terminal NaNa POS Pro avec suivi des ventes en temps réel.',
-    hashtags: ['#NaNaPOS', '#AffichePromo', '#FintechAfrique', '#CommerceModerne'],
-    audioTrackName: 'Son Officiel • NaNa POS Pro',
+      'Fini les cahiers de dettes perdus et les erreurs de caisse : activez votre terminal Nanasore Pro avec suivi des ventes en temps réel.',
+    hashtags: ['#Nanasore', '#AffichePromo', '#FintechAfrique', '#CommerceModerne'],
+    audioTrackName: 'Son Officiel • Nanasore Pro',
     category: 'IDEAS_BUSINESS',
     likesCount: 634,
     isLiked: false,
@@ -235,11 +235,11 @@ export const INITIAL_REELS: WameetReelItem[] = [
     sharesCount: 145,
     productTag: {
       id: 'shop-prod-promo-2',
-      name: 'Pack NaNa POS Pro Annuel + Formation Équipe Offerte',
+      name: 'Pack Nanasore Pro Annuel + Formation Équipe Offerte',
       priceFcfa: 29000,
       imageUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?w=400&auto=format&fit=crop&q=80',
-      sellerName: 'NaNa POS Pro • Afrique',
-      sellerHandle: '@nanapos.officiel'
+      sellerName: 'Nanasore Pro • Afrique',
+      sellerHandle: '@nanasore.officiel'
     },
     comments: [],
     createdAt: 'Il y a 50 min'

@@ -97,25 +97,48 @@ export const NanasoreLiveProductPopUp: React.FC<NanasoreLiveProductPopUpProps> =
             </h4>
 
             {/* Tarifs : Prix actuel en Bleu Royal */}
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm sm:text-base font-black text-[#4169E1] tabular-nums tracking-tight">
-                {formatCFA(product.price)}
-              </span>
-              {product.originalPrice && product.originalPrice > product.price && (
-                <span className="text-[11px] line-through text-slate-400 tabular-nums font-semibold">
-                  {formatCFA(product.originalPrice)}
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-sm sm:text-base font-black text-[#4169E1] tabular-nums tracking-tight">
+                  {formatCFA(product.price)}
+                </span>
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <span className="text-[11px] line-through text-slate-400 tabular-nums font-semibold">
+                    {formatCFA(product.originalPrice)}
+                  </span>
+                )}
+              </div>
+
+              {typeof product.stockLeft === 'number' && (
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  product.stockLeft <= 0
+                    ? 'bg-rose-100 text-rose-700 border border-rose-300'
+                    : product.stockLeft <= 3
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                }`}>
+                  {product.stockLeft <= 0 ? '🚫 Rupture Caisse' : `⚡ ${product.stockLeft} en stock`}
                 </span>
               )}
             </div>
 
-            {/* Bouton Acheter : Bleu Royal (#4169E1) */}
+            {/* Bouton Acheter : Bleu Royal (#4169E1) ou Verrouillé si Rupture */}
             <button
               type="button"
+              disabled={typeof product.stockLeft === 'number' && product.stockLeft <= 0}
               onClick={handleBuy}
-              className="w-full mt-1 py-2 px-3 rounded-xl bg-[#4169E1] hover:bg-[#3154b3] active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#4169E1]/30 border border-blue-400/30 transition-all cursor-pointer relative overflow-hidden group"
+              className={`w-full mt-1 py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition-all relative overflow-hidden group ${
+                typeof product.stockLeft === 'number' && product.stockLeft <= 0
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                  : 'bg-[#4169E1] hover:bg-[#3154b3] active:scale-95 text-white shadow-[#4169E1]/30 border border-blue-400/30 cursor-pointer'
+              }`}
             >
               <Zap className="w-3.5 h-3.5 text-white fill-white group-hover:scale-110 transition-transform" />
-              <span className="relative z-10 tracking-wide">Acheter en 1 Clic</span>
+              <span className="relative z-10 tracking-wide">
+                {typeof product.stockLeft === 'number' && product.stockLeft <= 0
+                  ? 'Épuisé en Boutique Physique'
+                  : 'Acheter en 1 Clic'}
+              </span>
             </button>
           </div>
         </div>

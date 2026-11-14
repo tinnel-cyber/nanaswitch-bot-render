@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export interface ContextualAuthProfile {
   id?: string;
-  firebase_uid: string;
+  auth_uid: string;
   email: string;
   full_name?: string;
   whatsapp_number?: string;
@@ -18,12 +18,12 @@ export interface ContextualAuthProfile {
  */
 export async function syncAuthProfileWithSupabase(params: {
   userId?: string;
-  firebaseUid?: string;
+  authUid?: string;
   email: string;
   fullName?: string;
   whatsapp?: string;
 }): Promise<ContextualAuthProfile> {
-  const resolvedUid = params.userId || params.firebaseUid || "";
+  const resolvedUid = params.userId || params.authUid || "";
   const { email, fullName, whatsapp } = params;
 
   // 1. Synchronisation prioritaire directe dans la table Supabase `profiles`
@@ -39,7 +39,7 @@ export async function syncAuthProfileWithSupabase(params: {
     if (supaProfile) {
       const profile: ContextualAuthProfile = {
         id: supaProfile.id,
-        firebase_uid: resolvedUid,
+        auth_uid: resolvedUid,
         email: supaProfile.email || email,
         full_name: supaProfile.full_name || fullName,
         whatsapp_number: supaProfile.whatsapp_number || whatsapp,
@@ -72,7 +72,7 @@ export async function syncAuthProfileWithSupabase(params: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        firebaseUid,
+        authUid,
         email,
         fullName: fullName || '',
         whatsapp: whatsapp || ''
@@ -85,7 +85,7 @@ export async function syncAuthProfileWithSupabase(params: {
         const p = json.profile;
         const profile: ContextualAuthProfile = {
           id: p.profile_id || p.id,
-          firebase_uid: resolvedUid,
+          auth_uid: resolvedUid,
           email: p.email || email,
           full_name: p.full_name || fullName,
           whatsapp_number: p.whatsapp_number || whatsapp,
@@ -115,7 +115,7 @@ export async function syncAuthProfileWithSupabase(params: {
 
   // Profil neutre par défaut en cas de latence réseau
   const fallbackProfile: ContextualAuthProfile = {
-    firebase_uid: resolvedUid,
+    auth_uid: resolvedUid,
     email,
     full_name: fullName,
     whatsapp_number: whatsapp,

@@ -17,7 +17,7 @@ async function main() {
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu',
-    'https://pos-app-1759a.web.app/'
+    'https://nanasore.web.app/'
   ]);
 
   await new Promise(r => setTimeout(r, 3000));
@@ -80,7 +80,7 @@ async function main() {
 
   // 1. NAVIGATE TO HUB BUILDER
   console.log('1. Navigating to /admin/hub-builder ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/admin/hub-builder' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/admin/hub-builder' });
   await new Promise(r => setTimeout(r, 6000));
 
   // Take screenshot of HubBuilder canvas
@@ -130,7 +130,7 @@ async function main() {
 
   // 4. NAVIGATE TO DASHBOARD
   console.log('4. Navigating to /dashboard ...');
-  await send('Page.navigate', { url: 'https://pos-app-1759a.web.app/?view=dashboard' });
+  await send('Page.navigate', { url: 'https://nanasore.web.app/?view=dashboard' });
   await new Promise(r => setTimeout(r, 6000));
 
   // Take screenshot of Dashboard

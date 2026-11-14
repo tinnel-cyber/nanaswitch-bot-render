@@ -47,7 +47,7 @@ import { fetchSyncedVipRooms } from '../../../../../services/wameetSyncService';
  * - Section 2 : "Salles de Cours & Masterclass" (tons bleu nuit/argent, titre cours, nb étudiants, badge Gratuit/Premium).
  * - Micro-Interactions : hover:scale-105 transition-transform, effet de brillance (shimmer).
  * 
- * PROMPT 30 : Synchronisation temps réel des espaces créés depuis NaNa POS via WebSockets
+ * PROMPT 30 : Synchronisation temps réel des espaces créés depuis Nanasore via WebSockets
  */
 export const VipDiscoveryScreen: React.FC<VipDiscoveryScreenProps> = ({
   businessLounges = MOCK_VIP_BUSINESS_LOUNGES,
@@ -64,7 +64,7 @@ export const VipDiscoveryScreen: React.FC<VipDiscoveryScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<VipFilterCategory>('ALL');
 
-  // Listes dynamiques en direct (combinées avec le backend synchronisé NaNa POS)
+  // Listes dynamiques en direct (combinées avec le backend synchronisé Nanasore)
   const [liveLounges, setLiveLounges] = useState<VipBusinessLounge[]>(businessLounges);
   const [liveCourses, setLiveCourses] = useState<VipCourseRoom[]>(courseRooms);
 
@@ -84,7 +84,7 @@ export const VipDiscoveryScreen: React.FC<VipDiscoveryScreenProps> = ({
     }, 4500);
   };
 
-  // Synchronisation initiale et écoute WebSocket des créations depuis NaNa POS (Prompt 30)
+  // Synchronisation initiale et écoute WebSocket des créations depuis Nanasore (Prompt 30)
   useEffect(() => {
     // 1. Récupération des rooms synchronisées depuis l'API REST
     fetchSyncedVipRooms().then((syncedRooms) => {
@@ -186,7 +186,7 @@ export const VipDiscoveryScreen: React.FC<VipDiscoveryScreenProps> = ({
                   bannerUrl: room.bannerUrl
                 };
                 setLiveCourses((prev) => [newCourse, ...prev.filter((c) => c.id !== newCourse.id)]);
-                showToast(`🎓 Nouvelle Masterclass publiée depuis NaNa POS : ${room.title} !`);
+                showToast(`🎓 Nouvelle Masterclass publiée depuis Nanasore : ${room.title} !`);
               } else {
                 const newLounge: VipBusinessLounge = {
                   id: room.id,
@@ -209,7 +209,7 @@ export const VipDiscoveryScreen: React.FC<VipDiscoveryScreenProps> = ({
                   roomCode: room.roomCode
                 };
                 setLiveLounges((prev) => [newLounge, ...prev.filter((l) => l.id !== newLounge.id)]);
-                showToast(`👑 Nouveau Salon VIP publié depuis NaNa POS : ${room.title} !`);
+                showToast(`👑 Nouveau Salon VIP publié depuis Nanasore : ${room.title} !`);
               }
             }
           } catch {

@@ -1776,7 +1776,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
                       ) : (
                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-[10.5px] flex items-center gap-1.5 font-bold">
                           <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>Zone validée pour la livraison express Nana POS !</span>
+                          <span>Zone validée pour la livraison express Nanasore !</span>
                         </div>
                       )}
 

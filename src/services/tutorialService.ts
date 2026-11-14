@@ -370,7 +370,7 @@ export const DEFAULT_TUTORIALS: TutorialItem[] = [
   }
 ];
 
-const RTDB_TUTORIALS_URL = 'https://pos-app-1759a-default-rtdb.firebaseio.com/tutorials_config.json';
+const RTDB_TUTORIALS_URL = 'https://nanasore-default-rtdb.firebaseio.com/tutorials_config.json';
 const LOCAL_TUTORIALS_KEY = 'nana_tutorials_config';
 const LOCAL_COMPLETED_KEY = 'nana_completed_tutorials';
 

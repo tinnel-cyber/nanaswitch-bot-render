@@ -334,7 +334,7 @@ export const VipModulesAccordion: React.FC<VipModulesAccordionProps> = ({
                   <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-medium flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
-                      Ressource certifiée conforme au programme officiel d'évaluation NaNa POS.
+                      Ressource certifiée conforme au programme officiel d'évaluation Nanasore.
                     </span>
                   </div>
                 </div>

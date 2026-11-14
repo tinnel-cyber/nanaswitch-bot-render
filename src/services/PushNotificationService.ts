@@ -14,13 +14,13 @@ import {
 import { app, db } from '../firebase';
 
 export const CLOUDFLARE_WORKER_URL = 'https://proud-block-9615.pousbila04.workers.dev/';
-export const FCM_LOCAL_STORAGE_KEY = 'nana_fcm_token';
+export const WebPush_LOCAL_STORAGE_KEY = 'nana_fcm_token';
 export const FIREBASE_VAPID_KEY = 'BOJi7t22t5CwP1jETmiQAQ-1fn3w7Z8EltEIw_pfbTRB6p68AwMrFwPync8PNNVHwOxGAPBVxWlG6B3HSMXRLwo';
 
 let messagingInstance: Messaging | null = null;
 
 /**
- * Vérifie si Firebase Messaging et les Web Push Notifications sont supportés par le navigateur actuel.
+ * Vérifie si Supabase Messaging et les Web Push Notifications sont supportés par le navigateur actuel.
  */
 export async function isPushNotificationSupported(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -30,19 +30,19 @@ export async function isPushNotificationSupported(): Promise<boolean> {
   try {
     return await isSupported();
   } catch (error) {
-    console.warn('[PushNotificationService] Erreur lors du test de compatibilité FCM :', error);
+    console.warn('[PushNotificationService] Erreur lors du test de compatibilité WebPush :', error);
     return false;
   }
 }
 
 /**
- * Récupère ou instancie le SDK Messaging Firebase
+ * Récupère ou instancie le SDK Messaging Supabase
  */
-export async function getFirebaseMessaging(): Promise<Messaging | null> {
+export async function getSupabaseMessaging(): Promise<Messaging | null> {
   if (messagingInstance) return messagingInstance;
   const supported = await isPushNotificationSupported();
   if (!supported) {
-    console.warn('[PushNotificationService] FCM n’est pas disponible sur cet environnement.');
+    console.warn('[PushNotificationService] WebPush n’est pas disponible sur cet environnement.');
     return null;
   }
   try {
@@ -74,7 +74,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Récupère le jeton FCM de l'appareil courant via getToken(),
+ * Récupère le jeton WebPush de l'appareil courant via getToken(),
  * le stocke dans le localStorage et optionnellement dans le document Firestore du marchand.
  */
 export async function getOrRegisterFcmToken(options?: {
@@ -96,25 +96,22 @@ export async function getOrRegisterFcmToken(options?: {
     throw new Error(`Permission refusée par l’utilisateur (${permission}).`);
   }
 
-  const messaging = await getFirebaseMessaging();
+  const messaging = await getSupabaseMessaging();
   if (!messaging) {
-    throw new Error('Service Firebase Messaging indisponible.');
+    throw new Error('Service Supabase Messaging indisponible.');
   }
 
-  // 2. Enregistrement ou récupération du Service Worker dédié
+  // 2. Utilisation exclusive du Service Worker PWA unifié /sw.js
   let swRegistration: ServiceWorkerRegistration | undefined;
   if ('serviceWorker' in navigator) {
     try {
-      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      await navigator.serviceWorker.ready;
-      console.log('[PushNotificationService] Service Worker FCM enregistré :', swRegistration.scope);
+      swRegistration = (await navigator.serviceWorker.getRegistration('/')) || (await navigator.serviceWorker.ready);
     } catch (swErr) {
-      console.warn('[PushNotificationService] Erreur register SW dédié, fallback SW global :', swErr);
-      swRegistration = (await navigator.serviceWorker.getRegistration()) || undefined;
+      console.warn('[PushNotificationService] Récupération SW unifié :', swErr);
     }
   }
 
-  // 3. Récupération du Token FCM avec la clé VAPID Web Push
+  // 3. Récupération du Token WebPush avec la clé VAPID Web Push
   const activeVapidKey = options?.vapidKey || FIREBASE_VAPID_KEY;
   const tokenOptions: { vapidKey: string; serviceWorkerRegistration?: ServiceWorkerRegistration } = {
     vapidKey: activeVapidKey,
@@ -127,12 +124,12 @@ export async function getOrRegisterFcmToken(options?: {
     const token = await getToken(messaging, tokenOptions);
 
     if (!token) {
-      throw new Error('Aucun token d’enregistrement FCM reçu.');
+      throw new Error('Aucun token d’enregistrement WebPush reçu.');
     }
 
     // 4. Sauvegarde locale dans le navigateur
-    localStorage.setItem(FCM_LOCAL_STORAGE_KEY, token);
-    console.log('[PushNotificationService] Jeton FCM obtenu et mémorisé avec succès :', token);
+    localStorage.setItem(WebPush_LOCAL_STORAGE_KEY, token);
+    console.log('[PushNotificationService] Jeton WebPush obtenu et mémorisé avec succès :', token);
 
     // 5. Sauvegarde unitaire dans Firestore pour le marchand (Écrase systématiquement l'ancien token)
     if (options?.merchantId && db) {
@@ -141,8 +138,8 @@ export async function getOrRegisterFcmToken(options?: {
         await setDoc(
           merchantRef,
           {
-            fcmToken: token, // Remplace et écrase systématiquement l'unique jeton actif (pas de liste infinie)
-            fcmTokens: deleteField(), // Nettoyage de sécurité : suppression de tout tableau historique obsolète
+            pushToken: token, // Remplace et écrase systématiquement l'unique jeton actif (pas de liste infinie)
+            pushTokens: deleteField(), // Nettoyage de sécurité : suppression de tout tableau historique obsolète
             fcmUpdatedAt: serverTimestamp(),
             notificationsEnabled: true,
           },
@@ -159,30 +156,30 @@ export async function getOrRegisterFcmToken(options?: {
 
     return token;
   } catch (err: any) {
-    console.error('[PushNotificationService] Erreur lors de l’obtention du token FCM :', err);
+    console.error('[PushNotificationService] Erreur lors de l’obtention du token WebPush :', err);
     throw err;
   }
 }
 
 /**
- * Envoie une requête POST vers le Cloudflare Worker pour déclencher l'envoi de la notification Push FCM v1.
- * @param fcmToken Le jeton FCM du destinataire
+ * Envoie une requête POST vers le Cloudflare Worker pour déclencher l'envoi de la notification Push WebPush v1.
+ * @param pushToken Le jeton WebPush du destinataire
  * @param title Le titre de la notification
  * @param body Le message ou corps de la notification
  * @param data Données additionnelles facultatives (payload JSON)
  */
 export async function triggerNotification(
-  fcmToken: string,
+  pushToken: string,
   title: string,
   body: string,
   data?: Record<string, string>
 ): Promise<{ success: boolean; data?: any; error?: string }> {
-  if (!fcmToken) {
-    return { success: false, error: 'Token FCM manquant pour l’envoi de la notification.' };
+  if (!pushToken) {
+    return { success: false, error: 'Token WebPush manquant pour l’envoi de la notification.' };
   }
 
   const payload: Record<string, any> = {
-    fcmToken,
+    pushToken,
     title: title || 'NaNa Studio Notification',
     body: body || 'Test de notification push en temps réel.',
   };
@@ -273,24 +270,24 @@ export async function triggerWameetTopicNotification(
 }
 
 /**
- * Récupère le jeton FCM actuellement stocké en local dans le navigateur
+ * Récupère le jeton WebPush actuellement stocké en local dans le navigateur
  */
 export function getStoredFcmToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(FCM_LOCAL_STORAGE_KEY);
+  return localStorage.getItem(WebPush_LOCAL_STORAGE_KEY);
 }
 
 /**
- * Écoute les notifications FCM entrantes lorsque l'application est ouverte au premier plan (Foreground).
+ * Écoute les notifications WebPush entrantes lorsque l'application est ouverte au premier plan (Foreground).
  */
 export async function onForegroundNotification(
   callback: (payload: any) => void
 ): Promise<(() => void) | null> {
-  const messaging = await getFirebaseMessaging();
+  const messaging = await getSupabaseMessaging();
   if (!messaging) return null;
 
   return onMessage(messaging, (payload) => {
-    console.log('[PushNotificationService] Message FCM reçu au premier plan :', payload);
+    console.log('[PushNotificationService] Message WebPush reçu au premier plan :', payload);
     callback(payload);
   });
 }
@@ -360,7 +357,7 @@ export interface NewOrderNotificationParams {
     hasPhysicalRegister?: boolean;
     hasPhysicalPos?: boolean;
     name?: string;
-    fcmToken?: string;
+    pushToken?: string;
     [key: string]: any;
   };
   hasPhysicalRegister?: boolean;
@@ -496,15 +493,15 @@ export async function notifyMerchantNewOrder(
       reason: 'MERCHANT_MUST_INSTALL_WAMEET'
     };
 
-    const fcmToken = params.merchantProfile?.fcmToken || data.fcmToken || data.lastFcmToken;
+    const pushToken = params.merchantProfile?.pushToken || data.pushToken || data.lastFcmToken;
 
     if (hasPhysicalRegister) {
       // EXCEPTION MATÉRIELLE CONFIRMÉE : Le commerçant possède une caisse physique
       // Le blocage est levé : il reçoit la notification sur Nanasore ET sur Wameet (Dual Dispatch)
       console.log(`[PulseRouter] 🟢 Exception Matérielle validée pour le marchand ${merchantId} (Caisse Physique). Déblocage de la notification Nanasore.`);
-      if (fcmToken) {
+      if (pushToken) {
         nanasoreResult = await triggerNotification(
-          fcmToken,
+          pushToken,
           '🎉 Nouvelle commande reçue (Caisse Physique) !',
           body,
           {
@@ -514,8 +511,8 @@ export async function notifyMerchantNewOrder(
           }
         );
       } else {
-        console.warn(`[PulseRouter] Caisse physique détectée mais aucun fcmToken Nanasore trouvé pour ${merchantId}.`);
-        nanasoreResult = { success: false, skipped: true, reason: 'NO_NANASORE_FCM_TOKEN' };
+        console.warn(`[PulseRouter] Caisse physique détectée mais aucun pushToken Nanasore trouvé pour ${merchantId}.`);
+        nanasoreResult = { success: false, skipped: true, reason: 'NO_NANASORE_WebPush_TOKEN' };
       }
     } else {
       // BLOCAGE NANASORE ACTIF : Le commerçant n'a pas de caisse physique
@@ -561,7 +558,7 @@ export async function notifyMerchantNewOrder(
 // Export par défaut pour commodité d'import
 const PushNotificationService = {
   isPushNotificationSupported,
-  getFirebaseMessaging,
+  getSupabaseMessaging,
   requestNotificationPermission,
   getOrRegisterFcmToken,
   triggerNotification,

@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { httpsCallable } from 'firebase/functions';
-import { collection, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
-import { functions, db, auth, getAppFunctions } from '../../../../firebase';
 import { 
   Video, PhoneOff, Loader2, ShieldCheck, AlertCircle, 
   Sparkles, Maximize2, Minimize2, Check, RefreshCw 
@@ -95,11 +92,10 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
   const dailyCallFrameRef = useRef<any>(null);
 
   /**
-   * Génère ou récupère l'identifiant de l'acheteur
-   */
+    * Génère ou récupère l'identifiant de l'acheteur
+    */
   const getEffectiveBuyerId = useCallback((): string => {
     if (customBuyerId && customBuyerId.trim()) return customBuyerId.trim();
-    if (auth.currentUser?.uid) return auth.currentUser.uid;
     // ID anonyme unique persisté en session pour identifier le device acheteur
     const sessionKey = 'nana_buyer_anon_id';
     let storedId = sessionStorage.getItem(sessionKey);
@@ -135,38 +131,20 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
     try {
       const effectiveBuyerId = getEffectiveBuyerId();
 
-      // 1. Création dynamique de la salle Daily.co (API REST ou Cloud Function)
+      // 1. Création dynamique de la salle Daily.co via Daily API backend
       let roomUrl: string | undefined;
       let roomName: string | undefined;
-
-      try {
-        // Tentative Cloud Function si disponible
-        const createRoomFn = httpsCallable<any, CreateLiveRoomResponse>(functions, 'createLiveRoom');
-        const cloudFnResult = await createRoomFn({
-          buyerId: effectiveBuyerId,
-          productId,
-          productName,
-          sellerId
-        });
-        roomUrl = cloudFnResult.data?.roomUrl;
-        roomName = cloudFnResult.data?.roomName;
-      } catch (err: any) {
-        console.info('[LIVE] Utilisation du service DailyVideoService direct...', err?.message);
-      }
-
-      // Si la fonction n'est pas disponible ou échoue, création directe via Daily API backend
       let acquiredToken: string | undefined;
-      if (!roomUrl) {
-        const liveResult = await createLiveProductRoom(
-          productId || 'general',
-          productName,
-          sellerId,
-          false // Acheteur = Spectateur (is_owner: false)
-        );
-        roomUrl = liveResult.url;
-        roomName = liveResult.name;
-        acquiredToken = liveResult.token;
-      }
+
+      const liveResult = await createLiveProductRoom(
+        productId || 'general',
+        productName,
+        sellerId,
+        false // Acheteur = Spectateur (is_owner: false)
+      );
+      roomUrl = liveResult.url;
+      roomName = liveResult.name;
+      acquiredToken = liveResult.token;
 
       if (!roomUrl) {
         throw new Error("L'URL de la salle vidéo n'a pas pu être générée par le serveur.");
@@ -178,24 +156,22 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
 
       setLoadingStep('Envoi du signal de sonnerie au vendeur...');
 
-      // 2. Signalisation Firestore (La Sonnerie) : Création instantanée dans live_requests
-      const newRequestDocRef = doc(collection(db, 'live_requests'));
-      const requestId = newRequestDocRef.id;
+      // 2. Signalisation Supabase Realtime (La Sonnerie) : Enregistrement dans wameet_messages
+      const requestId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-      const liveRequestPayload = {
-        id: requestId,
-        status: 'ringing',
-        buyerId: effectiveBuyerId,
-        dailyRoomUrl: roomUrl,
-        roomName: roomName || null,
-        productId: productId || null,
-        productName: productName || null,
-        sellerId: sellerId || null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-
-      await setDoc(newRequestDocRef, liveRequestPayload);
+      try {
+        await supabase.from('wameet_messages').insert({
+          id: requestId,
+          type: 'call',
+          status: 'ringing',
+          sender_id: effectiveBuyerId,
+          text: productName,
+          media_url: roomUrl,
+          created_at: new Date().toISOString()
+        });
+      } catch (signalErr) {
+        console.warn('[BUYER LIVE CALL] Repli signalisation Supabase:', signalErr);
+      }
 
       // Incrémentation du compteur d'appels mensuel
       incrementMonthlyLiveCallsCount(sellerId);
@@ -323,7 +299,7 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
         // Connexion effective à la salle dynamique avec token éphémère si disponible
         const joinOptions: any = {
           url: dailyRoomUrl,
-          userName: auth.currentUser?.displayName || 'Acheteur'
+          userName: 'Acheteur'
         };
         if (meetingToken) {
           joinOptions.token = meetingToken;
@@ -360,16 +336,17 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
       dailyCallFrameRef.current = null;
     }
 
-    // 2. Mettre à jour le statut Firestore
+    // 2. Mettre à jour le statut Supabase
     if (activeRequestId) {
       try {
-        const requestRef = doc(db, 'live_requests', activeRequestId);
-        await updateDoc(requestRef, {
-          status: 'completed',
-          endedAt: serverTimestamp()
-        });
+        await supabase
+          .from('wameet_messages')
+          .update({
+            status: 'completed'
+          })
+          .eq('id', activeRequestId);
       } catch (e) {
-        console.warn('[HANGUP FIRESTORE ERROR]', e);
+        console.warn('[HANGUP SUPABASE ERROR]', e);
       }
     }
 

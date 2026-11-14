@@ -1,7 +1,7 @@
 import { SellerUser } from '../types';
 import { getOrCreateTabCasierSession } from './casierSessionService';
 
-const RTDB_BASE_URL = 'https://pos-app-1759a-default-rtdb.firebaseio.com';
+const RTDB_BASE_URL = 'https://nanasore-default-rtdb.firebaseio.com';
 
 /**
  * Génère le lien unique de connexion caissier
@@ -92,14 +92,14 @@ export function persistCashierSession(
     // 1. Clés standards multi-tenant et POS
     localStorage.setItem('tenantId', tenantId);
     localStorage.setItem('caisseId', caisseId);
-    localStorage.setItem('nana_pos_tenant_id', tenantId);
-    localStorage.setItem('nana_pos_caisse_id', caisseId);
+    localStorage.setItem('nanasore_tenant_id', tenantId);
+    localStorage.setItem('nanasore_caisse_id', caisseId);
     localStorage.setItem('nana_store_id', tenantId);
     
     if (cashier) {
       localStorage.setItem('nana_active_seller', JSON.stringify(cashier));
       if (cashier.pinCode || cashier.pin) {
-        localStorage.setItem('nana_pos_cashier_pin', cashier.pinCode || cashier.pin || '');
+        localStorage.setItem('nanasore_cashier_pin', cashier.pinCode || cashier.pin || '');
       }
       
       // Stocker également dans la liste des caissiers locaux du tenant pour persistance offline
@@ -153,7 +153,7 @@ export async function verifyCashierPin(
 
   if (typeof window !== 'undefined') {
     const localTenant = localStorage.getItem('tenantId') || 
-                        localStorage.getItem('nana_pos_tenant_id') || 
+                        localStorage.getItem('nanasore_tenant_id') || 
                         localStorage.getItem('nana_store_id');
     if (localTenant && !candidateTenants.includes(localTenant)) {
       candidateTenants.push(localTenant);

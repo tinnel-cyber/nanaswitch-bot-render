@@ -1,6 +1,6 @@
 /**
  * Script autoritaire de persistance de la logique de routes, préfixes de thèmes et nsore.shop dans Cloud Firestore
- * Projet : pos-app-1759a
+ * Projet : nanasore
  */
 
 import fs from 'fs';
@@ -12,7 +12,7 @@ const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 async function getAccessToken() {
   if (cfg.tokens.access_token) {
-    const testRes = await fetch('https://firestore.googleapis.com/v1/projects/pos-app-1759a/databases/(default)/documents/stores', {
+    const testRes = await fetch('https://firestore.googleapis.com/v1/projects/nanasore/databases/(default)/documents/stores', {
       headers: { Authorization: 'Bearer ' + cfg.tokens.access_token }
     });
     if (testRes.ok) return cfg.tokens.access_token;
@@ -92,7 +92,7 @@ function slugify(text) {
 }
 
 async function patchFirestoreDoc(token, collection, docId, fields) {
-  const url = `https://firestore.googleapis.com/v1/projects/pos-app-1759a/databases/(default)/documents/${collection}/${docId}`;
+  const url = `https://firestore.googleapis.com/v1/projects/nanasore/databases/(default)/documents/${collection}/${docId}`;
   
   // Convert fields to Firestore REST API format
   const firestoreFields = {};
@@ -139,7 +139,7 @@ async function main() {
   console.log('Jeton d\'accès Firebase Admin validé.');
 
   // 1. Lire tous les documents de 'stores'
-  const storesRes = await fetch('https://firestore.googleapis.com/v1/projects/pos-app-1759a/databases/(default)/documents/stores', {
+  const storesRes = await fetch('https://firestore.googleapis.com/v1/projects/nanasore/databases/(default)/documents/stores', {
     headers: { Authorization: 'Bearer ' + token }
   });
   const storesData = await storesRes.json();
@@ -234,7 +234,7 @@ async function main() {
 
   // Vérifier également les tenants existants (ex: promo.nana-store.ci)
   console.log('\n=== VÉRIFICATION TENANTS EXISTANTS ===');
-  const tenantsRes = await fetch('https://firestore.googleapis.com/v1/projects/pos-app-1759a/databases/(default)/documents/tenants', {
+  const tenantsRes = await fetch('https://firestore.googleapis.com/v1/projects/nanasore/databases/(default)/documents/tenants', {
     headers: { Authorization: 'Bearer ' + token }
   });
   const tenantsData = await tenantsRes.json();

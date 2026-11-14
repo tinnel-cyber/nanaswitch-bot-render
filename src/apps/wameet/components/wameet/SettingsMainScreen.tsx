@@ -184,7 +184,7 @@ SettingsGroup.displayName = 'SettingsGroup';
  * - Groupes de Paramètres :
  *   - Groupe 1 (Compte & Sécurité) : Clé, Cadenas, Double authentification (connecté au Prompt 35).
  *   - Groupe 2 (Portefeuille & Monétisation) : Wallet, Historique Wameet, Escrow.
- *   - Groupe 3 (Outils Créateur & Business) : Boutique, NaNa POS Sync, VIP Rooms, Heatmap CRM.
+ *   - Groupe 3 (Outils Créateur & Business) : Boutique, Nanasore Sync, VIP Rooms, Heatmap CRM.
  *   - Groupe 4 (Préférences & Médias) : Thème, Langue, Stockage.
  */
 export const SettingsMainScreen: React.FC<SettingsMainScreenProps> = ({
@@ -507,7 +507,7 @@ export const SettingsMainScreen: React.FC<SettingsMainScreenProps> = ({
         )}
 
         {/* =====================================================================
-            6. GROUPE 3 : OUTILS CRÉATEUR & BUSINESS (NANA POS, VIP ROOMS)
+            6. GROUPE 3 : OUTILS CRÉATEUR & BUSINESS (NANASORE, VIP ROOMS)
            ===================================================================== */}
         {(matches('créateur') ||
           matches('business') ||
@@ -532,7 +532,7 @@ export const SettingsMainScreen: React.FC<SettingsMainScreenProps> = ({
             <SettingsRow
               icon={<RefreshCw className="w-5 h-5 text-emerald-600" />}
               iconBgColor="bg-emerald-50"
-              title="Synchronisation NaNa POS Studio"
+              title="Synchronisation Nanasore Studio"
               subtitle="Pont M2M en temps réel vers votre caisse physique"
               badge="Connecté"
               badgeTone="emerald"

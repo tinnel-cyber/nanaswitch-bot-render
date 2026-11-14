@@ -1,5 +1,5 @@
 // Script pour insérer immédiatement 'pous' dans Firestore via l'API REST Firestore
-const projectId = 'pos-app-1759a';
+const projectId = 'nanasore';
 const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
 async function seedDocument(collection, docId, fields) {

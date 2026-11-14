@@ -11,14 +11,14 @@ import {
 export const INITIAL_SEARCH_HISTORY: string[] = [
   'Chaussures Ouaga',
   'Concert Live',
-  "Gâteau d'anniversaire NaNa POS",
+  "Gâteau d'anniversaire Nanasore",
   'Masterclass Vente 1-Clic',
   'Mode Wax Abidjan',
   'Farotage Wameet'
 ];
 
 export const TRENDING_SEARCH_SUGGESTIONS: string[] = [
-  '🔥 Vente Flash Live NaNa POS',
+  '🔥 Vente Flash Live Nanasore',
   '💡 Idées Business 18h',
   '📦 Livraison Express Yopougon',
   '🎵 Sons Afrobeat Viraux',
@@ -32,7 +32,7 @@ export const MOCK_CREATORS: CreatorProfile[] = [
     handle: '@awa.empire.bf',
     avatarUrl:
       'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&auto=format&fit=crop&q=80',
-    badge: '🛍️ E-Shop NaNa POS',
+    badge: '🛍️ E-Shop Nanasore',
     verified: true,
     isLiveNow: true,
     liveTitle: 'Vente Flash Chaussures & Sacs en Cuir Ouaga',
@@ -40,7 +40,7 @@ export const MOCK_CREATORS: CreatorProfile[] = [
     followersCount: 184500,
     likesCount: 1200000,
     salesCount: 4280,
-    bio: 'Boutique officielle à Ouagadougou & Abidjan. Livraison physique express 24h via NaNa POS.',
+    bio: 'Boutique officielle à Ouagadougou & Abidjan. Livraison physique express 24h via Nanasore.',
     category: 'Mode & E-Commerce',
     playlist: [
       {
@@ -70,7 +70,7 @@ export const MOCK_CREATORS: CreatorProfile[] = [
       },
       {
         id: 'play-3',
-        title: 'Masterclass : Comment lancer sa boutique physique avec NaNa POS',
+        title: 'Masterclass : Comment lancer sa boutique physique avec Nanasore',
         thumbnailUrl:
           'https://images.unsplash.com/photo-1556742049-0a67e55722ee?w=600&auto=format&fit=crop&q=80',
         viewsCount: 312000,
@@ -196,7 +196,7 @@ export const MOCK_SHORTS: ShortVideoResult[] = [
     likesCount: 12400,
     createdAt: 'Il y a 2h',
     createdAtTimestamp: Date.now() - 2 * 3600 * 1000,
-    hashtags: ['#ChaussuresOuaga', '#NaNaPOS', '#ModeAfricaine'],
+    hashtags: ['#ChaussuresOuaga', '#Nanasore', '#ModeAfricaine'],
     productTag: { name: 'Escarpins Royaux Ouaga', priceFcfa: 19500 }
   },
   {
@@ -250,7 +250,7 @@ export const MOCK_SHORTS: ShortVideoResult[] = [
 export const MOCK_LONGS: LongVideoResult[] = [
   {
     id: 'long-1',
-    title: 'Masterclass Complète : Bâtir son Empire de Vente 1-Clic Wameet & NaNa POS',
+    title: 'Masterclass Complète : Bâtir son Empire de Vente 1-Clic Wameet & Nanasore',
     creatorName: 'Dr. Idriss Kaboré',
     creatorHandle: '@idriss.academie',
     creatorAvatar:
@@ -379,7 +379,7 @@ export const MOCK_HASHTAGS: HashtagResult[] = [
   },
   {
     id: 'hash-3',
-    tag: '#NaNaPOS',
+    tag: '#Nanasore',
     viewsCount: 5400000,
     postsCount: 12400,
     isTrending: true

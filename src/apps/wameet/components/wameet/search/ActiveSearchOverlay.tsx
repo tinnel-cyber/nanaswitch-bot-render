@@ -47,7 +47,7 @@ export const ActiveSearchOverlay: React.FC<ActiveSearchOverlayProps> = ({
   trendingSuggestions = [
     'Chaussures Ouaga',
     'Concert Live',
-    'Vente Flash NaNa POS',
+    'Vente Flash Nanasore',
     'Idées Business 18h',
     'Sons Viraux Abidjan'
   ],

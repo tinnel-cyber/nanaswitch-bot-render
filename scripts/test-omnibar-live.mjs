@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import fs from 'fs';
 
 const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const targetUrl = 'https://pos-app-1759a.web.app/?view=dashboard';
+const targetUrl = 'https://nanasore.web.app/?view=dashboard';
 const port = 9222;
 
 async function run() {

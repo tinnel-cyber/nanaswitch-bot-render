@@ -11,8 +11,8 @@ services:
         value: production
       - key: PORT
         value: 10000
-      - key: FIREBASE_PROJECT_ID
-        value: pos-app-1759a
+      - key: PROJECT_ID
+        value: nanasore
       # Proxies Fixie dédiés avec priorité & fallback
       - key: SEBPAY_FIXIE_URL
         sync: false
@@ -77,3 +77,8 @@ services:
       # Master Vault
       - key: NANASWITCH_MASTER_KEY
         sync: false
+      # Daily.co WebRTC (Clé secrète configurée dans le Dashboard Render, JAMAIS sur GitHub)
+      - key: DAILY_API_KEY
+        sync: false
+      - key: DAILY_DOMAIN
+        value: nanasore

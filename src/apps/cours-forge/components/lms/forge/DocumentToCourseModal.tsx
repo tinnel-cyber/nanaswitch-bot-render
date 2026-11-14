@@ -45,15 +45,16 @@ Ce document traite des infrastructures USSD, des canaux SMS de confirmation de t
 Il détaille les procédures de sécurité contre la fraude, la mise en place de caisses hybrides synchronisées, et les stratégies de Live Shopping avec encaissement instantané.`
   );
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [pdfFileContent, setPdfFileContent] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
 
   const GENERATION_STEPS = [
     "Analyse sémantique et extraction des concepts clés...",
-    "Découpage en 5 modules pédagogiques d'excellence...",
+    "Découpage en modules pédagogiques d'excellence...",
     "Conception des quiz adaptatifs (Théorie de Réponse à l'Item N1-N5)...",
-    "Génération des leçons vidéo et supports PDF attachés...",
-    "Calcul de la disposition cartographique et des branches de remédiation..."
+    "Génération des leçons vidéo et scripts multimodaux...",
+    "Calcul de la disposition cartographique DAG et branches de remédiation..."
   ];
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,15 +62,25 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
     if (!file) return;
     playTapBeep();
     setPdfFileName(file.name);
+
+    // Extraction du contenu textuel si fichier texte/markdown/pdf
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setPdfFileContent(text);
+      }
+    };
+    reader.readAsText(file);
   };
 
-  const handleStartAutoBuild = () => {
+  const handleStartAutoBuild = async () => {
     if (inputMode === 'TEXT' && !textInput.trim()) {
       alert("Veuillez saisir ou coller un texte de formation.");
       return;
     }
     if (inputMode === 'PDF' && !pdfFileName) {
-      alert("Veuillez téléverser un fichier PDF.");
+      alert("Veuillez téléverser un fichier de formation.");
       return;
     }
 
@@ -77,188 +88,139 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
     setIsGenerating(true);
     setCurrentStep(0);
 
-    // Simulation progressive du pipeline IA
+    // Animation visuelle de progression par étapes
     const stepInterval = setInterval(() => {
-      setCurrentStep(prev => {
-        if (prev < GENERATION_STEPS.length - 1) {
-          return prev + 1;
-        } else {
-          clearInterval(stepInterval);
-          finalizeGeneration();
-          return prev;
-        }
+      setCurrentStep(prev => (prev < 3 ? prev + 1 : prev));
+    }, 1200);
+
+    try {
+      const payloadText = inputMode === 'TEXT' ? textInput.trim() : (pdfFileContent || `Fichier téléversé : ${pdfFileName}`);
+      const response = await fetch('/api/ai/document-to-course', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentText: payloadText,
+          fileName: pdfFileName || undefined
+        })
       });
-    }, 900);
+
+      clearInterval(stepInterval);
+      setCurrentStep(4);
+
+      if (!response.ok) {
+        throw new Error(`Erreur serveur (${response.status}) lors de l'analyse IA`);
+      }
+
+      const data = await response.json();
+      const courseStructure = data?.courseStructure;
+
+      if (!courseStructure || !Array.isArray(courseStructure.modules)) {
+        throw new Error("Format de cursus invalide retourné par l'IA");
+      }
+
+      finalizeGeneration(courseStructure);
+    } catch (err: any) {
+      clearInterval(stepInterval);
+      setIsGenerating(false);
+      console.error("Échec de la génération automatique du cours :", err);
+      alert(`La génération IA a rencontré une erreur : ${err?.message || 'Serveur indisponible'}.`);
+    }
   };
 
-  const finalizeGeneration = () => {
+  const finalizeGeneration = (courseStructure: { syllabusTitle: string; modules: any[] }) => {
     playCashChime();
 
-    // 5 Modules complets générés avec positions DAG harmonieuses
-    const generatedNodes: GeneratedGraphData['nodes'] = [
-      // Module 1 : Fondamentaux
-      {
-        id: 'node-gen-1',
-        type: 'videoLesson',
-        position: { x: 50, y: 80 },
-        data: {
-          id: 'node-gen-1',
-          type: 'videoLesson',
-          title: '1. Introduction aux Réseaux Télécom & Canaux USSD UEMOA',
-          durationMinutes: 18,
-          videoConfig: {
-            mode: 'AI_AVATAR',
-            title: '1. Introduction aux Réseaux Télécom & Canaux USSD UEMOA',
-            durationMinutes: 18,
-            aiAvatarModel: 'ibrahim_konkobo_hd',
-            isUploaded: true
-          }
-        }
-      },
-      {
-        id: 'node-gen-2',
-        type: 'pdfResource',
-        position: { x: 380, y: 80 },
-        data: {
-          id: 'node-gen-2',
-          type: 'pdfResource',
-          title: 'Guide Officiel : Normes Réglementaires BCEAO',
-          pdfFileName: 'Normes_Telecom_BCEAO.pdf',
-          pdfFileSize: '3.2 MB'
-        }
-      },
-      // Module 2 : Quiz Adaptatif 1 avec branche de remédiation
-      {
-        id: 'node-gen-3',
-        type: 'interactiveQuiz',
-        position: { x: 200, y: 260 },
-        data: {
-          id: 'node-gen-3',
-          type: 'interactiveQuiz',
-          title: 'Quiz Adaptatif : Régulation & Protocoles USSD',
-          quizPassingScore: 70,
-          quizQuestions: [
-            {
-              id: 'q-gen-1',
-              level: 1,
-              levelName: 'Niveau 1 : Rappel',
-              difficultyBeta: -1.2,
-              discriminationAlpha: 1.1,
-              questionText: "Quel canal GSM délivre des menus interactifs sans connexion data ?",
-              options: ['Le canal USSD (*144#)', 'Le protocole FTP', 'Le câble HDMI', 'Le protocole NFC'],
-              correctOptionIndex: 0,
-              hint: "Il fonctionne directement sur la voix GSM.",
-              explanation: "L'USSD opère en temps réel sur le réseau cellulaire de base."
-            },
-            {
-              id: 'q-gen-2',
-              level: 3,
-              levelName: 'Niveau 3 : Application',
-              difficultyBeta: 0.4,
-              discriminationAlpha: 1.6,
-              questionText: "Quelle mesure évite les doubles débits lors d'un paiement marchand ?",
-              options: ['La vérification de l\'ID Transaction unique', 'Le redémarrage du terminal', 'L\'encaissement en espèces', 'L\'envoi d\'un deuxième SMS'],
-              correctOptionIndex: 0,
-              hint: "Chaque transfert possède une référence irrévocable.",
-              explanation: "L'identifiant unique de transaction garantit l'unicité du règlement."
-            }
-          ]
-        }
-      },
-      // Nœud de Remédiation (si échec au quiz 1)
-      {
-        id: 'node-gen-remedial',
-        type: 'videoLesson',
-        position: { x: 420, y: 450 },
-        data: {
-          id: 'node-gen-remedial',
-          type: 'videoLesson',
-          title: 'Remédiation : Maîtrise Approfondie des Codes USSD',
-          durationMinutes: 12,
-          isRemedial: true,
-          videoConfig: {
-            mode: 'AI_AVATAR',
-            title: 'Remédiation : Maîtrise Approfondie des Codes USSD',
-            durationMinutes: 12,
-            isUploaded: true
-          }
-        }
-      },
-      // Module 3 : Intégration Caisse Hybride
-      {
-        id: 'node-gen-4',
-        type: 'videoLesson',
-        position: { x: 50, y: 450 },
-        data: {
-          id: 'node-gen-4',
-          type: 'videoLesson',
-          title: '2. Déploiement Caisse Hybride POS & Rapprochement',
-          durationMinutes: 25,
-          videoConfig: {
-            mode: 'MANUAL_UPLOAD',
-            title: '2. Déploiement Caisse Hybride POS & Rapprochement',
-            durationMinutes: 25,
-            isUploaded: true
-          }
-        }
-      },
-      // Module 4 : Session Live Daily.co
-      {
-        id: 'node-gen-5',
-        type: 'dailyLive',
-        position: { x: 200, y: 640 },
-        data: {
-          id: 'node-gen-5',
-          type: 'dailyLive',
-          title: 'Atelier en Direct : Questions-Réponses avec Ibrahim Konkobo',
-          dailyScheduledDate: 'Jeudi 18h00 GMT'
-        }
-      },
-      // Module 5 : Grand Examen Final
-      {
-        id: 'node-gen-6',
-        type: 'interactiveQuiz',
-        position: { x: 200, y: 820 },
-        data: {
-          id: 'node-gen-6',
-          type: 'interactiveQuiz',
-          title: 'Examen Final de Certification Professionnelle',
-          quizPassingScore: 80
-        }
-      }
-    ];
+    const generatedNodes: GeneratedGraphData["nodes"] = [];
+    const generatedEdges: GeneratedGraphData["edges"] = [];
+    let lastNodeId: string | null = null;
+    let nodeCounter = 1;
 
-    const generatedEdges: GeneratedGraphData['edges'] = [
-      { id: 'e1-2', source: 'node-gen-1', target: 'node-gen-2', animated: false },
-      { id: 'e1-3', source: 'node-gen-1', target: 'node-gen-3', animated: true },
-      // Embranchement conditionnel
-      { 
-        id: 'e-pass-3-4', 
-        source: 'node-gen-3', 
-        sourceHandle: 'pass', 
-        target: 'node-gen-4', 
-        label: 'Succès (≥70%)',
-        style: { stroke: '#10b981', strokeWidth: 2 }
-      },
-      { 
-        id: 'e-fail-3-rem', 
-        source: 'node-gen-3', 
-        sourceHandle: 'fail', 
-        target: 'node-gen-remedial', 
-        label: 'Échec (<70%)',
-        animated: true,
-        style: { stroke: '#f43f5e', strokeWidth: 2, strokeDasharray: '5,5' }
-      },
-      { id: 'e-rem-4', source: 'node-gen-remedial', target: 'node-gen-4', label: 'Après rattrapage' },
-      { id: 'e4-5', source: 'node-gen-4', target: 'node-gen-5', animated: true },
-      { id: 'e5-6', source: 'node-gen-5', target: 'node-gen-6', animated: true }
-    ];
+    (courseStructure.modules || []).forEach((mod: any, mIdx: number) => {
+      const yBase = 80 + mIdx * 260;
+      let prevInModuleId: string | null = null;
+
+      (mod.lessons || []).forEach((lesson: any, lIdx: number) => {
+        const nodeId = "node-ai-" + (nodeCounter++);
+        const nodeType: CourseNodeType = lesson.type || (lIdx % 2 === 0 ? "videoLesson" : "interactiveQuiz");
+        const xPos = 60 + lIdx * 300;
+        const yPos = yBase;
+
+        const nodeData: CourseNodeData = {
+          id: nodeId,
+          type: nodeType,
+          title: lesson.title || ("Leçon " + nodeCounter),
+          durationMinutes: lesson.durationMinutes || 15,
+          moduleIndex: mIdx + 1,
+        };
+
+        if (nodeType === "videoLesson") {
+          nodeData.videoConfig = {
+            mode: "AI_AVATAR",
+            title: lesson.title,
+            durationMinutes: lesson.durationMinutes || 15,
+            aiScript: lesson.aiScript || ("Bienvenue dans cette leçon consacrée à : " + lesson.title),
+            aiAvatarModel: lesson.aiAvatarModel || "ibrahim_konkobo_hd",
+            isUploaded: true
+          };
+        } else if (nodeType === "interactiveQuiz") {
+          nodeData.quizPassingScore = lesson.quizPassingScore || 75;
+          nodeData.quizQuestions = lesson.quizQuestions || [
+            {
+              id: "q-ai-" + nodeId + "-1",
+              level: 1,
+              levelName: "Niveau 1 : Rappel",
+              difficultyBeta: -1.0,
+              discriminationAlpha: 1.1,
+              questionText: "Quel principe essentiel caractérise \"" + lesson.title + "\" ?",
+              options: [
+                "La conformité opérationnelle et la maîtrise des protocoles",
+                "L\x27omission des règles de contrôle",
+                "L\x27absence de journalisation",
+                "La désactivation des vérifications"
+              ],
+              correctOptionIndex: 0,
+              hint: "Pensez à la rigueur méthodologique.",
+              explanation: "La maîtrise opérationnelle garantit l\x27intégrité du système."
+            }
+          ];
+        } else if (nodeType === "pdfResource") {
+          nodeData.pdfFileName = lesson.pdfFileName || (lesson.title.replace(/\s+/g, "_") + ".pdf");
+          nodeData.pdfFileSize = lesson.pdfFileSize || "2.4 MB";
+        }
+
+        generatedNodes.push({
+          id: nodeId,
+          type: nodeType,
+          position: { x: xPos, y: yPos },
+          data: nodeData
+        });
+
+        if (prevInModuleId) {
+          generatedEdges.push({
+            id: "edge-" + prevInModuleId + "-" + nodeId,
+            source: prevInModuleId,
+            target: nodeId,
+            animated: nodeType === "interactiveQuiz"
+          });
+        } else if (lastNodeId) {
+          generatedEdges.push({
+            id: "edge-" + lastNodeId + "-" + nodeId,
+            source: lastNodeId,
+            target: nodeId,
+            animated: true
+          });
+        }
+
+        prevInModuleId = nodeId;
+        lastNodeId = nodeId;
+      });
+    });
 
     setIsGenerating(false);
     onGenerated({
       nodes: generatedNodes,
       edges: generatedEdges,
-      syllabusTitle: "Syllabus IA : Cursus Télécom & Monétique UEMOA (5 Modules)"
+      syllabusTitle: courseStructure.syllabusTitle || "Cursus Pédagogique Spécialisé"
     });
     onClose();
   };

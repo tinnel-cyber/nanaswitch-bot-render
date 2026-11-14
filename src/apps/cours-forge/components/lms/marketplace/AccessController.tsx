@@ -11,7 +11,6 @@ import {
   Zap
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { auth } from '../../../../../firebase';
 import { playCashChime, playValidationBeep } from '../../../../../utils/audio';
 
 export interface AccessControllerProps {
@@ -42,7 +41,7 @@ export const AccessController: React.FC<AccessControllerProps> = ({
 
   // Écouteur temps réel de l'enrollment dans Supabase (Zero-Trust Server-Authoritative Unlock)
   useEffect(() => {
-    const currentUid = auth.currentUser?.uid || localStorage.getItem('nana_store_auth_user_id') || 'student-demo';
+    const currentUid = localStorage.getItem('nana_store_auth_user_id') || 'student-demo';
 
     // 1. Écouteur Supabase Realtime sur la table enrollments
     const channelName = `enrollment_${currentUid}_${courseId}_${Math.random().toString(36).substring(7)}`;

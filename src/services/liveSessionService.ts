@@ -1,18 +1,3 @@
-import { db } from '../firebaseConfig';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where, 
-  addDoc, 
-  orderBy, 
-  limit, 
-  deleteDoc 
-} from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { 
   LiveSession, 
@@ -28,7 +13,7 @@ import {
 import { StoreProductItem } from '../components/storeBuilder/types';
 
 // Produits de démonstration pour les sessions Live
-const DEMO_LIVE_PRODUCTS: StoreProductItem[] = [
+export const DEMO_LIVE_PRODUCTS: StoreProductItem[] = [
   {
     id: 'live-prod-01',
     name: 'Pack VIP : Formation Live Shopping & Vente IA 2026',
@@ -68,35 +53,30 @@ const DEMO_LIVE_PRODUCTS: StoreProductItem[] = [
     price: 20000,
     originalPrice: 45000,
     badge: 'Téléchargement Immédiat',
-    category: 'Logiciels & Outils',
+    category: 'Outils & Templates',
     image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
     stock: 999,
-    shortDescription: 'Tous les visuels réseaux sociaux et argumentaires de vente pour convertir vos prospects.'
+    shortDescription: 'Tous nos scripts de closing WhatsApp et bannières publicitaires prêts à copier-coller.'
   }
 ];
 
-// Session par défaut de secours haute fidélité
+// Session de repli par défaut ultra-complète
 export const FALLBACK_LIVE_SESSION: LiveSession = {
   id: 'live-demo-session',
-  storeId: 'demo-store',
-  storeName: 'Académie Nanasore Pro',
-  sessionSlug: 'masterclass-direct',
-  title: '🔴 Masterclass en Direct : Vente Multi-Canaux & Stratégie Mobile Money 2026',
-  description: 'Rejoignez la session interactive exclusive : audit en direct, questions-réponses et offres flash réservées aux participants du direct.',
-  sessionMode: 'live_shopping',
+  storeId: 'demo-store-001',
+  storeName: 'Académie Business Afrique',
+  sessionSlug: 'masterclass-live-2026',
+  title: 'Masterclass Direct : Lancer et Rentabiliser son Business E-Commerce en 2026',
+  description: 'Posez vos questions en direct, téléchargez vos supports de cours, répondez aux quiz et commandez vos accès exclusifs avec Orange Money, Wave, Moov et MTN.',
+  sessionMode: 'webinar_formation',
   status: 'live',
   sourceType: 'youtube',
-  streamUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk', // Stream live démo stable
-  posterUrl: 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1080&auto=format&fit=crop&q=85',
-  aspectRatio: '16:9',
-  scheduledAt: Date.now(),
-  startedAt: Date.now() - 1000 * 60 * 18,
-  viewerCount: 168,
-  countdownTitle: '⏳ Tarif Flash du Direct garanti pendant :',
-  countdownEndsAt: Date.now() + 1000 * 3600 * 2, // 2h de chrono
+  streamUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  viewerCount: 284,
   pinnedProductId: 'live-prod-01',
   pinnedProduct: DEMO_LIVE_PRODUCTS[0],
   products: DEMO_LIVE_PRODUCTS,
+  scheduledAt: Date.now() - 1000 * 60 * 20,
   whatsappPhone: '+2250700000000',
   hostName: 'Coach Ibrahim',
   hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
@@ -105,30 +85,41 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
 };
 
 /**
- * Récupère une session Live par son slug ou son ID depuis Firestore
+ * Récupère une session Live par son slug ou son ID depuis Supabase
  */
 export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | null> {
   if (!slug) return FALLBACK_LIVE_SESSION;
 
   try {
-    // 1. Recherche par sessionSlug
-    const sessionsRef = collection(db, 'live_sessions');
-    const q = query(sessionsRef, where('sessionSlug', '==', slug));
-    const snapshot = await getDocs(q);
+    // 1. Recherche par ID direct
+    const { data: byId } = await supabase
+      .from('live_sessions')
+      .select('*')
+      .eq('id', slug)
+      .maybeSingle();
 
-    if (!snapshot.empty) {
-      const docData = snapshot.docs[0].data() as LiveSession;
-      return { ...docData, id: snapshot.docs[0].id };
-    }
-
-    // 2. Recherche par ID direct
-    const docRef = doc(db, 'live_sessions', slug);
-    const directSnap = await getDoc(docRef);
-    if (directSnap.exists()) {
-      return { ...(directSnap.data() as LiveSession), id: directSnap.id };
+    if (byId) {
+      return {
+        id: byId.id,
+        storeId: byId.tenant_id,
+        storeName: 'Boutique Nanasore',
+        sessionSlug: slug,
+        title: byId.title,
+        description: byId.description || '',
+        sessionMode: 'live_shopping',
+        status: byId.status as any,
+        sourceType: 'youtube',
+        streamUrl: byId.stream_url || '',
+        viewerCount: byId.viewer_count || 42,
+        pinnedProductId: byId.pinned_product_id,
+        pinnedProduct: byId.pinned_product_data,
+        scheduledAt: new Date(byId.created_at).getTime(),
+        allowChat: true,
+        createdAt: new Date(byId.created_at).getTime()
+      };
     }
   } catch (err) {
-    console.warn('[liveSessionService] Firestore offline or error, using fallback session:', err);
+    console.warn('[liveSessionService] Supabase offline or error, using fallback session:', err);
   }
 
   // Fallback propre pour la démonstration
@@ -141,6 +132,7 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
 
 /**
  * Abonnement en temps réel aux mises à jour de la session Live (spectateurs, produit épinglé, etc.)
+ * Utilise Supabase Realtime broadcast & postgres_changes sur live_sessions
  */
 export function subscribeLiveSession(
   sessionId: string,
@@ -150,32 +142,71 @@ export function subscribeLiveSession(
 
   const fetchSession = async () => {
     try {
-      const docRef = doc(db, 'live_sessions', sessionId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as LiveSession;
-        onUpdate({ ...data, id: snap.id });
+      const { data: supaLive } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (supaLive) {
+        onUpdate({
+          id: supaLive.id,
+          storeId: supaLive.tenant_id,
+          storeName: 'Boutique Nanasore',
+          sessionSlug: sessionId,
+          title: supaLive.title,
+          description: supaLive.description || '',
+          sessionMode: 'live_shopping',
+          status: supaLive.status as any,
+          sourceType: 'youtube',
+          streamUrl: supaLive.stream_url || '',
+          viewerCount: supaLive.viewer_count || 42,
+          pinnedProductId: supaLive.pinned_product_id,
+          pinnedProduct: supaLive.pinned_product_data,
+          scheduledAt: new Date(supaLive.created_at).getTime(),
+          allowChat: true,
+          createdAt: new Date(supaLive.created_at).getTime()
+        });
       }
-    } catch (err) {
-      console.warn('[liveSessionService] Lecture session :', err);
-    }
+    } catch (_e) {}
   };
 
   fetchSession();
 
-  const channelName = `live_sess_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  // Écouteur Supabase ciblé sur les modifications de la table live_sessions
+  const channelName = `live_sess_pub_${sessionId}`;
   const channel = supabase
     .channel(channelName)
     .on(
       'postgres_changes',
       {
-        event: '*',
+        event: 'UPDATE',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
+        table: 'live_sessions',
+        filter: `id=eq.${sessionId}`,
       },
-      () => {
-        fetchSession();
+      (payload) => {
+        if (payload.new) {
+          const row = payload.new as any;
+          onUpdate({
+            id: row.id,
+            title: row.title,
+            status: row.status,
+            viewerCount: row.viewer_count,
+            pinnedProductId: row.pinned_product_id,
+            pinnedProduct: row.pinned_product_data,
+            streamUrl: row.stream_url
+          } as any);
+        }
+      }
+    )
+    .on(
+      'broadcast',
+      { event: 'session_update' },
+      ({ payload }) => {
+        if (payload) {
+          onUpdate(payload);
+        }
       }
     )
     .subscribe();
@@ -193,34 +224,55 @@ export async function updatePinnedProduct(
   product: StoreProductItem | null
 ): Promise<void> {
   if (!sessionId) return;
+
+  // 1. Mise à jour Supabase SQL prioritaire
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, {
-      pinnedProductId: product ? product.id : null,
-      pinnedProduct: product || null,
-      updatedAt: Date.now()
-    });
-  } catch (err) {
-    console.warn('[liveSessionService] updatePinnedProduct warning (local sync):', err);
+    await supabase
+      .from('live_sessions')
+      .update({
+        pinned_product_id: product ? product.id : null,
+        pinned_product_data: product || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+  } catch (supaErr) {
+    console.warn('[liveSessionService] updatePinnedProduct Supabase warning:', supaErr);
   }
+
+  // 2. Diffusion Realtime Broadcast instantanée pour tous les spectateurs (0 latence)
+  try {
+    const channel = supabase.channel(`live_sess_pub_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'session_update',
+      payload: {
+        pinnedProductId: product ? product.id : null,
+        pinnedProduct: product || null
+      }
+    });
+  } catch (_bErr) {}
 }
 
 /**
- * Mettre à jour le statut du direct
+ * Mettre à jour le statut du direct dans Supabase
  */
 export async function updateLiveSessionStatus(
   sessionId: string,
   status: LiveSessionStatus
 ): Promise<void> {
   if (!sessionId) return;
+
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, {
-      status,
-      updatedAt: Date.now()
-    });
-  } catch (err) {
-    console.warn('[liveSessionService] updateLiveSessionStatus warning:', err);
+    await supabase
+      .from('live_sessions')
+      .update({
+        status,
+        is_live: status === 'live',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+  } catch (supaErr) {
+    console.warn('[liveSessionService] updateLiveSessionStatus Supabase warning:', supaErr);
   }
 }
 
@@ -241,10 +293,24 @@ export async function createLiveSession(data: Partial<LiveSession>): Promise<Liv
   };
 
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await setDoc(docRef, sessionObj, { merge: true });
-  } catch (err) {
-    console.warn('[liveSessionService] createLiveSession warning (local only):', err);
+    await supabase
+      .from('live_sessions')
+      .upsert({
+        id: sessionId,
+        tenant_id: data.storeId || 'default',
+        host_id: data.hostName || 'host-default',
+        title: data.title || 'Session Directe',
+        description: data.description || '',
+        status: data.status || 'scheduled',
+        is_live: data.status === 'live',
+        stream_url: data.streamUrl || '',
+        viewer_count: data.viewerCount || 0,
+        pinned_product_id: data.pinnedProductId || null,
+        pinned_product_data: data.pinnedProduct || null,
+        updated_at: new Date().toISOString()
+      });
+  } catch (supaErr) {
+    console.warn('[liveSessionService] createLiveSession Supabase warning:', supaErr);
   }
 
   return sessionObj;
@@ -276,50 +342,50 @@ export function generateLiveShareLinks(
 }
 
 // =========================================================================
-// 2. CHAT EN TEMPS RÉEL (live_sessions/{sessionId}/messages)
+// 2. CHAT EN TEMPS RÉEL (REALTIME LIVE CHAT)
 // =========================================================================
 
-// Mémoire locale de secours pour le chat en mode prévisualisation / hors-ligne
 const localChatMemory: Record<string, LiveChatMessage[]> = {
   'live-demo-session': [
     {
-      id: 'msg-01',
+      id: 'demo-1',
       sessionId: 'live-demo-session',
-      senderName: 'Coach Ibrahim',
-      senderRole: 'host',
-      text: 'Bienvenue à tous sur ce direct ! Posez vos questions dans le chat ou levez la main ✋.',
-      isPinned: true,
+      senderName: 'Fatou Diallo',
+      senderRole: 'student',
+      text: 'Bonsoir Coach ! Les diapositives seront-elles téléchargeables après la session ?',
+      isQuestion: true,
       createdAt: Date.now() - 1000 * 60 * 12
     },
     {
-      id: 'msg-02',
+      id: 'demo-2',
       sessionId: 'live-demo-session',
-      senderName: 'Amina (Abidjan)',
-      senderRole: 'student',
-      text: 'Le son et l\'image sont parfaits depuis la Côte d\'Ivoire ! 👏',
+      senderName: 'Coach Ibrahim',
+      senderRole: 'instructor',
+      text: 'Oui absolument Fatou ! Le PDF complet est disponible dans l\'onglet Devoirs & Supports en haut.',
+      isQuestion: false,
       createdAt: Date.now() - 1000 * 60 * 10
     },
     {
-      id: 'msg-03',
+      id: 'demo-3',
       sessionId: 'live-demo-session',
-      senderName: 'Moussa K.',
+      senderName: 'Moussa Koné',
       senderRole: 'student',
-      text: 'Est-ce que le pack templates inclut les tunnels pour WhatsApp ?',
-      isQuestion: true,
-      createdAt: Date.now() - 1000 * 60 * 5
+      text: 'Je viens de commander le Pack VIP via Wave, validation instantanée reçue merci ! 🎉',
+      isQuestion: false,
+      createdAt: Date.now() - 1000 * 60 * 4
     }
   ]
 };
 
 /**
- * Envoie un message dans le chat du direct
+ * Envoi d'un message dans le chat du direct via Supabase Realtime Broadcast
  */
 export async function sendLiveChatMessage(
   sessionId: string,
   message: {
     senderName: string;
     senderId?: string;
-    senderRole?: 'host' | 'student' | 'viewer';
+    senderRole?: 'instructor' | 'student' | 'moderator';
     text: string;
     isQuestion?: boolean;
     avatar?: string;
@@ -342,17 +408,21 @@ export async function sendLiveChatMessage(
   localChatMemory[sessionId].push(newMsg);
 
   try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'messages');
-    await addDoc(colRef, newMsg);
+    const channel = supabase.channel(`live_chat_chan_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'chat_msg',
+      payload: newMsg
+    });
   } catch (err) {
-    console.warn('[liveSessionService] sendLiveChatMessage firestore warning (saved locally):', err);
+    console.warn('[liveSessionService] sendLiveChatMessage Supabase broadcast warning:', err);
   }
 
   return newMsg;
 }
 
 /**
- * Abonnement en temps réel aux messages du chat
+ * Abonnement en temps réel aux messages du chat via Supabase Broadcast
  */
 export function subscribeLiveChatMessages(
   sessionId: string,
@@ -361,40 +431,16 @@ export function subscribeLiveChatMessages(
   const initial = localChatMemory[sessionId] || localChatMemory['live-demo-session'] || [];
   callback([...initial]);
 
-  const fetchMessages = async () => {
-    try {
-      const colRef = collection(db, 'live_sessions', sessionId, 'messages');
-      const q = query(colRef, orderBy('createdAt', 'asc'), limit(150));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreMsgs: LiveChatMessage[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreMsgs.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        callback(firestoreMsgs);
-      }
-    } catch (err) {
-      console.warn('[liveSessionService] Lecture chat messages :', err);
-    }
-  };
-
-  fetchMessages();
-
-  const channelName = `live_chat_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  const channelName = `live_chat_chan_${sessionId}`;
   const channel = supabase
     .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
-      },
-      () => {
-        fetchMessages();
+    .on('broadcast', { event: 'chat_msg' }, ({ payload }) => {
+      if (payload && payload.sessionId === sessionId) {
+        if (!localChatMemory[sessionId]) localChatMemory[sessionId] = [];
+        localChatMemory[sessionId].push(payload as LiveChatMessage);
+        callback([...localChatMemory[sessionId]]);
       }
-    )
+    })
     .subscribe();
 
   return () => {
@@ -407,8 +453,10 @@ export function subscribeLiveChatMessages(
  */
 export async function pinLiveChatMessage(sessionId: string, message: LiveChatMessage | null): Promise<void> {
   try {
-    const docRef = doc(db, 'live_sessions', sessionId);
-    await updateDoc(docRef, { pinnedMessage: message });
+    await supabase
+      .from('live_sessions')
+      .update({ pinned_product_data: message })
+      .eq('id', sessionId);
   } catch (err) {
     console.warn('[liveSessionService] pinLiveChatMessage warning:', err);
   }
@@ -418,20 +466,23 @@ export async function pinLiveChatMessage(sessionId: string, message: LiveChatMes
 // 3. LEVÉE DE MAIN EN DIRECT (HAND RAISING)
 // =========================================================================
 
+const localHandRaisedMemory: Record<string, HandRaisedUser[]> = {};
+
 /**
  * Lever la main pour intervenir en direct
  */
 export async function raiseHandInSession(sessionId: string, user: HandRaisedUser): Promise<void> {
+  if (!localHandRaisedMemory[sessionId]) localHandRaisedMemory[sessionId] = [];
+  localHandRaisedMemory[sessionId] = localHandRaisedMemory[sessionId].filter(u => u.id !== user.id);
+  localHandRaisedMemory[sessionId].push(user);
+
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    const currentList: HandRaisedUser[] = snap.exists() ? (snap.data().handRaisedUsers || []) : [];
-    
-    // Éviter les doublons
-    const filtered = currentList.filter(u => u.id !== user.id);
-    const updated = [...filtered, user];
-    
-    await updateDoc(sessionDoc, { handRaisedUsers: updated });
+    const channel = supabase.channel(`live_hands_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'hand_raised',
+      payload: user
+    });
   } catch (err) {
     console.warn('[liveSessionService] raiseHandInSession warning:', err);
   }
@@ -441,12 +492,17 @@ export async function raiseHandInSession(sessionId: string, user: HandRaisedUser
  * Baisser la main
  */
 export async function lowerHandInSession(sessionId: string, userId: string): Promise<void> {
+  if (localHandRaisedMemory[sessionId]) {
+    localHandRaisedMemory[sessionId] = localHandRaisedMemory[sessionId].filter(u => u.id !== userId);
+  }
+
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    const currentList: HandRaisedUser[] = snap.exists() ? (snap.data().handRaisedUsers || []) : [];
-    const updated = currentList.filter(u => u.id !== userId);
-    await updateDoc(sessionDoc, { handRaisedUsers: updated });
+    const channel = supabase.channel(`live_hands_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'hand_lowered',
+      payload: { userId }
+    });
   } catch (err) {
     console.warn('[liveSessionService] lowerHandInSession warning:', err);
   }
@@ -460,16 +516,20 @@ export async function lowerHandInSession(sessionId: string, userId: string): Pro
  * Épingle et lance un Quiz en direct chez tous les élèves
  */
 export async function pinLiveQuiz(sessionId: string, quiz: LiveQuizQuestion): Promise<void> {
+  const quizPayload = {
+    ...quiz,
+    isActive: true,
+    startedAt: Date.now(),
+    totalVotes: 0,
+    votesBreakdown: {}
+  };
+
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, {
-      activeQuiz: {
-        ...quiz,
-        isActive: true,
-        startedAt: Date.now(),
-        totalVotes: 0,
-        votesBreakdown: {}
-      }
+    const channel = supabase.channel(`live_quiz_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'quiz_pinned',
+      payload: quizPayload
     });
   } catch (err) {
     console.warn('[liveSessionService] pinLiveQuiz warning:', err);
@@ -481,8 +541,12 @@ export async function pinLiveQuiz(sessionId: string, quiz: LiveQuizQuestion): Pr
  */
 export async function closeLiveQuiz(sessionId: string): Promise<void> {
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeQuiz: null });
+    const channel = supabase.channel(`live_quiz_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'quiz_closed',
+      payload: {}
+    });
   } catch (err) {
     console.warn('[liveSessionService] closeLiveQuiz warning:', err);
   }
@@ -512,25 +576,12 @@ export async function submitQuizAnswer(
   };
 
   try {
-    // 1. Sauvegarder dans la sous-collection quiz_responses
-    const colRef = collection(db, 'live_sessions', sessionId, 'quiz_responses');
-    await addDoc(colRef, respObj);
-
-    // 2. Mettre à jour les stats du quiz dans le doc session
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    if (snap.exists()) {
-      const activeQuiz = snap.data().activeQuiz as LiveQuizQuestion;
-      if (activeQuiz && activeQuiz.id === quizId) {
-        const breakdown = activeQuiz.votesBreakdown || {};
-        breakdown[response.selectedOptionId] = (breakdown[response.selectedOptionId] || 0) + 1;
-        const totalVotes = (activeQuiz.totalVotes || 0) + 1;
-        await updateDoc(sessionDoc, {
-          'activeQuiz.votesBreakdown': breakdown,
-          'activeQuiz.totalVotes': totalVotes
-        });
-      }
-    }
+    const channel = supabase.channel(`live_quiz_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'quiz_answer',
+      payload: respObj
+    });
   } catch (err) {
     console.warn('[liveSessionService] submitQuizAnswer warning:', err);
   }
@@ -540,7 +591,6 @@ export async function submitQuizAnswer(
 // 5. DEVOIR, SUPPORT PDF & SOUMISSIONS ÉLÈVES (ASSIGNMENTS & SUBMISSIONS)
 // =========================================================================
 
-// Mémoire locale de secours pour les devoirs soumis
 const localSubmissionsMemory: Record<string, LiveSubmission[]> = {
   'live-demo-session': [
     {
@@ -575,8 +625,12 @@ export async function publishLiveAssignment(
   };
 
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeAssignment: assignmentObj });
+    const channel = supabase.channel(`live_assign_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'assignment_published',
+      payload: assignmentObj
+    });
   } catch (err) {
     console.warn('[liveSessionService] publishLiveAssignment warning:', err);
   }
@@ -587,8 +641,12 @@ export async function publishLiveAssignment(
  */
 export async function closeLiveAssignment(sessionId: string): Promise<void> {
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { activeAssignment: null });
+    const channel = supabase.channel(`live_assign_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'assignment_closed',
+      payload: {}
+    });
   } catch (err) {
     console.warn('[liveSessionService] closeLiveAssignment warning:', err);
   }
@@ -612,22 +670,14 @@ export async function submitLiveAssignmentWork(
   localSubmissionsMemory[sessionId].push(subObj);
 
   try {
-    const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
-    await addDoc(colRef, subObj);
-
-    // Incrémente le compteur dans la session
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    const snap = await getDoc(sessionDoc);
-    if (snap.exists()) {
-      const activeAssignment = snap.data().activeAssignment;
-      if (activeAssignment) {
-        await updateDoc(sessionDoc, {
-          'activeAssignment.submissionsCount': (activeAssignment.submissionsCount || 0) + 1
-        });
-      }
-    }
+    const channel = supabase.channel(`live_assign_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'work_submitted',
+      payload: subObj
+    });
   } catch (err) {
-    console.warn('[liveSessionService] submitLiveAssignmentWork firestore warning (saved locally):', err);
+    console.warn('[liveSessionService] submitLiveAssignmentWork warning:', err);
   }
 
   return subObj;
@@ -643,40 +693,16 @@ export function subscribeLiveSubmissions(
   const initial = localSubmissionsMemory[sessionId] || localSubmissionsMemory['live-demo-session'] || [];
   callback([...initial]);
 
-  const fetchSubs = async () => {
-    try {
-      const colRef = collection(db, 'live_sessions', sessionId, 'submissions');
-      const q = query(colRef, orderBy('submittedAt', 'desc'), limit(100));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreSubs: LiveSubmission[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreSubs.push({ id: docSnap.id, ...(docSnap.data() as any) });
-        });
-        callback(firestoreSubs);
-      }
-    } catch (err) {
-      console.warn('[liveSessionService] Lecture submissions :', err);
-    }
-  };
-
-  fetchSubs();
-
-  const channelName = `live_subs_${sessionId}_${Math.random().toString(36).substring(7)}`;
+  const channelName = `live_assign_${sessionId}`;
   const channel = supabase
     .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${sessionId}`,
-      },
-      () => {
-        fetchSubs();
+    .on('broadcast', { event: 'work_submitted' }, ({ payload }) => {
+      if (payload) {
+        if (!localSubmissionsMemory[sessionId]) localSubmissionsMemory[sessionId] = [];
+        localSubmissionsMemory[sessionId].unshift(payload as LiveSubmission);
+        callback([...localSubmissionsMemory[sessionId]]);
       }
-    )
+    })
     .subscribe();
 
   return () => {
@@ -693,7 +719,6 @@ export async function gradeLiveSubmission(
   grade: string,
   feedback?: string
 ): Promise<void> {
-  // Mise à jour locale
   if (localSubmissionsMemory[sessionId]) {
     const target = localSubmissionsMemory[sessionId].find(s => s.id === submissionId);
     if (target) {
@@ -704,11 +729,11 @@ export async function gradeLiveSubmission(
   }
 
   try {
-    const subDoc = doc(db, 'live_sessions', sessionId, 'submissions', submissionId);
-    await updateDoc(subDoc, {
-      grade,
-      feedback: feedback || '',
-      status: 'graded'
+    const channel = supabase.channel(`live_assign_${sessionId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'work_graded',
+      payload: { submissionId, grade, feedback }
     });
   } catch (err) {
     console.warn('[liveSessionService] gradeLiveSubmission warning:', err);
@@ -720,8 +745,10 @@ export async function gradeLiveSubmission(
  */
 export async function updateCoachingRoom(sessionId: string, roomUrl: string): Promise<void> {
   try {
-    const sessionDoc = doc(db, 'live_sessions', sessionId);
-    await updateDoc(sessionDoc, { coachingRoomUrl: roomUrl });
+    await supabase
+      .from('live_sessions')
+      .update({ stream_url: roomUrl })
+      .eq('id', sessionId);
   } catch (err) {
     console.warn('[liveSessionService] updateCoachingRoom warning:', err);
   }

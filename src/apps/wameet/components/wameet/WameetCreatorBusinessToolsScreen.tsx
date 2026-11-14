@@ -50,12 +50,12 @@ export interface VipRoomItem {
 }
 
 /**
- * PROMPT 37 : L'Écran "Outils Business & Créateur" (Liaison NaNa POS)
+ * PROMPT 37 : L'Écran "Outils Business & Créateur" (Liaison Nanasore)
  * Panneau de configuration expert pour vendeurs, formateurs et créateurs Wameet.
  * 
  * Directives UI/UX au millimètre :
- * 1. Statut d'intégration NaNa POS :
- *    - Bloc statut "Synchronisation NaNa POS" avec un point vert clignotant "Connecté".
+ * 1. Statut d'intégration Nanasore :
+ *    - Bloc statut "Synchronisation Nanasore" avec un point vert clignotant "Connecté".
  *    - Bouton "Forcer la synchronisation des stocks".
  * 2. Paramètres des Lives Shopping :
  *    - Curseur (slider) pour définir la "Commission d'affiliation par défaut" (ex: 5%) pour le système Micro-relais.
@@ -69,7 +69,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
   onNavigateToVipRooms,
   className = ''
 }) => {
-  // 1. États de Synchronisation NaNa POS
+  // 1. États de Synchronisation Nanasore
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('Il y a 3 minutes');
   const [syncedItemsCount, setSyncedItemsCount] = useState<number>(142);
@@ -133,7 +133,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
     else if (typeof window !== 'undefined' && window.history.length > 1) window.history.back();
   };
 
-  // Action : Forcer la synchronisation des stocks NaNa POS
+  // Action : Forcer la synchronisation des stocks Nanasore
   const handleForceSync = () => {
     if (isSyncing) return;
     playTapBeep();
@@ -144,7 +144,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
       setLastSyncTime('À l’instant');
       setSyncedItemsCount((prev) => prev + 3);
       playValidationBeep();
-      showToast('✅ Stocks NaNa POS synchronisés avec succès (145 articles à jour).');
+      showToast('✅ Stocks Nanasore synchronisés avec succès (145 articles à jour).');
     }, 1200);
   };
 
@@ -193,7 +193,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
               </span>
             </h1>
             <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">
-              Passerelle NaNa POS, Espaces VIP & Logistique Swarm
+              Passerelle Nanasore, Espaces VIP & Logistique Swarm
             </p>
           </div>
         </div>
@@ -208,8 +208,8 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
 
       <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6">
         {/* =====================================================================
-            DIRECTIVE PROMPT 37 : 1. STATUT D'INTÉGRATION NANA POS
-            - Bloc statut : "Synchronisation NaNa POS" avec point vert clignotant "Connecté"
+            DIRECTIVE PROMPT 37 : 1. STATUT D'INTÉGRATION NANASORE
+            - Bloc statut : "Synchronisation Nanasore" avec point vert clignotant "Connecté"
             - Bouton "Forcer la synchronisation des stocks"
            ===================================================================== */}
         <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden">
@@ -224,7 +224,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
               <div>
                 <div className="flex items-center gap-2.5">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Synchronisation NaNa POS
+                    Synchronisation Nanasore
                   </h3>
 
                   {/* POINT VERT CLIGNOTANT "CONNECTÉ" */}
@@ -499,7 +499,7 @@ export const WameetCreatorBusinessToolsScreen: React.FC<WameetCreatorBusinessToo
               type="button"
               onClick={() => {
                 playTapBeep();
-                showToast('Le Studio NaNa POS est prêt pour créer une nouvelle Salle ou Salon.');
+                showToast('Le Studio Nanasore est prêt pour créer une nouvelle Salle ou Salon.');
               }}
               className="py-2 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
             >

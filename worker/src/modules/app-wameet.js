@@ -5,7 +5,7 @@
 
 export async function handleWameetModule(request, env, ctx) {
   const url = new URL(request.url);
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.com");
 
   const newHeaders = new Headers(request.headers);
   newHeaders.set("X-Nanasore-Module", "app-wameet");

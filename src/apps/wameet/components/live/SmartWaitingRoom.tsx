@@ -146,7 +146,7 @@ export const SmartWaitingRoom: React.FC<SmartWaitingRoomProps> = ({
     if (onShareLink) {
       onShareLink();
     } else {
-      const url = typeof window !== 'undefined' ? window.location.href : `https://nanasore.com/live/${webinarId}`;
+      const url = typeof window !== 'undefined' ? window.location.href : `https://nsore.shop/live/${webinarId}`;
       if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
         try {
           await (navigator as any).share({

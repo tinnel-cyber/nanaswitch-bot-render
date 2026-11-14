@@ -14,14 +14,14 @@ import {
   Gamepad2,
   Watch
 } from 'lucide-react';
-import { NaNaPosGiftItem, NANA_POS_GIFT_CATALOG } from '../../../../../types/cagnotte';
+import { NanasoreGiftItem, NANASORE_GIFT_CATALOG } from '../../../../../types/cagnotte';
 import { playTapBeep, playValidationBeep } from '../../../../../utils/audio';
 
 export interface CreateCagnotteModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentGiftId?: string;
-  onSelectGift: (gift: NaNaPosGiftItem, eventDate: string, eventLocation: string) => void;
+  onSelectGift: (gift: NanasoreGiftItem, eventDate: string, eventLocation: string) => void;
 }
 
 export const CreateCagnotteModal: React.FC<CreateCagnotteModalProps> = ({
@@ -37,7 +37,7 @@ export const CreateCagnotteModal: React.FC<CreateCagnotteModalProps> = ({
 
   if (!isOpen) return null;
 
-  const selectedGift = NANA_POS_GIFT_CATALOG.find((g) => g.id === selectedGiftId) || NANA_POS_GIFT_CATALOG[0];
+  const selectedGift = NANASORE_GIFT_CATALOG.find((g) => g.id === selectedGiftId) || NANASORE_GIFT_CATALOG[0];
   const fmt = (n: number) => n.toLocaleString('fr-FR');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -58,10 +58,10 @@ export const CreateCagnotteModal: React.FC<CreateCagnotteModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white">
-                Sélectionner le Cadeau NaNa POS
+                Sélectionner le Cadeau Nanasore
               </h2>
               <p className="text-xs text-slate-400">
-                Inventaire certifié des commerçants du réseau NaNa POS
+                Inventaire certifié des commerçants du réseau Nanasore
               </p>
             </div>
           </div>
@@ -80,13 +80,13 @@ export const CreateCagnotteModal: React.FC<CreateCagnotteModalProps> = ({
 
         {/* Corps Formulaire */}
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
-          {/* Grille de sélection des cadeaux réels NaNa POS */}
+          {/* Grille de sélection des cadeaux réels Nanasore */}
           <div className="space-y-2">
             <label className="block text-xs font-bold text-slate-300">
               1. Choisissez un article réel parmi nos marchands partenaires
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {NANA_POS_GIFT_CATALOG.map((item) => {
+              {NANASORE_GIFT_CATALOG.map((item) => {
                 const isSelected = item.id === selectedGiftId;
                 return (
                   <div
@@ -187,7 +187,7 @@ export const CreateCagnotteModal: React.FC<CreateCagnotteModalProps> = ({
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-slate-950 border border-emerald-500/30 text-xs space-y-1.5">
             <div className="font-bold text-emerald-300 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Garantie Contrat Intelligent NaNa POS</span>
+              <span>Garantie Contrat Intelligent Nanasore</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
               Dès que les contributions des membres atteindront les{' '}

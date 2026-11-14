@@ -1,5 +1,5 @@
 /**
- * NANA POS - GESTIONNAIRE DE STOCKAGE & PURGE AUTOMATIQUE DU CACHE
+ * NANASORE - GESTIONNAIRE DE STOCKAGE & PURGE AUTOMATIQUE DU CACHE
  * 
  * Assure la longévité de l'application sur smartphone en :
  * 1. Purgeant automatiquement les brouillons, caches et états temporaires obsolètes (> 48h)

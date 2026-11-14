@@ -1,7 +1,7 @@
 -- =======================================================================
 -- MIGRATION SUPABASE / POSTGRESQL : Système de Monétisation & Abonnements
 -- Tables : plans, subscriptions, wallets, wallet_transactions
--- Écosystème : Nanasore / NaNa POS
+-- Écosystème : Nanasore / Nanasore
 -- Date : 2026-11-02
 -- =======================================================================
 
@@ -229,7 +229,7 @@ INSERT INTO public.plans (
 (
     'MERCHANT',
     'Plan Commerçant / POS (Abonnement White-label)',
-    'Solution complète de caisse tactile NaNa POS, gestion multi-boutiques, facturation normalisée et personnalisation.',
+    'Solution complète de caisse tactile Nanasore, gestion multi-boutiques, facturation normalisée et personnalisation.',
     'SUBSCRIPTION',
     0.00,
     15000.00,

@@ -368,7 +368,7 @@ export const ManagerAuthModal: React.FC<ManagerAuthModalProps> = ({
         {/* Note de sécurité */}
         <div className="mt-4 flex items-center gap-1 text-[10px] text-slate-400">
           <Lock className="w-3 h-3 text-indigo-400" />
-          <span>Protection cryptographique SHA-256 NaNa POS</span>
+          <span>Protection cryptographique SHA-256 Nanasore</span>
         </div>
       </div>
     </div>

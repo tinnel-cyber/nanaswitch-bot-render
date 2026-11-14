@@ -113,7 +113,7 @@ export const ActionBottomSheet: React.FC<ActionBottomSheetProps> = ({
 
 // ===========================================================================
 // 2. SAS "LANCER UN LIVE SHOPPING" : LiveShoppingGatewayBottomSheet
-//    Demande : Titre du Live, Catégorie, boutons de permission ("Autoriser Caméra", "Lier le catalogue NaNa POS")
+//    Demande : Titre du Live, Catégorie, boutons de permission ("Autoriser Caméra", "Lier le catalogue Nanasore")
 //    Gros bouton : "Démarrer le Live"
 // ===========================================================================
 
@@ -121,7 +121,7 @@ export interface LiveShoppingConfig {
   title: string;
   category: string;
   cameraAllowed: boolean;
-  nanaPosLinked: boolean;
+  nanasoreLinked: boolean;
 }
 
 export interface LiveShoppingGatewayBottomSheetProps {
@@ -138,7 +138,7 @@ export const LiveShoppingGatewayBottomSheet: React.FC<LiveShoppingGatewayBottomS
   const [liveTitle, setLiveTitle] = useState('Vente Flash du Soir • Déstockage & Nouveautés 🔥');
   const [liveCategory, setLiveCategory] = useState('Mode & Beauté');
   const [cameraAllowed, setCameraAllowed] = useState(true);
-  const [nanaPosLinked, setNanaPosLinked] = useState(true);
+  const [nanasoreLinked, setNanasoreLinked] = useState(true);
 
   const categories = [
     'Mode & Beauté',
@@ -155,7 +155,7 @@ export const LiveShoppingGatewayBottomSheet: React.FC<LiveShoppingGatewayBottomS
       title: liveTitle,
       category: liveCategory,
       cameraAllowed,
-      nanaPosLinked
+      nanasoreLinked
     });
     onClose();
   };
@@ -248,33 +248,33 @@ export const LiveShoppingGatewayBottomSheet: React.FC<LiveShoppingGatewayBottomS
               </div>
             </button>
 
-            {/* Bouton Permission 2 : Lier le catalogue NaNa POS */}
+            {/* Bouton Permission 2 : Lier le catalogue Nanasore */}
             <button
               type="button"
               onClick={() => {
                 playTapBeep();
-                setNanaPosLinked((prev) => !prev);
+                setNanasoreLinked((prev) => !prev);
               }}
               className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition cursor-pointer active:scale-95 ${
-                nanaPosLinked
+                nanasoreLinked
                   ? 'bg-blue-50/80 border-blue-300 text-blue-900'
                   : 'bg-slate-50 border-slate-200 text-slate-600'
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  nanaPosLinked ? 'bg-[#2563EB] text-white' : 'bg-slate-200 text-slate-500'
+                  nanasoreLinked ? 'bg-[#2563EB] text-white' : 'bg-slate-200 text-slate-500'
                 }`}
               >
                 <Boxes className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold flex items-center gap-1">
-                  <span>Lier NaNa POS</span>
-                  {nanaPosLinked && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
+                  <span>Lier Nanasore</span>
+                  {nanasoreLinked && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
-                  {nanaPosLinked ? 'Catalogue relié' : 'Stock hors-ligne'}
+                  {nanasoreLinked ? 'Catalogue relié' : 'Stock hors-ligne'}
                 </div>
               </div>
             </button>

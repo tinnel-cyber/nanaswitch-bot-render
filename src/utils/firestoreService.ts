@@ -1519,14 +1519,14 @@ Pour garantir que votre boutique continue à vendre sans interruption même en c
 - Aucune donnée de carte bancaire ni de code confidentiel Mobile Money n'est jamais stockée sur nos serveurs.
 
 ### 3. Propriété Exclusif de Vos Données
-Vos données commerciales et vos bilans de ventes restent la propriété pleine et exclusive de votre établissement. Nana POS ne commercialise ni ne loue jamais les données de ses clients à des tiers à des fins publicitaires.
+Vos données commerciales et vos bilans de ventes restent la propriété pleine et exclusive de votre établissement. Nanasore ne commercialise ni ne loue jamais les données de ses clients à des tiers à des fins publicitaires.
 
 ### 4. Vos Droits et Contact
 Conformément aux réglementations applicables en matière de protection des données personnelles, vous disposez d'un droit permanent d'accès, de rectification et d'exportation complète de vos données (au format PDF ou Excel/JSON).
 
 Pour toute assistance ou question relative à la protection de vos données :
 - **Support Wameet Officiel :** +226 70 00 00 00 / +225 07 00 00 00
-- **Email de contact :** support@nanapos.africa
+- **Email de contact :** support@nanasore.com
 `.trim();
 
 /**

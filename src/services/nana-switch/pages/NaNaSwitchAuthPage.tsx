@@ -44,7 +44,7 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signInWithPopup,
-  User as FirebaseUser
+  User as SupabaseUser
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
@@ -108,7 +108,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
 
   // Écran d'initialisation en 1-clic (si le compte Firebase existe déjà sans switch_account)
   const [needsActivation, setNeedsActivation] = useState<boolean>(false);
-  const [pendingFirebaseUser, setPendingFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [pendingSupabaseUser, setPendingSupabaseUser] = useState<SupabaseUser | null>(null);
   const [activationOrgName, setActivationOrgName] = useState<string>('');
   const [activationProfileType, setActivationProfileType] = useState<ProfileType>('developer');
 
@@ -282,7 +282,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
     setIsLoading(true);
 
     try {
-      let registeredUser: FirebaseUser | null = null;
+      let registeredUser: SupabaseUser | null = null;
 
       try {
         // Tentative de création du compte Firebase Auth
@@ -383,7 +383,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
         }, 1000);
       } else {
         // L'utilisateur est connecté à Firebase mais n'a pas encore de profil d'organisation NaNaSwitch Cloud
-        setPendingFirebaseUser(user);
+        setPendingSupabaseUser(user);
         setActivationOrgName(user.displayName || 'Mon Organisation Cloud');
         setNeedsActivation(true);
         setIsLoading(false);
@@ -422,7 +422,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
         }, 1000);
       } else {
         // Demander l'initialisation de son organisation Cloud
-        setPendingFirebaseUser(user);
+        setPendingSupabaseUser(user);
         setActivationOrgName(user.displayName ? `${user.displayName} Cloud` : 'Organisation Cloud');
         setNeedsActivation(true);
         setIsLoading(false);
@@ -443,7 +443,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
   const handleActivateExistingAccount = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     playTapBeep();
-    if (!pendingFirebaseUser) return;
+    if (!pendingSupabaseUser) return;
 
     if (!activationOrgName.trim()) {
       setErrorMessage('Veuillez renseigner le nom de votre Organisation.');
@@ -459,11 +459,11 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
     setIsLoading(true);
     try {
       await initializeSwitchAccountDocument(
-        pendingFirebaseUser.uid,
-        pendingFirebaseUser.email || '',
+        pendingSupabaseUser.uid,
+        pendingSupabaseUser.email || '',
         activationOrgName.trim(),
-        pendingFirebaseUser.displayName || 'Développeur Cloud',
-        pendingFirebaseUser.phoneNumber || '',
+        pendingSupabaseUser.displayName || 'Développeur Cloud',
+        pendingSupabaseUser.phoneNumber || '',
         activationProfileType,
         'BF',
         cleanActPin
@@ -480,7 +480,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
       setIsLoading(false);
     }
   }, [
-    pendingFirebaseUser,
+    pendingSupabaseUser,
     activationOrgName,
     activationProfileType,
     activationPin,
@@ -626,7 +626,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
                     Activer votre Organisation NaNaSwitch Cloud
                   </h3>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Votre session est reconnue (<strong className="text-slate-800">{pendingFirebaseUser?.email}</strong>). Veuillez simplement nommer votre espace d'infrastructure Cloud pour initialiser votre portefeuille de 100 crédits Sandbox isolés.
+                    Votre session est reconnue (<strong className="text-slate-800">{pendingSupabaseUser?.email}</strong>). Veuillez simplement nommer votre espace d'infrastructure Cloud pour initialiser votre portefeuille de 100 crédits Sandbox isolés.
                   </p>
                 </div>
 
@@ -730,7 +730,7 @@ export const NaNaSwitchAuthPage: React.FC<NaNaSwitchAuthPageProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => { setNeedsActivation(false); setPendingFirebaseUser(null); }}
+                    onClick={() => { setNeedsActivation(false); setPendingSupabaseUser(null); }}
                     className="w-full text-center text-xs text-slate-500 hover:text-slate-800 font-bold py-1"
                   >
                     Utiliser un autre compte

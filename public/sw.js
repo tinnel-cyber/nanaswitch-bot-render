@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v8-brevo-auth';
+const CACHE_NAME = 'nanasore-v9-supabase-live';
 const WASM_CACHE_NAME = 'nanasore-v7-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v7-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v3';
@@ -82,14 +82,17 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Ne pas intercepter les requêtes non-GET, APIs externes ou routes dynamiques d'authentification et de tableau de bord
+  // Ne pas intercepter les requêtes non-GET, APIs externes, WebSockets ou routes dynamiques en temps réel
   if (req.method !== 'GET') return;
   if (
     url.hostname.includes('firestore.googleapis.com') ||
-    url.hostname.includes('firebaseio.com') ||
+    url.hostname.includes('supabaseio.com') ||
     url.hostname.includes('generativelanguage.googleapis.com') ||
     url.hostname.includes('identitytoolkit.googleapis.com') ||
     url.hostname.includes('supabase.co') ||
+    url.hostname.includes('workers.dev') ||
+    url.hostname.includes('daily.co') ||
+    url.pathname.startsWith('/live/') ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/v1/switch/') ||
     url.pathname.startsWith('/auth') ||
@@ -222,7 +225,7 @@ self.addEventListener('fetch', (event) => {
     req.destination === 'image' ||
     url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|avif)$/i) ||
     url.hostname.includes('images.unsplash.com') ||
-    url.hostname.includes('firebasestorage.googleapis.com');
+    url.hostname.includes('supabasestorage.googleapis.com');
 
   if (isImageRequest) {
     event.respondWith(
@@ -290,3 +293,49 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// 4. Standard W3C Web Push Notification (Équivalent souverain à supabase-messaging-sw)
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (_e) {
+    data = { title: 'Notification NaNa', body: event.data ? event.data.text() : '' };
+  }
+
+  const title = data.title || '🎉 Nouvelle Notification NaNa';
+  const options = {
+    body: data.body || 'Une nouvelle activité est disponible.',
+    icon: data.icon || '/icon.svg',
+    badge: '/favicon.svg',
+    vibrate: [200, 100, 200],
+    data: {
+      url: data.url || data.link || '/',
+      timestamp: Date.now()
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Clic sur la notification Push : Ouvre ou focalise l'onglet correspondant
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url && 'focus' in client) {
+          if (client.url.includes(targetUrl)) {
+            return client.focus();
+          }
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

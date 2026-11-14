@@ -1,6 +1,6 @@
 # NaNa Payment Micro-service (IP Statique & Zéro Carte Bancaire)
 
-Micro-service autonome dédié au traitement des paiements bancaires et Mobile Money pour **NaNa POS**.
+Micro-service autonome dédié au traitement des paiements bancaires et Mobile Money pour **Nanasore**.
 Conçu pour fonctionner **100 % gratuitement et sans aucune carte bancaire** sur **Render.com** (ou Vercel), avec sortie réseau par **IP Statique via Fixie**.
 
 ---
@@ -8,7 +8,7 @@ Conçu pour fonctionner **100 % gratuitement et sans aucune carte bancaire** sur
 ## 🏗️ Architecture
 
 ```
-[ Frontend NaNa POS ] (Firebase Hosting - Gratuit)
+[ Frontend Nanasore ] (Firebase Hosting - Gratuit)
         │
         ▼ (HTTPS REST / Webhooks)
 [ Micro-service Node.js ] (Render Free Web Service - Gratuit)
@@ -50,7 +50,7 @@ Conçu pour fonctionner **100 % gratuitement et sans aucune carte bancaire** sur
    - `PAYMENT_WEBHOOK_SECRET` : `konkobo_telecom_webhook_secret_key_2026`
    - `PORT` : `10000`
    - `NODE_ENV` : `production`
-   - `FIREBASE_PROJECT_ID` : `pos-app-1759a`
+   - `FIREBASE_PROJECT_ID` : `nanasore`
 6. Cliquez sur **Deploy Web Service**.
 7. Votre API sera immédiatement disponible sur : `https://nana-payment-api.onrender.com`.
 

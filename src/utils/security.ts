@@ -1,5 +1,5 @@
 /**
- * NANA POS - Security & Hardening Utilities
+ * NANASORE - Security & Hardening Utilities
  * 
  * Provides robust HTML sanitization against XSS vectors, safe URL checking,
  * and text input sanitization for user-generated content (store descriptions,

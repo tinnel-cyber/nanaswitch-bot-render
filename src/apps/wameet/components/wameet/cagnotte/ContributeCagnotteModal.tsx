@@ -126,7 +126,7 @@ export const ContributeCagnotteModal: React.FC<ContributeCagnotteModalProps> = (
 
         {/* Corps Formulaire Scrollable */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
-          {/* Rappel du Cadeau NaNa POS */}
+          {/* Rappel du Cadeau Nanasore */}
           <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center gap-3">
             <img
               src={cagnotte.gift.imageUrl}
@@ -271,7 +271,7 @@ export const ContributeCagnotteModal: React.FC<ContributeCagnotteModalProps> = (
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong>Zéro détournement :</strong> Vos {fmt(effectiveAmount)} FCFA sont placés sous séquestre intelligent.
-              L'argent ne sera jamais transféré à un tiers : dès 100%, il est versé directement au marchand NaNa POS.
+              L'argent ne sera jamais transféré à un tiers : dès 100%, il est versé directement au marchand Nanasore.
             </p>
           </div>
 

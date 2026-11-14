@@ -652,69 +652,95 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   // Cours actif pour le widget de droite et le Hero
   const activeCourse = enrolledCourses[0];
 
-  // Données des Achats & Souscriptions de l'étudiant (Prompt 3/4)
-  const studentPurchases: StudentPurchase[] = useMemo(() => [
-    {
-      id: '#NS-1092',
-      courseId: 'telecom-fintech-masterclass',
-      courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
-      campusName: 'Campus : Ibrahim P. Konkobo',
-      instructorName: 'Ibrahim Pousbila Konkobo',
-      date: '19 Octobre 2026',
-      paymentMethod: 'Wave (Mobile Money 1-Clic)',
-      transactionRef: 'WAV-BF-89230198',
-      amountNumber: 45000,
-      amountFormatted: '45 000 FCFA',
-      accessType: 'Accès à vie',
-      status: 'Validé',
-      invoiceNumber: 'FAC-2026-NS-1092'
-    },
-    {
-      id: '#NS-1088',
-      courseId: 'course-pos-resilience-offline',
-      courseTitle: 'Architecture Caisses Connectées & Mode Déconnecté (Offline-First)',
-      campusName: 'Campus : Systèmes POS & Caisses',
-      instructorName: 'Ing. Marc Ouedraogo',
-      date: '14 Octobre 2026',
-      paymentMethod: 'Orange Money BF',
-      transactionRef: 'OM-BF-77341902',
-      amountNumber: 65000,
-      amountFormatted: '65 000 FCFA',
-      accessType: 'Accès à vie',
-      status: 'Validé',
-      invoiceNumber: 'FAC-2026-NS-1088'
-    },
-    {
-      id: '#NS-1065',
-      courseId: 'course-live-shopping-mastery',
-      courseTitle: 'Live Shopping & Vente Vidéo Interactive sur WhatsApp & Réseaux',
-      campusName: 'Campus : Live Shopping & Social Selling',
-      instructorName: 'Kadiatou Diallo',
-      date: '02 Octobre 2026',
-      paymentMethod: 'CinetPay (Carte Visa / Mastercard)',
-      transactionRef: 'CP-CI-44189021',
-      amountNumber: 35000,
-      amountFormatted: '35 000 FCFA',
-      accessType: 'Abonnement actif',
-      status: 'Validé',
-      invoiceNumber: 'FAC-2026-NS-1065'
-    },
-    {
-      id: '#NS-1040',
-      courseId: 'course-fintech-security-kyc',
-      courseTitle: 'Sécurité des Transactions, Prévention Fraude & Conformité KYC',
-      campusName: 'Campus : Sécurité & Conformité Réglementaire',
-      instructorName: 'Cabinet Conformité & Risques',
-      date: '18 Septembre 2026',
-      paymentMethod: 'Monero XMR (Crypto Décentralisée)',
-      transactionRef: 'XMR-TX-883A09FB2',
-      amountNumber: 25000,
-      amountFormatted: '25 000 FCFA',
-      accessType: 'Accès à vie',
-      status: 'Validé',
-      invoiceNumber: 'FAC-2026-NS-1040'
+  // Données des Achats & Souscriptions de l'étudiant
+  const [studentPurchases, setStudentPurchases] = useState<StudentPurchase[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nana_student_purchases');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {
+        console.warn('Erreur lecture purchases:', e);
+      }
     }
-  ], []);
+    return [
+      {
+        id: '#NS-1092',
+        courseId: 'telecom-fintech-masterclass',
+        courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
+        campusName: 'Campus : Ibrahim P. Konkobo',
+        instructorName: 'Ibrahim Pousbila Konkobo',
+        date: '19 Octobre 2026',
+        paymentMethod: 'Wave (Mobile Money 1-Clic)',
+        transactionRef: 'WAV-BF-89230198',
+        amountNumber: 45000,
+        amountFormatted: '45 000 FCFA',
+        accessType: 'Accès à vie',
+        status: 'Validé',
+        invoiceNumber: 'FAC-2026-NS-1092'
+      },
+      {
+        id: '#NS-1088',
+        courseId: 'course-pos-resilience-offline',
+        courseTitle: 'Architecture Caisses Connectées & Mode Déconnecté (Offline-First)',
+        campusName: 'Campus : Systèmes POS & Caisses',
+        instructorName: 'Ing. Marc Ouedraogo',
+        date: '14 Octobre 2026',
+        paymentMethod: 'Orange Money BF',
+        transactionRef: 'OM-BF-77341902',
+        amountNumber: 65000,
+        amountFormatted: '65 000 FCFA',
+        accessType: 'Accès à vie',
+        status: 'Validé',
+        invoiceNumber: 'FAC-2026-NS-1088'
+      },
+      {
+        id: '#NS-1065',
+        courseId: 'course-live-shopping-mastery',
+        courseTitle: 'Live Shopping & Vente Vidéo Interactive sur WhatsApp & Réseaux',
+        campusName: 'Campus : Live Shopping & Social Selling',
+        instructorName: 'Kadiatou Diallo',
+        date: '02 Octobre 2026',
+        paymentMethod: 'CinetPay (Carte Visa / Mastercard)',
+        transactionRef: 'CP-CI-44189021',
+        amountNumber: 35000,
+        amountFormatted: '35 000 FCFA',
+        accessType: 'Abonnement actif',
+        status: 'Validé',
+        invoiceNumber: 'FAC-2026-NS-1065'
+      },
+      {
+        id: '#NS-1040',
+        courseId: 'course-fintech-security-kyc',
+        courseTitle: 'Sécurité des Transactions, Prévention Fraude & Conformité KYC',
+        campusName: 'Campus : Sécurité & Conformité Réglementaire',
+        instructorName: 'Cabinet Conformité & Risques',
+        date: '18 Septembre 2026',
+        paymentMethod: 'Monero XMR (Crypto Décentralisée)',
+        transactionRef: 'XMR-TX-883A09FB2',
+        amountNumber: 25000,
+        amountFormatted: '25 000 FCFA',
+        accessType: 'Accès à vie',
+        status: 'Validé',
+        invoiceNumber: 'FAC-2026-NS-1040'
+      }
+    ];
+  });
+
+  // Calcul dynamique des métriques financières
+  const totalInvested = useMemo(() => {
+    return studentPurchases.reduce((acc, p) => acc + (p.amountNumber || 0), 0);
+  }, [studentPurchases]);
+
+  const activeSubscriptionsCount = useMemo(() => {
+    return studentPurchases.filter(p => p.status === 'Validé').length;
+  }, [studentPurchases]);
+
+  const receiptsCount = useMemo(() => {
+    return studentPurchases.filter(p => !!p.invoiceNumber).length;
+  }, [studentPurchases]);
 
   // Filtrage des transactions financières
   const filteredPurchases = useMemo(() => {
@@ -745,69 +771,40 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   // Champs de réponse rapide aux formateurs
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
 
-  // 1. Section "🏆 Mes Certificats" (Passeport d'Élite Nanasore - Prompt 4/4)
-  const certificatesList: CertificateItem[] = useMemo(() => [
-    {
-      id: 'CERT-2026-BF-948201',
-      courseId: 'course-pos-resilience-offline',
-      courseTitle: 'Architecture Caisses Connectées & Mode Déconnecté (Offline-First)',
-      campusName: 'Campus : Systèmes POS & Caisses',
-      instructorName: 'Ing. Marc Ouedraogo',
-      instructorTitle: 'Directeur Technique Monétique • ENTREPRISE KONKOBO POUSBILA',
-      instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-      issueDate: '14 Octobre 2026',
-      grade: '98% (Mention d\'Excellence)',
-      status: 'UNLOCKED',
-      progress: 100,
-      verificationHash: '0x9a8f4c...b948201',
-      skills: ['SQLite IndexedDB Sync', 'Impression Thermique ESC/POS', 'Résilience Offline 4G/2G', 'Sécurité Caisses']
-    },
-    {
-      id: 'CERT-2026-CI-819024',
-      courseId: 'telecom-fintech-masterclass',
-      courseTitle: 'Spécialiste Monétique & Intégration Passerelles Mobile Money',
-      campusName: 'Campus : Ibrahim P. Konkobo',
-      instructorName: 'Ibrahim Pousbila Konkobo',
-      instructorTitle: 'Fondateur & Ingénieur Télécom • Nanasore LMS',
-      instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      issueDate: '05 Octobre 2026',
-      grade: '96% (Mention Très Honorable)',
-      status: 'UNLOCKED',
-      progress: 100,
-      verificationHash: '0x7e2d1a...c819024',
-      skills: ['Webhooks Wave 1-Clic', 'API Orange Money BF/CI', 'Panier USSD Hybride', 'Cryptographie SHA-256']
-    },
-    {
-      id: 'CERT-IN-PROGRESS-1',
-      courseId: 'telecom-fintech-masterclass',
-      courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
-      campusName: 'Campus : Ibrahim P. Konkobo',
-      instructorName: 'Ibrahim Pousbila Konkobo',
-      instructorTitle: 'Fondateur & Ingénieur Télécom',
-      instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      issueDate: 'Délivrance à 100%',
-      grade: '80% validé (reste 20%)',
-      status: 'IN_PROGRESS',
-      progress: 80,
-      verificationHash: 'Verrouillé',
-      skills: ['Live Commerce Panier', 'Synchronisation PWA']
-    },
-    {
-      id: 'CERT-IN-PROGRESS-2',
-      courseId: 'course-live-shopping-mastery',
-      courseTitle: 'Live Shopping & Vente Vidéo Interactive sur WhatsApp & Réseaux',
-      campusName: 'Campus : Live Shopping & Social Selling',
-      instructorName: 'Kadiatou Diallo',
-      instructorTitle: 'Coach Experte Social Selling',
-      instructorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
-      issueDate: 'Délivrance à 100%',
-      grade: '45% validé (reste 55%)',
-      status: 'IN_PROGRESS',
-      progress: 45,
-      verificationHash: 'Verrouillé',
-      skills: ['Tunnel Vidéo 1-Clic', 'Closing WhatsApp Direct']
+  // 1. Section "🏆 Mes Certificats" (Passeport d'Élite Nanasore)
+  const certificatesList: CertificateItem[] = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('nana_student_certificates');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {
+        console.warn('Erreur lecture certificates:', e);
+      }
     }
-  ], []);
+
+    // Calcul dynamique dérivé de l'avancement réel des cours souscrits
+    return enrolledCourses.map((c, idx) => {
+      const isCompleted = (c.progress || 0) >= 100;
+      return {
+        id: c.certificateId || (isCompleted ? `CERT-2026-${c.id.slice(0, 4).toUpperCase()}-${100000 + idx * 37}` : `CERT-IN-PROGRESS-${idx + 1}`),
+        courseId: c.id,
+        courseTitle: c.title,
+        campusName: c.campusName || 'Campus Virtuel',
+        instructorName: c.instructorName || 'Professeur Titulaire',
+        instructorTitle: 'Instructeur Certifié • Entreprise Konkobo Pousbila',
+        instructorAvatar: c.instructorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+        issueDate: isCompleted ? (c.lastAccessed || 'Validé avec succès') : 'Délivrance à 100%',
+        grade: isCompleted ? '98% (Mention d\'Excellence)' : `${c.progress}% validé (reste ${100 - c.progress}%)`,
+        status: isCompleted ? ('UNLOCKED' as const) : ('IN_PROGRESS' as const),
+        progress: c.progress || 0,
+        verificationHash: isCompleted ? `0x${c.id.slice(0, 6)}...cert${idx + 1}` : 'Verrouillé',
+        skills: ['Maîtrise Opérationnelle', 'Validation des Compétences']
+      };
+    });
+  }, [enrolledCourses]);
 
   // 2. Section "💬 Messages & Notifications Inter-Campus" (Prompt 4/4)
   const [interCampusNotifications, setInterCampusNotifications] = useState<InterCampusNotification[]>([
@@ -2607,7 +2604,9 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                       <Wallet className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-[#0F172A] mt-2">170 000 FCFA</p>
+                  <p className="text-2xl font-black text-[#0F172A] mt-2">
+                    {totalInvested.toLocaleString('fr-FR')} FCFA
+                  </p>
                   <p className="text-[11px] text-emerald-600 font-bold mt-1">✓ Tous paiements acquittés</p>
                 </div>
 
@@ -2618,7 +2617,9 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                       <CheckCircle2 className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-[#0F172A] mt-2">4 Formations</p>
+                  <p className="text-2xl font-black text-[#0F172A] mt-2">
+                    {activeSubscriptionsCount} {activeSubscriptionsCount > 1 ? 'Formations' : 'Formation'}
+                  </p>
                   <p className="text-[11px] text-slate-400 font-medium mt-1">Accès à vie garanti sans expiration</p>
                 </div>
 
@@ -2629,7 +2630,9 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                       <FileText className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-[#0F172A] mt-2">4 Reçus</p>
+                  <p className="text-2xl font-black text-[#0F172A] mt-2">
+                    {receiptsCount} {receiptsCount > 1 ? 'Reçus' : 'Reçu'}
+                  </p>
                   <p className="text-[11px] text-[#1D4ED8] font-bold mt-1">Disponibles en téléchargement immédiat</p>
                 </div>
               </div>

@@ -1,15 +1,5 @@
-import { db } from '../firebaseConfig';
 import { supabase } from '../lib/supabase';
 import { FlashLiveRequest, FlashLiveStatus } from '../types/flashLive';
-
-// Dynamic on-demand Firestore loader to protect initial bundle size
-let firestorePromise: Promise<typeof import('firebase/firestore')> | null = null;
-function loadFirestore() {
-  if (!firestorePromise) {
-    firestorePromise = import('firebase/firestore');
-  }
-  return firestorePromise;
-}
 
 const LOCAL_STORAGE_KEY = 'nana_flash_requests_cache';
 
@@ -28,7 +18,6 @@ function saveLocalRequest(req: FlashLiveRequest): void {
     const current = getLocalRequests();
     current[req.id] = req;
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(current));
-    // Dispatch cross-window and in-tab notifications
     window.dispatchEvent(new CustomEvent('nana_flash_live_update', { detail: req }));
   } catch (e) {}
 }
@@ -62,13 +51,20 @@ export async function createFlashLiveRequest(params: {
   // 1. Sauvegarde locale immédiate pour réactivité instantanée
   saveLocalRequest(request);
 
-  // 2. Écriture Firestore en tâche de fond (asynchrone)
+  // 2. Écriture Supabase wameet_messages
   try {
-    const { doc, setDoc } = await loadFirestore();
-    const docRef = doc(db, 'flash_requests', id);
-    await setDoc(docRef, request);
+    await supabase.from('wameet_messages').insert({
+      id,
+      chat_id: params.merchantId || 'store-konkobo-telecom',
+      sender_id: id,
+      sender_name: params.customerName || 'Client',
+      text: params.productName,
+      type: 'call',
+      status: 'pending',
+      created_at: new Date().toISOString()
+    });
   } catch (err) {
-    console.warn('[FLASH_LIVE] Firestore write fallback to local event bus:', err);
+    console.warn('[FLASH_LIVE] Supabase write fallback:', err);
   }
 
   return request;
@@ -81,8 +77,6 @@ export function subscribeToFlashLiveRequest(
   requestId: string,
   onUpdate: (request: FlashLiveRequest | null) => void
 ): () => void {
-  let isSubscribed = true;
-
   // 1. Émission immédiate depuis le cache local
   const cached = getLocalRequests()[requestId];
   if (cached) {
@@ -111,7 +105,7 @@ export function subscribeToFlashLiveRequest(
   window.addEventListener('nana_flash_live_update', handleLocalUpdate);
   window.addEventListener('storage', handleStorageEvent);
 
-  // 3. Écouteur Supabase Realtime (remplace Firestore onSnapshot)
+  // 3. Écouteur Supabase Realtime
   const channelName = `flash_req_${requestId}_${Math.random().toString(36).substring(7)}`;
   const channel = supabase
     .channel(channelName)
@@ -129,10 +123,9 @@ export function subscribeToFlashLiveRequest(
           const updatedReq: FlashLiveRequest = {
             id: requestId,
             productId: row.product_id || '',
-            productName: row.product_name || 'Produit Flash',
-            merchantId: row.merchant_id || '',
-            buyerName: row.sender_name || 'Client',
-            buyerPhone: row.sender_phone || '',
+            productName: row.text || 'Produit Flash',
+            merchantId: row.chat_id || '',
+            customerName: row.sender_name || 'Client',
             status: (row.status || 'pending') as FlashLiveStatus,
             dailyRoomUrl: row.media_url,
             createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
@@ -145,7 +138,6 @@ export function subscribeToFlashLiveRequest(
     .subscribe();
 
   return () => {
-    isSubscribed = false;
     window.removeEventListener('nana_flash_live_update', handleLocalUpdate);
     window.removeEventListener('storage', handleStorageEvent);
     supabase.removeChannel(channel);
@@ -159,8 +151,6 @@ export function subscribeToMerchantFlashRequests(
   merchantId: string,
   onRequestsChange: (pendingRequests: FlashLiveRequest[]) => void
 ): () => void {
-  let isSubscribed = true;
-
   const emitFilteredLocal = () => {
     const all = getLocalRequests();
     const now = Date.now();
@@ -173,7 +163,6 @@ export function subscribeToMerchantFlashRequests(
     onRequestsChange(filtered);
   };
 
-  // Émission initiale
   emitFilteredLocal();
 
   const handleLocalUpdate = () => {
@@ -189,7 +178,6 @@ export function subscribeToMerchantFlashRequests(
   window.addEventListener('nana_flash_live_update', handleLocalUpdate);
   window.addEventListener('storage', handleStorageEvent);
 
-  // Écouteur Supabase Realtime (remplace Firestore onSnapshot)
   const channelName = `merchant_flash_${merchantId}_${Math.random().toString(36).substring(7)}`;
   const channel = supabase
     .channel(channelName)
@@ -207,7 +195,6 @@ export function subscribeToMerchantFlashRequests(
     .subscribe();
 
   return () => {
-    isSubscribed = false;
     window.removeEventListener('nana_flash_live_update', handleLocalUpdate);
     window.removeEventListener('storage', handleStorageEvent);
     supabase.removeChannel(channel);
@@ -218,7 +205,6 @@ export function subscribeToMerchantFlashRequests(
  * Génère une URL Daily.co unique et sécurisée pour la session Flash Live
  */
 export function generateFlashRoomUrl(requestId: string): string {
-  // Utilise le domaine Daily.co officiel nanasore
   const cleanId = requestId.replace(/[^a-zA-Z0-9_-]/g, '');
   return `https://nanasore.daily.co/flash-${cleanId}`;
 }
@@ -243,22 +229,22 @@ export async function acceptFlashLiveRequest(
       createdAt: Date.now()
     }),
     status: 'accepted',
-    roomUrl,
+    dailyRoomUrl: roomUrl,
     acceptedAt: Date.now()
   };
 
   saveLocalRequest(updated);
 
   try {
-    const { doc, updateDoc } = await loadFirestore();
-    const docRef = doc(db, 'flash_requests', requestId);
-    await updateDoc(docRef, {
-      status: 'accepted',
-      roomUrl,
-      acceptedAt: updated.acceptedAt
-    });
+    await supabase
+      .from('wameet_messages')
+      .update({
+        status: 'accepted',
+        media_url: roomUrl
+      })
+      .eq('id', requestId);
   } catch (err) {
-    console.warn('[FLASH_LIVE] Accept update fallback:', err);
+    console.warn('[FLASH_LIVE] Accept update Supabase fallback:', err);
   }
 
   return updated;
@@ -276,17 +262,15 @@ export async function rejectFlashLiveRequest(requestId: string): Promise<void> {
   }
 
   try {
-    const { doc, updateDoc } = await loadFirestore();
-    const docRef = doc(db, 'flash_requests', requestId);
-    await updateDoc(docRef, {
-      status: 'rejected',
-      endedAt: Date.now()
-    });
+    await supabase
+      .from('wameet_messages')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
   } catch (err) {}
 }
 
 /**
- * Fin normale de l'appel (ou coupure automatique par kill switch 300s)
+ * Fin normale de l'appel
  */
 export async function completeFlashLiveRequest(requestId: string): Promise<void> {
   const current = getLocalRequests()[requestId];
@@ -297,17 +281,15 @@ export async function completeFlashLiveRequest(requestId: string): Promise<void>
   }
 
   try {
-    const { doc, updateDoc } = await loadFirestore();
-    const docRef = doc(db, 'flash_requests', requestId);
-    await updateDoc(docRef, {
-      status: 'completed',
-      endedAt: Date.now()
-    });
+    await supabase
+      .from('wameet_messages')
+      .update({ status: 'completed' })
+      .eq('id', requestId);
   } catch (err) {}
 }
 
 /**
- * Le client annule sa demande avant que le marchand ne décroche
+ * Le client annule sa demande
  */
 export async function cancelFlashLiveRequest(requestId: string): Promise<void> {
   const current = getLocalRequests()[requestId];
@@ -318,12 +300,10 @@ export async function cancelFlashLiveRequest(requestId: string): Promise<void> {
   }
 
   try {
-    const { doc, updateDoc } = await loadFirestore();
-    const docRef = doc(db, 'flash_requests', requestId);
-    await updateDoc(docRef, {
-      status: 'cancelled',
-      endedAt: Date.now()
-    });
+    await supabase
+      .from('wameet_messages')
+      .update({ status: 'cancelled' })
+      .eq('id', requestId);
   } catch (err) {}
 }
 
@@ -339,7 +319,6 @@ export function playIncomingCallRingtone(): void {
 
     const now = ctx.currentTime;
     
-    // Cadence de sonnerie de téléphone moderne (bip double doux et pénétrant)
     const playRingBurst = (timeOffset: number) => {
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
@@ -347,8 +326,8 @@ export function playIncomingCallRingtone(): void {
 
       osc1.type = 'sine';
       osc2.type = 'sine';
-      osc1.frequency.setValueAtTime(440, now + timeOffset); // La standard 440 Hz
-      osc2.frequency.setValueAtTime(480, now + timeOffset); // Fréquence téléphone
+      osc1.frequency.setValueAtTime(440, now + timeOffset);
+      osc2.frequency.setValueAtTime(480, now + timeOffset);
 
       gain.gain.setValueAtTime(0.2, now + timeOffset);
       gain.gain.exponentialRampToValueAtTime(0.01, now + timeOffset + 0.35);

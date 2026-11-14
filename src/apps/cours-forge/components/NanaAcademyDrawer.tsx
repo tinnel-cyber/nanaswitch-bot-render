@@ -36,7 +36,7 @@ import {
   isDirectVideoStream
 } from '../../../services/tutorialService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
-import { CertificatePreviewModal } from '../../../components/lms/CertificatePreviewModal';
+import { CertificatePreviewModal } from './lms/CertificatePreviewModal';
 
 interface NanaAcademyDrawerProps {
   isOpen: boolean;

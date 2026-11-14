@@ -30,7 +30,7 @@ import { WameetAppHeader } from '../../../components/wameet/WameetAppHeader';
 import { WameetBottomTabBar } from '../../../components/wameet/WameetBottomTabBar';
 import { WameetLayout } from '../../../components/wameet/WameetLayout';
 import { WameetSidebarDrawer } from '../../../components/wameet/WameetSidebarDrawer';
-import { NanaPosProShowcaseModal } from '../../../components/wameet/NanaPosProShowcaseModal';
+import { NanasoreProShowcaseModal } from '../../../components/wameet/NanasoreProShowcaseModal';
 import { WameetPrivacySecurityScreen } from '../../../components/wameet/WameetPrivacySecurityScreen';
 import { WameetWalletFinanceScreen } from '../../../components/wameet/WameetWalletFinanceScreen';
 import { SocialFeedScreen } from '../../../components/wameet/SocialFeedScreen';
@@ -485,8 +485,8 @@ export const WameetSupraApp: React.FC<WameetSupraAppProps> = ({
   const [isDeliveryHeatmapOpen, setIsDeliveryHeatmapOpen] = useState(false);
   const [isCagnotteOpen, setIsCagnotteOpen] = useState(false);
 
-  // Modales et sous-écrans Prompt 43 (Tiroir des 3 points & NaNa POS)
-  const [isNanaPosPromoOpen, setIsNanaPosPromoOpen] = useState(false);
+  // Modales et sous-écrans Prompt 43 (Tiroir des 3 points & Nanasore)
+  const [isNanasorePromoOpen, setIsNanasorePromoOpen] = useState(false);
   const [isPrivacySecurityOpen, setIsPrivacySecurityOpen] = useState(false);
   const [isWalletFinanceOpen, setIsWalletFinanceOpen] = useState(false);
 
@@ -1466,21 +1466,21 @@ function sanitizeForFirestore(obj: any): any {
         onOpenLiveShopping={() => setIsLiveShoppingGatewayOpen(true)}
         onOpenCagnotte={() => setIsCagnotteOpen(true)}
         onOpenSwarmDelivery={() => setIsSwarmDeliveryGatewayOpen(true)}
-        onOpenNanaPosPromo={() => setIsNanaPosPromoOpen(true)}
+        onOpenNanasorePromo={() => setIsNanasorePromoOpen(true)}
         onOpenPrivacySettings={() => setIsPrivacySecurityOpen(true)}
         onOpenWallet={() => setIsWalletFinanceOpen(true)}
         onOpenCreateVip={() => setIsVipLoungeGatewayOpen(true)}
       />
 
       {/* =====================================================================
-          PAGE PROMOTIONNELLE DÉDIÉE NANA POS (PROMPT 43 - SECTION 2)
+          PAGE PROMOTIONNELLE DÉDIÉE NANASORE (PROMPT 43 - SECTION 2)
          ===================================================================== */}
-      {isNanaPosPromoOpen && (
-        <NanaPosProShowcaseModal
-          isOpen={isNanaPosPromoOpen}
-          onClose={() => setIsNanaPosPromoOpen(false)}
-          onLaunchNanaPos={() => {
-            setIsNanaPosPromoOpen(false);
+      {isNanasorePromoOpen && (
+        <NanasoreProShowcaseModal
+          isOpen={isNanasorePromoOpen}
+          onClose={() => setIsNanasorePromoOpen(false)}
+          onLaunchNanasore={() => {
+            setIsNanasorePromoOpen(false);
             if (onBackToDashboard) onBackToDashboard();
             else if (typeof window !== 'undefined') window.location.href = '/dashboard';
           }}
@@ -1523,7 +1523,7 @@ function sanitizeForFirestore(obj: any): any {
             showToast(`🔍 Recherche pour "${q}"`);
             setIsSearchOpen(false);
           }}
-          searchHistory={['Chaussures Ouaga', 'Concert Live', 'Vente Flash NaNa POS', 'Afterwork Tech']}
+          searchHistory={['Chaussures Ouaga', 'Concert Live', 'Vente Flash Nanasore', 'Afterwork Tech']}
           onRemoveHistoryItem={() => {}}
           onClearHistory={() => {}}
           hasSubmittedSearch={false}

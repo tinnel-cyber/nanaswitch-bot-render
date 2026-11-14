@@ -21,8 +21,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, Clock, ShieldCheck, LogOut, Sparkles, CheckCircle2, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { db } from '../../../../firebase';
-import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 
 declare global {
   interface Window {
@@ -245,29 +244,19 @@ export const WameetRoom: React.FC<WameetRoomProps> = ({
     // 3. Sanction Backend : Statut à 'REPORTED_ABUSE' & réduction du score d'impact de 500 points
     const nowIso = new Date().toISOString();
     try {
-      if (db) {
-        // A. Mise à jour de la table/collection du Wameet
-        const wameetRef = doc(collection(db, 'wameets'), wameetId);
-        await setDoc(wameetRef, {
-          status: 'REPORTED_ABUSE',
-          reportedAt: nowIso,
-          reportedParticipantId: creatorName,
-          penaltyScore: -500,
-          reason: "Signalement d'urgence en direct (Bouton Bouclier)"
-        }, { merge: true });
-
-        // B. Pénalisation directe de l'utilisateur signalé (-500 points)
-        const userRef = doc(collection(db, 'wameet_profiles'), creatorName);
-        const userSnap = await getDoc(userRef);
-        const currentScore = userSnap.exists() ? (userSnap.data().impactScore || 18450) : 18450;
-        await setDoc(userRef, {
-          impactScore: Math.max(0, currentScore - 500),
-          lastReportedAt: nowIso,
-          sanctionReason: 'REPORTED_ABUSE_DIRECT'
-        }, { merge: true });
-      }
+      await supabase
+        .from('wameet_messages')
+        .insert({
+          id: `rep_${Date.now()}`,
+          chat_id: wameetId,
+          sender_name: creatorName,
+          text: `REPORTED_ABUSE: Signalement d'urgence en direct (Bouton Bouclier)`,
+          type: 'abuse_report',
+          status: 'reported',
+          created_at: nowIso
+        });
     } catch (dbErr) {
-      console.warn('[KILL SWITCH] Enregistrement Firestore :', dbErr);
+      console.warn('[KILL SWITCH] Enregistrement Supabase :', dbErr);
     }
 
     // C. Requête API backend de réplication

@@ -20,7 +20,7 @@ export async function handleSeoOgModule(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname;
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
-  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "pos-app-1759a.web.app");
+  const renderBackend = (env.RENDER_BACKEND_URL && env.RENDER_BACKEND_URL !== "nanasore.onrender.com" ? env.RENDER_BACKEND_URL : "nanasore.com");
 
   const isSocialBot = SOCIAL_BOTS_USER_AGENTS.some(bot => userAgent.includes(bot));
 

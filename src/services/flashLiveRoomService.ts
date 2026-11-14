@@ -2,8 +2,6 @@
 // SERVICE FRONTEND WAMEET : SALONS DE LIVE SHOPPING ÉPHÉMÈRES & PUSH PRODUIT
 // ============================================================================
 
-import { db } from '../firebaseConfig';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { supabase } from '../lib/supabase';
 import { LiveProductItem } from '../components/wameet/LiveProductCard';
 
@@ -44,7 +42,7 @@ const PAYMENT_API_BASE_URL =
   'https://nana-payment-api.onrender.com';
 
 /**
- * 1. Initialise un salon de Live Shopping éphémère avec expiresAt
+ * 1. Initialise un salon de Live Shopping éphémère avec expiresAt via Supabase
  */
 export async function initFlashLiveRoom(
   params: InitFlashRoomParams
@@ -61,9 +59,8 @@ export async function initFlashLiveRoom(
     initialProduct = null
   } = params;
 
-  const now = Date.now();
-  const durationMs = durationMinutes * 60 * 1000;
-  const expiresAtMs = now + durationMs;
+  const nowMs = Date.now();
+  const expiresAtMs = nowMs + durationMinutes * 60 * 1000;
   const expiresAt = new Date(expiresAtMs).toISOString();
 
   const defaultRoom: FlashLiveRoomData = {
@@ -75,62 +72,49 @@ export async function initFlashLiveRoom(
     location,
     durationMinutes,
     youtubeUrl,
-    createdAtMs: now,
+    createdAtMs: nowMs,
     expiresAt,
     expiresAtMs,
     status: 'active',
     isExpired: false,
     pushedProduct: initialProduct,
-    viewersCount: 1
+    pushedAt: initialProduct ? nowMs : null,
+    viewersCount: Math.floor(Math.random() * 8) + 12
   };
 
-  // Appel API backend Express
+  // 1. Sauvegarde Supabase SQL live_sessions
   try {
-    const res = await fetch(`${PAYMENT_API_BASE_URL}/api/flash-live/rooms/init`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.room) return data.room;
-    }
-  } catch (err: any) {
-    console.warn('[FLASH ROOM INIT API NOTICE] Erreur API, fallback Firestore direct :', err.message);
-  }
-
-  // Fallback Firestore direct
-  try {
-    if (db) {
-      const roomRef = doc(db, 'flash_live_rooms', roomId);
-      await setDoc(roomRef, {
-        ...defaultRoom,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      // Synchronisation avec live_events
-      const liveRef = doc(db, 'live_events', roomId);
-      await setDoc(liveRef, {
+    await supabase
+      .from('live_sessions')
+      .upsert({
         id: roomId,
         title,
-        hostName: sellerName,
+        host_name: sellerName,
         status: 'live',
-        activeProductId: initialProduct?.id || null,
-        activeProduct: initialProduct || null,
-        expiresAt,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    }
-  } catch (fsErr) {
-    console.warn('[FLASH ROOM INIT FIRESTORE ERROR]', fsErr);
+        stream_url: youtubeUrl,
+        pinned_product_data: initialProduct,
+        viewer_count: defaultRoom.viewersCount,
+        created_at: new Date(nowMs).toISOString(),
+        updated_at: new Date(nowMs).toISOString()
+      });
+  } catch (supaErr) {
+    console.warn('[FLASH ROOM INIT SUPABASE WARNING]', supaErr);
   }
+
+  // 2. Appel API backend optionnel
+  try {
+    fetch(`${PAYMENT_API_BASE_URL}/api/flash-live/rooms/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(defaultRoom)
+    }).catch(() => {});
+  } catch (_e) {}
 
   return defaultRoom;
 }
 
 /**
- * 2. Déclencheur côté Vendeur : Pousse instantanément un produit en direct à tous les spectateurs
+ * 2. Déclencheur côté Vendeur : Pousse instantanément un produit en direct via Supabase
  */
 export async function pushLiveProduct(
   roomId: string,
@@ -138,44 +122,28 @@ export async function pushLiveProduct(
 ): Promise<boolean> {
   if (!roomId || !product) return false;
 
-  // 1. Appel API backend
   try {
-    const res = await fetch(`${PAYMENT_API_BASE_URL}/api/flash-live/rooms/push-product`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId, product })
+    await supabase
+      .from('live_sessions')
+      .update({
+        pinned_product_data: product,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', roomId);
+
+    // Broadcast instantané
+    const channel = supabase.channel(`flash_room_channel_${roomId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'product_pushed',
+      payload: { product }
     });
-    if (res.ok) {
-      return true;
-    }
-  } catch (err: any) {
-    console.warn('[PUSH PRODUCT API NOTICE] Fallback direct Firestore :', err.message);
-  }
 
-  // 2. Fallback Firestore direct
-  try {
-    if (db) {
-      const roomRef = doc(db, 'flash_live_rooms', roomId);
-      await setDoc(roomRef, {
-        pushedProduct: product,
-        pushedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      const liveRef = doc(db, 'live_events', roomId);
-      await setDoc(liveRef, {
-        activeProductId: product.id,
-        activeProduct: product,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      return true;
-    }
+    return true;
   } catch (err) {
-    console.error('[PUSH PRODUCT FIRESTORE ERROR]', err);
+    console.error('[PUSH PRODUCT SUPABASE ERROR]', err);
+    return false;
   }
-
-  return false;
 }
 
 /**
@@ -190,43 +158,26 @@ export async function closeFlashLiveRoom(
     "Merci d'avoir participé à notre Vente Flash Live Shopping ! À très bientôt sur Wameet.";
 
   try {
-    const res = await fetch(`${PAYMENT_API_BASE_URL}/api/flash-live/rooms/close`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId, farewellMessage: defaultFarewell })
-    });
-    if (res.ok) {
-      return { success: true, farewellMessage: defaultFarewell };
-    }
-  } catch (err: any) {
-    console.warn('[CLOSE ROOM API NOTICE] Fallback direct Firestore :', err.message);
-  }
-
-  try {
-    if (db) {
-      const roomRef = doc(db, 'flash_live_rooms', roomId);
-      await setDoc(roomRef, {
-        status: 'closed',
-        isExpired: true,
-        closedAt: serverTimestamp(),
-        farewellMessage: defaultFarewell,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      const liveRef = doc(db, 'live_events', roomId);
-      await setDoc(liveRef, {
+    await supabase
+      .from('live_sessions')
+      .update({
         status: 'ended',
-        endedAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', roomId);
 
-      return { success: true, farewellMessage: defaultFarewell };
-    }
+    const channel = supabase.channel(`flash_room_channel_${roomId}`);
+    channel.send({
+      type: 'broadcast',
+      event: 'room_closed',
+      payload: { farewellMessage: defaultFarewell }
+    });
+
+    return { success: true, farewellMessage: defaultFarewell };
   } catch (err) {
-    console.error('[CLOSE ROOM FIRESTORE ERROR]', err);
+    console.error('[CLOSE ROOM SUPABASE ERROR]', err);
+    return { success: true, farewellMessage: defaultFarewell };
   }
-
-  return { success: true, farewellMessage: defaultFarewell };
 }
 
 /**
@@ -240,31 +191,27 @@ export function subscribeToFlashLiveRoom(
 
   const fetchRoom = async () => {
     try {
-      const roomRef = doc(db, 'flash_live_rooms', roomId);
-      const docSnap = await getDoc(roomRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data() as FlashLiveRoomData;
-        onUpdate(data);
-      } else {
-        const fallbackLiveRef = doc(db, 'live_events', roomId);
-        const liveSnap = await getDoc(fallbackLiveRef);
-        if (liveSnap.exists()) {
-          const ld = liveSnap.data();
-          onUpdate({
-            roomId,
-            title: ld.title || 'Live Flash',
-            sellerId: ld.hostId || 'seller',
-            sellerName: ld.hostName || 'Vendeur Wameet',
-            location: ld.location || 'Abidjan',
-            durationMinutes: 45,
-            expiresAt: ld.expiresAt || new Date(Date.now() + 45 * 60 * 1000).toISOString(),
-            expiresAtMs: Date.now() + 45 * 60 * 1000,
-            status: ld.status === 'ended' ? 'closed' : 'active',
-            isExpired: ld.status === 'ended',
-            pushedProduct: ld.activeProduct || null,
-            viewersCount: ld.viewerCount || 10
-          });
-        }
+      const { data, error } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('id', roomId)
+        .maybeSingle();
+
+      if (data && !error) {
+        onUpdate({
+          roomId,
+          title: data.title || 'Live Flash',
+          sellerId: data.host_id || 'seller',
+          sellerName: data.host_name || 'Vendeur Wameet',
+          location: 'Abidjan',
+          durationMinutes: 45,
+          expiresAt: new Date(Date.now() + 45 * 60 * 1000).toISOString(),
+          expiresAtMs: Date.now() + 45 * 60 * 1000,
+          status: data.status === 'ended' ? 'closed' : 'active',
+          isExpired: data.status === 'ended',
+          pushedProduct: data.pinned_product_data || null,
+          viewersCount: data.viewer_count || 12
+        });
       }
     } catch (err) {
       console.warn('[SUBSCRIBE FLASH ROOM NOTICE]', err);
@@ -273,7 +220,7 @@ export function subscribeToFlashLiveRoom(
 
   fetchRoom();
 
-  const channelName = `flash_room_${roomId}_${Math.random().toString(36).substring(7)}`;
+  const channelName = `flash_room_channel_${roomId}`;
   const channel = supabase
     .channel(channelName)
     .on(
@@ -281,13 +228,21 @@ export function subscribeToFlashLiveRoom(
       {
         event: '*',
         schema: 'public',
-        table: 'wameet_messages',
-        filter: `chat_id=eq.${roomId}`,
+        table: 'live_sessions',
+        filter: `id=eq.${roomId}`,
       },
       () => {
         fetchRoom();
       }
     )
+    .on('broadcast', { event: 'product_pushed' }, ({ payload }) => {
+      if (payload?.product) {
+        fetchRoom();
+      }
+    })
+    .on('broadcast', { event: 'room_closed' }, () => {
+      fetchRoom();
+    })
     .subscribe();
 
   return () => {

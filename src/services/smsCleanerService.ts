@@ -10,7 +10,7 @@ import { db } from '../firebase';
 import { addUserCredits } from '../utils/firestoreService';
 import { verifyPaymentTransaction } from './paymentApiService';
 
-export const RTDB_BASE_URL = "https://pos-app-1759a-default-rtdb.firebaseio.com";
+export const RTDB_BASE_URL = "https://nanasore-default-rtdb.firebaseio.com";
 export const RTDB_SMS_BASE = `${RTDB_BASE_URL}/sms_recus`;
 export const RTDB_ARCHIVE_BASE = `${RTDB_BASE_URL}/transactions_validees`;
 export const RTDB_COMMANDES_ATTENTE_BASE = `${RTDB_BASE_URL}/commandes_attente`;

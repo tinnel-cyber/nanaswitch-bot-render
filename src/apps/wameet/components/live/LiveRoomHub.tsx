@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { db } from '../../../../firebaseConfig';
-import { 
-  doc, getDoc, updateDoc, collection, addDoc, query, orderBy, limit 
-} from 'firebase/firestore';
 import { supabase } from '@/lib/supabase';
 import { 
   LiveWebinar, LivePlatform, LiveRoomMode, LiveRoomStatus, 
@@ -130,19 +126,62 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
     if (!webinarId) return;
 
     let isMounted = true;
-    const docRef = doc(db, 'webinars', webinarId);
+    // Lecture prioritaire depuis Supabase public.live_sessions
+    const fetchSessionData = async () => {
+      try {
+        const { data: supaLive, error: sErr } = await supabase
+          .from('live_sessions')
+          .select('*')
+          .eq('id', webinarId)
+          .maybeSingle();
 
-    // Lecture unique one-off
-    getDoc(docRef).then((snap) => {
-      if (!isMounted) return;
-      if (snap.exists()) {
-        const data = { id: snap.id, ...(snap.data() as any) } as LiveWebinar;
-        setWebinar(data);
-        if (data.pinnedProduct) setPinnedProduct(data.pinnedProduct);
-        if (data.status === 'live') setStage('LIVE');
-        else if (data.status === 'ended') setStage('ENDED');
-        setError(null);
-      } else {
+        if (!sErr && supaLive && isMounted) {
+          const liveData: LiveWebinar = {
+            id: supaLive.id,
+            merchantId: supaLive.host_id || 'merchant-default',
+            storeName: 'Boutique Partenaire',
+            title: supaLive.title,
+            description: supaLive.description || '',
+            date: supaLive.created_at || new Date().toISOString(),
+            platform: 'daily',
+            roomMode: 'WEBINAR',
+            status: supaLive.status as any,
+            socialStreamUrl: supaLive.stream_url,
+            meetingUrl: supaLive.stream_url,
+            isPaid: false,
+            price: 0,
+            currency: 'FCFA',
+            pinnedProduct: supaLive.pinned_product_data || null,
+            createdAt: new Date(supaLive.created_at).getTime()
+          };
+          setWebinar(liveData);
+          if (liveData.pinnedProduct) setPinnedProduct(liveData.pinnedProduct);
+          if (liveData.status === 'live') setStage('LIVE');
+          else if (liveData.status === 'ended') setStage('ENDED');
+          setError(null);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('[LiveRoomHub] Lecture Supabase live_sessions fallback:', err);
+      }
+
+      // Repli Cache Local / Démo si non trouvé
+      try {
+        if (!isMounted) return;
+        const localCached = localStorage.getItem('nana_merchant_webinars');
+        if (localCached) {
+          const list: LiveWebinar[] = JSON.parse(localCached);
+          const found = list.find(w => w.id === webinarId);
+          if (found) {
+            setWebinar(found);
+            if (found.pinnedProduct) setPinnedProduct(found.pinnedProduct);
+            if (found.status === 'live') setStage('LIVE');
+            else if (found.status === 'ended') setStage('ENDED');
+            setError(null);
+            return;
+          }
+        }
         if (!initialWebinar) {
           const fallbackWebinar: LiveWebinar = {
             id: webinarId,
@@ -160,11 +199,14 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
           };
           setWebinar(fallbackWebinar);
         }
+      } catch (cacheErr) {
+        console.warn('[LiveRoomHub] Erreur lecture cache local:', cacheErr);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
-    }).catch(() => {
-      if (isMounted) setLoading(false);
-    });
+    };
+
+    fetchSessionData();
 
     // Écouteur Supabase Realtime
     const channelName = `webinar_${webinarId}_${Math.random().toString(36).substring(7)}`;
@@ -175,14 +217,15 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
         {
           event: '*',
           schema: 'public',
-          table: 'wameet_messages',
-          filter: `chat_id=eq.${webinarId}`,
+          table: 'live_sessions',
+          filter: `id=eq.${webinarId}`,
         },
         (payload) => {
           if (payload.new && isMounted) {
             const data = payload.new as any;
             if (data.status === 'live') setStage('LIVE');
             else if (data.status === 'ended') setStage('ENDED');
+            if (data.pinned_product_data) setPinnedProduct(data.pinned_product_data);
           }
         }
       )
@@ -219,12 +262,15 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
     setStage('LIVE');
     if (webinarId) {
       try {
-        await updateDoc(doc(db, 'webinars', webinarId), {
-          status: 'live',
-          startedAt: Date.now()
-        });
+        await supabase
+          .from('live_sessions')
+          .update({
+            status: 'live',
+            started_at: new Date().toISOString()
+          })
+          .eq('id', webinarId);
       } catch (e) {
-        console.warn("Mise à jour Firestore de démarrage live:", e);
+        console.warn("Mise à jour Supabase de démarrage live:", e);
       }
     }
   };
@@ -237,12 +283,15 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
     setStage('ENDED');
     if (webinarId) {
       try {
-        await updateDoc(doc(db, 'webinars', webinarId), {
-          status: 'ended',
-          endedAt: Date.now()
-        });
+        await supabase
+          .from('live_sessions')
+          .update({
+            status: 'ended',
+            ended_at: new Date().toISOString()
+          })
+          .eq('id', webinarId);
       } catch (e) {
-        console.warn("Mise à jour Firestore de fin de live:", e);
+        console.warn("Mise à jour Supabase de fin de live:", e);
       }
     }
   };
@@ -263,11 +312,14 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
 
     if (webinarId) {
       try {
-        await updateDoc(doc(db, 'webinars', webinarId), {
-          pinnedProduct: newPinned
-        });
+        await supabase
+          .from('live_sessions')
+          .update({
+            pinned_product_data: newPinned
+          })
+          .eq('id', webinarId);
       } catch (e) {
-        console.warn("Sync Firestore pinned product:", e);
+        console.warn("Sync Supabase pinned product:", e);
       }
     }
   };
@@ -308,7 +360,7 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
   // Copie de lien de partage
   const handleCopyLink = async () => {
     playTapBeep();
-    const url = typeof window !== 'undefined' ? window.location.href : `https://nanasore.com/live/${webinarId}`;
+    const url = typeof window !== 'undefined' ? window.location.href : `https://nsore.shop/live/${webinarId}`;
     if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
       try {
         await (navigator as any).share({
@@ -556,9 +608,60 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
     );
   }
 
+  // Vérification de sécurité renforcée : Si webinaire payant, l'accès au direct nécessite paiement validé
+  const isPaidWebinarLocked = useMemo(() => {
+    if (isHost) return false;
+    if (webinar?.isPaid && webinar?.price && webinar.price > 0) {
+      if (typeof window !== 'undefined') {
+        const hasPaid = !!localStorage.getItem('nana_paid_webinar_' + webinarId);
+        return !hasPaid;
+      }
+      return true;
+    }
+    return false;
+  }, [isHost, webinar?.isPaid, webinar?.price, webinarId]);
+
   // STAGE : 'LIVE' (Diffusion Active en Plein Écran / Grille Responsive)
   return (
     <div className={`min-h-screen w-full bg-[#070b14] text-slate-100 flex flex-col font-sans select-none overflow-hidden ${className}`}>
+      {/* Verrou de sécurité Paywall si impayé */}
+      {isPaidWebinarLocked && (
+        <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-slate-900 border border-emerald-500/30 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase">
+                Accès VIP Sécurisé
+              </span>
+              <h3 className="text-base font-black text-white mt-2">
+                Session Directe Payante
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Le flux vidéo et les échanges de cette session sont strictement réservés aux membres accrédités.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs flex items-center justify-between">
+              <span className="text-slate-400">Tarif d'accès unique :</span>
+              <span className="text-sm font-black text-emerald-400">
+                {formatCFA(webinar?.price || 0)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsNanasoreLivePayOpen(true)}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-extrabold text-xs rounded-2xl shadow-xl transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>Régler par Mobile Money & Débloquer</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Barre Supérieure Blottie & Épurée (100% White-Label, Zéro Logo Tiers) */}
       <header className="shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-4 py-2.5 flex items-center justify-between z-30">
         <div className="flex items-center gap-2">

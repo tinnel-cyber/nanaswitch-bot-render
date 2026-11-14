@@ -159,7 +159,7 @@ export const DEFAULT_MASTERCLASS_COURSE: Course = {
         {
           id: 'les-2-1',
           moduleId: 'mod-2',
-          title: '2.1 Déploiement de NaNa POS : Caisse Tactile, Scanner Code-barres & Reçus Bluetooth',
+          title: '2.1 Déploiement de Nanasore : Caisse Tactile, Scanner Code-barres & Reçus Bluetooth',
           durationMinutes: 30,
           videoUrl: 'https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=0&controls=1',
           isFreePreview: true,
@@ -345,7 +345,7 @@ export function getInitialStudentEnrollment(courseId: string, studentName: strin
     id: `enroll-${Date.now()}`,
     studentId: 'student-demo',
     studentName,
-    studentEmail: 'etudiant@nanapos.app',
+    studentEmail: 'etudiant@nanasore.com',
     courseId,
     enrolledAt: Date.now() - 1000 * 60 * 60 * 24 * 3, // Inscrit il y a 3 jours
     completedLessonIds: ['les-1-1'], // 1 leçon déjà validée par défaut

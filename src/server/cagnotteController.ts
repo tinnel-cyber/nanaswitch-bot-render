@@ -4,10 +4,10 @@
  * 
  * Fonctionnalité clé :
  * - Les groupes d'anniversaire / événements activent le mode Cagnotte.
- * - Le cadeau est un article réel issu de l'inventaire des marchands NaNa POS (ex: iPhone 15, Billet d'avion).
+ * - Le cadeau est un article réel issu de l'inventaire des marchands Nanasore (ex: iPhone 15, Billet d'avion).
  * - Jauge de progression temps réel épinglée en haut de la conversation.
  * - À 100%, le Contrat Intelligent s'active automatiquement :
- *   L'argent n'est JAMAIS versé à un particulier ; il est transféré directement au Wallet du marchand NaNa POS.
+ *   L'argent n'est JAMAIS versé à un particulier ; il est transféré directement au Wallet du marchand Nanasore.
  * - Commande ferme émise pour livraison à l'heure exacte de la fête.
  */
 
@@ -16,8 +16,8 @@ import type { Request, Response, Express } from 'express';
 import sClient from './sebpay-client';
 import { POS_SYNC_M2M_TOKEN } from './posSyncController';
 import {
-  NANA_POS_GIFT_CATALOG,
-  NaNaPosGiftItem,
+  NANASORE_GIFT_CATALOG,
+  NanasoreGiftItem,
   CagnotteContribution,
   CagnotteGroupState,
   CagnotteSession,
@@ -26,7 +26,7 @@ import {
   CagnottePaymentMethod
 } from '../types/cagnotte';
 
-export { NANA_POS_GIFT_CATALOG };
+export { NANASORE_GIFT_CATALOG };
 
 const S_WEBHOOK_SECRET = process.env.S_WEBHOOK_SECRET || 'wameet_cagnotte_s_secret_key_2026';
 
@@ -136,7 +136,7 @@ function releaseCagnotteLock(cagnotteId: string): void {
 export function seedInitialSarahBirthdayCagnotte(): CagnotteGroupState {
   const cagnotteId = 'cagnotte_anniv_sarah_2026';
   const groupId = 'group_anniv_sarah';
-  const gift = NANA_POS_GIFT_CATALOG[0]; // iPhone 15 Pro Max (650 000 FCFA)
+  const gift = NANASORE_GIFT_CATALOG[0]; // iPhone 15 Pro Max (650 000 FCFA)
 
   const initialContributions: CagnotteContribution[] = [
     {
@@ -265,7 +265,7 @@ export function seedInitialSarahBirthdayCagnotte(): CagnotteGroupState {
       deliverySlot: 'Samedi 24 Octobre à 19h30 (Heure de la fête)',
       deliveryAddress: 'Villa 42, Rue des Ambassades, Ouaga 2000',
       deliveryPinCode: '7842',
-      terms: 'Règlement 100% direct au marchand NaNa POS iStore Ouaga 2000 dès atteinte des 650 000 FCFA. Fonds séquestrés par contrat intelligent Wameet. 0 FCFA perçu par un particulier.'
+      terms: 'Règlement 100% direct au marchand Nanasore iStore Ouaga 2000 dès atteinte des 650 000 FCFA. Fonds séquestrés par contrat intelligent Wameet. 0 FCFA perçu par un particulier.'
     },
     createdAt: Date.now() - 86400000,
     updatedAt: Date.now()
@@ -299,9 +299,9 @@ export async function createCagnotte(payload: CreateCagnottePayload): Promise<Ca
     eventLocation
   } = payload;
 
-  const gift = NANA_POS_GIFT_CATALOG.find((g) => g.id === giftId);
+  const gift = NANASORE_GIFT_CATALOG.find((g) => g.id === giftId);
   if (!gift) {
-    throw { status: 400, message: `Cadeau NaNa POS introuvable pour l'id: ${giftId}` };
+    throw { status: 400, message: `Cadeau Nanasore introuvable pour l'id: ${giftId}` };
   }
 
   const cagnotteId = `cagnotte_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
@@ -330,7 +330,7 @@ export async function createCagnotte(payload: CreateCagnottePayload): Promise<Ca
       deliverySlot: `${eventDate} (Heure de la fête)`,
       deliveryAddress: eventLocation,
       deliveryPinCode,
-      terms: `Règlement direct de ${gift.price} FCFA vers le marchand NaNa POS ${gift.merchantName} dès atteinte de 100%. Sécurité Escrow tripartite sans intermédiaire individuel.`
+      terms: `Règlement direct de ${gift.price} FCFA vers le marchand Nanasore ${gift.merchantName} dès atteinte de 100%. Sécurité Escrow tripartite sans intermédiaire individuel.`
     },
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -499,7 +499,7 @@ export async function processContributionValidation(params: {
     // 2. CONTRAT INTELLIGENT : DÉCLENCHEMENT AUTOMATIQUE À 100% (PROMPT 21)
     // "Si currentAmount >= targetAmount, le système passe le statut à completed.
     // L'appel crucial : Le serveur fait une requête HTTP interne sécurisée vers
-    // l'API de NaNa POS (POST /api/pos/auto-order) pour générer le bon de commande
+    // l'API de Nanasore (POST /api/pos/auto-order) pour générer le bon de commande
     // physique et créditer le marchand.
     // Pousse une SmartTransactionBubble dans le chat :
     // '🎉 Incroyable ! La cagnotte est pleine, le cadeau est en cours de préparation par la boutique !'"
@@ -516,7 +516,7 @@ export async function processContributionValidation(params: {
 
       let posOrderId = `CMD-POS-AUTO-${Date.now().toString().slice(-6)}`;
 
-      // 1. L'appel crucial : Requête HTTP interne sécurisée vers NaNa POS (POST /api/pos/auto-order)
+      // 1. L'appel crucial : Requête HTTP interne sécurisée vers Nanasore (POST /api/pos/auto-order)
       try {
         const port = process.env.PORT || 3000;
         const autoOrderUrl = `http://127.0.0.1:${port}/api/pos/auto-order`;
@@ -543,14 +543,14 @@ export async function processContributionValidation(params: {
           const posData = await autoOrderResponse.json();
           if (posData?.orderId) {
             posOrderId = posData.orderId;
-            console.log(`[CAGNOTTE SMART CONTRACT] ✅ Bon de commande NaNa POS généré avec succès : ${posOrderId}`);
+            console.log(`[CAGNOTTE SMART CONTRACT] ✅ Bon de commande Nanasore généré avec succès : ${posOrderId}`);
           }
         }
       } catch (httpErr: any) {
         console.warn(`[CAGNOTTE SMART CONTRACT] Appel HTTP /api/pos/auto-order en fallback local (${httpErr.message})`);
       }
 
-      // 2. Action Financière : Virement 100% direct au Wallet du commerçant NaNa POS
+      // 2. Action Financière : Virement 100% direct au Wallet du commerçant Nanasore
       const payoutId = `payout_pos_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
       const merchantWalletResult = await sClient.creditWameetWallet(
         cagnotte.gift.merchantWalletId,
@@ -572,7 +572,7 @@ export async function processContributionValidation(params: {
       };
 
       console.log(
-        `[SMART CONTRACT EXECUTED] 🚀 100% ATTEINT ! Versement automatique de ${cagnotte.targetAmount} FCFA effectué directement au marchand NaNa POS "${cagnotte.gift.merchantName}" (Wallet: ${cagnotte.gift.merchantWalletId}, Nouveau solde: ${merchantWalletResult.balance} FCFA). Commande POS ${posOrderId} générée pour livraison à l'heure de la fête !`
+        `[SMART CONTRACT EXECUTED] 🚀 100% ATTEINT ! Versement automatique de ${cagnotte.targetAmount} FCFA effectué directement au marchand Nanasore "${cagnotte.gift.merchantName}" (Wallet: ${cagnotte.gift.merchantWalletId}, Nouveau solde: ${merchantWalletResult.balance} FCFA). Commande POS ${posOrderId} générée pour livraison à l'heure de la fête !`
       );
 
       // 3. Pousse la SmartTransactionBubble dans le chat de groupe (Prompt 21)
@@ -580,7 +580,7 @@ export async function processContributionValidation(params: {
         id: `bubble_${Date.now()}_${crypto.randomBytes(2).toString('hex')}`,
         groupId: cagnotte.groupId,
         type: 'smart_transaction_bubble',
-        senderName: 'Smart Contract Wameet x NaNa POS',
+        senderName: 'Smart Contract Wameet x Nanasore',
         text: '🎉 Incroyable ! La cagnotte est pleine, le cadeau est en cours de préparation par la boutique !',
         cagnotteId: cagnotte.id,
         giftName: cagnotte.gift.name,
@@ -634,11 +634,11 @@ export async function processContributionValidation(params: {
 // ============================================================================
 
 export function attachCagnotteRoutes(app: Express): void {
-  // 1. Catalogue des cadeaux NaNa POS
+  // 1. Catalogue des cadeaux Nanasore
   app.get('/api/cagnotte/catalog', (_req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
-      catalog: NANA_POS_GIFT_CATALOG
+      catalog: NANASORE_GIFT_CATALOG
     });
   });
 
@@ -765,7 +765,7 @@ export function attachCagnotteRoutes(app: Express): void {
       return res.status(200).json({
         success: true,
         message: result.smartContractTriggered
-          ? '🎯 100% Atteint ! Le Contrat Intelligent a réglé le commerçant NaNa POS directement !'
+          ? '🎯 100% Atteint ! Le Contrat Intelligent a réglé le commerçant Nanasore directement !'
           : `Contribution de ${contributionAmount} FCFA ajoutée avec succès !`,
         ...result
       });
@@ -789,7 +789,7 @@ export function attachCagnotteRoutes(app: Express): void {
 }
 
 export default {
-  NANA_POS_GIFT_CATALOG,
+  NANASORE_GIFT_CATALOG,
   createCagnotte,
   getCagnotteByGroup,
   initiateContribution,

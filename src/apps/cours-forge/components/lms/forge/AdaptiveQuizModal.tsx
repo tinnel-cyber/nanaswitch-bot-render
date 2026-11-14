@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { AdaptiveQuizQuestion } from '../../../../../types';
 import { useFeatureGate } from '../../../../../hooks/useFeatureGate';
+import { playTapBeep, playValidationBeep } from '../../../../../utils/audio';
 
 interface AdaptiveQuizModalProps {
   isOpen: boolean;
@@ -178,10 +179,35 @@ export const AdaptiveQuizModal: React.FC<AdaptiveQuizModalProps> = ({
     ? questions
     : questions.filter(q => q.level === selectedLevelFilter);
 
-  // IA Auto-Génération d'une question supplémentaire selon le niveau
-  const handleGenerateAiQuestion = (targetLevel: 1 | 2 | 3 | 4 | 5) => {
+  // IA Auto-Génération d'une question supplémentaire selon le niveau via backend Gemini
+  const handleGenerateAiQuestion = async (targetLevel: 1 | 2 | 3 | 4 | 5) => {
     setIsGeneratingAI(true);
-    setTimeout(() => {
+    playTapBeep();
+
+    try {
+      const response = await fetch('/api/ai/quiz-question/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lessonTitle: nodeTitle || 'Quiz Pédagogique',
+          targetLevel,
+          topic: nodeTitle
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur serveur (${response.status})`);
+      }
+
+      const data = await response.json();
+      if (data?.success && data?.question) {
+        setQuestions(prev => [...prev, data.question]);
+        playValidationBeep();
+      } else {
+        throw new Error("Format de question invalide");
+      }
+    } catch (err: any) {
+      console.warn("Échec de l'appel /api/ai/quiz-question/generate, repli contextualisé :", err);
       const levelNames: Record<number, string> = {
         1: 'Niveau 1 : Rappel & Définitions',
         2: 'Niveau 2 : Compréhension & Principes',
@@ -190,28 +216,29 @@ export const AdaptiveQuizModal: React.FC<AdaptiveQuizModalProps> = ({
         5: 'Niveau 5 : Architecture Expert'
       };
 
-      const newQ: AdaptiveQuizQuestion = {
-        id: `gen_${Date.now()}`,
+      const fallbackQ: AdaptiveQuizQuestion = {
+        id: `gen_ctx_${Date.now()}`,
         level: targetLevel,
         levelName: levelNames[targetLevel],
         difficultyBeta: Number((-2.0 + targetLevel * 0.75).toFixed(2)),
         discriminationAlpha: Number((1.1 + targetLevel * 0.2).toFixed(2)),
-        questionText: `[IA Généré] Scénario avancé de niveau ${targetLevel} sur l'optimisation des flux télécom et de caisse hybride.`,
+        questionText: `Dans le cadre de "${nodeTitle || 'cette leçon'}", quelle mesure opérationnelle répond aux exigences du ${levelNames[targetLevel]} ?`,
         options: [
-          'Solution optimale préconisée avec isolation des sous-systèmes',
-          'Méthode alternative synchrone avec goulot d\'étranglement',
-          'Approche obsolète non conforme aux protocoles',
-          'Désactivation des contrôles cryptographiques'
+          `Application stricte des protocoles de conformité et de contrôle`,
+          `Omission temporaire de la journalisation des opérations`,
+          `Exécution non vérifiée sans identifiant unique de transaction`,
+          `Désactivation arbitraire des contrôles de sécurité`
         ],
         correctOptionIndex: 0,
-        hint: `Indice pédagogique calibré pour le niveau de compétence ${targetLevel}. Analysez les dépendances amont.`,
-        explanation: `Explication synthétique : Ce choix maximise l'efficience opérationnelle et respecte les contraintes IRT de niveau ${targetLevel}.`,
-        topic: 'Généré par NaNa AI'
+        hint: `Analysez les dépendances et règles de conformité liées à ${nodeTitle || 'la leçon'}.`,
+        explanation: `Ce choix respecte les critères de compétence exigés pour le ${levelNames[targetLevel]}.`,
+        topic: nodeTitle || 'Évaluation des compétences'
       };
 
-      setQuestions(prev => [...prev, newQ]);
+      setQuestions(prev => [...prev, fallbackQ]);
+    } finally {
       setIsGeneratingAI(false);
-    }, 700);
+    }
   };
 
   const handleDeleteQuestion = (qId: string) => {

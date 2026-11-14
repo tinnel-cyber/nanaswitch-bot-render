@@ -151,7 +151,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
       autoDebtReminders: true,
       reminderDaysBefore: 2,
       debtReminderTemplate: 'Bonjour {client}, rappel bienveillant : votre solde chez {boutique} est de {montant}. Merci de prévoir votre règlement. Bonne journée !',
-      otpTemplate: 'Code NanaPOS pour valider votre opération chez {boutique} : {otp}. Valide 5 minutes.'
+      otpTemplate: 'Code Nanasore pour valider votre opération chez {boutique} : {otp}. Valide 5 minutes.'
     };
   });
 
@@ -234,7 +234,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
 
   // SMS Live Test State
   const [testPhone, setTestPhone] = useState('+225 07 12 34 56 78');
-  const [testSmsMessage, setTestSmsMessage] = useState('Test Passerelle NanaPOS : la connexion SMS fonctionne parfaitement !');
+  const [testSmsMessage, setTestSmsMessage] = useState('Test Passerelle Nanasore : la connexion SMS fonctionne parfaitement !');
   const [isSendingTestSms, setIsSendingTestSms] = useState(false);
   const [testSmsResult, setTestSmsResult] = useState<{ success: boolean; message: string; ackId?: string } | null>(null);
 
@@ -1284,7 +1284,7 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
                   <ol className="list-decimal list-inside space-y-1 pl-1 text-[11px] text-slate-400">
                     <li>Connectez-vous à votre tableau de bord WordPress (admin).</li>
                     <li>Rendez-vous dans <strong>WooCommerce → Réglages → Avancé → API REST</strong>.</li>
-                    <li>Cliquez sur <strong>"Ajouter une clé"</strong> et nommez-la <em>"Caisse NanaPOS"</em>.</li>
+                    <li>Cliquez sur <strong>"Ajouter une clé"</strong> et nommez-la <em>"Caisse Nanasore"</em>.</li>
                     <li>Attribuez les droits : <strong>"Lecture/Écriture"</strong> puis cliquez sur Générer.</li>
                     <li>Copiez la <strong>Clé client (ck_...)</strong> et le <strong>Secret client (cs_...)</strong> dans les champs ci-dessus.</li>
                   </ol>

@@ -22,7 +22,7 @@ const SAMPLE_GIFT_PRODUCTS: MysteryGiftProduct[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Pâtisserie Douceur Divine • NaNa POS',
+    merchantName: 'Pâtisserie Douceur Divine • Nanasore',
     category: 'Pâtisserie',
     deliveryEta: '15 - 20 min',
     description: 'Confection artisanale sur-mesure pour célébrer une occasion spéciale.'
@@ -34,7 +34,7 @@ const SAMPLE_GIFT_PRODUCTS: MysteryGiftProduct[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1569864358642-9d1684040f43?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Maison du Macaron • NaNa POS',
+    merchantName: 'Maison du Macaron • Nanasore',
     category: 'Confiserie',
     deliveryEta: '25 - 30 min',
     description: 'Sélection raffinée vanille Bourbon, pistache, caramel beurre salé.'
@@ -46,7 +46,7 @@ const SAMPLE_GIFT_PRODUCTS: MysteryGiftProduct[] = [
     currency: 'FCFA',
     imageUrl:
       'https://images.unsplash.com/photo-1523293182086-7651a899d37f?q=80&w=800&auto=format&fit=crop',
-    merchantName: 'Parfumerie Royale • NaNa POS',
+    merchantName: 'Parfumerie Royale • Nanasore',
     category: 'Luxe & Beauté',
     deliveryEta: '30 - 45 min',
     description: 'Fragrance précieuse emballée dans son écrin velours.'
@@ -146,7 +146,7 @@ export const MysteryGiftShowcase: React.FC = () => {
             {/* Choix du produit réel révélé */}
             <div>
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                Produit physique NaNa POS :
+                Produit physique Nanasore :
               </label>
               <div className="space-y-2">
                 {SAMPLE_GIFT_PRODUCTS.map((prod, idx) => (

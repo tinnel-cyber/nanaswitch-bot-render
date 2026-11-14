@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NanaPOS_MultiTenant_Blueprint",
-  "description": "Schéma et modèle de données multi-tenant Firestore pour Nana POS avec isolation stricte par storeId",
+  "title": "Nanasore_MultiTenant_Blueprint",
+  "description": "Schéma et modèle de données multi-tenant Firestore pour Nanasore avec isolation stricte par storeId",
   "entities": {
     "User": {
       "path": "users/{userId}",

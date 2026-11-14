@@ -91,15 +91,30 @@ if (typeof window !== 'undefined') {
 // 2. Enregistrement du Service Worker PWA (Hors-ligne & Installation avec mise à jour immédiate)
 const isTestEnv = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && !isTestEnv) {
-  // Purge proactive des caches obsolètes dans le navigateur client (v3, v4, v5, v6)
-  if (typeof window !== 'undefined' && 'caches' in window) {
-    caches.keys().then((keys) => {
-      keys.forEach((key) => {
-        if (key.includes('v3') || key.includes('v4') || key.includes('v5') || key.includes('v6')) {
-          caches.delete(key).catch(() => {});
-        }
-      });
-    }).catch(() => {});
+  // Purge proactive des caches obsolètes et des anciens workers Firebase dans le navigateur client
+  if (typeof window !== 'undefined') {
+    if ('caches' in window) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key.includes('v3') || key.includes('v4') || key.includes('v5') || key.includes('v6') || key.includes('v7') || key.includes('v8')) {
+            caches.delete(key).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
+
+    // Désactivation et désenregistrement des workers Firebase
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => {
+          if (reg.active?.scriptURL?.includes('sw.js')) {
+            reg.unregister().then(() => {
+              console.log('[Worker Purge] Ancien worker Firebase désactivé avec succès.');
+            }).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
   }
 
   const registerSW = () => {
@@ -110,7 +125,7 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && !isTestE
         if (registration.waiting) {
           registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
-        console.log('[PWA] Service Worker actif v7, scope :', registration.scope);
+        console.log('[PWA] Service Worker actif v9, scope :', registration.scope);
       })
       .catch((err) => {
         console.warn('[PWA] Échec enregistrement Service Worker :', err);

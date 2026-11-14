@@ -55,33 +55,33 @@ export const KNOWN_SUPERADMIN_EMAILS = [
 ];
 
 /**
- * Synchronisation de l'UID Firebase vers la table Supabase `profiles`
+ * Synchronisation de l'UID Supabase vers la table Supabase `profiles`
  * Enregistrement neutre à l'entrée sans KYC ni permission :
  * kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
  */
-export async function syncFirebaseProfileToSupabase({
-  firebaseUid,
+export async function syncAuthProfileToSupabase({
+  authUid,
   email,
   fullName,
   whatsapp,
 }: {
-  firebaseUid: string;
+  authUid: string;
   email?: string;
   fullName?: string;
   whatsapp?: string;
 }) {
-  if (!firebaseUid) {
-    throw new Error("firebaseUid est requis pour la synchronisation");
+  if (!authUid) {
+    throw new Error("authUid est requis pour la synchronisation");
   }
 
   const cleanEmail = String(email || "").trim().toLowerCase();
   const cleanName = String(fullName || "").trim();
   const cleanWhatsapp = String(whatsapp || "").trim();
 
-  // 1. Tenter l'appel RPC Postgres `sync_firebase_profile`
+  // 1. Tenter l'appel RPC Postgres `sync_auth_profile`
   try {
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("sync_firebase_profile", {
-      p_firebase_uid: firebaseUid,
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("sync_auth_profile", {
+      p_auth_uid: authUid,
       p_email: cleanEmail,
       p_full_name: cleanName,
       p_whatsapp: cleanWhatsapp,
@@ -99,7 +99,7 @@ export async function syncFirebaseProfileToSupabase({
     const { data: existingProfiles } = await supabase
       .from("profiles")
       .select("*")
-      .or(`firebase_uid.eq.${firebaseUid},email.eq.${cleanEmail}`)
+      .or(`auth_uid.eq.${authUid},email.eq.${cleanEmail}`)
       .limit(1);
 
     if (existingProfiles && existingProfiles.length > 0) {
@@ -108,7 +108,7 @@ export async function syncFirebaseProfileToSupabase({
         success: true,
         profile: {
           ...existing,
-          firebase_uid: firebaseUid,
+          auth_uid: authUid,
           email: existing.email || cleanEmail,
           full_name: existing.full_name || cleanName,
           whatsapp_number: existing.whatsapp_number || cleanWhatsapp,
@@ -118,7 +118,7 @@ export async function syncFirebaseProfileToSupabase({
 
     // 3. Fallback neutre sans altération de privilèges
     const defaultNeutralProfile = {
-      firebase_uid: firebaseUid,
+      auth_uid: authUid,
       email: cleanEmail,
       full_name: cleanName,
       whatsapp_number: cleanWhatsapp,
@@ -168,11 +168,11 @@ export async function checkIsSuperAdmin(userIdOrUid?: string | null, email?: str
 
       if (superAdminRecord) return true;
 
-      // Recherche du user_id profile correspondant au firebase_uid
+      // Recherche du user_id profile correspondant au auth_uid
       const { data: profile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("firebase_uid", userIdOrUid)
+        .eq("auth_uid", userIdOrUid)
         .maybeSingle();
 
       if (profile?.id) {
@@ -214,7 +214,7 @@ export async function getUserAccountStatus(userIdOrUid?: string | null): Promise
     const { data: profile } = await supabase
       .from("profiles")
       .select("kyc_status, pricing_model")
-      .or(`id.eq.${userIdOrUid},firebase_uid.eq.${userIdOrUid}`)
+      .or(`id.eq.${userIdOrUid},auth_uid.eq.${userIdOrUid}`)
       .maybeSingle();
 
     if (!profile) {

@@ -17,8 +17,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist .next server.js",
     "lint": "tsc --noEmit",
-    "deploy": "npm run build && npx -p firebase-tools firebase deploy --only hosting",
-    "deploy:ci": "npx -p firebase-tools firebase deploy --only hosting"
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "deploy:ci": "wrangler pages deploy dist"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

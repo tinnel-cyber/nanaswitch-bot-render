@@ -18,7 +18,7 @@ export interface EmailLinkAuthPlugin {
 const EmailLinkAuth = registerPlugin<EmailLinkAuthPlugin>('EmailLinkAuth');
 
 /**
- * Service d'authentification par lien email pour Nana POS
+ * Service d'authentification par lien email pour Nanasore
  * Gère le stockage local de l'email et l'intégration avec Capacitor
  */
 export class EmailLinkAuthService {

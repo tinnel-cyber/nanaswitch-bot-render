@@ -150,6 +150,7 @@ export const StealthYouTubePlayer: React.FC<StealthYouTubePlayerProps> = ({
       (videoUrl.endsWith('.mp4') ||
         videoUrl.endsWith('.webm') ||
         videoUrl.includes('/blob/') ||
+        videoUrl.includes('supabase.co/storage') ||
         videoUrl.includes('firebasestorage.googleapis.com'))
     );
   }, [videoId, videoUrl]);

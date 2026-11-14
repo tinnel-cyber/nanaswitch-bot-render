@@ -93,7 +93,7 @@ export const DailyVideoRoom: React.FC<DailyVideoRoomProps> = ({
 
   // Construction de l'URL de chambre Daily.co officielle (nanasore.daily.co)
   const rawUrl = roomUrl || (roomId.startsWith('http') ? roomId : `${DAILY_BASE_URL}/${roomId}`);
-  const effectiveRoomUrl = rawUrl.replace(/https:\/\/(wameet|nanapos|nana-telecom)\.daily\.co/g, `${DAILY_BASE_URL}`);
+  const effectiveRoomUrl = rawUrl.replace(/https:\/\/(wameet|nanasore|nana-telecom)\.daily\.co/g, `${DAILY_BASE_URL}`);
 
   // Formatage mm:ss
   const formatTime = (secs: number) => {

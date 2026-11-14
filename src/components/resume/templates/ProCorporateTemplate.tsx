@@ -237,7 +237,7 @@ export const ProCorporateTemplate: React.FC<TemplateProps> = ({ resume, isPro = 
           <ShieldCheck className="w-3.5 h-3.5 text-blue-700" />
           <span className="font-semibold text-slate-700">Document Officiel Normalisé A4 • Qualité Haute Définition</span>
         </div>
-        <span className="font-mono">Généré via NaNa POS Pro Suite</span>
+        <span className="font-mono">Généré via Nanasore Pro Suite</span>
       </footer>
     </div>
   );

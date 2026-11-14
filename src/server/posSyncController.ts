@@ -1,6 +1,6 @@
 /**
  * @file posSyncController.ts
- * @description Moteur de Synchronisation Phygitale (Backend NaNa POS vers Wameet Live)
+ * @description Moteur de Synchronisation Phygitale (Backend Nanasore vers Wameet Live)
  * 
  * Directives d'architecture et logique métier :
  * 1. Webhook de caisse sécurisé (POST /api/pos/sync-sale) avec authentification Machine-to-Machine (M2M).
@@ -20,7 +20,7 @@ import { NANA_PRODUCT_CATALOG } from './smartHaggleController';
 // ============================================================================
 
 export const POS_SYNC_M2M_TOKEN =
-  process.env.POS_SYNC_M2M_TOKEN || 'nana_pos_m2m_phygital_secret_token_2026';
+  process.env.POS_SYNC_M2M_TOKEN || 'nanasore_m2m_phygital_secret_token_2026';
 
 // ============================================================================
 // 2. TYPES ET STRUCTURES DE DONNÉES DU GESTIONNAIRE PHYGITAL
@@ -185,7 +185,7 @@ export async function handlePosSyncSale(
   for (const item of items) {
     const { productId, quantitySold } = item;
 
-    // Met à jour l'inventaire dans le catalogue produit NaNa POS
+    // Met à jour l'inventaire dans le catalogue produit Nanasore
     const catalogProduct = NANA_PRODUCT_CATALOG.get(productId);
     if (catalogProduct) {
       catalogProduct.stock = Math.max(0, catalogProduct.stock - quantitySold);
@@ -311,7 +311,7 @@ export function attachPosSyncRoutes(app: any, io?: WebSocketRoomEmitter): void {
 
   /**
    * POST /api/pos/sync-sale
-   * Webhook de Caisse NaNa POS appelé lors de la validation d'un ticket de caisse
+   * Webhook de Caisse Nanasore appelé lors de la validation d'un ticket de caisse
    */
   app.post('/api/pos/sync-sale', async (req: Request, res: Response) => {
     try {
@@ -377,7 +377,7 @@ export function attachPosSyncRoutes(app: any, io?: WebSocketRoomEmitter): void {
 
   /**
    * GET /api/pos/live-rooms
-   * Retourne l'état des live rooms actives (pour debug ou administration NaNa POS)
+   * Retourne l'état des live rooms actives (pour debug ou administration Nanasore)
    */
   app.get('/api/pos/live-rooms', (req: Request, res: Response) => {
     if (!verifyM2mAuth(req)) {
@@ -405,7 +405,7 @@ export function attachPosSyncRoutes(app: any, io?: WebSocketRoomEmitter): void {
   /**
    * POST /api/pos/auto-order
    * Commande physique automatisée déclenchée par le Contrat Intelligent de la Cagnotte (Prompt 21)
-   * Génère le bon de commande physique et réserve le stock dans le système NaNa POS.
+   * Génère le bon de commande physique et réserve le stock dans le système Nanasore.
    */
   app.post('/api/pos/auto-order', async (req: Request, res: Response) => {
     try {

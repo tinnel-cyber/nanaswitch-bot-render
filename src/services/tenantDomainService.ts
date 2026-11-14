@@ -154,8 +154,6 @@ export function isPlatformRootDomain(rawHostname: string): boolean {
     host === 'nsore.shop' ||
     host === 'www.nsore.shop' ||
     host.includes('pages.dev') ||
-    host === 'pos-app-1759a.web.app' ||
-    host === 'pos-app-1759a.firebaseapp.com' ||
     host.includes('cloudflarepreviews.com') ||
     host.includes('workers.dev')
   ) {
