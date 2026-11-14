@@ -376,6 +376,7 @@ export default function App() {
   }>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      const urlParams = new URLSearchParams(window.location.search);
       if (
         pathname === '/dashboard/marketing/emailing' ||
         pathname.startsWith('/dashboard/marketing/emailing') ||
@@ -406,7 +407,7 @@ export default function App() {
       ) {
         return { isBoutique: false, targetStoreId: null, targetProductId: null };
       }
-      const params = new URLSearchParams(window.location.search);
+      const params = urlParams;
       const isCustomHost = !isNativeDomain(window.location.hostname);
 
       let storeIdFromPath: string | null = null;
