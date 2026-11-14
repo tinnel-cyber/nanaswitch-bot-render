@@ -450,6 +450,7 @@ export default function App() {
   // Current view: 'POS', 'INVENTORY', 'REPORTS', 'DEBT_BOOK', or 'VOICE_TEST'
   const [currentView, setCurrentView] = useState<AppView>(() => {
     if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       if (
         pathname === '/login' ||
