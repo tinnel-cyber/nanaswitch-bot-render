@@ -263,9 +263,11 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   // KYC Form State (Particulier vs Entreprise & Mode BYOK vs AGREGATED)
   const [kycForm, setKycForm] = useState({
     integration_mode: 'AGREGATED' as 'AGREGATED' | 'BYOK',
-    type: 'entreprise' as 'entreprise' | 'particulier',
+    type: 'particulier' as 'entreprise' | 'particulier',
     appName: '',
     sector: 'E-commerce & Vente en ligne',
+    customSector: '',
+    activityDescription: '',
     website: '',
     description: '',
     byokSaspayKey: '',
@@ -317,15 +319,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onOpenCreateUniverse = (e: Event) => {
-      const detail = (e as CustomEvent)?.detail;
-      if (detail?.name) {
-        setKycForm((prev: any) => ({
-          ...prev,
-          sector: prev.sector || detail.name,
-          appName: prev.appName || `Univers ${detail.name}`
-        }));
-      }
+    const onOpenCreateUniverse = () => {
+      // Ouvre directement le formulaire sans imposer le nom d'une application comme nom d'univers
       setIsKycModalOpen(true);
     };
     window.addEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
@@ -593,7 +588,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     const isByokMode = kycForm.integration_mode === 'BYOK';
     const newId = `univ_nana_${Date.now().toString().slice(-4)}`;
     const appDisplayName = kycForm.appName || (kycForm.type === 'entreprise' ? kycForm.companyName : kycForm.fullName) || 'Nouvel Univers';
-    const sectorChosen = kycForm.sector || 'E-commerce & Vente en ligne';
+    const sectorChosen = (kycForm.sector === 'Autres' && kycForm.customSector?.trim())
+      ? kycForm.customSector.trim()
+      : (kycForm.sector || 'E-commerce & Vente en ligne');
 
     const generatedByokKeys: AppKeys | undefined = isByokMode ? {
       publicKey: `ns_live_pk_${Math.random().toString(36).substring(2, 14)}${Date.now().toString(36)}`,
@@ -3179,6 +3176,160 @@ function TabSettings({ app, onUpgradeClick }: { app: NanaMerchantApp; onUpgradeC
 }
 
 
+/* MODALE DE LECTURE SIMPLE DE LA POLITIQUE DE CONFIDENTIALITÉ & CGU */
+function LegalPolicyReaderModal({
+  isOpen,
+  initialDoc = 'privacy',
+  onClose
+}: {
+  isOpen: boolean;
+  initialDoc?: 'privacy' | 'terms';
+  onClose: () => void;
+}) {
+  const [activeDoc, setActiveDoc] = useState<'privacy' | 'terms'>(initialDoc);
+
+  useEffect(() => {
+    setActiveDoc(initialDoc);
+  }, [initialDoc]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[10000000] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh] animate-in fade-in zoom-in-95 duration-150">
+        
+        {/* Header */}
+        <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-blue-400" />
+            <h3 className="font-bold text-sm sm:text-base">
+              {activeDoc === 'privacy' ? 'Politique de Confidentialité • Nanasore' : "Conditions Générales & d'Utilisation • Nanasore"}
+            </h3>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            title="Fermer"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Onglets de navigation */}
+        <div className="flex border-b border-slate-200 bg-slate-50 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveDoc('privacy')}
+            className={`flex-1 py-3 text-xs font-bold transition border-b-2 ${
+              activeDoc === 'privacy'
+                ? 'border-blue-600 text-blue-900 bg-white shadow-xs'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            Politique de Confidentialité
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveDoc('terms')}
+            className={`flex-1 py-3 text-xs font-bold transition border-b-2 ${
+              activeDoc === 'terms'
+                ? 'border-blue-600 text-blue-900 bg-white shadow-xs'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            Conditions Légales & d'Utilisation
+          </button>
+        </div>
+
+        {/* Corps de lecture */}
+        <div className="p-5 sm:p-6 overflow-y-auto text-xs text-slate-700 space-y-4 leading-relaxed">
+          {activeDoc === 'privacy' ? (
+            <>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">1. Collecte et Traitement des Données Personnelles</h4>
+                <p>
+                  La plateforme Nanasore applique une politique stricte de souveraineté et de confidentialité. Les données collectées (nom, numéro de téléphone, pièce d'identité officielle, selfie, documents d'entreprise RCCM et IFU) sont strictement réservées à la vérification d'identité (KYC), à la conformité financière légale, à la prévention des fraudes et à l'ouverture de votre compte marchand.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">2. Sécurité et Chiffrement des Pièces</h4>
+                <p>
+                  Toutes les pièces d'identité et documents officiels sont chiffrés et stockés dans un environnement sécurisé conforme aux standards bancaires et aux directives régionales sur les transactions électroniques. Vos données ne sont en aucun cas vendues, cédées ou partagées à des tiers à des fins publicitaires.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">3. Confidentialité des Transactions et Secret des Affaires</h4>
+                <p>
+                  Les volumes de vente, encaissements Mobile Money et cartes bancaires, historiques de caisse et fichiers clients de votre univers marchand constituent votre propriété exclusive. Nanasore s'interdit formellement toute divulgation de vos données financières ou stratégiques.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">4. Vos Droits d'Accès et de Rectification</h4>
+                <p>
+                  Conformément aux réglementations sur la protection des données à caractère personnel, vous disposez d'un droit permanent d'accès, d'exportation de vos données comptables et de rectification de vos informations via votre tableau de bord marchand Nanasore.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">1. Objet et Exploitation des Services</h4>
+                <p>
+                  Les présentes Conditions Générales d'Utilisation régissent l'accès et l'exploitation des services marchands, applications, caisses physiques et outils de commerce omnicanal hébergés au sein de l'écosystème Nanasore.
+                </p>
+              </div>
+
+              <div className="bg-blue-50/70 border border-blue-200 p-3.5 rounded-xl text-blue-950">
+                <h4 className="font-bold text-sm mb-1">2. Plafonds Légaux et Identification Réglementaire</h4>
+                <p>
+                  L'ouverture d'un Univers Marchand fixe le plafond mensuel d'encaissement légal :
+                </p>
+                <ul className="list-disc list-inside mt-2 space-y-1 font-medium">
+                  <li><strong>Compte Particulier :</strong> Plafond de 1 000 000 FCFA / mois (commerçants physiques, formateurs, indépendants sans obligation de RCCM).</li>
+                  <li><strong>Compte Entreprise :</strong> Plafond de 5 000 000 FCFA / mois (sociétés formelles avec extrait RCCM et numéro IFU vérifiés).</li>
+                </ul>
+                <p className="mt-2 text-[11px] text-blue-800">
+                  L'ouverture du compte Univers est un acte de conformité réglementaire. Elle n'est pas une souscription payante et ne dispense pas des conditions propres aux modules payants éventuels.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">3. Engagements et Licéité des Activités</h4>
+                <p>
+                  Le titulaire de l'univers s'engage formellement à exercer une activité commerciale ou de formation licite. Tout acte de contrefaçon, de blanchiment, de fraude ou de fausse déclaration entraîne la suspension immédiate de l'univers et le signalement aux autorités compétentes.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm mb-1">4. Disponibilité du Service et Règlements</h4>
+                <p>
+                  Nanasore s'efforce d'assurer une haute disponibilité continue du système d'encaissement. Les reversements des fonds encaissés via Mobile Money ou Carte Bancaire s'effectuent conformément aux délais réglementaires sur le compte bancaire ou numéro de portefeuille vérifié du titulaire.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex justify-end shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition shadow-sm"
+          >
+            J'ai lu et compris • Fermer
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 /* DYNAMIC MULTI-STEP KYC ONBOARDING MODAL */
 function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: { 
   onClose: () => void; 
@@ -3188,6 +3339,10 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
 }) {
   const isParticulier = kycForm.type === 'particulier';
   const modalScrollRef = useRef<HTMLDivElement>(null);
+  const [legalDocModal, setLegalDocModal] = useState<{ isOpen: boolean; doc: 'privacy' | 'terms' }>({
+    isOpen: false,
+    doc: 'privacy'
+  });
 
   useEffect(() => {
     // S'assurer que le formulaire démarre tout en haut à l'ouverture pour afficher le header
@@ -3315,11 +3470,14 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                 <input 
                   type="text" 
                   required 
-                  placeholder="Ex: Univers Freelance, Studio Photo, Boutique en ligne..."
+                  placeholder="Ex: Ma Boutique Mode & Beauté, Centre de Formation Excellence, Service Digital Express..."
                   value={kycForm.appName}
                   onChange={e => setKycForm({ ...kycForm, appName: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                 />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                  <strong className="text-slate-800 font-bold">Important :</strong> Indiquez par exemple <strong>le nom de votre boutique physique ou en ligne</strong>, de votre <strong>centre de formation</strong> ou de votre <strong>service commercial</strong>. <strong className="text-blue-700">C'est ce nom d'univers qui sera affiché comme nom officiel de votre compte après validation.</strong> (Ne pas mettre le nom d'une application ou d'un module).
+                </p>
               </div>
 
               {/* 1. Nom complet */}
@@ -3330,7 +3488,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                 <input 
                   type="text" 
                   required 
-                  placeholder="Ex: Rasmané Konkobo"
+                  placeholder="Ex: Kaboré Wend-Panga"
                   value={kycForm.fullName}
                   onChange={e => setKycForm({ ...kycForm, fullName: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3355,8 +3513,52 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <option value="Éducation, Coaching & Formation">Éducation, Coaching & Formation</option>
                   <option value="Technologies & Développement Web/Mobile">Technologies & Développement Web/Mobile</option>
                   <option value="Commerce Général & Distribution">Commerce Général & Distribution</option>
+                  <option value="Autres">Autres (Préciser...)</option>
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">Sera affiché à côté du nom de l'univers sur votre tableau de bord.</p>
+
+                {/* Champ spécifique si Autres */}
+                {kycForm.sector === 'Autres' && (
+                  <div className="mt-2.5 animate-in fade-in duration-150">
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Précisez votre secteur ou appellation personnalisée <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Ex: Élevage & Agriculture, Agence Immobilière, Santé..."
+                      value={kycForm.customSector || ''}
+                      onChange={e => setKycForm({ ...kycForm, customSector: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-900 bg-white focus:outline-none focus:border-blue-600 text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Description du secteur d'activité choisi (max 200 caractères) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 block text-xs">
+                    Description du secteur d'activité choisi <span className="text-rose-500">*</span>
+                  </label>
+                  <span className={`text-[10px] font-bold ${
+                    (kycForm.activityDescription?.length || 0) >= 200 
+                      ? 'text-rose-600' 
+                      : 'text-slate-400'
+                  }`}>
+                    {kycForm.activityDescription?.length || 0} / 200 car.
+                  </span>
+                </div>
+                <textarea 
+                  required
+                  rows={2}
+                  maxLength={200}
+                  placeholder="Décrivez brièvement les produits, formations ou services proposés dans cet univers marchand..."
+                  value={kycForm.activityDescription || ''}
+                  onChange={e => setKycForm({ ...kycForm, activityDescription: e.target.value.slice(0, 200) })}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:border-blue-600 resize-none text-xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">200 caractères maximum.</p>
               </div>
 
               {/* 3. CNIB / Passeport (Numéro + Recto & Verso) */}
@@ -3368,7 +3570,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: B12940291"
+                    placeholder="Ex: B00000000"
                     value={kycForm.cnibNumber}
                     onChange={e => setKycForm({ ...kycForm, cnibNumber: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3477,11 +3679,14 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                 <input 
                   type="text" 
                   required 
-                  placeholder="Ex: Univers Principal, Filiale Abidjan, E-Shop Express..."
+                  placeholder="Ex: Établissement Commercial Grand Marché, Complexe Éducatif Horizon, Société Logistique..."
                   value={kycForm.appName}
                   onChange={e => setKycForm({ ...kycForm, appName: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                 />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                  <strong className="text-slate-800 font-bold">Important :</strong> Indiquez par exemple <strong>le nom de votre entreprise, boutique ou centre de formation</strong>. <strong className="text-blue-700">C'est ce nom d'univers qui sera affiché comme nom officiel de votre compte après validation.</strong> (Ne pas mettre le nom d'une application ou d'un module).
+                </p>
               </div>
 
               {/* 1. Nom complet du gérant & 2. Email professionnel */}
@@ -3493,7 +3698,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: Ousmane Konkobo"
+                    placeholder="Ex: Traoré Amadou"
                     value={kycForm.managerName}
                     onChange={e => setKycForm({ ...kycForm, managerName: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3508,7 +3713,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                     <input 
                       type="email" 
                       required 
-                      placeholder="contact@nanasore.com"
+                      placeholder="contact@mon-entreprise.com"
                       value={kycForm.companyEmail}
                       onChange={e => setKycForm({ ...kycForm, companyEmail: e.target.value })}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3526,7 +3731,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: NANASORE TECHNOLOGIES SARL"
+                    placeholder="Ex: AFRIK DISTRIBUTION SERVICES SARL"
                     value={kycForm.companyName}
                     onChange={e => setKycForm({ ...kycForm, companyName: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3548,8 +3753,52 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                     <option value="Éducation & Formation">Éducation & Formation</option>
                     <option value="Commerce Général & Distribution">Commerce Général & Distribution</option>
                     <option value="Technologies & Solutions Financières">Fintech & Technologies</option>
+                    <option value="Autres">Autres (Préciser...)</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Champ personnalisé si Autres pour Entreprise */}
+              {kycForm.sector === 'Autres' && (
+                <div className="animate-in fade-in duration-150">
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Précisez votre secteur ou appellation personnalisée <span className="text-rose-500">*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Ex: Élevage & Agroalimentaire, Immobilier, Logistique..."
+                    value={kycForm.customSector || ''}
+                    onChange={e => setKycForm({ ...kycForm, customSector: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-900 bg-white focus:outline-none focus:border-blue-600 text-xs"
+                  />
+                </div>
+              )}
+
+              {/* Description du secteur d'activité choisi (max 200 caractères) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 block text-xs">
+                    Description du secteur d'activité choisi <span className="text-rose-500">*</span>
+                  </label>
+                  <span className={`text-[10px] font-bold ${
+                    (kycForm.activityDescription?.length || 0) >= 200 
+                      ? 'text-rose-600' 
+                      : 'text-slate-400'
+                  }`}>
+                    {kycForm.activityDescription?.length || 0} / 200 car.
+                  </span>
+                </div>
+                <textarea 
+                  required
+                  rows={2}
+                  maxLength={200}
+                  placeholder="Décrivez brièvement les activités, produits, services ou solutions commercialisés dans cet univers entreprise..."
+                  value={kycForm.activityDescription || ''}
+                  onChange={e => setKycForm({ ...kycForm, activityDescription: e.target.value.slice(0, 200) })}
+                  className="w-full px-4 py-2 rounded-xl border border-slate-200 text-slate-900 bg-white focus:outline-none focus:border-blue-600 resize-none text-xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-0.5">200 caractères maximum.</p>
               </div>
 
               {/* 4. RCCM & 5. IFU Entreprise */}
@@ -3561,7 +3810,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: BF-OUA-01-2026-B12-09431"
+                    placeholder="Ex: BF-OUA-01-202X-B12-00000"
                     value={kycForm.rccm}
                     onChange={e => setKycForm({ ...kycForm, rccm: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3589,7 +3838,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: 001928473610L"
+                    placeholder="Ex: 000000000000X"
                     value={kycForm.ifuCompany}
                     onChange={e => setKycForm({ ...kycForm, ifuCompany: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3620,7 +3869,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: B10928374"
+                    placeholder="Ex: B00000000"
                     value={kycForm.managerCnibNumber}
                     onChange={e => setKycForm({ ...kycForm, managerCnibNumber: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3708,8 +3957,24 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
               onChange={e => setKycForm({ ...kycForm, contractSigned: e.target.checked })}
               className="mt-1 w-4 h-4 text-[#1E40AF] rounded"
             />
-            <label htmlFor="contract" className="text-[11px] text-blue-900 leading-tight">
-              Je certifie l'exactitude des pièces et informations fournies pour mon compte <strong>{isParticulier ? 'Particulier (Plafond 1M XOF)' : 'Entreprise (Plafond 5M XOF)'}</strong> et j'accepte les termes du Contrat Partenaire NanaSwitch Cloud.
+            <label htmlFor="contract" className="text-[11px] text-blue-900 leading-normal">
+              Je certifie l'exactitude des pièces et informations fournies pour mon compte <strong>{isParticulier ? 'Particulier (Plafond 1M XOF)' : 'Entreprise (Plafond 5M XOF)'}</strong>. J'accepte la{' '}
+              <button
+                type="button"
+                onClick={() => setLegalDocModal({ isOpen: true, doc: 'privacy' })}
+                className="font-bold underline text-blue-700 hover:text-blue-900 cursor-pointer inline"
+              >
+                politique de confidentialité
+              </button>
+              {' '}ainsi que les{' '}
+              <button
+                type="button"
+                onClick={() => setLegalDocModal({ isOpen: true, doc: 'terms' })}
+                className="font-bold underline text-blue-700 hover:text-blue-900 cursor-pointer inline"
+              >
+                conditions légales et d'utilisation
+              </button>
+              {' '}de <strong>Nanasore</strong>.
             </label>
           </div>
 
@@ -3725,6 +3990,13 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
           </div>
 
         </form>
+
+        {/* Modal de lecture des documents légaux Nanasore */}
+        <LegalPolicyReaderModal
+          isOpen={legalDocModal.isOpen}
+          initialDoc={legalDocModal.doc}
+          onClose={() => setLegalDocModal(prev => ({ ...prev, isOpen: false }))}
+        />
       </div>
     </div>
   );

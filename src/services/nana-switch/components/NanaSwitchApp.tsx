@@ -315,15 +315,8 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onOpenCreateUniverse = (e: Event) => {
-      const detail = (e as CustomEvent)?.detail;
-      if (detail?.name) {
-        setKycForm((prev: any) => ({
-          ...prev,
-          sector: prev.sector || detail.name,
-          appName: prev.appName || `Univers ${detail.name}`
-        }));
-      }
+    const onOpenCreateUniverse = () => {
+      // Ouvre directement le formulaire sans imposer le nom d'une application comme nom d'univers
       setIsKycModalOpen(true);
     };
     window.addEventListener('nanasore_open_create_universe', onOpenCreateUniverse);
@@ -3418,7 +3411,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                 <input 
                   type="text" 
                   required 
-                  placeholder="Ex: Rasmané Konkobo"
+                  placeholder="Ex: Kaboré Wend-Panga"
                   value={kycForm.fullName}
                   onChange={e => setKycForm({ ...kycForm, fullName: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3581,7 +3574,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: Ousmane Konkobo"
+                    placeholder="Ex: Traoré Amadou"
                     value={kycForm.managerName}
                     onChange={e => setKycForm({ ...kycForm, managerName: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3596,7 +3589,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                     <input 
                       type="email" 
                       required 
-                      placeholder="contact@nanasore.com"
+                      placeholder="contact@mon-entreprise.com"
                       value={kycForm.companyEmail}
                       onChange={e => setKycForm({ ...kycForm, companyEmail: e.target.value })}
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3614,7 +3607,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: NANASORE TECHNOLOGIES SARL"
+                    placeholder="Ex: AFRIK DISTRIBUTION SERVICES SARL"
                     value={kycForm.companyName}
                     onChange={e => setKycForm({ ...kycForm, companyName: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3649,7 +3642,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: BF-OUA-01-2026-B12-09431"
+                    placeholder="Ex: BF-OUA-01-202X-B12-00000"
                     value={kycForm.rccm}
                     onChange={e => setKycForm({ ...kycForm, rccm: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
@@ -3677,7 +3670,7 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
                   <input 
                     type="text" 
                     required 
-                    placeholder="Ex: 001928473610L"
+                    placeholder="Ex: 000000000000X"
                     value={kycForm.ifuCompany}
                     onChange={e => setKycForm({ ...kycForm, ifuCompany: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-600"
