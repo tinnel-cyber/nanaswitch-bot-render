@@ -199,6 +199,22 @@ const PRICING_RULES = [
   { country: 'Bénin 🇧🇯', operator: 'Celtiis Cash', baseRate: '3.2%', margin: '+1.5%', totalFee: '4.7%', minFee: '15 XOF' },
 ];
 
+// Helper de synchronisation avec le cache local pour affichage immédiat
+const STORAGE_KEY_UNIVERSES = 'nana_merchant_universes';
+const getStoredUniverses = (): NanaMerchantApp[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_UNIVERSES);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('[STORAGE] Erreur lecture univers locaux :', e);
+  }
+  return [];
+};
+
 export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   slug = 'nanaswitch',
   appId,
@@ -208,8 +224,11 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   initialAppId,
   className = ''
 }) => {
-  // State management
-  const [apps, setApps] = useState<NanaMerchantApp[]>(INITIAL_APPS);
+  // State management (initialisé avec le cache local des univers créés)
+  const [apps, setApps] = useState<NanaMerchantApp[]>(() => {
+    const cached = getStoredUniverses();
+    return cached.length > 0 ? cached : INITIAL_APPS;
+  });
   const [selectedApp, setSelectedApp] = useState<NanaMerchantApp | null>(null);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [isKycModalOpen, setIsKycModalOpen] = useState(() => {
@@ -476,7 +495,16 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                 kyc: u.kyc_data || {}
               }));
 
-              setApps(loaded);
+              // Fusion avec le cache local pour ne jamais perdre un univers fraîchement soumis
+              const localCached = getStoredUniverses();
+              const mergedMap = new Map<string, NanaMerchantApp>();
+              localCached.forEach(a => mergedMap.set(a.id, a));
+              loaded.forEach(a => mergedMap.set(a.id, a));
+              const allApps = Array.from(mergedMap.values());
+              setApps(allApps);
+              try {
+                localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(allApps));
+              } catch (_) {}
               return;
             }
           } catch (supaErr) {
@@ -544,13 +572,25 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
               });
             });
 
-            if (loaded.length > 0) {
-              setApps(loaded);
-            } else {
-              setApps([]);
-            }
+            const localCached = getStoredUniverses();
+            const mergedMap = new Map<string, NanaMerchantApp>();
+            localCached.forEach(a => mergedMap.set(a.id, a));
+            loaded.forEach(a => mergedMap.set(a.id, a));
+            const allApps = Array.from(mergedMap.values());
+            setApps(allApps);
+            try {
+              localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(allApps));
+            } catch (_) {}
           } else {
-            setApps([]);
+            const localCached = getStoredUniverses();
+            if (localCached.length > 0) {
+              setApps(localCached);
+            }
+          }
+        } else {
+          const localCached = getStoredUniverses();
+          if (localCached.length > 0) {
+            setApps(localCached);
           }
         }
       } catch (err) {
@@ -567,12 +607,12 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     };
   }, [currentUser]);
 
-  // Détection du target appId initial si passé via prop
+  // Détection du target appId initial si passé via prop (accessible quel que soit le statut KYC)
   useEffect(() => {
     const target = appId || initialAppId;
     if (target) {
       const match = apps.find(a => a.id === target);
-      if (match && match.status === 'VERIFIED') {
+      if (match) {
         setSelectedApp(match);
       }
     }
@@ -628,7 +668,11 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       }
     };
 
-    setApps([newApp, ...apps]);
+    const updatedApps = [newApp, ...apps.filter(a => a.id !== newApp.id)];
+    setApps(updatedApps);
+    try {
+      localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(updatedApps));
+    } catch (_) {}
     setSelectedApp(newApp);
     setIsKycModalOpen(false);
     showToast(
@@ -1233,7 +1277,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900">Vos Univers ({apps.length})</h2>
-              <span className="text-xs text-slate-500 font-medium">Cliquez sur un univers vérifié pour ouvrir son tableau de bord</span>
+              <span className="text-xs text-slate-500 font-medium">Cliquez sur un univers pour ouvrir directement son tableau de bord</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1258,27 +1302,22 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                 </div>
               )}
 
-              {/* Existing Univers Cards */}
+              {/* Existing Univers Cards - Chaque carte sert de porte d'entrée immédiate vers le dashboard */}
               {apps.map((app) => {
                 const isVerified = app.status === 'VERIFIED';
                 return (
                   <div
                     key={app.id}
                     onClick={() => {
-                      if (isVerified) {
-                        setSelectedApp(app);
-                      } else {
-                        showToast("Cet univers est en cours de vérification KYC par nos équipes.", "warning");
+                      setSelectedApp(app);
+                      if (!isVerified) {
+                        showToast(`Bienvenue dans l'univers ${app.name} ! KYC en cours de finalisation.`, 'warning');
                       }
                     }}
-                    className={`group bg-white rounded-3xl p-6 border transition duration-300 relative overflow-hidden ${
-                      isVerified 
-                        ? 'border-slate-200/90 hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-600/10 cursor-pointer' 
-                        : 'border-amber-200/80 bg-amber-50/20 cursor-not-allowed'
-                    }`}
+                    className="group bg-white rounded-3xl p-6 border border-slate-200/90 hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-600/10 transition duration-300 relative overflow-hidden cursor-pointer"
                   >
                     <div className="flex items-start justify-between mb-6">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-blue-600/20">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-blue-600/20 group-hover:scale-105 transition">
                         {app.name.charAt(0)}
                       </div>
 
@@ -1313,12 +1352,10 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                       </span>
                     </div>
 
-                    {isVerified && (
-                      <div className="mt-4 flex items-center justify-end text-xs font-bold text-[#1E40AF] group-hover:translate-x-1 transition">
-                        <span>Ouvrir l'univers</span>
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      </div>
-                    )}
+                    <div className="mt-4 flex items-center justify-end text-xs font-bold text-[#1E40AF] group-hover:translate-x-1 transition">
+                      <span>Accéder au Dashboard</span>
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </div>
                   </div>
                 );
               })}
