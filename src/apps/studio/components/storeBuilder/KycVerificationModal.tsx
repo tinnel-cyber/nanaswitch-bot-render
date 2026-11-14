@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { KycSubmission, KycDocumentType, KycStatus, StoreUser } from '../../../../types';
 import { compressImageToBase64, submitKycRequest, getStoreKycRequest, submitKycSubmission } from '../../../../utils/kycService';
 import { checkAndBlockDemoAction } from '../../../../utils/demoSecurityGuard';
@@ -199,8 +200,8 @@ export const KycVerificationModal: React.FC<KycVerificationModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999999] flex items-start sm:items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
       <div className="w-full max-w-lg bg-card border border-theme rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl relative text-body my-auto max-h-[calc(100vh-2rem)] sm:max-h-[92vh] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-slate-700">
         
         {/* En-tête avec bouton fermer */}
@@ -462,6 +463,12 @@ export const KycVerificationModal: React.FC<KycVerificationModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 };
 
 export default KycVerificationModal;

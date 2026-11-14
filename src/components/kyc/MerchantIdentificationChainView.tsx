@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ShieldCheck,
   Building2,
@@ -275,8 +276,8 @@ export function MerchantIdentificationChainView({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999999] bg-slate-950/80 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
       <div 
         className="w-full max-w-3xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100vh-2rem)] sm:max-h-[90vh] text-slate-800 animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
@@ -1173,4 +1174,10 @@ export function MerchantIdentificationChainView({
       )}
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 }

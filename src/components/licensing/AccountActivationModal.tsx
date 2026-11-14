@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ShieldCheck,
   Zap,
@@ -169,7 +170,7 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[9999999] overflow-y-auto bg-slate-950/85 backdrop-blur-md p-3 sm:p-6 flex items-start sm:items-center justify-center animate-in fade-in duration-200"
       onClick={(e) => {
@@ -691,6 +692,12 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 };
 
 export default AccountActivationModal;
