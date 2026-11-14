@@ -251,7 +251,7 @@ export async function verifySuperAdminPrivileges(userArg?: any): Promise<boolean
     if (uid) {
       const { data: adminRecord } = await supabase
         .from('super_admins')
-        .select('user_id')
+        .select('user_id, role')
         .eq('user_id', uid)
         .maybeSingle();
 

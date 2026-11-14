@@ -262,8 +262,32 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     }
   };
 
+  // Détecte la plateforme de streaming à partir d'une URL collée
+  const detectPlatformFromUrl = useCallback((rawUrl: string): LivePlatform | null => {
+    const u = (rawUrl || '').trim().toLowerCase();
+    if (!u) return null;
+    if (u.includes('meet.google.com')) return 'google_meet';
+    if (u.includes('zoom.us') || u.includes('zoom.com')) return 'zoom';
+    if (u.includes('classroom.google.com')) return 'google_classroom';
+    if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+    if (u.includes('tiktok.com')) return 'tiktok';
+    if (u.includes('facebook.com') || u.includes('fb.watch') || u.includes('fb.gg')) return 'facebook';
+    if (u.includes('instagram.com')) return 'instagram';
+    if (u.includes('linkedin.com')) return 'linkedin';
+    if (u.includes('meet.jit.si') || u.includes('jitsi.')) return 'jitsi';
+    if (u.includes('daily.co')) return 'daily';
+    return null;
+  }, []);
+
+  // Détermine si l'URL courante a été générée automatiquement par le système interne
+  const isInternalGeneratedUrl = useCallback((rawUrl: string): boolean => {
+    const u = (rawUrl || '').trim();
+    if (!u) return true;
+    return u.includes('meet.jit.si/nana-live-') || u.includes('daily.co/');
+  }, []);
+
   // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD (Daily.co)
-  const handleAutoGenerateRoomUrl = useCallback(async (targetPlatform: LivePlatform) => {
+  const handleAutoGenerateRoomUrl = useCallback(async (targetPlatform: LivePlatform, forceOverwrite: boolean = false) => {
     playTapBeep();
     const currentUrl = (meetingUrl || streamUrl).trim();
     if (!forceOverwrite && currentUrl && !isInternalGeneratedUrl(currentUrl)) {
@@ -303,6 +327,16 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setStreamUrl(finalDailyUrl);
     }
   }, [generateUniqueRoomId, isInternalGeneratedUrl, meetingUrl, streamUrl]);
+
+  // Handler de saisie manuelle de lien live (auto-détecte la plateforme)
+  const handleLiveUrlInput = useCallback((rawUrl: string) => {
+    setMeetingUrl(rawUrl);
+    setStreamUrl(rawUrl);
+    const detected = detectPlatformFromUrl(rawUrl);
+    if (detected) {
+      setPlatform(detected);
+    }
+  }, [detectPlatformFromUrl]);
 
   // Initialisation automatique du lien Jitsi uniquement si aucun lien n'a été collé
   useEffect(() => {
@@ -563,6 +597,36 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         console.warn("[SUPABASE WEBINAR] Mode résilient activé:", sbCatchErr);
       }
 
+      const liveSessionPayload = {
+        id: liveId,
+        sessionSlug: liveId,
+        storeId: merchantId || 'merchant-store',
+        storeName: storeName || 'Ma Boutique',
+        title: title.trim(),
+        description: description.trim(),
+        sessionMode: roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping',
+        status: 'live',
+        sourceType: effectivePlatform === 'youtube'
+          ? 'youtube'
+          : effectivePlatform === 'facebook'
+            ? 'facebook'
+            : (finalStreamUrl.endsWith('.mp4') ? 'mp4' : finalStreamUrl.endsWith('.m3u8') ? 'hls' : 'youtube'),
+        platform: effectivePlatform,
+        streamUrl: finalStreamUrl,
+        meetingUrl: finalMeetingUrl,
+        socialStreamUrl: finalStreamUrl,
+        coachingRoomUrl: coachingRoom,
+        aspectRatio: aspectRatio || '16:9',
+        isPaid,
+        price: numericPrice,
+        currency: 'FCFA',
+        scheduledAt: new Date(date).getTime() || Date.now(),
+        startedAt: Date.now(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        allowChat: true
+      };
+
       const newWebinarData = {
         merchantId,
         storeName,
@@ -583,32 +647,6 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         registeredCount: 0
       };
 
-      liveId = `live_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
-
-      // 1. Enregistrement prioritaire dans Supabase SQL (public.live_sessions)
-      try {
-        const { data: supaData, error: supaErr } = await supabase
-          .from('live_sessions')
-          .insert({
-            host_id: merchantId || 'merchant-default',
-            tenant_id: merchantId || 'tenant-default',
-            title: title.trim(),
-            description: description.trim(),
-            status: 'scheduled',
-            is_live: false,
-            stream_url: finalStreamUrl || finalMeetingUrl,
-            viewer_count: 0
-          })
-          .select('id')
-          .single();
-
-        if (!supaErr && supaData?.id) {
-          liveId = supaData.id;
-        }
-      } catch (sErr) {
-        console.warn("[WEBINAR] Sauvegarde Supabase SQL en repli:", sErr);
-      }
-
       // 2. Mise à jour du cache local (nana_merchant_webinars + nana_live_sessions_cache)
       const localWebinarItem: LiveWebinar = {
         id: liveId,
@@ -626,10 +664,11 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
       } catch {}
 
-      // 3. Génération du lien de la Landing Page publique (Domaine public officiel : nsore.shop)
+      // 3. Génération du lien de la Salle Live
+      // Pour la visualisation interne / Omnibar / Dashboard (marchand) : nanasore.com ou window.location.origin
       const origin = typeof window !== 'undefined' && window.location.origin 
-        ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nsore.shop')
-        : 'https://nsore.shop';
+        ? window.location.origin 
+        : 'https://nanasore.com';
       const publicUrl = `${origin}/live/${liveId}`;
       setGeneratedLink(publicUrl);
       playValidationBeep();
