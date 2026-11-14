@@ -179,6 +179,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   const [price, setPrice] = useState('5000');
   const [loading, setLoading] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
+  const [previewLink, setPreviewLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -664,13 +665,24 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         localStorage.setItem('nana_live_sessions_cache', JSON.stringify(sessionsMap));
       } catch {}
 
-      // 3. Génération du lien de la Salle Live
-      // Pour la visualisation interne / Omnibar / Dashboard (marchand) : nanasore.com ou window.location.origin
-      const origin = typeof window !== 'undefined' && window.location.origin 
-        ? window.location.origin 
+      // 3. Génération des liens :
+      // - EXTERNAL LINK CLIENT : Commence par nsore.shop + extension du type de live (ex: /live/webinar/, /live/formation/, /live/coaching/)
+      // - PRÉVISUALISATION MARCHAND / TENANT : Utilise nanasore.com (ou window.location.origin)
+      const liveTypeExtension = roomMode === 'CLASSROOM'
+        ? 'formation'
+        : roomMode === 'ONE_ON_ONE'
+          ? 'coaching'
+          : 'webinar';
+
+      const clientExternalLink = `https://nsore.shop/live/${liveTypeExtension}/${liveId}`;
+
+      const tenantOrigin = typeof window !== 'undefined' && window.location.origin 
+        ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
         : 'https://nanasore.com';
-      const publicUrl = `${origin}/live/${liveId}`;
-      setGeneratedLink(publicUrl);
+      const tenantPreviewLink = `${tenantOrigin}/live/${liveTypeExtension}/${liveId}`;
+
+      setGeneratedLink(clientExternalLink);
+      setPreviewLink(tenantPreviewLink);
       playValidationBeep();
     } catch (error: any) {
       console.error("Erreur lors de la création du webinaire :", error);
@@ -1353,25 +1365,65 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                   <div className="space-y-1">
                     <h3 className="text-base font-extrabold text-white">Votre Salle Live est Prête !</h3>
                     <p className="text-xs text-slate-400">
-                      Les participants accéderont à la page intelligente synchronisée avec compte à rebours et encaissement Mobile Money.
+                      Diffusez le lien externe client officiel sur vos réseaux, et utilisez le lien d'administration pour tester votre régie.
                     </p>
                   </div>
 
-                  {/* Affichage du lien */}
-                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-indigo-300 truncate select-all">
-                      {generatedLink}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyLink(generatedLink)}
-                      className="p-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 min-h-[40px] cursor-pointer"
-                      title="Copier le lien"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copié !' : 'Copier'}</span>
-                    </button>
+                  {/* Affichage du lien externe Client (nsore.shop) */}
+                  <div className="space-y-2 text-left">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                      <span className="flex items-center gap-1.5 text-emerald-400">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Lien Externe Client (Vitrine & Achats Directs)</span>
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        nsore.shop
+                      </span>
+                    </div>
+                    <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-2 shadow-inner">
+                      <span className="text-xs font-mono text-emerald-300 truncate select-all">
+                        {generatedLink}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(generatedLink)}
+                        className="p-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 min-h-[40px] cursor-pointer"
+                        title="Copier le lien client"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-200" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copied ? 'Copié !' : 'Copier'}</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Affichage du lien Prévisualisation Marchand / Tenant (nanasore.com) */}
+                  {previewLink && (
+                    <div className="space-y-1.5 text-left pt-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                        <span className="flex items-center gap-1.5 text-indigo-400">
+                          <Radio className="w-3.5 h-3.5" />
+                          <span>Lien Régie & Prévisualisation Tenant</span>
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          nanasore.com
+                        </span>
+                      </div>
+                      <div className="p-2.5 bg-slate-950/80 border border-indigo-500/20 rounded-xl flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono text-indigo-300 truncate select-all">
+                          {previewLink}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyLink(previewLink)}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shrink-0 cursor-pointer"
+                          title="Copier le lien régie"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copier</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Boutons d'action */}
                   <div className="space-y-2 pt-2">
@@ -1385,24 +1437,24 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                     </button>
 
                     <a
-                      href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🔥 *INVITATION EXCLUSIVE LIVE SHOPPING*\n\nNe manquez pas notre diffusion en direct : *${title}* !\n\n👉 *Rejoindre la salle live :* ${generatedLink}\n\nÀ très vite !`)}`}
+                      href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🔥 *INVITATION EXCLUSIVE DIRECT*\n\nNe manquez pas notre événement : *${title}* !\n\n👉 *Rejoindre la salle live :* ${generatedLink}\n\nÀ très vite !`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={playValidationBeep}
                       className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition cursor-pointer min-h-[48px]"
                     >
                       <PhoneCall className="w-4 h-4" />
-                      <span>Diffuser sur WhatsApp (Statuts & Groupes)</span>
+                      <span>Diffuser le lien Client sur WhatsApp (Statuts & Groupes)</span>
                     </a>
 
                     <a
-                      href={generatedLink}
+                      href={previewLink || generatedLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer min-h-[44px]"
+                      className="w-full py-3 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/30 text-indigo-200 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer min-h-[44px]"
                     >
-                      <ExternalLink className="w-4 h-4 text-indigo-400" />
-                      <span>Tester et Prévisualiser la Salle</span>
+                      <Radio className="w-4 h-4 text-indigo-400" />
+                      <span>Prévisualiser en Mode Marchand (nanasore.com)</span>
                     </a>
                   </div>
 
@@ -1496,7 +1548,16 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                         const platInfo = platformLabels[webinar.platform] || platformLabels.daily;
                         const isLiveNow = webinar.status === 'live';
                         const isEnded = webinar.status === 'ended';
-                        const publicLink = typeof window !== 'undefined' ? `${window.location.origin}/live/${webinar.id}` : `/live/${webinar.id}`;
+                        const liveType = webinar.roomMode === 'CLASSROOM'
+                          ? 'formation'
+                          : webinar.roomMode === 'ONE_ON_ONE'
+                            ? 'coaching'
+                            : 'webinar';
+                        const clientExternalLink = `https://nsore.shop/live/${liveType}/${webinar.id}`;
+                        const tenantOrigin = typeof window !== 'undefined' && window.location.origin
+                          ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
+                          : 'https://nanasore.com';
+                        const previewLink = `${tenantOrigin}/live/${liveType}/${webinar.id}`;
 
                         return (
                           <div 
@@ -1551,28 +1612,35 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                                   {webinar.description}
                                 </p>
                               )}
+
+                              {/* Aperçu du lien externe client */}
+                              <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-1 text-[10.5px]">
+                                <span className="font-mono text-emerald-400 truncate select-all">{clientExternalLink}</span>
+                                <span className="text-[9px] uppercase font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">Client</span>
+                              </div>
                             </div>
 
                             {/* Boutons d'action pour la session */}
                             <div className="pt-2 border-t border-slate-900 flex items-center gap-1.5 flex-wrap">
                               <a
-                                href={publicLink}
+                                href={previewLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex-1 min-w-[110px] py-2 px-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer min-h-[36px]"
+                                className="flex-1 min-w-[110px] py-2 px-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-rose-600 hover:from-indigo-500 hover:to-rose-500 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer min-h-[36px]"
+                                title="Prévisualiser sur nanasore.com"
                               >
                                 <Play className="w-3.5 h-3.5 fill-current" />
-                                <span>Rejoindre</span>
+                                <span>Régie Live</span>
                               </a>
 
                               <button
                                 type="button"
-                                onClick={() => handleCopyLink(publicLink)}
-                                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer min-h-[36px]"
-                                title="Copier le lien d'invitation"
+                                onClick={() => handleCopyLink(clientExternalLink)}
+                                className="p-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer min-h-[36px]"
+                                title="Copier le lien client nsore.shop"
                               >
                                 <Copy className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">Lien</span>
+                                <span className="hidden sm:inline">Lien Client</span>
                               </button>
 
                               <button

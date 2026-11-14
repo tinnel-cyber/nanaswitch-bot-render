@@ -947,9 +947,11 @@ export default function App() {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       if (pathname.startsWith('/live/')) {
-        const parts = pathname.split('/live/');
-        if (parts[1]) {
-          return parts[1].split('/')[0].split('?')[0];
+        const parts = pathname.replace(/^\/live\//, '').split('/');
+        // Si l'URL est sous la forme /live/webinar/123 ou /live/formation/123 ou /live/coaching/123
+        const id = parts.length > 1 ? parts[1] : parts[0];
+        if (id) {
+          return id.split('?')[0];
         }
       }
       const params = new URLSearchParams(window.location.search);
@@ -1937,8 +1939,9 @@ export default function App() {
 
       // Live
       if (pathname.startsWith('/live/')) {
-        const p = pathname.split('/live/')[1];
-        setPublicWebinarId(p ? p.split('/')[0].split('?')[0] : null);
+        const parts = pathname.replace(/^\/live\//, '').split('/');
+        const id = parts.length > 1 ? parts[1] : parts[0];
+        setPublicWebinarId(id ? id.split('?')[0] : null);
       } else {
         setPublicWebinarId(params.get('live') || params.get('webinar'));
       }
