@@ -84,7 +84,7 @@ import { LiveSaleToast } from '../../../../components/cro/LiveSaleToast';
 import { AutoplayVideoBlock } from '../../../../components/cro/AutoplayVideoBlock';
 import { useLiveSalePulse } from '../../../../hooks/useLiveSalePulse';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { registerSubdomainInFirebase, saveFunnelConfig } from '../../../../services/omniFunnelService';
+import { saveFunnelConfig } from '../../../../services/omniFunnelService';
 
 // Item draggable dans la liste des blocs
 interface SortableBlockRowProps {
@@ -264,13 +264,12 @@ export const PhysicalFunnelBuilder: React.FC<{
   const brandColor = funnelConfig.brandColor || '#10b981';
 
   const handleCopyLink = useCallback(() => {
-    const shareUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/c/${funnelConfig.slug || 'offre-exclusive'}`
-      : `https://nanasore.com/c/${funnelConfig.slug || 'offre-exclusive'}`;
+    // Les clients finaux utilisent le lien externe souverain nsore.shop/c/:slug
+    const shareUrl = `https://nsore.shop/c/${funnelConfig.slug || 'offre-exclusive'}`;
     navigator.clipboard.writeText(shareUrl);
     setCopyFeedback(true);
     playValidationBeep();
-    setSavedNotification(`Lien direct copié : ${shareUrl}`);
+    setSavedNotification(`Lien client externe copié : ${shareUrl}`);
     setTimeout(() => {
       setCopyFeedback(false);
       setSavedNotification(null);
@@ -595,7 +594,6 @@ export const PhysicalFunnelBuilder: React.FC<{
     } catch (e) {}
 
     try {
-      await registerSubdomainInFirebase(updated.slug, updated.title, updated);
       await saveFunnelConfig(updated);
     } catch (e) {
       console.warn('[PhysicalFunnelBuilder] Erreur enregistrement:', e);
@@ -603,11 +601,9 @@ export const PhysicalFunnelBuilder: React.FC<{
 
     if (onSave) onSave(updated);
 
-    const shareUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/c/${updated.slug}`
-      : `https://nanasore.com/c/${updated.slug}`;
+    const shareUrl = `https://nsore.shop/c/${updated.slug}`;
 
-    setSavedNotification(`Tunnel publié avec succès ! Lien direct : ${shareUrl}`);
+    setSavedNotification(`Tunnel publié avec succès ! Lien client externe : ${shareUrl}`);
     setTimeout(() => setSavedNotification(null), 4000);
   };
 
@@ -882,7 +878,7 @@ export const PhysicalFunnelBuilder: React.FC<{
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                     <Globe style={{ color: brandColor }} className="w-3.5 h-3.5" />
-                    <span>Lien Public Caisse Express</span>
+                    <span>Lien Externe Client (nsore.shop)</span>
                   </span>
                   <span
                     style={{ backgroundColor: `${brandColor}20`, borderColor: `${brandColor}40`, color: brandColor }}
@@ -896,7 +892,7 @@ export const PhysicalFunnelBuilder: React.FC<{
                     style={{ color: brandColor }}
                     className="bg-slate-950 px-2.5 py-2 text-xs font-mono font-bold border-r border-slate-800 shrink-0 select-none"
                   >
-                    nanasore.com/c/
+                    nsore.shop/c/
                   </span>
                   <input
                     type="text"
@@ -916,9 +912,10 @@ export const PhysicalFunnelBuilder: React.FC<{
                     <span>{copyFeedback ? 'Copié !' : 'Copier'}</span>
                   </button>
                 </div>
-                <p className="text-[10.5px] text-slate-400">
-                  Partagez ce lien directement sur vos publicités TikTok, Facebook, Instagram et WhatsApp.
-                </p>
+                <div className="flex items-center justify-between text-[10.5px] text-slate-400">
+                  <span>Lien client externe pour publicités TikTok, Facebook et WhatsApp.</span>
+                  <span className="text-slate-500 font-mono text-[9.5px]">Prévis. interne : nanasore.com/c/{funnelConfig.slug}</span>
+                </div>
               </div>
 
               {/* 3. Colorimétrie Dynamique & Couleur de Marque */}
