@@ -27,7 +27,6 @@ service cloud.firestore {
         request.auth.token.email == 'pousbila36@gmail.com' ||
         request.auth.token.email == 'pousbila04@gmail.com' ||
         request.auth.token.email == 'admin@nanasore.com' ||
-        request.auth.token.email == 'admin@nana.ci' ||
         ('role' in request.auth.token && (
           request.auth.token.role in ['SUPER_ADMIN', 'superadmin', 'ADMIN']
         )) ||

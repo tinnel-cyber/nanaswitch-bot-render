@@ -5,8 +5,8 @@
        Autorise le Super Admin partout (par custom claims token, email ou UID).
        Par défaut, tout autre utilisateur est REFUSÉ à la racine.
        ========================================================================= */
-    ".read": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com' || auth.token.email === 'admin@nana.ci')",
-    ".write": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com' || auth.token.email === 'admin@nana.ci')",
+    ".read": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com')",
+    ".write": "auth != null && (auth.token.admin === true || auth.token.superadmin === true || auth.token.role === 'SUPER_ADMIN' || auth.token.role === 'ADMIN' || auth.token.email === 'pousbila36@gmail.com' || auth.token.email === 'pousbila04@gmail.com' || auth.token.email === 'admin@nanasore.com')",
 
     /* =========================================================================
        2. DONNÉES DU SAAS MULTI-TENANT (/tenants/{tenantId})
