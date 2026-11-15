@@ -47,6 +47,13 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const cleanSlug = (slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
   const [funnel, setFunnel] = useState<PhysicalFunnelConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFromPhysicalQr, setIsFromPhysicalQr] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const search = new URLSearchParams(window.location.search);
+      return search.get('source') === 'physical_pos_qr' || search.get('drawer') === 'true';
+    }
+    return false;
+  });
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
   const [isMiniMarketOpen, setIsMiniMarketOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -260,7 +267,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
               style={{ backgroundColor: `${brandColor}20`, borderColor: `${brandColor}40`, color: brandColor }}
               className="px-2.5 py-0.5 rounded-full text-[10.5px] font-black border"
             >
-              CAISSE EXPRESS 1-CLIC
+              {isFromPhysicalQr ? 'SCAN MAGASIN • CAISSE CONNECTÉE' : 'CAISSE EXPRESS 1-CLIC'}
             </span>
             <span className="text-xs font-black text-white truncate max-w-[160px] sm:max-w-xs">
               {activeFunnel.title}
