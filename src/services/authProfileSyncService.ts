@@ -72,7 +72,7 @@ export async function syncAuthProfileWithSupabase(params: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        authUid,
+        authUid: resolvedUid,
         email,
         fullName: fullName || '',
         whatsapp: whatsapp || ''
