@@ -295,6 +295,10 @@ export const KycValidationControlPlaneView: React.FC = () => {
       if (userId && userId !== storeId) {
         await updateKycStatusInSupabase(userId, 'verified', adminEmail);
       }
+      const targetEmail = item.userEmail || (item.businessData as any)?.companyEmail;
+      if (targetEmail) {
+        await updateKycStatusInSupabase(targetEmail, 'verified', adminEmail);
+      }
 
       // 3. Synchronisation service local & Firestore
       await updateKycRequestStatus(storeId, 'verified', undefined, adminEmail);
@@ -381,6 +385,10 @@ export const KycValidationControlPlaneView: React.FC = () => {
       await updateKycStatusInSupabase(storeId, 'rejected', adminEmail, rejectionReason);
       if (userId && userId !== storeId) {
         await updateKycStatusInSupabase(userId, 'rejected', adminEmail, rejectionReason);
+      }
+      const targetEmail = rejectingItem.userEmail || (rejectingItem.businessData as any)?.companyEmail;
+      if (targetEmail) {
+        await updateKycStatusInSupabase(targetEmail, 'rejected', adminEmail, rejectionReason);
       }
 
       // 3. Synchronisation service local & Firestore

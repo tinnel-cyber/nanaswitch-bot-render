@@ -624,11 +624,23 @@ async function startServer() {
       try {
         const { supabase } = await import('./app/utils/supabase.server');
         if (supabase && userId && !userId.startsWith('usr-demo')) {
-          await supabase.from('profiles').update({
-            kyc_status: 'pending',
-            pricing_model: submission.pricingModel,
-            updated_at: new Date().toISOString()
-          }).eq('id', userId);
+          const isUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+          const targetEmail = submission.userEmail || submission.businessData?.companyEmail || (typeof userId === 'string' && userId.includes('@') ? userId : null);
+
+          if (isUuid(userId)) {
+            await supabase.from('profiles').update({
+              kyc_status: submission.status === 'verified' ? 'full' : 'pending',
+              pricing_model: submission.pricingModel,
+              updated_at: new Date().toISOString()
+            }).eq('id', userId);
+          }
+          if (targetEmail) {
+            await supabase.from('profiles').update({
+              kyc_status: submission.status === 'verified' ? 'full' : 'pending',
+              pricing_model: submission.pricingModel,
+              updated_at: new Date().toISOString()
+            }).eq('email', targetEmail);
+          }
         }
       } catch (supaErr) {
         console.warn('[SERVER KYC] Supabase profiles sync notice:', supaErr);
@@ -692,12 +704,33 @@ async function startServer() {
       // Synchronisation Supabase profiles
       try {
         const { supabase } = await import('./app/utils/supabase.server');
-        if (supabase && (userId || storeId)) {
-          const target = userId || storeId;
-          await supabase.from('profiles').update({
-            kyc_status: isApproved ? 'full' : 'none',
-            updated_at: new Date().toISOString()
-          }).eq('id', target);
+        if (supabase) {
+          const isUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+          const foundSub = updated.find((s: any) => s.storeId === storeId || s.id === storeId || s.userId === userId);
+          const emailTarget = foundSub?.userEmail || foundSub?.businessData?.companyEmail || req.body?.userEmail || (typeof userId === 'string' && userId.includes('@') ? userId : null);
+
+          if (userId && isUuid(userId)) {
+            await supabase.from('profiles').update({
+              kyc_status: isApproved ? 'full' : 'none',
+              role: isApproved ? 'vendor' : 'customer',
+              updated_at: new Date().toISOString()
+            }).eq('id', userId);
+          } else if (storeId && isUuid(storeId)) {
+            await supabase.from('profiles').update({
+              kyc_status: isApproved ? 'full' : 'none',
+              role: isApproved ? 'vendor' : 'customer',
+              updated_at: new Date().toISOString()
+            }).eq('id', storeId);
+          }
+
+          if (emailTarget) {
+            await supabase.from('profiles').update({
+              kyc_status: isApproved ? 'full' : 'none',
+              role: isApproved ? 'vendor' : 'customer',
+              updated_at: new Date().toISOString()
+            }).eq('email', emailTarget);
+          }
+          console.log(`[SERVER KYC] Supabase profile mis à jour : kyc_status=${isApproved ? 'full' : 'none'}`);
         }
       } catch (supaErr) {
         console.warn('[SERVER KYC] Supabase profiles approve sync notice:', supaErr);

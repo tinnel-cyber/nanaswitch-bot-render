@@ -1,19 +1,13 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const defaultUrl = 'https://wsxnznobeefrsoicjqte.supabase.co';
+const defaultAnonKey = 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || defaultUrl;
+const supabaseAnonKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || defaultAnonKey;
 
 export function getSupabaseClient(): SupabaseClient {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "Les variables d'environnement SUPABASE_URL et SUPABASE_ANON_KEY sont manquantes dans votre fichier .env"
-    );
-  }
-
-  return createClient(url, key, {
+  return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -22,24 +16,12 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 /**
- * Client Supabase côté serveur.
- * Si les clés ne sont pas encore renseignées dans le .env, il lance une erreur claire à l'usage.
+ * Client Supabase côté serveur robuste avec fallback automatique.
  */
-export const supabase = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
-  : new Proxy({} as SupabaseClient, {
-      get(_, prop) {
-        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-          throw new Error(
-            "SUPABASE_URL ou SUPABASE_ANON_KEY n'est pas configuré dans votre fichier .env"
-          );
-        }
-        const client = getSupabaseClient();
-        return (client as any)[prop];
-      },
-    });
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});
+

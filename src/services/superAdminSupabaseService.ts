@@ -236,33 +236,38 @@ export async function syncStoreApprovalToSupabase(
 ): Promise<boolean> {
   try {
     const isApproved = status === 'APPROVED';
+    const isUuid = (val: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    const now = new Date().toISOString();
 
-    // 1. Mettre à jour l'organisation dans la table organizations
-    const { error: orgErr } = await supabase
-      .from('organizations')
-      .update({ 
-        status: status,
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', storeId);
-
-    if (orgErr) {
-      console.warn('[SUPABASE_SUPERADMIN] Notice update organizations :', orgErr.message);
+    // 1. Appel du backend serveur centralisé (garantit la persistance multi-tenant et mise à jour profiles)
+    try {
+      await fetch('/api/admin/kyc/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId,
+          action: isApproved ? 'approve' : status === 'SUSPENDED' ? 'rejected' : 'pending',
+          adminEmail
+        })
+      });
+    } catch (e) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice validation API:', e);
     }
 
-    // 2. Mettre à jour l'activation dans account_activations si elle existe
-    const { error: actErr } = await supabase
-      .from('account_activations')
-      .update({
-        status: isApproved ? 'approved' : status === 'SUSPENDED' ? 'rejected' : 'pending',
-        reviewed_by: adminEmail,
-        reviewed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('organization_id', storeId);
-
-    if (actErr) {
-      console.warn('[SUPABASE_SUPERADMIN] Notice update account_activations :', actErr.message);
+    // 2. Mettre à jour profiles dans Supabase si identifiant UUID
+    if (isUuid(storeId)) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ 
+            kyc_status: isApproved ? 'full' : 'none',
+            role: isApproved ? 'vendor' : 'customer',
+            updated_at: now 
+          })
+          .eq('id', storeId);
+      } catch (err: any) {
+        console.warn('[SUPABASE_SUPERADMIN] Notice update profiles :', err.message);
+      }
     }
 
     // 3. Sauvegarder dans le cache local
@@ -364,28 +369,29 @@ export async function updateKycStatusInSupabase(
   try {
     const isVerified = newStatus === 'verified';
     const now = new Date().toISOString();
+    const isUuid = (val: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
-    // 1. Mettre à jour profiles
-    await supabase
-      .from('profiles')
-      .update({
-        kyc_status: isVerified ? 'full' : 'none',
-        updated_at: now
-      })
-      .or(`id.eq.${userIdOrStoreId},organization_id.eq.${userIdOrStoreId}`);
-
-    // 2. Mettre à jour account_activations
-    await supabase
-      .from('account_activations')
-      .update({
-        status: isVerified ? 'approved' : 'rejected',
-        kyc_status: isVerified ? 'full' : 'none',
-        admin_notes: rejectionReason || null,
-        reviewed_by: adminEmail,
-        reviewed_at: now,
-        updated_at: now
-      })
-      .or(`user_id.eq.${userIdOrStoreId},organization_id.eq.${userIdOrStoreId}`);
+    // 1. Mettre à jour profiles par UUID si valide
+    if (isUuid(userIdOrStoreId)) {
+      await supabase
+        .from('profiles')
+        .update({
+          kyc_status: isVerified ? 'full' : 'none',
+          role: isVerified ? 'vendor' : 'customer',
+          updated_at: now
+        })
+        .eq('id', userIdOrStoreId);
+    } else if (userIdOrStoreId && typeof userIdOrStoreId === 'string' && userIdOrStoreId.includes('@')) {
+      // 2. Mettre à jour profiles par email si disponible
+      await supabase
+        .from('profiles')
+        .update({
+          kyc_status: isVerified ? 'full' : 'none',
+          role: isVerified ? 'vendor' : 'customer',
+          updated_at: now
+        })
+        .eq('email', userIdOrStoreId);
+    }
 
     return true;
   } catch (err) {
