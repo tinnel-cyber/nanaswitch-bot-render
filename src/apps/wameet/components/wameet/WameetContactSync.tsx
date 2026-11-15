@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  setDoc,
-  serverTimestamp
-} from 'firebase/firestore';
-import { db } from '../../../../firebase';
+import { supabase } from '@/lib/supabase';
 import {
   normalizeContactPhoneNumber,
   formatDisplayPhone
@@ -145,9 +136,9 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
   };
 
   /**
-   * Moteur de Matching Firestore par lots de 10 numéros
+   * Moteur de Matching Supabase par lots de numéros
    */
-  const executeFirestoreMatching = async (contactsList: Array<{ name: string; tel: string[] }>) => {
+  const executeSupabaseMatching = async (contactsList: Array<{ name: string; tel: string[] }>) => {
     setPhase('scanning');
     setScanMessage('Normalisation des numéros au standard international E.164...');
     playTapBeep();
@@ -178,72 +169,50 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
       return;
     }
 
-    // 2. Découper les numéros en lots de 10 pour Firestore
+    // 2. Découper les numéros en lots pour Supabase
     const batches = chunkArray(allPhones, 10);
     const foundMatches: WameetMatchedUser[] = [];
 
-    setScanMessage(`Interrogation de notre base Firestore (${batches.length} lots de 10)...`);
+    setScanMessage(`Interrogation de la base Supabase (${batches.length} lots)...`);
 
     try {
-      const usersRef = collection(db, 'users');
-
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         setScanMessage(`Analyse du lot ${i + 1}/${batches.length}...`);
 
-        // Requête sur phoneNumber
-        const qPhone = query(usersRef, where('phoneNumber', 'in', batch));
-        const qPhoneSnap = await getDocs(qPhone);
+        // Requête Supabase sur profiles
+        try {
+          const { data: supaProfiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('phone', batch);
 
-        qPhoneSnap.forEach(docSnap => {
-          const data = docSnap.data();
-          const p = data.phoneNumber || data.phone || data.wameetPhone;
-          const bookName = phoneMap.get(p) || data.name || 'Ami';
+          if (Array.isArray(supaProfiles)) {
+            supaProfiles.forEach(data => {
+              const p = data.phone || data.phoneNumber;
+              const bookName = phoneMap.get(p) || data.name || data.full_name || 'Ami';
 
-          if (!foundMatches.some(m => m.id === docSnap.id)) {
-            foundMatches.push({
-              id: docSnap.id,
-              name: data.name || data.displayName || 'Utilisateur Wameet',
-              handle: data.handle || `@${(data.name || 'user').toLowerCase().replace(/\s+/g, '.')}`,
-              avatarUrl:
-                data.avatarUrl ||
-                data.photoURL ||
-                `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80`,
-              statusBadge: data.statusBadge || '🌙 Détente & Idées après le boulot',
-              phoneNumber: p,
-              contactNameInBook: bookName,
-              followersCount: data.followersCount || Math.floor(Math.random() * 500) + 50,
-              isOnline: true
+              if (!foundMatches.some(m => m.id === data.id)) {
+                foundMatches.push({
+                  id: data.id,
+                  name: data.full_name || data.name || data.displayName || 'Utilisateur Wameet',
+                  handle: data.handle || `@${(data.full_name || data.name || 'user').toLowerCase().replace(/\s+/g, '.')}`,
+                  avatarUrl:
+                    data.avatar_url ||
+                    data.avatarUrl ||
+                    `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80`,
+                  statusBadge: data.statusBadge || '🌙 Détente & Idées après le boulot',
+                  phoneNumber: p,
+                  contactNameInBook: bookName,
+                  followersCount: data.followersCount || Math.floor(Math.random() * 500) + 50,
+                  isOnline: true
+                });
+              }
             });
           }
-        });
-
-        // Requête de secours sur 'phone'
-        const qAlt = query(usersRef, where('phone', 'in', batch));
-        const qAltSnap = await getDocs(qAlt);
-
-        qAltSnap.forEach(docSnap => {
-          const data = docSnap.data();
-          const p = data.phoneNumber || data.phone || data.wameetPhone;
-          const bookName = phoneMap.get(p) || data.name || 'Ami';
-
-          if (!foundMatches.some(m => m.id === docSnap.id)) {
-            foundMatches.push({
-              id: docSnap.id,
-              name: data.name || data.displayName || 'Utilisateur Wameet',
-              handle: data.handle || `@${(data.name || 'user').toLowerCase().replace(/\s+/g, '.')}`,
-              avatarUrl:
-                data.avatarUrl ||
-                data.photoURL ||
-                `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80`,
-              statusBadge: data.statusBadge || '🌙 Détente & Idées après le boulot',
-              phoneNumber: p,
-              contactNameInBook: bookName,
-              followersCount: data.followersCount || 120,
-              isOnline: true
-            });
-          }
-        });
+        } catch (queryErr) {
+          console.warn('[Wameet Contact Sync] Erreur requête Supabase:', queryErr);
+        }
       }
 
       // Si la base ne contient pas encore tous les contacts, on inclut les profils d'accueil correspondants
@@ -286,7 +255,7 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
           name: Array.isArray(c.name) ? c.name[0] : c.name || 'Contact',
           tel: Array.isArray(c.tel) ? c.tel : [c.tel]
         }));
-        await executeFirestoreMatching(parsed);
+        await executeSupabaseMatching(parsed);
       } else {
         // Utilisateur a annulé sans sélectionner
       }
@@ -299,7 +268,7 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
    * Déclencheur simulation de test (pour ordinateurs et Safari iOS)
    */
   const handleTestDemoContacts = async () => {
-    await executeFirestoreMatching(DEMO_REPERTOIRE_CONTACTS);
+    await executeSupabaseMatching(DEMO_REPERTOIRE_CONTACTS);
   };
 
   /**
@@ -367,21 +336,26 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
     }
     setFollowingIds(next);
 
-    // Enregistrement de la connexion dans Firestore si l'utilisateur est authentifié
+    // Enregistrement de la connexion dans Supabase / LocalStorage si l'utilisateur est authentifié
     if (currentUserId) {
       try {
-        const connectionRef = doc(db, 'users', currentUserId, 'wameet_contacts', user.id);
+        const storedKey = `wameet_contacts_${currentUserId}`;
+        const existing = JSON.parse(localStorage.getItem(storedKey) || '[]');
         if (isAdding) {
-          await setDoc(connectionRef, {
+          const updated = [...existing.filter((item: any) => item.friendId !== user.id), {
             friendId: user.id,
             friendName: user.name,
             friendPhoneNumber: user.phoneNumber,
-            connectedAt: serverTimestamp(),
+            connectedAt: new Date().toISOString(),
             source: 'address_book_sync'
-          });
+          }];
+          localStorage.setItem(storedKey, JSON.stringify(updated));
+        } else {
+          const updated = existing.filter((item: any) => item.friendId !== user.id);
+          localStorage.setItem(storedKey, JSON.stringify(updated));
         }
       } catch (e) {
-        console.warn('Erreur écriture connexion storage:', e);
+        console.warn('Erreur persistance connexion locale:', e);
       }
     }
   };
@@ -402,18 +376,21 @@ export const WameetContactSync: React.FC<WameetContactSyncProps> = ({
       });
     } catch {}
 
-    // Persistance groupée Firestore
+    // Persistance groupée Locale / Supabase
     if (currentUserId) {
-      matchedUsers.forEach(user => {
-        const ref = doc(db, 'users', currentUserId, 'wameet_contacts', user.id);
-        setDoc(ref, {
+      try {
+        const storedKey = `wameet_contacts_${currentUserId}`;
+        const batch = matchedUsers.map(user => ({
           friendId: user.id,
           friendName: user.name,
           friendPhoneNumber: user.phoneNumber,
-          connectedAt: serverTimestamp(),
+          connectedAt: new Date().toISOString(),
           source: 'address_book_sync_all'
-        }).catch(console.warn);
-      });
+        }));
+        localStorage.setItem(storedKey, JSON.stringify(batch));
+      } catch (err) {
+        console.warn('Erreur persistance groupée contacts:', err);
+      }
     }
   };
 

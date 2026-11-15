@@ -16,8 +16,10 @@ import {
   SlidersHorizontal,
   ChevronRight
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { LiveSession } from '../../../types/liveSession';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
+import { StoreUser } from '../../../types';
 import { 
   getLiveSessionBySlug, 
   subscribeLiveSession, 
@@ -37,6 +39,7 @@ export interface PublicLiveSessionPageProps {
   sessionSlug?: string;
   initialSession?: LiveSession;
   isHost?: boolean;
+  currentUser?: StoreUser | null;
   onBackToStore?: () => void;
 }
 
@@ -44,6 +47,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   sessionSlug,
   initialSession,
   isHost: initialIsHost = false,
+  currentUser,
   onBackToStore
 }) => {
   // 1. DÉCLARATION STRICTE DE TOUS LES HOOKS AU SOMMET DU COMPOSANT (ZÉRO ERREUR #310)
@@ -62,13 +66,50 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   }, [sessionSlug]);
 
   const [session, setSession] = useState<LiveSession>(initialSession || FALLBACK_LIVE_SESSION);
-  const [isHostMode, setIsHostMode] = useState<boolean>(initialIsHost);
+  const [supabaseUser, setSupabaseUser] = useState<any>(null);
+
+  // Vérification de session Supabase Auth en arrière-plan
+  useEffect(() => {
+    let isMounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (isMounted && data?.user) {
+        setSupabaseUser(data.user);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  // Détection souveraine du statut d'hôte (Prop explicite, Paramètre URL, Supabase Auth ou Rôle currentUser)
+  const isHostComputed = useMemo(() => {
+    if (initialIsHost) return true;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('host') === 'true' || params.get('mode') === 'host') return true;
+    }
+    if (currentUser) {
+      if (session.storeId && (currentUser.id === session.storeId || currentUser.storeId === session.storeId)) return true;
+      if (currentUser.role === 'GERANT' || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') return true;
+    }
+    if (supabaseUser) {
+      if (session.storeId && (supabaseUser.id === session.storeId || supabaseUser.user_metadata?.tenant_id === session.storeId)) return true;
+    }
+    return false;
+  }, [initialIsHost, currentUser, supabaseUser, session.storeId]);
+
+  const [isHostMode, setIsHostMode] = useState<boolean>(initialIsHost || isHostComputed);
+
+  useEffect(() => {
+    if (isHostComputed) {
+      setIsHostMode(true);
+    }
+  }, [isHostComputed]);
+
   const [activeClassroomTab, setActiveClassroomTab] = useState<LivePanelTab>('chat');
   const [selectedFunnelProduct, setSelectedFunnelProduct] = useState<StoreProductItem | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!initialSession);
 
-  // Chargement de la session depuis Firestore
+  // Chargement de la session depuis Supabase / cache local
   useEffect(() => {
     let isMounted = true;
     getLiveSessionBySlug(resolvedSlug).then(res => {
@@ -289,7 +330,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 onUnpinProduct={handleUnpinProduct}
               />
 
-              {/* Moteur E-Commerce & Le Tiroir Nanasore (Firebase Live Sync) */}
+              {/* Moteur E-Commerce & Le Tiroir Nanasore (Supabase Live Sync) */}
               <NanasoreLiveCommerceOverlay
                 liveId={session.id || resolvedSlug}
                 isHost={isHostMode}

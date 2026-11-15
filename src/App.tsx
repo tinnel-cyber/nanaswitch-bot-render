@@ -5695,6 +5695,7 @@ export default function App() {
         <React.Suspense fallback={<LazyModuleFallback label="Connexion au Live Studio Nanasore..." />}>
           <PublicLiveSessionPage
             sessionSlug={publicWebinarId}
+            currentUser={currentUser}
             onBackToStore={() => {
               setPublicWebinarId(null);
               if (typeof window !== 'undefined') {

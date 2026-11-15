@@ -11,7 +11,7 @@ import {
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { LivePlatform, LiveRoomMode, LiveRoomStatus, LiveWebinar } from '../../../types';
 import { UltimateFunnelBuilder } from '../../../components/storeBuilder/UltimateFunnelBuilder';
-import { saveFunnelConfig, registerSubdomainInFirebase } from '../../../services/omniFunnelService';
+import { saveFunnelConfig } from '../../../services/omniFunnelService';
 
 export interface CreateWebinarModalProps {
   isOpen?: boolean;
@@ -1889,7 +1889,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
               setGeneratedFunnels(updated);
               localStorage.setItem('nana_webinar_funnels', JSON.stringify(updated));
 
-              // Persistance universelle dans Firestore (funnels, deals, tenants, stores)
+              // Persistance universelle dans Supabase / LocalStorage (funnels, deals, tenants, stores)
               const funnelSlug = newFunnelItem.slug || newFunnelItem.id;
               const webinarPayload = {
                 id: funnelSlug,
@@ -1906,7 +1906,6 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                 isPublished: true,
                 updatedAt: new Date().toISOString()
               };
-              await registerSubdomainInFirebase(funnelSlug, webinarPayload.title, webinarPayload);
               await saveFunnelConfig(webinarPayload);
             } catch (err) {
               console.error('Error saving funnel:', err);

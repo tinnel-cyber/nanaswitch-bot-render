@@ -117,14 +117,34 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
         createdAt: new Date(byId.created_at).getTime()
       };
     }
+
+    // 2. Recherche locale (localStorage) si non trouvé dans Supabase ou hors ligne
+    try {
+      if (typeof window !== 'undefined') {
+        const rawWebinars = localStorage.getItem('nana_merchant_webinars');
+        if (rawWebinars) {
+          const list = JSON.parse(rawWebinars);
+          if (Array.isArray(list)) {
+            const match = list.find((w: any) => w.id === slug || w.sessionSlug === slug);
+            if (match) {
+              return mapWebinarToLiveSession(slug, match);
+            }
+          }
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('[liveSessionService] Erreur lecture cache local webinar:', cacheErr);
+    }
   } catch (err) {
     console.warn('[liveSessionService] Supabase offline or error, using fallback session:', err);
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+
+  // 3. Fallback officiel de démonstration
+  return {
+    ...FALLBACK_LIVE_SESSION,
+    id: slug,
+    sessionSlug: slug
+  };
 }
 
 /**
