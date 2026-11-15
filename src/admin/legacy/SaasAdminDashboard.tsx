@@ -391,7 +391,17 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     };
 
     loadSuperAdminData();
-    return () => { isMounted = false; };
+    const handleRefresh = () => { loadSuperAdminData(); };
+    window.addEventListener('superAdminUpdated', handleRefresh);
+    window.addEventListener('nana_kyc_submission_created', handleRefresh);
+    window.addEventListener('nana_kyc_status_changed', handleRefresh);
+
+    return () => { 
+      isMounted = false;
+      window.removeEventListener('superAdminUpdated', handleRefresh);
+      window.removeEventListener('nana_kyc_submission_created', handleRefresh);
+      window.removeEventListener('nana_kyc_status_changed', handleRefresh);
+    };
   }, []);
 
   const isSuperAdmin = Boolean(

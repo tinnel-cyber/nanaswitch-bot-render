@@ -37,16 +37,23 @@ export const TenantsManagementView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Lecture directe et exclusive depuis les tables SQL Supabase (aucun fallback mock)
-    fetchOrganizationsAsStoresFromSupabase().then((stores) => {
-      setLiveSupabaseStores(stores.filter(s => !isDemoStore(s)));
-    });
-
-    const handleUpdate = () => {
+    const refreshData = () => {
+      fetchOrganizationsAsStoresFromSupabase().then((stores) => {
+        setLiveSupabaseStores(stores.filter(s => !isDemoStore(s)));
+      });
       setSettings(getSuperAdminSettingsLocal() || {});
     };
-    window.addEventListener('superAdminUpdated', handleUpdate);
-    return () => window.removeEventListener('superAdminUpdated', handleUpdate);
+
+    refreshData();
+
+    window.addEventListener('superAdminUpdated', refreshData);
+    window.addEventListener('nana_kyc_submission_created', refreshData);
+    window.addEventListener('nana_kyc_status_changed', refreshData);
+    return () => {
+      window.removeEventListener('superAdminUpdated', refreshData);
+      window.removeEventListener('nana_kyc_submission_created', refreshData);
+      window.removeEventListener('nana_kyc_status_changed', refreshData);
+    };
   }, []);
 
   const allStores: SaasStore[] = useMemo(() => {

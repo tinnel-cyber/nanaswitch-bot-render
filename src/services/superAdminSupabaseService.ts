@@ -84,14 +84,18 @@ export async function fetchOrganizationsAsStoresFromSupabase(): Promise<SaasStor
     });
 
     // 4. Mappage vers l'interface standard SaasStore (filtre strict contre tout mock)
+    const mappedStores: SaasStore[] = [];
+    const registeredIds = new Set<string>();
+
     if (orgs && orgs.length > 0) {
       const realOrgs = orgs.filter(o => !isDemoStore(o));
-      const mappedStores: SaasStore[] = realOrgs.map(org => {
+      realOrgs.forEach(org => {
         const profile = profileByOrg.get(org.id);
         const rev = revenueByOrg.get(org.id) || { total: 0, monthly: 0 };
         const isSuspended = org.status === 'SUSPENDED';
+        registeredIds.add(org.id);
 
-        return {
+        mappedStores.push({
           id: org.id,
           name: org.name || `Boutique ${org.slug || org.id.slice(0, 8)}`,
           ownerName: profile?.full_name || profile?.email || 'Commerçant Nanasore',
@@ -113,13 +117,62 @@ export async function fetchOrganizationsAsStoresFromSupabase(): Promise<SaasStor
           subscriptionExpiryDate: 'Renouvellement auto',
           lastActive: 'En ligne',
           syncPendingCount: 0,
-        };
+          approvalStatus: isSuspended ? 'REJECTED' : 'APPROVED'
+        });
       });
-
-      return mappedStores;
     }
 
-    return [];
+    // 5. Intégration des comptes et univers récemment soumis en attente de validation Super Admin
+    try {
+      let pendingList: any[] = [];
+      try {
+        const res = await fetch('/api/kyc/submissions');
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData?.success && Array.isArray(resData.submissions)) {
+            pendingList = resData.submissions;
+          }
+        }
+      } catch {}
+
+      if (pendingList.length === 0 && typeof window !== 'undefined') {
+        const raw = localStorage.getItem('nana_kyc_submissions');
+        if (raw) pendingList = JSON.parse(raw);
+      }
+
+      pendingList.forEach((sub: any) => {
+        const sId = sub.storeId || sub.id;
+        if (sId && !registeredIds.has(sId) && !isDemoStore({ id: sId, name: sub.storeName })) {
+          registeredIds.add(sId);
+          mappedStores.push({
+            id: sId,
+            name: sub.storeName || sub.businessData?.companyName || 'Univers Marchand',
+            ownerName: sub.managerFullName || sub.individualData?.fullName || 'Gérant',
+            phone: sub.whatsappPhone || 'Non renseigné',
+            city: 'Afrique de l\'Ouest',
+            country: 'Zone UEMOA',
+            totalRevenue: 0,
+            monthlyRevenue: 0,
+            previousMonthRevenue: 0,
+            personalExpensesAmount: 0,
+            personalExpensesRate: 0,
+            criticalStockCount: 0,
+            totalDebtAmount: 0,
+            health: 'HEALTHY',
+            subscriptionPlan: 'STARTER',
+            subscriptionStatus: 'ACTIVE',
+            subscriptionExpiryDate: 'En attente',
+            lastActive: 'Récemment soumis',
+            syncPendingCount: 1,
+            approvalStatus: (sub.status === 'verified' || sub.status === 'approved') ? 'APPROVED' : 'PENDING'
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice pending submissions merge:', e);
+    }
+
+    return mappedStores;
   } catch (err: any) {
     console.error('[SUPABASE_SUPERADMIN] Exception fetchOrganizationsAsStoresFromSupabase :', err);
     return [];
@@ -230,39 +283,76 @@ export async function syncStoreApprovalToSupabase(
 // ==============================================================================
 
 export async function fetchKycSubmissionsFromSupabase(): Promise<KycSubmission[]> {
+  const resultList: KycSubmission[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Appel serveur centralisé (dossiers réels soumis par les nouveaux comptes)
   try {
-    // Lecture directe de la table account_activations (contenant les vraies pièces d'identité et statuts)
+    const res = await fetch('/api/kyc/submissions');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.submissions)) {
+        data.submissions.forEach((sub: any) => {
+          const key = sub.storeId || sub.id;
+          if (key && !seenIds.has(key)) {
+            seenIds.add(key);
+            resultList.push(sub);
+          }
+        });
+      }
+    }
+  } catch (apiErr) {
+    // API offline
+  }
+
+  // 2. Lecture directe de la table account_activations (si existante sur Supabase)
+  try {
     const { data: activations, error } = await supabase
       .from('account_activations')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !activations) {
-      return [];
+    if (!error && activations && activations.length > 0) {
+      activations
+        .filter(act => act.kyc_data && (act.kyc_data.idCardUrl || act.kyc_data.fullName || act.status === 'pending'))
+        .forEach(act => {
+          const key = act.organization_id || `store-${act.user_id}`;
+          if (key && !seenIds.has(key)) {
+            seenIds.add(key);
+            resultList.push({
+              id: act.id || `kyc-${act.user_id}`,
+              storeId: key,
+              storeName: act.kyc_data?.companyName || act.kyc_data?.fullName || `Commerce ${act.user_id.slice(0, 6)}`,
+              managerFullName: act.kyc_data?.fullName || 'Gérant',
+              managerPhotoUrl: act.kyc_data?.photoCaptureUrl || '',
+              whatsappPhone: act.kyc_data?.paymentNumber || '',
+              documentType: (act.kyc_data?.documentType || 'CNIB') as any,
+              documentPhotoUrl: act.kyc_data?.idCardUrl || '',
+              status: act.status === 'approved' ? 'verified' : act.status === 'rejected' ? 'rejected' : 'pending_approval',
+              submittedAt: act.submitted_at || act.created_at || new Date().toISOString(),
+              reviewedAt: act.reviewed_at || undefined,
+              reviewedBy: act.reviewed_by || undefined,
+              userId: act.user_id
+            });
+          }
+        });
     }
-
-    // Mappage des activations réelles sans aucun faux document hardcodé
-    return activations
-      .filter(act => act.kyc_data && (act.kyc_data.idCardUrl || act.kyc_data.fullName || act.status === 'pending'))
-      .map(act => ({
-        id: act.id || `kyc-${act.user_id}`,
-        storeId: act.organization_id || `store-${act.user_id}`,
-        storeName: act.kyc_data?.companyName || act.kyc_data?.fullName || `Commerce ${act.user_id.slice(0, 6)}`,
-        managerFullName: act.kyc_data?.fullName || 'Gérant',
-        managerPhotoUrl: act.kyc_data?.photoCaptureUrl || '',
-        whatsappPhone: act.kyc_data?.paymentNumber || '',
-        documentType: (act.kyc_data?.documentType || 'CNIB') as any,
-        documentPhotoUrl: act.kyc_data?.idCardUrl || '',
-        status: act.status === 'approved' ? 'verified' : act.status === 'rejected' ? 'rejected' : 'pending_approval',
-        submittedAt: act.submitted_at || act.created_at || new Date().toISOString(),
-        reviewedAt: act.reviewed_at || undefined,
-        reviewedBy: act.reviewed_by || undefined,
-        userId: act.user_id
-      }));
   } catch (err) {
-    console.warn('[SUPABASE_SUPERADMIN] Exception fetchKycSubmissionsFromSupabase :', err);
-    return [];
+    console.warn('[SUPABASE_SUPERADMIN] Notice account_activations fetch :', err);
   }
+
+  // 3. Repli sur le cache local
+  if (resultList.length === 0 && typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('nana_kyc_submissions');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+  }
+
+  return resultList;
 }
 
 export async function updateKycStatusInSupabase(

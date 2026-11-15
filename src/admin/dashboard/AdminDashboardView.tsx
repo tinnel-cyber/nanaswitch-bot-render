@@ -40,31 +40,38 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   const [liveKpis, setLiveKpis] = useState(() => calculateRealKpiMetrics([]));
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+
   useEffect(() => {
     let isMounted = true;
     
-    // Chargement exclusif des données réelles depuis les tables SQL Supabase
-    fetchOrganizationsAsStoresFromSupabase().then((stores) => {
-      if (isMounted) {
-        const clean = (stores || []).filter(s => !isDemoStore(s));
-        setLiveStoresCount(clean.length);
-        setLiveKpis(calculateRealKpiMetrics(clean));
-      }
-    });
-
-    const handleUpdate = () => {
+    const refreshData = () => {
+      fetchOrganizationsAsStoresFromSupabase().then((stores) => {
+        if (isMounted) {
+          const clean = (stores || []).filter(s => !isDemoStore(s));
+          setLiveStoresCount(clean.length);
+          setPendingApprovalsCount(clean.filter(s => s.approvalStatus === 'PENDING').length);
+          setLiveKpis(calculateRealKpiMetrics(clean));
+        }
+      });
       setSettings(getSuperAdminSettingsLocal() || {});
     };
 
-    window.addEventListener('superAdminUpdated', handleUpdate);
+    refreshData();
+
+    window.addEventListener('superAdminUpdated', refreshData);
+    window.addEventListener('nana_kyc_submission_created', refreshData);
+    window.addEventListener('nana_kyc_status_changed', refreshData);
     return () => {
       isMounted = false;
-      window.removeEventListener('superAdminUpdated', handleUpdate);
+      window.removeEventListener('superAdminUpdated', refreshData);
+      window.removeEventListener('nana_kyc_submission_created', refreshData);
+      window.removeEventListener('nana_kyc_status_changed', refreshData);
     };
   }, []);
 
   const totalStores = liveStoresCount;
-  const pendingApprovals = 0;
+  const pendingApprovals = pendingApprovalsCount;
   const activeMrr = liveKpis.monthlyRecurringRevenueMRR || 0;
 
   return (

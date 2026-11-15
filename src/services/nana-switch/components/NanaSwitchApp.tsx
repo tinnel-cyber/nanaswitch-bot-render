@@ -38,6 +38,8 @@ import {
 import { useActiveOmnibarApps } from '../../../hooks/useActiveOmnibarApps';
 import { ProFeaturesModal, ProFeatureTab } from '../../../shell/modals/ProFeaturesModal';
 import { supabase } from '../../../lib/supabase';
+import { submitKycSubmission } from '../../../utils/kycService';
+import { KycSubmission } from '../../../types';
 
 export interface NanaSwitchAppProps {
   slug?: string;
@@ -676,6 +678,45 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       } catch (supaSaveErr) {
         console.warn('[NANASWITCH SUPABASE SAVE]', (supaSaveErr as Error).message);
       }
+    }
+
+    // 2. Soumission officielle et persistante au Control Plane Super Admin
+    try {
+      const kycSub: KycSubmission & { userId: string } = {
+        id: `kyc-sub-${newId}-${Date.now()}`,
+        userId: targetUid || newId,
+        storeId: newId,
+        storeName: appDisplayName,
+        managerFullName: kycForm.fullName || kycForm.managerName || appDisplayName,
+        managerPhotoUrl: kycForm.photoCaptureUrl || '',
+        whatsappPhone: kycForm.whatsappPhone || kycForm.managerPhone || (kycForm as any).phone || '',
+        documentType: (kycForm.documentType || 'CNIB') as any,
+        documentPhotoUrl: kycForm.idCardUrl || '',
+        status: isByokMode ? 'verified' : 'pending',
+        submittedAt: new Date().toISOString(),
+        businessData: kycForm.type === 'entreprise' ? {
+          companyName: kycForm.companyName || appDisplayName,
+          rccmNumber: kycForm.rccm || '',
+          ifuNumber: kycForm.ifuCompany || '',
+          companyAddress: kycForm.address || '',
+          companyEmail: kycForm.companyEmail || '',
+          activitySector: sectorChosen,
+          sectorDescription: kycForm.sectorDescription || ''
+        } : undefined,
+        individualData: kycForm.type === 'particulier' ? {
+          fullName: kycForm.fullName || appDisplayName,
+          activitySector: sectorChosen,
+          sectorDescription: kycForm.sectorDescription || '',
+          monthlyLimit: 1000000
+        } : undefined
+      };
+      await submitKycSubmission(kycSub);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('superAdminUpdated'));
+        window.dispatchEvent(new CustomEvent('nana_kyc_submission_created', { detail: kycSub }));
+      }
+    } catch (kErr) {
+      console.warn('[KYC SUBMISSION NOTICE]:', kErr);
     }
   };
 

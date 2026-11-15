@@ -846,7 +846,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         storeName: appDisplayName,
         managerFullName: kycForm.fullName || kycForm.managerName || appDisplayName,
         managerPhotoUrl: kycForm.photoCaptureUrl || '',
-        whatsappPhone: kycForm.whatsappPhone || kycForm.managerPhone || '',
+        whatsappPhone: kycForm.whatsappPhone || kycForm.managerPhone || (kycForm as any).phone || '',
         documentType: (kycForm.documentType || 'CNIB') as any,
         documentPhotoUrl: kycForm.idCardUrl || '',
         status: isByokMode ? 'verified' : 'pending',
@@ -868,8 +868,12 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         } : undefined
       };
       await submitKycSubmission(kycSub);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('superAdminUpdated'));
+        window.dispatchEvent(new CustomEvent('nana_kyc_submission_created', { detail: kycSub }));
+      }
     } catch (kycErr) {
-      console.warn('[KYC SUBMISSION FIREBASE NOTICE]:', kycErr);
+      console.warn('[KYC SUBMISSION NOTICE]:', kycErr);
     }
 
     // 4. Destination Super Admin Supabase (account_activations, organizations & universes)

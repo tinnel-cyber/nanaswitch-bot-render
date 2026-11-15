@@ -169,23 +169,40 @@ export async function getStoreKycRequest(storeId: string): Promise<KycSubmission
  * Récupère toutes les demandes KYC (pour le Super Admin)
  */
 export async function getAllKycRequests(): Promise<KycSubmission[]> {
-  let list: KycSubmission[] = [...INITIAL_DEMO_KYC];
+  let list: KycSubmission[] = [];
 
+  // 1. Chargement prioritaire depuis l'API serveur dédiée
   try {
-    const rawAll = localStorage.getItem('nana_all_kyc_requests');
+    const res = await fetch('/api/kyc/submissions');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.submissions)) {
+        list = data.submissions;
+      }
+    }
+  } catch (apiErr) {
+    // API offline
+  }
+
+  // 2. Fusion avec le cache local
+  try {
+    const rawAll = localStorage.getItem('nana_all_kyc_requests') || localStorage.getItem('nana_kyc_submissions');
     if (rawAll) {
       const localList: KycSubmission[] = JSON.parse(rawAll);
-      // Merge unique
-      const ids = new Set(localList.map(item => item.storeId));
-      list = [...localList, ...INITIAL_DEMO_KYC.filter(d => !ids.has(d.storeId))];
-    } else {
-      localStorage.setItem('nana_all_kyc_requests', JSON.stringify(INITIAL_DEMO_KYC));
+      const ids = new Set(list.map(item => item.storeId || item.id));
+      localList.forEach(item => {
+        const key = item.storeId || item.id;
+        if (key && !ids.has(key)) {
+          ids.add(key);
+          list.push(item);
+        }
+      });
     }
   } catch (e) {
     console.warn('Erreur chargement local all KYC', e);
   }
 
-  // Tenter de rafraîchir depuis Firestore
+  // 3. Tenter de rafraîchir depuis Firestore
   try {
     const snap = await getDocs(collection(db, 'kyc_requests'));
     if (!snap.empty) {
@@ -194,14 +211,23 @@ export async function getAllKycRequests(): Promise<KycSubmission[]> {
         remoteList.push(d.data() as KycSubmission);
       });
       if (remoteList.length > 0) {
-        const ids = new Set(remoteList.map(r => r.storeId));
-        list = [...remoteList, ...list.filter(l => !ids.has(l.storeId))];
-        localStorage.setItem('nana_all_kyc_requests', JSON.stringify(list));
+        const ids = new Set(list.map(r => r.storeId || r.id));
+        remoteList.forEach(r => {
+          const key = r.storeId || r.id;
+          if (key && !ids.has(key)) {
+            ids.add(key);
+            list.push(r);
+          }
+        });
       }
     }
   } catch (e) {
     // Firestore hors ligne ou permissions
   }
+
+  try {
+    localStorage.setItem('nana_all_kyc_requests', JSON.stringify(list));
+  } catch {}
 
   return list;
 }
@@ -459,13 +485,30 @@ export async function submitKycSubmission(submission: KycSubmission & { userId: 
     submittedAt: submission.submittedAt || new Date().toISOString()
   };
 
-  // 2. Sauvegarde dans le cache local
+  // 2. Sauvegarde immédiate dans l'API Serveur persistante
+  try {
+    await fetch('/api/kyc/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(preparedData)
+    });
+  } catch (apiErr) {
+    console.warn('[KYC SERVICE] API /api/kyc/submit notice:', apiErr);
+  }
+
+  // 3. Sauvegarde dans le cache local
   try {
     const rawSubs = localStorage.getItem('nana_kyc_submissions');
     let allSubs: KycSubmission[] = rawSubs ? JSON.parse(rawSubs) : [];
     allSubs = allSubs.filter(s => s.id !== submissionId && s.userId !== submission.userId);
     allSubs.unshift(preparedData);
     localStorage.setItem('nana_kyc_submissions', JSON.stringify(allSubs));
+
+    const rawAll = localStorage.getItem('nana_all_kyc_requests');
+    let allReqs: KycSubmission[] = rawAll ? JSON.parse(rawAll) : [];
+    allReqs = allReqs.filter(s => s.id !== submissionId && s.userId !== submission.userId && s.storeId !== preparedData.storeId);
+    allReqs.unshift(preparedData);
+    localStorage.setItem('nana_all_kyc_requests', JSON.stringify(allReqs));
 
     // Mettre à jour l'utilisateur local si applicable
     if (currentUser && (currentUser.id === submission.userId || currentUser.uid === submission.userId)) {
@@ -477,24 +520,25 @@ export async function submitKycSubmission(submission: KycSubmission & { userId: 
     console.warn('Erreur cache local kyc_submissions', err);
   }
 
-  // 3. Notification événementielle UI
+  // 4. Notification événementielle UI temps réel pour rafraîchir le Super Admin
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nana_kyc_submission_created', { detail: preparedData }));
+    window.dispatchEvent(new CustomEvent('nana_kyc_status_changed', { detail: preparedData }));
+    window.dispatchEvent(new CustomEvent('superAdminUpdated'));
   }
 
-  // 4. Envoi vers collection Firestore sécurisée /kyc_submissions
-  const subDocRef = doc(db, 'kyc_submissions', submissionId);
-  await setDoc(subDocRef, preparedData, { merge: true });
-
-  // Mise à jour de l'utilisateur dans /users/{userId} si présent
+  // 5. Repli asynchrone Firestore
   try {
+    const subDocRef = doc(db, 'kyc_submissions', submissionId);
+    await setDoc(subDocRef, preparedData, { merge: true });
+
     const userDocRef = doc(db, 'users', submission.userId);
     await setDoc(userDocRef, {
       kycStatus: 'pending',
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (userErr) {
-    console.info('storage user kycStatus notice:', userErr);
+    // Firestore hors ligne ou credentials nettoyés
   }
 }
 
@@ -502,38 +546,8 @@ export async function submitKycSubmission(submission: KycSubmission & { userId: 
  * Récupère les soumissions KYC en attente (/kyc_submissions où status == 'pending')
  */
 export async function getPendingKycSubmissions(): Promise<KycSubmission[]> {
-  let list: KycSubmission[] = [];
-
-  // 1. Local storage fallback
-  try {
-    const rawSubs = localStorage.getItem('nana_kyc_submissions');
-    if (rawSubs) {
-      const all: KycSubmission[] = JSON.parse(rawSubs);
-      list = all.filter(s => s.status === 'pending' || s.status === 'pending_approval');
-    }
-  } catch (e) {
-    console.warn('Erreur lecture locale kyc_submissions', e);
-  }
-
-  // 2. Requête Firestore sécurisée /kyc_submissions
-  try {
-    const q = query(collection(db, 'kyc_submissions'), where('status', 'in', ['pending', 'pending_approval']));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const remoteList: KycSubmission[] = [];
-      snap.forEach(d => {
-        remoteList.push(d.data() as KycSubmission);
-      });
-      if (remoteList.length > 0) {
-        const remoteIds = new Set(remoteList.map(r => r.id));
-        list = [...remoteList, ...list.filter(l => !remoteIds.has(l.id))];
-      }
-    }
-  } catch (e) {
-    console.info('storage getPendingKycSubmissions notice (offline fallback):', e);
-  }
-
-  return list;
+  const all = await getAllKycSubmissions();
+  return all.filter(s => s.status === 'pending' || s.status === 'pending_approval');
 }
 
 /**
@@ -542,15 +556,38 @@ export async function getPendingKycSubmissions(): Promise<KycSubmission[]> {
 export async function getAllKycSubmissions(): Promise<KycSubmission[]> {
   let list: KycSubmission[] = [];
 
+  // 1. Appel serveur centralisé (garantie de synchronisation cross-appareils)
+  try {
+    const res = await fetch('/api/kyc/submissions');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.submissions)) {
+        list = data.submissions;
+      }
+    }
+  } catch (apiErr) {
+    // API offline fallback
+  }
+
+  // 2. Fusion avec le cache local
   try {
     const rawSubs = localStorage.getItem('nana_kyc_submissions');
     if (rawSubs) {
-      list = JSON.parse(rawSubs);
+      const localSubs: KycSubmission[] = JSON.parse(rawSubs);
+      const ids = new Set(list.map(s => s.storeId || s.id));
+      localSubs.forEach(s => {
+        const key = s.storeId || s.id;
+        if (key && !ids.has(key)) {
+          ids.add(key);
+          list.push(s);
+        }
+      });
     }
   } catch (e) {
     console.warn('Erreur lecture locale all kyc_submissions', e);
   }
 
+  // 3. Repli Firestore si disponible
   try {
     const snap = await getDocs(collection(db, 'kyc_submissions'));
     if (!snap.empty) {
@@ -558,40 +595,65 @@ export async function getAllKycSubmissions(): Promise<KycSubmission[]> {
       snap.forEach(d => {
         remoteList.push(d.data() as KycSubmission);
       });
-      const remoteIds = new Set(remoteList.map(r => r.id));
-      list = [...remoteList, ...list.filter(l => !remoteIds.has(l.id))];
-      localStorage.setItem('nana_kyc_submissions', JSON.stringify(list));
+      const ids = new Set(list.map(r => r.storeId || r.id));
+      remoteList.forEach(r => {
+        const key = r.storeId || r.id;
+        if (key && !ids.has(key)) {
+          ids.add(key);
+          list.push(r);
+        }
+      });
     }
   } catch (e) {
-    console.info('storage getAllKycSubmissions notice:', e);
+    // Firestore hors ligne
   }
+
+  try {
+    localStorage.setItem('nana_kyc_submissions', JSON.stringify(list));
+  } catch {}
 
   return list;
 }
 
 /**
- * Action Firebase Super Admin : Approuver une soumission KYC
- * Met à jour /kyc_submissions/{submissionId} à 'approved'
- * Met à jour /users/{userId} à role: 'vendor' et kycStatus: 'approved'
+ * Action Super Admin : Approuver une soumission KYC
+ * Valide le dossier, débloque le marchand et synchronise en direct
  */
 export async function approveKycSubmission(
   submissionId: string, 
   userId: string, 
   storeId?: string,
-  reviewerEmail = 'pousbila36@gmail.com'
+  reviewerEmail = 'Super-Admin Direction Conformité'
 ): Promise<void> {
   const reviewedAt = new Date().toISOString();
+  const targetStoreId = storeId || submissionId;
 
-  // 1. Cache local
+  // 1. Validation via l'API Serveur
+  try {
+    await fetch('/api/admin/kyc/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeId: targetStoreId,
+        userId,
+        action: 'approve',
+        adminEmail: reviewerEmail
+      })
+    });
+  } catch (apiErr) {
+    console.warn('[KYC APPROVE API] notice:', apiErr);
+  }
+
+  // 2. Cache local
   try {
     const rawSubs = localStorage.getItem('nana_kyc_submissions');
     if (rawSubs) {
       const all: KycSubmission[] = JSON.parse(rawSubs);
       const updated = all.map(s => {
-        if (s.id === submissionId || s.userId === userId) {
+        if (s.id === submissionId || s.userId === userId || s.storeId === targetStoreId) {
           return {
             ...s,
-            status: 'approved' as KycStatus,
+            status: 'verified' as KycStatus,
             reviewedAt,
             reviewedBy: reviewerEmail
           };
@@ -599,6 +661,23 @@ export async function approveKycSubmission(
         return s;
       });
       localStorage.setItem('nana_kyc_submissions', JSON.stringify(updated));
+    }
+
+    const rawAll = localStorage.getItem('nana_all_kyc_requests');
+    if (rawAll) {
+      const allReqs: KycSubmission[] = JSON.parse(rawAll);
+      const updatedReqs = allReqs.map(s => {
+        if (s.id === submissionId || s.userId === userId || s.storeId === targetStoreId) {
+          return {
+            ...s,
+            status: 'verified' as KycStatus,
+            reviewedAt,
+            reviewedBy: reviewerEmail
+          };
+        }
+        return s;
+      });
+      localStorage.setItem('nana_all_kyc_requests', JSON.stringify(updatedReqs));
     }
 
     const savedUserRaw = localStorage.getItem('nana_store_auth_user');

@@ -543,6 +543,174 @@ async function startServer() {
     }
   });
 
+  // ─── KYC & Nouveaux Comptes / Univers Marchands ──────────────────────────────
+  const KYC_DATA_DIR = path.join(process.cwd(), 'data');
+  const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
+
+  function getStoredKycSubmissions(): any[] {
+    try {
+      if (fs.existsSync(KYC_DATA_FILE)) {
+        const raw = fs.readFileSync(KYC_DATA_FILE, 'utf-8');
+        return JSON.parse(raw) || [];
+      }
+    } catch (e) {
+      console.warn('[SERVER KYC] Erreur lecture fichier kyc_submissions.json:', e);
+    }
+    return [];
+  }
+
+  function saveStoredKycSubmissions(subs: any[]): void {
+    try {
+      if (!fs.existsSync(KYC_DATA_DIR)) {
+        fs.mkdirSync(KYC_DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(KYC_DATA_FILE, JSON.stringify(subs, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[SERVER KYC] Erreur écriture fichier kyc_submissions.json:', e);
+    }
+  }
+
+  // 1. Soumission d'un dossier KYC / Univers Marchand
+  app.post('/api/kyc/submit', async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const storeId = payload.storeId || payload.id || `store_${Date.now()}`;
+      const userId = payload.userId || payload.uid || storeId;
+      const storeName = payload.storeName || payload.companyName || payload.appName || payload.fullName || 'Commerce Marchand';
+
+      const submission = {
+        id: payload.id || `kyc-sub-${storeId}-${Date.now()}`,
+        storeId,
+        userId,
+        storeName,
+        managerFullName: payload.managerFullName || payload.fullName || payload.managerName || 'Gérant',
+        managerPhotoUrl: payload.managerPhotoUrl || payload.photoCaptureUrl || payload.faceSelfieUrl || '',
+        whatsappPhone: payload.whatsappPhone || payload.phone || payload.managerPhone || '',
+        userEmail: payload.userEmail || payload.email || payload.companyEmail || '',
+        activityDomain: payload.activityDomain || payload.sector || payload.appellation || 'Commerce Général',
+        briefDescription: payload.briefDescription || payload.activityDescription || payload.description || '',
+        activityDescription: payload.activityDescription || payload.briefDescription || '',
+        monetizationModel: payload.monetizationModel || payload.pricingModel || payload.integration_mode || 'commission',
+        pricingModel: payload.pricingModel || payload.monetizationModel || 'commission',
+        documentType: payload.documentType || 'CNIB',
+        documentPhotoUrl: payload.documentPhotoUrl || payload.idCardUrl || payload.cnibRectoUrl || '',
+        businessDocumentUrl: payload.businessDocumentUrl || payload.rccmDocPhotoUrl || payload.rccmFileUrl || '',
+        rccmDocPhotoUrl: payload.rccmDocPhotoUrl || payload.rccmFileUrl || '',
+        ifuDocPhotoUrl: payload.ifuDocPhotoUrl || payload.ifuFileUrl || '',
+        rccmNumber: payload.rccmNumber || payload.rccm || '',
+        ifuNumber: payload.ifuNumber || payload.ifuCompany || payload.ifu || '',
+        type: payload.type || payload.accountType || (payload.rccmNumber || payload.rccm ? 'business' : 'individual'),
+        accountType: payload.accountType || payload.type || 'entreprise',
+        status: payload.status === 'verified' || payload.status === 'approved' ? 'verified' : 'pending_approval',
+        submittedAt: payload.submittedAt || new Date().toISOString(),
+        businessData: payload.businessData || {
+          companyName: payload.companyName || storeName,
+          rccmNumber: payload.rccmNumber || payload.rccm || '',
+          ifuNumber: payload.ifuNumber || payload.ifuCompany || payload.ifu || '',
+          companyEmail: payload.companyEmail || payload.email || '',
+          companyAddress: payload.companyAddress || payload.address || ''
+        },
+        individualData: payload.individualData || {
+          fullName: payload.fullName || payload.managerFullName || storeName,
+          monthlyLimit: 1000000
+        }
+      };
+
+      const existing = getStoredKycSubmissions();
+      const updated = [submission, ...existing.filter((s: any) => s.storeId !== storeId && s.id !== submission.id)];
+      saveStoredKycSubmissions(updated);
+
+      // Synchronisation Supabase profiles (marquer kyc_status en attente)
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase && userId && !userId.startsWith('usr-demo')) {
+          await supabase.from('profiles').update({
+            kyc_status: 'pending',
+            pricing_model: submission.pricingModel,
+            updated_at: new Date().toISOString()
+          }).eq('id', userId);
+        }
+      } catch (supaErr) {
+        console.warn('[SERVER KYC] Supabase profiles sync notice:', supaErr);
+      }
+
+      console.log(`[SERVER KYC] Nouveau dossier reçu et enregistré : ${storeName} (${storeId})`);
+      return res.json({ success: true, submission });
+    } catch (err: any) {
+      console.error('[SERVER KYC] Erreur soumission KYC:', err);
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur soumission' });
+    }
+  });
+
+  // 2. Consultation de tous les dossiers KYC / Univers par le Super Admin
+  app.get(['/api/kyc/submissions', '/api/admin/kyc/submissions'], async (_req, res) => {
+    try {
+      const stored = getStoredKycSubmissions();
+      return res.json({ success: true, submissions: stored });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur liste KYC', submissions: [] });
+    }
+  });
+
+  // 3. Validation ou Rejet par le Super Admin
+  app.post('/api/admin/kyc/validate', async (req, res) => {
+    try {
+      const { storeId, userId, action = 'approve', adminEmail = 'Super-Admin', rejectionReason } = req.body || {};
+      const isApproved = action === 'approve' || action === 'verified';
+      const newStatus = isApproved ? 'verified' : 'rejected';
+
+      const existing = getStoredKycSubmissions();
+      let matched = false;
+      const updated = existing.map((sub: any) => {
+        if (sub.storeId === storeId || sub.userId === userId || sub.id === storeId) {
+          matched = true;
+          return {
+            ...sub,
+            status: newStatus,
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: adminEmail,
+            rejectionReason: !isApproved ? (rejectionReason || 'Dossier non validé') : undefined
+          };
+        }
+        return sub;
+      });
+
+      if (!matched && storeId) {
+        updated.unshift({
+          id: `kyc-${storeId}`,
+          storeId,
+          userId: userId || storeId,
+          storeName: `Commerce ${storeId.slice(0, 8)}`,
+          status: newStatus,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: adminEmail
+        });
+      }
+
+      saveStoredKycSubmissions(updated);
+
+      // Synchronisation Supabase profiles
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase && (userId || storeId)) {
+          const target = userId || storeId;
+          await supabase.from('profiles').update({
+            kyc_status: isApproved ? 'full' : 'none',
+            updated_at: new Date().toISOString()
+          }).eq('id', target);
+        }
+      } catch (supaErr) {
+        console.warn('[SERVER KYC] Supabase profiles approve sync notice:', supaErr);
+      }
+
+      console.log(`[SERVER KYC] Action Super Admin appliquée : ${action} sur ${storeId}`);
+      return res.json({ success: true, status: newStatus });
+    } catch (err: any) {
+      console.error('[SERVER KYC] Erreur validation Super Admin:', err);
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur validation' });
+    }
+  });
+
   // Route d'inscription avec envoi d'email de confirmation Brevo
   app.post('/api/auth/register', async (req, res) => {
     try {
