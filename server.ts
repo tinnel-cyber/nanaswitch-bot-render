@@ -643,7 +643,7 @@ async function startServer() {
     }
   });
 
-  // Route de réinitialisation de mot de passe via Brevo & Supabase Admin
+  // Route de réinitialisation de mot de passe via Brevo & Supabase
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
       const { email } = req.body;
@@ -652,37 +652,53 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Adresse email invalide.' });
       }
 
-      const { adminAuth } = await import('./app/utils/supabase.server');
-      const actionCodeSettings = {
-        url: 'https://nanasore.com/auth/action',
-        handleCodeInApp: true,
-      };
+      // Initialiser client Supabase
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-      const resetLink = await adminAuth.generatePasswordResetLink(cleanEmail, actionCodeSettings);
+      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      let resetLink = `${appUrl}/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`;
 
-      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
-      if (apiKey) {
-        await fetch('https://api.brevo.com/v3/smtp/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': apiKey,
-          },
-          body: JSON.stringify({
-            sender: {
-              name: process.env.BREVO_SENDER_NAME || 'Nanasore',
-              email: process.env.BREVO_SENDER_EMAIL || 'contact@nanasore.com',
+      // 1. Tenter la génération d'un lien officiel avec jeton via Supabase Admin si clé service disponible
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+            type: 'recovery',
+            email: cleanEmail,
+            options: {
+              redirectTo: `${appUrl}/auth/reset-password`,
             },
-            to: [{ email: cleanEmail }],
-            subject: 'Réinitialisation de votre mot de passe Nanasore',
-            htmlContent: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2>Réinitialisation de mot de passe</h2>
-              <p>Une demande de réinitialisation de mot de passe a été reçue pour votre compte Nanasore.</p>
-              <p><a href="${resetLink}" style="background-color: #1d4ed8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Changer mon mot de passe →</a></p>
-              <p style="color: #64748b; font-size: 12px; margin-top: 24px;">Ce lien temporaire expire dans 1 heure.</p>
-            </div>`,
-          }),
+          });
+          if (!linkErr && linkData?.properties?.action_link) {
+            resetLink = linkData.properties.action_link;
+          }
+        } catch (adminErr: any) {
+          console.warn('[SERVER RESET] Supabase admin generateLink notice:', adminErr?.message);
+        }
+      }
+
+      // 2. Déclencher la réinitialisation côté Supabase Auth
+      try {
+        await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${appUrl}/auth/reset-password`,
         });
+      } catch (supaResetErr: any) {
+        console.warn('[SERVER RESET] Supabase resetPassword notice:', supaResetErr?.message);
+      }
+
+      // 3. Envoyer l'email officiel transactionnel via Brevo
+      try {
+        const { sendPasswordResetEmail } = await import('./app/utils/email.server');
+        await sendPasswordResetEmail({
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          resetUrl: resetLink,
+        });
+        console.log(`[BREVO] Email de réinitialisation envoyé avec succès à ${cleanEmail}`);
+      } catch (emailErr: any) {
+        console.warn('[BREVO] Erreur envoi email reset:', emailErr?.message);
       }
 
       return res.json({
@@ -698,7 +714,7 @@ async function startServer() {
     }
   });
 
-  // Route de renvoi de confirmation via Brevo & Supabase Admin
+  // Route de renvoi de confirmation via Brevo & Supabase
   app.post('/api/auth/resend-verification', async (req, res) => {
     try {
       const { email } = req.body;
@@ -707,36 +723,18 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Adresse email requise.' });
       }
 
-      const { adminAuth } = await import('./app/utils/supabase.server');
-      const actionCodeSettings = {
-        url: 'https://nanasore.com/auth/action',
-        handleCodeInApp: true,
-      };
+      const confirmationUrl = `https://nanasore.com/dashboard?email=${encodeURIComponent(cleanEmail)}`;
 
-      const verificationLink = await adminAuth.generateEmailVerificationLink(cleanEmail, actionCodeSettings);
-
-      const apiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
-      if (apiKey) {
-        await fetch('https://api.brevo.com/v3/smtp/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': apiKey,
-          },
-          body: JSON.stringify({
-            sender: {
-              name: process.env.BREVO_SENDER_NAME || 'Nanasore',
-              email: process.env.BREVO_SENDER_EMAIL || 'contact@nanasore.com',
-            },
-            to: [{ email: cleanEmail }],
-            subject: 'Vérifiez votre adresse e-mail Nanasore',
-            htmlContent: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2>Vérification de votre compte</h2>
-              <p>Merci de confirmer votre adresse e-mail pour activer votre compte Nanasore.</p>
-              <p><a href="${verificationLink}" style="background-color: #1d4ed8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">Confirmer mon compte →</a></p>
-            </div>`,
-          }),
+      try {
+        const { sendConfirmationEmail } = await import('./app/utils/email.server');
+        await sendConfirmationEmail({
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          confirmationUrl,
         });
+        console.log(`[BREVO] Email de vérification renvoyé à ${cleanEmail}`);
+      } catch (emailErr: any) {
+        console.warn('[BREVO] Erreur renvoi confirmation:', emailErr?.message);
       }
 
       return res.json({

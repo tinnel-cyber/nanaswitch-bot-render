@@ -297,6 +297,19 @@ export async function resetPasswordEmail(email: string): Promise<void> {
 }
 
 /**
+ * Mise à jour sécurisée du mot de passe (après clic sur lien de réinitialisation)
+ */
+export async function updateUserPassword(newPassword: string): Promise<void> {
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
+  }
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) {
+    throw new Error(error.message || 'Impossible de mettre à jour le mot de passe.');
+  }
+}
+
+/**
  * Renvoyer l'e-mail de confirmation via Supabase Auth & Brevo
  */
 export async function resendVerificationEmail(emailTarget?: string): Promise<boolean> {

@@ -332,17 +332,94 @@ export async function sendConfirmationEmail({ email, name, confirmationUrl }: { 
 }
 
 /**
- * Envoie l'e-mail de réinitialisation de mot de passe (Template ID 2)
+ * Envoie l'e-mail de réinitialisation de mot de passe (Template ID 2 ou template HTML de marque direct)
  */
 export async function sendPasswordResetEmail({ email, name, resetUrl }: { email: string; name?: string; resetUrl: string }) {
-  return sendBrevoEmail({
-    templateId: 2,
-    email,
-    name,
-    params: {
-      RESET_PASSWORD_URL: resetUrl,
-      EMAIL: email,
-      NAME: name || 'Utilisateur',
+  const userName = name || email.split('@')[0] || 'Utilisateur';
+
+  // 1. Tenter avec le Template ID 2 officiel de Brevo
+  try {
+    const templateResult = await sendBrevoEmail({
+      templateId: 2,
+      email,
+      name: userName,
+      params: {
+        RESET_PASSWORD_URL: resetUrl,
+        EMAIL: email,
+        NAME: userName,
+      },
+    });
+    return templateResult;
+  } catch (templateError: any) {
+    console.warn("[BREVO] Template ID 2 non configuré ou introuvable, expédition via le template de marque HTML direct :", templateError?.message);
+  }
+
+  // 2. Repli direct avec le template HTML de prestige Nanasore
+  const apiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_KEY || process.env.VITE_BREVO_SMTP_KEY || process.env.VITE_BREVO_API_KEY;
+  if (!apiKey || apiKey.length < 5) {
+    console.warn("[BREVO] Aucune clé Brevo API trouvée. E-mail de reset simulé.");
+    return { success: true, simulated: true };
+  }
+
+  const sender = getSenderConfig();
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Réinitialisation de votre mot de passe - Nanasore</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #334155;">
+  <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(29, 78, 216, 0.08);">
+    <div style="background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%); padding: 36px 24px; text-align: center; color: #ffffff;">
+      <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background: rgba(255, 255, 255, 0.15); border-radius: 12px; font-size: 22px; font-weight: 900; margin-bottom: 8px;">N</div>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Nanasore Security</h1>
+      <p style="margin: 6px 0 0; font-size: 13px; color: #bfdbfe;">Réinitialisation sécurisée de vos accès</p>
+    </div>
+    <div style="padding: 36px 28px;">
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0;">Bonjour ${userName},</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 24px;">
+        Nous avons reçu une demande de réinitialisation de mot de passe pour votre compte Nanasore. Cliquez sur le bouton sécurisé ci-dessous pour choisir votre nouveau mot de passe :
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetUrl}" style="background-color: #1d4ed8; color: #ffffff; padding: 14px 32px; border-radius: 12px; font-weight: 700; text-decoration: none; display: inline-block; font-size: 15px; box-shadow: 0 4px 14px rgba(29, 78, 216, 0.35);">
+          Changer mon mot de passe →
+        </a>
+      </div>
+      <div style="background-color: #f8fafc; border-left: 4px solid #1d4ed8; padding: 14px 18px; border-radius: 8px; margin: 24px 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+        <strong>Sécurité :</strong> Ce lien temporaire est strictement confidentiel et expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute tranquillité.
+      </div>
+    </div>
+    <div style="background-color: #f8fafc; padding: 20px 24px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} Nanasore OS — Plateforme de commerce souverain.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
     },
+    body: JSON.stringify({
+      sender,
+      to: [{ email, name: userName }],
+      subject: 'Réinitialisation de votre mot de passe Nanasore',
+      htmlContent,
+    }),
   });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error("❌ Erreur Brevo SMTP direct:", errorData);
+    throw new Error(`Échec de l'envoi de l'e-mail (Code ${response.status})`);
+  }
+
+  return await response.json();
 }
+

@@ -7,9 +7,11 @@ import {
   resendVerificationEmail, 
   signInWithGoogle, 
   resetPasswordEmail,
+  updateUserPassword,
   logoutUser,
   getSupabaseCurrentUser
 } from '../../services/supabaseAuthService';
+import { supabase } from '../../lib/supabase';
 import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
 import { hashMasterPin, generateStoreUniqueId } from '../../utils/managerSecurityService';
 import { syncAuthProfileWithSupabase } from '../../services/authProfileSyncService';
@@ -53,7 +55,8 @@ type ScreenStep =
   | 'LOGIN'               // Connexion Email / Mot de passe
   | 'REGISTER'            // Inscription Email / Mot de passe (Nom, WhatsApp, Email, Pass)
   | 'EMAIL_VERIFICATION'  // Sas de vérification email
-  | 'PIN_SETUP';          // Configuration obligatoire du Master PIN de sécurité
+  | 'PIN_SETUP'           // Configuration obligatoire du Master PIN de sécurité
+  | 'RESET_PASSWORD';     // Définition du nouveau mot de passe suite au lien reçu par email
 
 import { ALL_WORLD_COUNTRIES, CountryCodeOption } from '../../utils/worldCountries';
 
@@ -150,6 +153,14 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
   const [resetErrorMsg, setResetErrorMsg] = useState<string | null>(null);
 
+  // Nouveau mot de passe (suite à lien reçu par e-mail)
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState<string>('');
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [isSavingNewPassword, setIsSavingNewPassword] = useState<boolean>(false);
+  const [newPasswordSuccessMsg, setNewPasswordSuccessMsg] = useState<string | null>(null);
+  const [newPasswordErrorMsg, setNewPasswordErrorMsg] = useState<string | null>(null);
+
   // Legal Modal
   const [legalConfig, setLegalConfig] = useState<PlatformLegalConfig>(DEFAULT_PLATFORM_LEGAL);
   const [activeLegalDoc, setActiveLegalDoc] = useState<'LEGAL_MENTIONS' | 'PRIVACY_POLICY' | null>(null);
@@ -174,14 +185,51 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     return () => unsub();
   }, []);
 
-  // Détection URL /register ou plan
+  // Détection URL /register, /reset-password ou hash Supabase recovery
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
-      if (pathname === '/register' || params.get('step') === 'register' || params.get('auth') === 'register') {
+      const hash = window.location.hash;
+
+      const isRecovery =
+        pathname.includes('reset-password') ||
+        params.get('type') === 'recovery' ||
+        params.get('mode') === 'resetPassword' ||
+        hash.includes('type=recovery');
+
+      if (isRecovery) {
+        setStep('RESET_PASSWORD');
+
+        // Échanger le code PKCE si présent
+        const code = params.get('code');
+        if (code) {
+          supabase.auth.exchangeCodeForSession(code).catch(() => {});
+        }
+
+        // Échanger les hash tokens si présents
+        if (hash.includes('access_token')) {
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          if (accessToken && refreshToken) {
+            supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).catch(() => {});
+          }
+        }
+      } else if (pathname === '/register' || params.get('step') === 'register' || params.get('auth') === 'register') {
         setStep('REGISTER');
       }
+
+      // Écouter l'événement Supabase de récupération de mot de passe
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setStep('RESET_PASSWORD');
+        }
+      });
+
+      return () => {
+        subscription?.unsubscribe?.();
+      };
     }
   }, []);
 
@@ -647,6 +695,42 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     }
   };
 
+  // Enregistrement du nouveau mot de passe
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewPasswordErrorMsg(null);
+    setNewPasswordSuccessMsg(null);
+
+    if (newPasswordInput.length < 6) {
+      setNewPasswordErrorMsg('Le mot de passe doit comporter au moins 6 caractères.');
+      return;
+    }
+
+    if (newPasswordInput !== confirmNewPasswordInput) {
+      setNewPasswordErrorMsg('Les deux mots de passe ne correspondent pas.');
+      return;
+    }
+
+    setIsSavingNewPassword(true);
+    try {
+      await updateUserPassword(newPasswordInput);
+      playValidationBeep();
+      setNewPasswordSuccessMsg('✓ Votre mot de passe a été modifié avec succès ! Redirection en cours...');
+      setTimeout(() => {
+        setStep('LOGIN');
+        setInfoMessage('Votre nouveau mot de passe est opérationnel. Vous pouvez vous connecter.');
+        setNewPasswordInput('');
+        setConfirmNewPasswordInput('');
+      }, 1800);
+    } catch (err: any) {
+      playCancelSound();
+      console.error('Erreur changement mot de passe :', err);
+      setNewPasswordErrorMsg(err?.message || 'Impossible de mettre à jour le mot de passe. Veuillez redemander un lien.');
+    } finally {
+      setIsSavingNewPassword(false);
+    }
+  };
+
   const activeSlideData = CAROUSEL_SLIDES[currentSlide];
 
   return (
@@ -816,8 +900,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
               </div>
             )}
 
-            {/* Onglets Connexion / Inscription si on n'est pas dans le PIN setup */}
-            {step !== 'PIN_SETUP' && step !== 'EMAIL_VERIFICATION' && (
+            {/* Onglets Connexion / Inscription si on n'est pas dans le PIN setup ou reset password */}
+            {step !== 'PIN_SETUP' && step !== 'EMAIL_VERIFICATION' && step !== 'RESET_PASSWORD' && (
               <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
                 <button
                   type="button"
@@ -1248,6 +1332,111 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                     {isResending ? 'Envoi...' : 'Renvoyer le lien'}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* CAS 5 : NOUVEAU MOT DE PASSE (RÉINITIALISATION VIA EMAIL)     */}
+            {/* ------------------------------------------------------------- */}
+            {step === 'RESET_PASSWORD' && (
+              <div className="space-y-5 animate-in fade-in duration-200">
+                <div className="text-center sm:text-left">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-black uppercase tracking-wider mb-2">
+                    <Lock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Sécurité du Compte</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Nouveau mot de passe
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Définissez votre nouveau mot de passe pour reprendre le contrôle sécurisé de votre espace.
+                  </p>
+                </div>
+
+                {newPasswordSuccessMsg && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                    <span>{newPasswordSuccessMsg}</span>
+                  </div>
+                )}
+
+                {newPasswordErrorMsg && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{newPasswordErrorMsg}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveNewPassword} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Nouveau mot de passe
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        placeholder="Au moins 6 caractères"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition outline-none pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Confirmer le nouveau mot de passe
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        minLength={6}
+                        value={confirmNewPasswordInput}
+                        onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
+                        placeholder="Retapez votre mot de passe"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition outline-none pr-10"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingNewPassword}
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSavingNewPassword ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Mise à jour sécurisée...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Valider mon nouveau mot de passe</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => { playTapBeep(); setStep('LOGIN'); }}
+                      className="text-xs font-bold text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                    >
+                      ← Revenir à la page de connexion
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
           </div>
