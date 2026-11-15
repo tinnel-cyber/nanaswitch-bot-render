@@ -766,10 +766,12 @@ async function startServer() {
       let userId = `usr_${Date.now().toString(36)}`;
       const resolvedName = name || email.trim().split('@')[0];
       const confirmationToken = crypto.randomBytes(32).toString('hex');
-      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+      const appUrl = process.env.APP_URL || `${proto}://${host}`;
       let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(email.trim())}`;
 
-      // 2. Création et confirmation de l'utilisateur dans Supabase Auth (si service role key disponible)
+      // 2. Création de l'utilisateur dans Supabase Auth (en attente de confirmation par email)
       try {
         if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
           // Tenter d'abord de générer le lien officiel de confirmation Supabase
@@ -787,11 +789,11 @@ async function startServer() {
             userId = linkData.user?.id || userId;
             console.log(`[AUTH REGISTER] Lien officiel Supabase généré avec succès pour ${email.trim()}`);
           } else {
-            // Création directe avec email_confirm: true pour débloquer l'accès sans blocage SMTP
+            // Création directe avec email_confirm: false : l'utilisateur doit obligatoirement valider par email
             const { data: adminUser, error: adminErr } = await supabase.auth.admin.createUser({
               email: email.trim(),
               password,
-              email_confirm: true,
+              email_confirm: false,
               user_metadata: { full_name: resolvedName, seller_mode: sellerMode }
             });
             if (!adminErr && adminUser?.user) {
@@ -947,7 +949,9 @@ async function startServer() {
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+      const appUrl = process.env.APP_URL || `${proto}://${host}`;
       const confirmationToken = crypto.randomBytes(32).toString('hex');
       let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(cleanEmail)}`;
 
@@ -955,9 +959,8 @@ async function startServer() {
       if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
         try {
           const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-            type: 'signup',
+            type: 'magiclink',
             email: cleanEmail,
-            password: 'TmpPassword123!',
             options: {
               redirectTo: `${appUrl}/dashboard`,
             },
@@ -1000,7 +1003,9 @@ async function startServer() {
     try {
       const email = String(req.query.email || '').trim().toLowerCase();
       const token = String(req.query.token || '').trim();
-      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+      const appUrl = process.env.APP_URL || `${proto}://${host}`;
 
       if (!email) {
         return res.redirect(`${appUrl}/dashboard?verified=true`);
@@ -1011,17 +1016,29 @@ async function startServer() {
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Validation effective dans Supabase Auth
+      // Validation effective dans Supabase Auth via la clé d'administration
       if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
         try {
-          const { data: listData } = await supabase.auth.admin.listUsers();
-          const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
-          if (targetUser) {
-            await supabase.auth.admin.updateUserById(targetUser.id, {
+          let targetUserId: string | null = null;
+          try {
+            const { data: prof } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
+            if (prof?.id && !prof.id.startsWith('usr_')) {
+              targetUserId = prof.id;
+            }
+          } catch {}
+
+          if (!targetUserId) {
+            const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+            const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+            if (targetUser) targetUserId = targetUser.id;
+          }
+
+          if (targetUserId) {
+            await supabase.auth.admin.updateUserById(targetUserId, {
               email_confirm: true,
-              user_metadata: { ...targetUser.user_metadata, email_verified: true },
+              user_metadata: { email_verified: true },
             });
-            console.log(`[AUTH VERIFY] Compte Supabase ${email} (ID: ${targetUser.id}) confirmé avec succès.`);
+            console.log(`[AUTH VERIFY] Compte Supabase ${email} (ID: ${targetUserId}) validé avec succès via admin.`);
           }
         } catch (adminErr: any) {
           console.warn('[AUTH VERIFY] Admin confirmation notice:', adminErr?.message);
@@ -1042,7 +1059,9 @@ async function startServer() {
       return res.redirect(`${appUrl}/dashboard?verified=true&email=${encodeURIComponent(email)}&auth_status=confirmed`);
     } catch (err: any) {
       console.error('[AUTH VERIFY] Erreur générale:', err);
-      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+      const appUrl = process.env.APP_URL || `${proto}://${host}`;
       return res.redirect(`${appUrl}/dashboard?verified=true`);
     }
   };
@@ -1066,15 +1085,27 @@ async function startServer() {
       let confirmed = false;
       if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
         try {
-          const { data: listData } = await supabase.auth.admin.listUsers();
-          const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
-          if (targetUser) {
-            await supabase.auth.admin.updateUserById(targetUser.id, {
+          let targetUserId: string | null = null;
+          try {
+            const { data: prof } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
+            if (prof?.id && !prof.id.startsWith('usr_')) {
+              targetUserId = prof.id;
+            }
+          } catch {}
+
+          if (!targetUserId) {
+            const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+            const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+            if (targetUser) targetUserId = targetUser.id;
+          }
+
+          if (targetUserId) {
+            await supabase.auth.admin.updateUserById(targetUserId, {
               email_confirm: true,
-              user_metadata: { ...targetUser.user_metadata, email_verified: true },
+              user_metadata: { email_verified: true },
             });
             confirmed = true;
-            console.log(`[CONFIRM USER] Utilisateur ${email} validé via admin API.`);
+            console.log(`[CONFIRM USER] Utilisateur ${email} (ID: ${targetUserId}) validé via admin API.`);
           }
         } catch (adminErr: any) {
           console.warn('[CONFIRM USER] Admin notice:', adminErr?.message);
