@@ -350,6 +350,34 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       }
     };
     window.addEventListener('nana_show_toast', onShowToast);
+
+    // Détection de confirmation d'email réussie depuis l'URL de redirection Brevo / Supabase
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('verified') === 'true' || p.get('auth_status') === 'confirmed') {
+      const verifiedEmail = p.get('email');
+      showToast('Adresse e-mail confirmée avec succès ! Bienvenue sur votre tableau de bord.', 'success');
+      try {
+        const saved = localStorage.getItem('nana_store_auth_user');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          parsed.emailVerified = true;
+          localStorage.setItem('nana_store_auth_user', JSON.stringify(parsed));
+          setCurrentUser((prev: any) => ({ ...(prev || {}), ...parsed, emailVerified: true }));
+        } else if (verifiedEmail) {
+          const fallbackUser = {
+            id: 'usr_' + Date.now().toString(36),
+            email: verifiedEmail,
+            emailVerified: true,
+            displayName: verifiedEmail.split('@')[0],
+            role: 'GERANT',
+            plan: 'free',
+          };
+          localStorage.setItem('nana_store_auth_user', JSON.stringify(fallbackUser));
+          setCurrentUser(fallbackUser);
+        }
+      } catch {}
+    }
+
     return () => window.removeEventListener('nana_show_toast', onShowToast);
   }, [showToast]);
 

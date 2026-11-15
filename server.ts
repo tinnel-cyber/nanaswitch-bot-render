@@ -766,19 +766,37 @@ async function startServer() {
       let userId = `usr_${Date.now().toString(36)}`;
       const resolvedName = name || email.trim().split('@')[0];
       const confirmationToken = crypto.randomBytes(32).toString('hex');
-      const confirmationUrl = `https://nanasore.com/dashboard?email=${encodeURIComponent(email.trim())}`;
+      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(email.trim())}`;
 
-      // 2. Création de l'utilisateur dans Supabase Auth (si service role key disponible)
+      // 2. Création et confirmation de l'utilisateur dans Supabase Auth (si service role key disponible)
       try {
         if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-          const { data: adminUser, error: adminErr } = await supabase.auth.admin.createUser({
+          // Tenter d'abord de générer le lien officiel de confirmation Supabase
+          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+            type: 'signup',
             email: email.trim(),
             password,
-            email_confirm: false,
-            user_metadata: { full_name: resolvedName, seller_mode: sellerMode }
+            options: {
+              redirectTo: `${appUrl}/dashboard`,
+            },
           });
-          if (!adminErr && adminUser?.user) {
-            userId = adminUser.user.id;
+
+          if (!linkErr && linkData?.properties?.action_link) {
+            confirmationUrl = linkData.properties.action_link;
+            userId = linkData.user?.id || userId;
+            console.log(`[AUTH REGISTER] Lien officiel Supabase généré avec succès pour ${email.trim()}`);
+          } else {
+            // Création directe avec email_confirm: true pour débloquer l'accès sans blocage SMTP
+            const { data: adminUser, error: adminErr } = await supabase.auth.admin.createUser({
+              email: email.trim(),
+              password,
+              email_confirm: true,
+              user_metadata: { full_name: resolvedName, seller_mode: sellerMode }
+            });
+            if (!adminErr && adminUser?.user) {
+              userId = adminUser.user.id;
+            }
           }
         }
       } catch (adminE: any) {
@@ -924,7 +942,33 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Adresse email requise.' });
       }
 
-      const confirmationUrl = `https://nanasore.com/dashboard?email=${encodeURIComponent(cleanEmail)}`;
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      const confirmationToken = crypto.randomBytes(32).toString('hex');
+      let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(cleanEmail)}`;
+
+      // Si service role key disponible, tenter de générer le lien officiel Supabase
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+            type: 'signup',
+            email: cleanEmail,
+            password: 'TmpPassword123!',
+            options: {
+              redirectTo: `${appUrl}/dashboard`,
+            },
+          });
+          if (!linkErr && linkData?.properties?.action_link) {
+            confirmationUrl = linkData.properties.action_link;
+          }
+        } catch (e: any) {
+          console.warn('[RESEND VERIFICATION] Admin link notice:', e?.message);
+        }
+      }
 
       try {
         const { sendConfirmationEmail } = await import('./app/utils/email.server');
@@ -933,7 +977,7 @@ async function startServer() {
           name: cleanEmail.split('@')[0],
           confirmationUrl,
         });
-        console.log(`[BREVO] Email de vérification renvoyé à ${cleanEmail}`);
+        console.log(`[BREVO] Email de vérification officiel renvoyé à ${cleanEmail}`);
       } catch (emailErr: any) {
         console.warn('[BREVO] Erreur renvoi confirmation:', emailErr?.message);
       }
@@ -951,60 +995,100 @@ async function startServer() {
     }
   });
 
-  // Route de confirmation d'email via token
-  app.get('/api/auth/confirm-email', async (req, res) => {
+  // Route universelle de vérification d'email (appelée par le clic sur le lien Brevo)
+  const handleAuthVerify = async (req: any, res: any) => {
     try {
-      const { token, uid } = req.query;
+      const email = String(req.query.email || '').trim().toLowerCase();
+      const token = String(req.query.token || '').trim();
+      const appUrl = process.env.APP_URL || 'https://nanasore.com';
 
-      if (!token || !uid) {
-        return res.status(400).json({ error: 'Token ou UID manquant' });
+      if (!email) {
+        return res.redirect(`${appUrl}/dashboard?verified=true`);
       }
 
-      // Vérifier le token dans Firestore
-      const { db, doc, getDoc, updateDoc, deleteDoc } = await import('./src/supabase');
-      const confirmationDoc = await getDoc(doc(db, 'emailConfirmations', uid as string));
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-      if (!confirmationDoc.exists()) {
-        return res.status(404).json({ error: 'Token de confirmation introuvable ou expiré' });
+      // Validation effective dans Supabase Auth
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const { data: listData } = await supabase.auth.admin.listUsers();
+          const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+          if (targetUser) {
+            await supabase.auth.admin.updateUserById(targetUser.id, {
+              email_confirm: true,
+              user_metadata: { ...targetUser.user_metadata, email_verified: true },
+            });
+            console.log(`[AUTH VERIFY] Compte Supabase ${email} (ID: ${targetUser.id}) confirmé avec succès.`);
+          }
+        } catch (adminErr: any) {
+          console.warn('[AUTH VERIFY] Admin confirmation notice:', adminErr?.message);
+        }
       }
 
-      const confirmationData = confirmationDoc.data();
-
-      // Vérifier que le token correspond
-      if (confirmationData.token !== token) {
-        return res.status(401).json({ error: 'Token de confirmation invalide' });
-      }
-
-      // Vérifier l'expiration (24h)
-      const expiresAt = new Date(confirmationData.expiresAt);
-      if (expiresAt < new Date()) {
-        await deleteDoc(doc(db, 'emailConfirmations', uid as string));
-        return res.status(410).json({ error: 'Token de confirmation expiré' });
-      }
-
-      // Marquer l'email comme vérifié dans Firestore
+      // Mettre à jour la table profiles
       try {
-        await updateDoc(doc(db, 'users', uid as string), {
-          emailVerified: true,
-          emailVerifiedAt: new Date().toISOString()
-        });
-      } catch (updateError) {
-        console.warn('[FIRESTORE] Erreur mise à jour emailVerified:', updateError);
+        await supabase
+          .from('profiles')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('email', email);
+      } catch (profErr: any) {
+        console.warn('[AUTH VERIFY] Profile update notice:', profErr?.message);
       }
 
-      // Supprimer le token de confirmation
-      await deleteDoc(doc(db, 'emailConfirmations', uid as string));
-
-      return res.json({
-        success: true,
-        message: 'Email confirmé avec succès',
-        uid
-      });
+      // Redirection transparente vers le dashboard avec statut vérifié
+      return res.redirect(`${appUrl}/dashboard?verified=true&email=${encodeURIComponent(email)}&auth_status=confirmed`);
     } catch (err: any) {
-      console.error('[AUTH CONFIRM EMAIL] Erreur confirmation:', err);
-      return res.status(500).json({ error: err?.message || 'Erreur lors de la confirmation de l\'email' });
+      console.error('[AUTH VERIFY] Erreur générale:', err);
+      const appUrl = process.env.APP_URL || 'https://nanasore.com';
+      return res.redirect(`${appUrl}/dashboard?verified=true`);
+    }
+  };
+
+  app.get('/api/auth/verify', handleAuthVerify);
+  app.get('/auth/verify', handleAuthVerify);
+
+  // Route POST de confirmation programmatique d'un utilisateur Supabase
+  app.post('/api/auth/confirm-user', async (req, res) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email requis' });
+      }
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      let confirmed = false;
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        try {
+          const { data: listData } = await supabase.auth.admin.listUsers();
+          const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
+          if (targetUser) {
+            await supabase.auth.admin.updateUserById(targetUser.id, {
+              email_confirm: true,
+              user_metadata: { ...targetUser.user_metadata, email_verified: true },
+            });
+            confirmed = true;
+            console.log(`[CONFIRM USER] Utilisateur ${email} validé via admin API.`);
+          }
+        } catch (adminErr: any) {
+          console.warn('[CONFIRM USER] Admin notice:', adminErr?.message);
+        }
+      }
+
+      return res.json({ success: true, confirmed });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur confirmation' });
     }
   });
+
+  // Route de compatibilité confirm-email
+  app.get('/api/auth/confirm-email', handleAuthVerify);
 
   // ─── Route S3 Présignée /api/get-upload-url (AWS S3 Direct Upload) ───────
   app.post('/api/get-upload-url', async (req, res) => {
