@@ -97,13 +97,14 @@ export const KycValidationControlPlaneView: React.FC = () => {
               monetizationModel: act.pricing_model || kd.monetizationModel || kd.pricingModel || 'commission',
               pricingModel: act.pricing_model || kd.pricingModel || kd.monetizationModel || 'commission',
               documentType: (kd.documentType || 'CNIB') as any,
-              documentPhotoUrl: kd.idCardUrl || '',
-              managerPhotoUrl: kd.photoCaptureUrl || '',
-              businessDocumentUrl: kd.rccmDocPhotoUrl || '',
-              rccmDocPhotoUrl: kd.rccmDocPhotoUrl || '',
-              ifuDocPhotoUrl: kd.ifuDocPhotoUrl || '',
-              rccmNumber: kd.rccmNumber || '',
-              ifuNumber: kd.ifuNumber || '',
+              documentPhotoUrl: kd.documentPhotoUrl || kd.idCardUrl || kd.cnibRectoUrl || kd.managerCnibRectoUrl || '',
+              documentVersoUrl: kd.documentVersoUrl || kd.cnibVersoUrl || kd.managerCnibVersoUrl || '',
+              managerPhotoUrl: kd.managerPhotoUrl || kd.photoCaptureUrl || kd.faceSelfieUrl || kd.managerSelfieUrl || '',
+              businessDocumentUrl: kd.rccmDocPhotoUrl || kd.rccmDocUrl || kd.rccmFileUrl || '',
+              rccmDocPhotoUrl: kd.rccmDocPhotoUrl || kd.rccmDocUrl || kd.rccmFileUrl || '',
+              ifuDocPhotoUrl: kd.ifuDocPhotoUrl || kd.ifuDocUrl || kd.ifuFileUrl || '',
+              rccmNumber: kd.rccmNumber || kd.rccm || '',
+              ifuNumber: kd.ifuNumber || kd.ifuCompany || '',
               type: kd.accountType === 'entreprise' || kd.rccmNumber ? 'business' : 'individual',
               status: mappedStatus,
               submittedAt: act.submitted_at || act.created_at || new Date().toISOString(),
@@ -136,6 +137,9 @@ export const KycValidationControlPlaneView: React.FC = () => {
               ...existing,
               activityDomain: existing.activityDomain || item.activityDomain || (item as any).sector || 'Commerce Général',
               briefDescription: existing.briefDescription || item.briefDescription || (item as any).activityDescription || '',
+              documentPhotoUrl: existing.documentPhotoUrl || item.documentPhotoUrl,
+              documentVersoUrl: existing.documentVersoUrl || item.documentVersoUrl,
+              managerPhotoUrl: existing.managerPhotoUrl || item.managerPhotoUrl,
               rccmDocPhotoUrl: existing.rccmDocPhotoUrl || item.rccmDocPhotoUrl,
               ifuDocPhotoUrl: existing.ifuDocPhotoUrl || item.ifuDocPhotoUrl
             });
@@ -168,12 +172,13 @@ export const KycValidationControlPlaneView: React.FC = () => {
                   monetizationModel: chainData.monetizationModel || chainData.pricingModel || 'commission',
                   pricingModel: chainData.pricingModel || chainData.monetizationModel || 'commission',
                   documentType: 'CNIB',
-                  documentPhotoUrl: chainData.cnibRectoUrl || chainData.managerCnibRectoUrl || '',
-                  managerPhotoUrl: chainData.faceSelfieUrl || chainData.managerSelfieUrl || '',
-                  rccmDocPhotoUrl: chainData.rccmFileUrl || '',
-                  ifuDocPhotoUrl: chainData.ifuFileUrl || '',
-                  rccmNumber: chainData.rccm || '',
-                  ifuNumber: chainData.ifuCompany || '',
+                  documentPhotoUrl: chainData.cnibRectoUrl || chainData.managerCnibRectoUrl || chainData.documentPhotoUrl || '',
+                  documentVersoUrl: chainData.cnibVersoUrl || chainData.managerCnibVersoUrl || chainData.documentVersoUrl || '',
+                  managerPhotoUrl: chainData.faceSelfieUrl || chainData.managerSelfieUrl || chainData.managerPhotoUrl || '',
+                  rccmDocPhotoUrl: chainData.rccmDocUrl || chainData.rccmFileUrl || chainData.rccmDocPhotoUrl || '',
+                  ifuDocPhotoUrl: chainData.ifuDocUrl || chainData.ifuFileUrl || chainData.ifuDocPhotoUrl || '',
+                  rccmNumber: chainData.rccm || chainData.rccmNumber || '',
+                  ifuNumber: chainData.ifuCompany || chainData.ifuNumber || '',
                   type: chainData.type === 'entreprise' ? 'business' : 'individual',
                   status: 'pending_approval',
                   submittedAt: new Date().toISOString()
@@ -818,6 +823,29 @@ export const KycValidationControlPlaneView: React.FC = () => {
                       ) : (
                         <span className="text-[11px] text-slate-500 italic bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-800">
                           Recto non téléversé
+                        </span>
+                      )}
+
+                      {/* CNIB / Pièce Verso */}
+                      {item.documentVersoUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            setPreviewDoc({
+                              url: item.documentVersoUrl!,
+                              title: `Pièce d'Identité (Verso)`,
+                              storeName: item.storeName || item.storeId || ''
+                            });
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-600/15 border border-indigo-500/30 hover:bg-indigo-600/25 text-indigo-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>CNIB / Passeport Verso</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-500 italic bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-800">
+                          Verso non téléversé
                         </span>
                       )}
 

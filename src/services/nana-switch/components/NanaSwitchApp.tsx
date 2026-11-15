@@ -38,7 +38,7 @@ import {
 import { useActiveOmnibarApps } from '../../../hooks/useActiveOmnibarApps';
 import { ProFeaturesModal, ProFeatureTab } from '../../../shell/modals/ProFeaturesModal';
 import { supabase } from '../../../lib/supabase';
-import { submitKycSubmission } from '../../../utils/kycService';
+import { submitKycSubmission, fileToDataUrl } from '../../../utils/kycService';
 import { KycSubmission } from '../../../types';
 
 export interface NanaSwitchAppProps {
@@ -295,8 +295,11 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     fullName: '',
     cnibNumber: '',
     cnibRectoName: '',
+    cnibRectoUrl: '',
     cnibVersoName: '',
+    cnibVersoUrl: '',
     faceSelfieName: '',
+    faceSelfieUrl: '',
     phone: '',
     // Champs spécifiques Entreprise
     companyName: '',
@@ -304,12 +307,17 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     managerName: '',
     managerCnibNumber: '',
     managerCnibRectoName: '',
+    managerCnibRectoUrl: '',
     managerCnibVersoName: '',
+    managerCnibVersoUrl: '',
     managerSelfieName: '',
+    managerSelfieUrl: '',
     rccm: '',
     rccmFileName: '',
+    rccmDocUrl: '',
     ifuCompany: '',
     ifuFileName: '',
+    ifuDocUrl: '',
     bankRib: '',
     contractSigned: false
   });
@@ -695,6 +703,17 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       }
     }
 
+    const isBusiness = kycForm.type === 'entreprise';
+    const docRecto = isBusiness ? (kycForm.managerCnibRectoUrl || kycForm.cnibRectoUrl || '') : (kycForm.cnibRectoUrl || '');
+    const docVerso = isBusiness ? (kycForm.managerCnibVersoUrl || kycForm.cnibVersoUrl || '') : (kycForm.cnibVersoUrl || '');
+    const selfieUrl = isBusiness ? (kycForm.managerSelfieUrl || kycForm.faceSelfieUrl || '') : (kycForm.faceSelfieUrl || '');
+    const rccmDoc = kycForm.rccmDocUrl || '';
+    const ifuDoc = kycForm.ifuDocUrl || '';
+    const docNumber = isBusiness ? (kycForm.managerCnibNumber || kycForm.cnibNumber || '') : (kycForm.cnibNumber || '');
+    const actDesc = (kycForm.activityDescription || kycForm.description || '').trim();
+    const phoneVal = kycForm.phone || (kycForm as any).whatsappPhone || (kycForm as any).managerPhone || '';
+    const userEmailVal = currentUser?.email || kycForm.companyEmail || '';
+
     // 2. Soumission officielle et persistante au Control Plane Super Admin
     try {
       const kycSub: KycSubmission & { userId: string } = {
@@ -702,30 +721,48 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
         userId: targetUid || newId,
         storeId: newId,
         storeName: appDisplayName,
-        managerFullName: kycForm.fullName || kycForm.managerName || appDisplayName,
-        managerPhotoUrl: kycForm.photoCaptureUrl || '',
-        whatsappPhone: kycForm.whatsappPhone || kycForm.managerPhone || (kycForm as any).phone || '',
-        documentType: (kycForm.documentType || 'CNIB') as any,
-        documentPhotoUrl: kycForm.idCardUrl || '',
+        companyName: isBusiness ? (kycForm.companyName || appDisplayName) : undefined,
+        managerFullName: isBusiness ? (kycForm.managerName || kycForm.fullName || appDisplayName) : (kycForm.fullName || appDisplayName),
+        managerPhotoUrl: selfieUrl,
+        whatsappPhone: phoneVal,
+        userEmail: userEmailVal,
+        documentType: 'CNIB',
+        documentPhotoUrl: docRecto,
+        documentVersoUrl: docVerso,
+        documentNumber: docNumber,
+        businessDocumentUrl: rccmDoc,
+        rccmDocPhotoUrl: rccmDoc,
+        ifuDocPhotoUrl: ifuDoc,
+        rccmNumber: isBusiness ? (kycForm.rccm || '') : '',
+        ifuNumber: isBusiness ? (kycForm.ifuCompany || '') : '',
+        activityDomain: sectorChosen,
+        briefDescription: actDesc,
+        activityDescription: actDesc,
+        monetizationModel: 'commission',
+        pricingModel: 'commission',
         status: isByokMode ? 'verified' : 'pending',
+        type: isBusiness ? 'business' : 'individual',
         submittedAt: new Date().toISOString(),
-        businessData: kycForm.type === 'entreprise' ? {
+        businessData: isBusiness ? {
           companyName: kycForm.companyName || appDisplayName,
           rccmNumber: kycForm.rccm || '',
           ifuNumber: kycForm.ifuCompany || '',
           companyAddress: kycForm.address || '',
-          companyEmail: kycForm.companyEmail || '',
+          companyEmail: kycForm.companyEmail || userEmailVal,
           activitySector: sectorChosen,
-          sectorDescription: kycForm.sectorDescription || ''
+          sectorDescription: actDesc
         } : undefined,
-        individualData: kycForm.type === 'particulier' ? {
+        individualData: !isBusiness ? {
           fullName: kycForm.fullName || appDisplayName,
           activitySector: sectorChosen,
-          sectorDescription: kycForm.sectorDescription || '',
+          sectorDescription: actDesc,
           monthlyLimit: 1000000
         } : undefined
       };
       await submitKycSubmission(kycSub);
+      try {
+        localStorage.setItem(`nanasore_kyc_chain_${newId}`, JSON.stringify(kycSub));
+      } catch {}
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('superAdminUpdated'));
         window.dispatchEvent(new CustomEvent('nana_kyc_submission_created', { detail: kycSub }));
@@ -3218,11 +3255,30 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
     };
   }, []);
 
-  // Helper pour simuler la sélection d'un fichier et mettre à jour le nom
-  const handleFileChange = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper pour traiter la sélection d'un fichier, compresser et générer le Data URL
+  const handleFileChange = async (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setKycForm({ ...kycForm, [field]: file.name });
+      let urlField = '';
+      if (field === 'cnibRectoName') urlField = 'cnibRectoUrl';
+      else if (field === 'cnibVersoName') urlField = 'cnibVersoUrl';
+      else if (field === 'faceSelfieName') urlField = 'faceSelfieUrl';
+      else if (field === 'managerCnibRectoName') urlField = 'managerCnibRectoUrl';
+      else if (field === 'managerCnibVersoName') urlField = 'managerCnibVersoUrl';
+      else if (field === 'managerSelfieName') urlField = 'managerSelfieUrl';
+      else if (field === 'rccmFileName') urlField = 'rccmDocUrl';
+      else if (field === 'ifuFileName') urlField = 'ifuDocUrl';
+
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        setKycForm(prev => ({
+          ...prev,
+          [field]: file.name,
+          ...(urlField ? { [urlField]: dataUrl } : {})
+        }));
+      } catch (err) {
+        setKycForm(prev => ({ ...prev, [field]: file.name }));
+      }
     }
   };
 

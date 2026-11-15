@@ -63,6 +63,25 @@ export async function compressImageToBase64(file: File, maxDim = 960, quality = 
 }
 
 /**
+ * Convertit un fichier (image avec compression ou PDF tel quel) en Data URL Base64
+ */
+export async function fileToDataUrl(file: File): Promise<string> {
+  if (file.type && file.type.startsWith('image/')) {
+    try {
+      return await compressImageToBase64(file);
+    } catch {
+      // repli direct si canvas échoue
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Envoie un dossier KYC pour vérification
  */
 export async function submitKycRequest(data: KycSubmission): Promise<void> {

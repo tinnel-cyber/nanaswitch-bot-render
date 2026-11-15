@@ -192,7 +192,7 @@ async function startServer() {
   });
 
   app.use(express.json({
-    limit: '10mb',
+    limit: '50mb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     }
@@ -584,19 +584,20 @@ async function startServer() {
         userId,
         storeName,
         managerFullName: payload.managerFullName || payload.fullName || payload.managerName || 'Gérant',
-        managerPhotoUrl: payload.managerPhotoUrl || payload.photoCaptureUrl || payload.faceSelfieUrl || '',
+        managerPhotoUrl: payload.managerPhotoUrl || payload.photoCaptureUrl || payload.faceSelfieUrl || payload.managerSelfieUrl || '',
         whatsappPhone: payload.whatsappPhone || payload.phone || payload.managerPhone || '',
         userEmail: payload.userEmail || payload.email || payload.companyEmail || '',
         activityDomain: payload.activityDomain || payload.sector || payload.appellation || 'Commerce Général',
         briefDescription: payload.briefDescription || payload.activityDescription || payload.description || '',
-        activityDescription: payload.activityDescription || payload.briefDescription || '',
+        activityDescription: payload.activityDescription || payload.briefDescription || payload.description || '',
         monetizationModel: payload.monetizationModel || payload.pricingModel || payload.integration_mode || 'commission',
         pricingModel: payload.pricingModel || payload.monetizationModel || 'commission',
         documentType: payload.documentType || 'CNIB',
-        documentPhotoUrl: payload.documentPhotoUrl || payload.idCardUrl || payload.cnibRectoUrl || '',
-        businessDocumentUrl: payload.businessDocumentUrl || payload.rccmDocPhotoUrl || payload.rccmFileUrl || '',
-        rccmDocPhotoUrl: payload.rccmDocPhotoUrl || payload.rccmFileUrl || '',
-        ifuDocPhotoUrl: payload.ifuDocPhotoUrl || payload.ifuFileUrl || '',
+        documentPhotoUrl: payload.documentPhotoUrl || payload.idCardUrl || payload.cnibRectoUrl || payload.managerCnibRectoUrl || '',
+        documentVersoUrl: payload.documentVersoUrl || payload.cnibVersoUrl || payload.managerCnibVersoUrl || '',
+        businessDocumentUrl: payload.businessDocumentUrl || payload.rccmDocPhotoUrl || payload.rccmDocUrl || payload.rccmFileUrl || '',
+        rccmDocPhotoUrl: payload.rccmDocPhotoUrl || payload.rccmDocUrl || payload.rccmFileUrl || '',
+        ifuDocPhotoUrl: payload.ifuDocPhotoUrl || payload.ifuDocUrl || payload.ifuFileUrl || '',
         rccmNumber: payload.rccmNumber || payload.rccm || '',
         ifuNumber: payload.ifuNumber || payload.ifuCompany || payload.ifu || '',
         type: payload.type || payload.accountType || (payload.rccmNumber || payload.rccm ? 'business' : 'individual'),

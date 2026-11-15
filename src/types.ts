@@ -284,6 +284,7 @@ export interface KycSubmission {
   whatsappPhone?: string;
   documentType?: KycDocumentType;
   documentPhotoUrl?: string;
+  documentVersoUrl?: string;
   documentNumber?: string;
   status: KycStatus;
   type?: 'individual' | 'business';
