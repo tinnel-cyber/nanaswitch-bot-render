@@ -41,6 +41,13 @@ export default async function HomePage() {
 
           <div className="flex items-center gap-3">
             <Link
+              href="/dashboard"
+              prefetch={false}
+              className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-300 hover:text-white transition"
+            >
+              Dashboard Marchand
+            </Link>
+            <Link
               href="/client/dashboard"
               prefetch={false}
               className="text-xs font-semibold px-3 py-2 rounded-xl text-slate-300 hover:text-white transition"
@@ -132,23 +139,23 @@ export default async function HomePage() {
             </div>
           </Link>
 
-          {/* 3. Control Plane Super Admin */}
+          {/* 3. Espace Marchand & Dashboard */}
           <Link
-            href="/admin/dashboard"
+            href="/dashboard"
             prefetch={false}
-            className="group p-6 rounded-3xl bg-slate-900/60 border border-slate-800/80 hover:border-amber-500/50 hover:bg-slate-900 transition-all flex flex-col justify-between"
+            className="group p-6 rounded-3xl bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/50 hover:bg-slate-900 transition-all flex flex-col justify-between"
           >
             <div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-5 group-hover:scale-105 transition-transform">
-                <Crown className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-5 group-hover:scale-105 transition-transform">
+                <LayoutDashboard className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Control Plane Super Admin</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Espace Marchand & Univers</h3>
               <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                Supervision stricte de la plateforme : marchands, santé système, gestion des tarifs et politiques RLS Supabase.
+                Accédez à votre tableau de bord marchand unifié, pilotez vos encaissements, transactions et modules métiers en temps réel.
               </p>
             </div>
-            <div className="mt-6 flex items-center gap-2 text-xs font-bold text-amber-400 group-hover:text-amber-300">
-              <span>Espace sécurisé Control Plane</span>
+            <div className="mt-6 flex items-center gap-2 text-xs font-bold text-emerald-400 group-hover:text-emerald-300">
+              <span>Accéder au Dashboard Marchand</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>

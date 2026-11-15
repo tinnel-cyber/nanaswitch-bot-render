@@ -224,7 +224,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     }
     return false;
   });
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -901,79 +900,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     }
   };
 
-  // Décision Super Admin (Approuver ou Rejeter avec génération cryptographique de clés réelles)
-  const handleAdminDecision = async (targetAppId: string, status: 'VERIFIED' | 'REJECTED') => {
-    let generatedKeys: AppKeys | null = null;
-
-    if (status === 'VERIFIED') {
-      try {
-        // 1. Tente d'appeler le backend Node.js Render / localhost
-        const resp = await fetch(`${PAYMENT_API_BASE}/v1/switch/keys/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ merchantId: targetAppId, mode: 'live' })
-        });
-        if (resp.ok) {
-          const keyData = await resp.json();
-          generatedKeys = {
-            pk: keyData.public_key,
-            skHash: '$2a$10$...bcrypt_protected',
-            rawSk: keyData.secret_key,
-            whSecret: keyData.webhook_secret || keyData.webhook_config?.secret_key
-          };
-        }
-      } catch (apiErr) {
-        console.warn('[BACKEND KEYS CALL FALLBACK]', (apiErr as Error).message);
-      }
-
-      // Fallback local Zero-Trust si backend hors-ligne
-      if (!generatedKeys) {
-        const randHex = (bytes: number) => Array.from({ length: bytes }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-        generatedKeys = {
-          pk: `ns_live_pk_${randHex(16)}`,
-          skHash: `$2a$10$${randHex(20)}`,
-          rawSk: `ns_live_sk_${randHex(24)}`,
-          whSecret: `ns_whsec_${randHex(32)}`
-        };
-      }
-    }
-
-    setApps(prev => prev.map(a => {
-      if (a.id === targetAppId) {
-        const updated: NanaMerchantApp = { ...a, status };
-        if (generatedKeys) {
-          updated.keys = generatedKeys;
-          updated.webhook_config = {
-            url: a.webhook_config?.url || 'https://boutique-client.com/api/nanaswitch-webhook',
-            secret_key: generatedKeys.whSecret,
-            is_active: true
-          };
-        }
-        return updated;
-      }
-      return a;
-    }));
-
-    // Met à jour Firestore si disponible
-    if (db) {
-      try {
-        await updateDoc(doc(db, 'merchants', targetAppId), {
-          status: status === 'VERIFIED' ? 'ACTIVE' : 'REJECTED',
-          storeApprovalStatus: status === 'VERIFIED' ? 'APPROVED' : 'REJECTED',
-          ...(generatedKeys ? {
-            'nanaswitch_keys.public_key': generatedKeys.pk,
-            'webhook_config.secret_key': generatedKeys.whSecret,
-            'webhook_config.is_active': true
-          } : {})
-        });
-      } catch (err) {
-        console.warn('[SUPER ADMIN UPDATE storage]', (err as Error).message);
-      }
-    }
-
-    showToast(`Statut de l'application mis à jour : ${status === 'VERIFIED' ? 'Approuvée & Clés générées' : 'Rejetée'}`);
-  };
-
   return (
     <div className={`min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-blue-100 selection:text-blue-900 ${className}`}>
       
@@ -1132,48 +1058,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             <span>Documentation Publique</span>
             <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
           </a>
-
-          {/* Bouton de Commutation Inter-Applications : Vers la Console Cloud BYOK */}
-          <button 
-            type="button"
-            onClick={() => {
-              try {
-                window.history.pushState({}, '', '/nana-switch');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              } catch {
-                window.location.href = '/nana-switch';
-              }
-            }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white shadow-sm border border-slate-700/80 transition cursor-pointer active:scale-95"
-            title="Basculer vers la Console Cloud BYOK (SaaS & Clés Passerelles SasPay/Sebpay)"
-          >
-            <Cpu className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="hidden sm:inline font-extrabold">Console Cloud BYOK</span>
-            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-
-          {/* Super Admin Control Plane Direct Link */}
-          <a
-            href="/admin/dashboard"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 border border-amber-300/60 transition shadow-sm"
-            title="Accéder au Dashboard Super Admin"
-          >
-            <Crown className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden md:inline">Dashboard Super Admin</span>
-          </a>
-
-          {/* Super Admin Toggle Switch */}
-          <button
-            onClick={() => setIsSuperAdmin(!isSuperAdmin)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition ${
-              isSuperAdmin 
-                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm' 
-                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <ShieldCheck className={`w-4 h-4 ${isSuperAdmin ? 'text-amber-600' : 'text-slate-400'}`} />
-            <span className="hidden lg:inline">{isSuperAdmin ? 'Mode Super Admin' : 'Vue Marchand'}</span>
-          </button>
 
           {/* User Badge */}
           <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm">
@@ -1417,58 +1301,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               </div>
             </div>
           </div>
-
-          {/* SUPER ADMIN QUEUE (Visible if isSuperAdmin = true) */}
-          {isSuperAdmin && (
-            <div className="mb-10 bg-amber-50/80 border border-amber-300 rounded-3xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <ShieldAlert className="w-6 h-6 text-amber-700" />
-                  <div>
-                    <h3 className="font-bold text-amber-900 text-base">File de Validation KYC (Super Admin)</h3>
-                    <p className="text-xs text-amber-700">Examiner et approuver les demandes d'univers soumises par les partenaires</p>
-                  </div>
-                </div>
-                <span className="bg-amber-200 text-amber-900 text-xs font-black px-3 py-1 rounded-full">
-                  {apps.filter(a => a.status === 'PENDING_KYC').length} En attente
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {apps.filter(a => a.status === 'PENDING_KYC').length === 0 ? (
-                  <p className="text-xs text-amber-700 italic">Aucun dossier en attente de révision pour le moment.</p>
-                ) : (
-                  apps.filter(a => a.status === 'PENDING_KYC').map((app) => (
-                    <div key={app.id} className="bg-white p-4 rounded-2xl border border-amber-200 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 text-sm">{app.name}</span>
-                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600 uppercase">{app.type}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">Secteur: {app.sector} • Nom: {app.kyc?.companyName || app.kyc?.fullName}</p>
-                        <p className="text-[11px] text-slate-400 mt-1">IFU: {app.kyc?.ifu || app.kyc?.ifuCompany || 'N/A'} • RCCM: {app.kyc?.rccm || 'Particulier'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => handleAdminDecision(app.id, 'REJECTED')}
-                          className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 transition"
-                        >
-                          Rejeter
-                        </button>
-                        <button 
-                          onClick={() => handleAdminDecision(app.id, 'VERIFIED')}
-                          className="px-4 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Approuver & Générer Clés</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
 
           {/* APPLICATION / UNIVERS GRID SECTION */}
           <div className="space-y-4">
