@@ -759,6 +759,51 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
                 onPaymentCompleted={async (txData) => {
                   setCompletedOrder(txData);
                   playCashChime();
+
+                  const effectiveStoreId = activeFunnel.storeId || 'default_store';
+                  const posOrderPayload = {
+                    id: txData.transactionId,
+                    storeId: effectiveStoreId,
+                    funnel_slug: cleanSlug,
+                    source: 'PHYSICAL_FUNNEL_QR',
+                    customerName: txData.customerName,
+                    customerPhone: txData.phoneNumber,
+                    totalAmount: txData.totalAmount,
+                    total: txData.totalAmount,
+                    currency: 'FCFA',
+                    status: 'PENDING',
+                    paymentStatus: txData.isCashOnDelivery ? 'PENDING' : 'PAID',
+                    paymentMethod: txData.provider || (txData.isCashOnDelivery ? 'CASH_ON_DELIVERY' : 'MOBILE_MONEY'),
+                    delivery: txData.delivery,
+                    items: txData.composedItems && txData.composedItems.length > 0
+                      ? txData.composedItems
+                      : [{
+                          id: activeFunnel.productId || cleanSlug,
+                          name: activeFunnel.title,
+                          price: heroProps.price || 35000,
+                          quantity: 1
+                        }],
+                    createdAt: Date.now()
+                  };
+
+                  // 1. Insertion locale synchrone pour alerte caisse POS immédiate
+                  try {
+                    const localKey = `nana_tenant_${effectiveStoreId}_orders`;
+                    const existingOrders = JSON.parse(localStorage.getItem(localKey) || '[]');
+                    localStorage.setItem(localKey, JSON.stringify([posOrderPayload, ...existingOrders]));
+                    localStorage.setItem(`nana_orders_${effectiveStoreId}`, JSON.stringify([posOrderPayload, ...existingOrders]));
+
+                    // Notification événementielle vers la caisse physique ouverte
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('newCustomerOrderAlert', { detail: posOrderPayload }));
+                      window.dispatchEvent(new CustomEvent('newCustomerOrder', { detail: posOrderPayload }));
+                      window.dispatchEvent(new Event('customerOrdersUpdated'));
+                    }
+                  } catch (posErr) {
+                    console.warn('[PublicPhysicalFunnelView] Notice injection caisse locale:', posErr);
+                  }
+
+                  // 2. Persistance Supabase
                   try {
                     await supabase.from('orders').insert({
                       id: txData.transactionId,
@@ -768,13 +813,15 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
                       total_amount: txData.totalAmount,
                       currency: 'FCFA',
                       status: 'pending',
-                      payment_status: txData.isCashOnDelivery ? 'pending_on_delivery' : 'pending',
+                      payment_status: txData.isCashOnDelivery ? 'pending_on_delivery' : 'paid',
                       payment_provider: txData.provider,
                       delivery_option: txData.delivery,
                       items: txData.composedItems || [],
                       metadata: {
                         productName: activeFunnel.title,
                         orderBumpAccepted: txData.orderBumpAccepted,
+                        source: 'physical_funnel_qr',
+                        storeId: effectiveStoreId,
                         createdAt: Date.now()
                       },
                       created_at: new Date().toISOString()

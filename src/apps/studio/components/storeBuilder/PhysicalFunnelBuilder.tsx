@@ -58,8 +58,10 @@ import {
   Gift,
   HelpCircle,
   Radio,
-  Edit3
+  Edit3,
+  QrCode
 } from 'lucide-react';
+import { MagicQrCodeModal } from './MagicQrCodeModal';
 import {
   PhysicalFunnelBlock,
   PhysicalFunnelBlockType,
@@ -256,6 +258,7 @@ export const PhysicalFunnelBuilder: React.FC<{
   const [devicePreview, setDevicePreview] = useState<'DESKTOP' | 'MOBILE'>('DESKTOP');
   const [mobileView, setMobileView] = useState<'preview' | 'editor'>('preview');
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isMiniMarketPreviewOpen, setIsMiniMarketPreviewOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [composedCart, setComposedCart] = useState<any[]>([]);
@@ -699,6 +702,25 @@ export const PhysicalFunnelBuilder: React.FC<{
             <span className="hidden sm:inline">Paramètres</span>
           </button>
 
+          {/* Bouton QR Code Magique (Affiche Boutique Physique) */}
+          <button
+            type="button"
+            onClick={() => {
+              playValidationBeep();
+              setIsQrModalOpen(true);
+            }}
+            style={{
+              backgroundColor: `${brandColor}20`,
+              borderColor: `${brandColor}50`,
+              color: brandColor
+            }}
+            className="px-3 py-2 rounded-xl border text-xs font-black flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm hover:brightness-125"
+            title="Générer l'affiche et le QR Code Magique pour magasin physique"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">QR Code Magique</span>
+          </button>
+
           {onViewLive && (
             <button
               type="button"
@@ -915,6 +937,26 @@ export const PhysicalFunnelBuilder: React.FC<{
                 <div className="flex items-center justify-between text-[10.5px] text-slate-400">
                   <span>Lien client externe pour publicités TikTok, Facebook et WhatsApp.</span>
                   <span className="text-slate-500 font-mono text-[9.5px]">Prévis. interne : nanasore.com/c/{funnelConfig.slug}</span>
+                </div>
+
+                {/* Bouton d'action QR Code Magique direct */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playValidationBeep();
+                      setIsQrModalOpen(true);
+                    }}
+                    style={{
+                      borderColor: `${brandColor}40`,
+                      backgroundColor: `${brandColor}10`,
+                      color: brandColor
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition active:scale-98 hover:brightness-125 cursor-pointer shadow-sm"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>Générer l'Affiche & QR Code Magique pour Magasin</span>
+                  </button>
                 </div>
               </div>
 
@@ -2850,6 +2892,13 @@ export const PhysicalFunnelBuilder: React.FC<{
         cartItems={composedCart}
         tenantId={funnelConfig.storeId}
         tenantName={funnelConfig.title}
+      />
+
+      {/* Modale Affiche & QR Code Magique pour Magasins Physiques */}
+      <MagicQrCodeModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        funnel={funnelConfig}
       />
     </div>
   );
