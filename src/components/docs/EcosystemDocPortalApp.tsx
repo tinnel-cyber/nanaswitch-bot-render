@@ -273,8 +273,8 @@ export const EcosystemDocPortalApp: React.FC<EcosystemDocPortalAppProps> = ({
                   <span className="text-[11px] text-blue-200 font-semibold">& Infrastructures</span>
                 </div>
                 <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/10">
-                  <span className="block text-2xl font-black text-amber-300">5 Modules</span>
-                  <span className="text-[11px] text-blue-200 font-semibold">& 3 Outils Intégrés</span>
+                  <span className="block text-2xl font-black text-amber-300">6 Modules</span>
+                  <span className="text-[11px] text-blue-200 font-semibold">& Résilience Hors-Ligne</span>
                 </div>
                 <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/10">
                   <span className="block text-2xl font-black text-purple-300">8 Thèmes</span>
@@ -357,7 +357,7 @@ export const EcosystemDocPortalApp: React.FC<EcosystemDocPortalAppProps> = ({
                   { id: 'ALL', label: 'Toutes les Solutions' },
                   { id: 'APPLICATION', label: 'Applications (14)' },
                   { id: 'SERVICE', label: 'Services (5)' },
-                  { id: 'MODULE', label: 'Modules (5)' },
+                  { id: 'MODULE', label: 'Modules (6)' },
                   { id: 'OUTIL', label: 'Outils (3)' }
                 ].map((tab) => (
                   <button

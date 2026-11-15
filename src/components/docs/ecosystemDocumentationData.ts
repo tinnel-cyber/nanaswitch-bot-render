@@ -1344,5 +1344,46 @@ export const ECOSYSTEM_COMPONENTS_DOCUMENTATION: ComponentDocItem[] = [
     ],
     pricingPlan: 'HYBRIDE',
     connectedModules: ['kyc', 'studio', 'analytics']
+  },
+
+  {
+    id: 'nanasore-offline',
+    name: 'Nanasore Hors-Ligne (Architecture Local-First & Résilience)',
+    taxonomy: 'MODULE',
+    category: 'Continuité d\'Activité & Infrastructure',
+    badge: '100% OPÉRATIONNEL SANS INTERNET',
+    badgeColor: 'bg-emerald-800 text-white',
+    shortDescription: "Moteur de persistance locale et file de synchronisation automatique permettant d'encaisser, d'imprimer des tickets et de gérer les stocks sans connexion réseau.",
+    definition: "Nanasore Hors-Ligne est le moteur technologique souverain de continuité d'activité basé sur le paradigme Local-First. Il garantit qu'aucun commerce physique ne s'arrête de vendre, même en cas de coupure Internet totale, de panne d'opérateur mobile ou de délestage électrique.",
+    function: "Stocke en toute sécurité les ventes, commandes, catalogues et paniers directement dans une base de données locale étanche et chiffrée sur le terminal (tablette, ordinateur ou smartphone). Il enregistre chaque mutation dans une file d'attente intelligente avec horodatage strict, et déclenche une synchronisation automatique et silencieuse avec le cloud dès que le réseau réapparaît, sans créer de doublon ni de conflit.",
+    domain: "Tous les points de vente physiques, superettes, boutiques en zone blanche ou mal couverte, marchés nomades, salons, foires et stations-service.",
+    businessValue: "Résout le fléau des pannes de réseau récurrentes. Un commerçant utilisant Nanasore ne perd aucun client à cause d'un 'réseau indisponible'. Il continue à scanner, encaisser, imprimer ses tickets et gérer son activité en toute sérénité avec un taux de disponibilité réel de 99.9%.",
+    workflow: [
+      "1. Si la connexion Internet vient à se couper, un voyant discret indique le passage automatique en mode Hors-Ligne sécurisé.",
+      "2. Le caissier continue d'ajouter des articles au panier par scan de code-barres ou par commande vocale locale.",
+      "3. La vente est validée en espèces ou en solde à crédit : le ticket de caisse est imprimé et le stock local est décrémenté instantanément.",
+      "4. La vente est stockée dans la file d'attente locale d'enregistrement.",
+      "5. Dès que la connexion est rétablie, le système synchronise en tâche de fond l'ensemble des ventes vers le serveur central sans aucune action manuelle requise."
+    ],
+    configuration: [
+      "Installation de la solution en mode PWA (Application Web Progressive) pour une exécution ultra-rapide hors-navigateur.",
+      "Vérification de l'activation du stockage local persistant sur le terminal de caisse.",
+      "Paramétrage du délai de tentative de synchronisation automatique (Retry exponentiel dès retour réseau).",
+      "Activation optionnelle de la commande vocale hors-ligne pour les postes de caisse mains libres."
+    ],
+    marketingStrategy: [
+      "Rassurer les commerçants réticents à la digitalisation en leur démontrant qu'ils ne dépendent plus des aléas de la connexion Internet.",
+      "Mettre en avant l'argument massue : 'Votre boutique reste ouverte et encaisse même quand les terminaux bancaires classiques de vos voisins tombent en panne'.",
+      "Déployer des stands de vente nomades sur des foires ou marchés ruraux sans avoir besoin de louer de routeur Wi-Fi."
+    ],
+    synergiesAndMonetization: [
+      "Nanasore Hors-Ligne + Caisse POS Pro : Le socle de fiabilité indispensable pour garantir une caisse physique infaillible.",
+      "Nanasore Hors-Ligne + Stock & Inventaire : Permet de réaliser des inventaires complets au fond d'un entrepôt métallique sans réseau.",
+      "Nanasore Hors-Ligne + Gestion des Dettes : Consultation et enregistrement des créances clients même hors connexion.",
+      "Modèle économique : Inclus nativement dans le Plan Abonnement de la Caisse POS Pro pour tous les commerces physiques."
+    ],
+    pricingPlan: 'PLAN_ABONNEMENT',
+    parentAppOrService: 'pos',
+    connectedModules: ['pos', 'mod-inventory', 'mod-debts', 'tool-scanner']
   }
 ];
