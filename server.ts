@@ -3177,7 +3177,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
         htmlContent, 
         textContent, 
         senderName = process.env.BREVO_SENDER_NAME || 'Nanasore Team', 
-        senderEmail = process.env.BREVO_SENDER_EMAIL || 'admin@nanasore.com',
+        senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.DEFAULT_SENDER_EMAIL || 'contact@nanasore.com',
         replyTo,
         tags
       } = req.body || {};
@@ -3209,7 +3209,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
       const payload: any = {
         sender: {
           name: senderName || 'Nanasore Team',
-          email: senderEmail || 'admin@nanasore.com'
+          email: senderEmail || 'contact@nanasore.com'
         },
         to: formattedRecipients,
         subject: subject.trim(),

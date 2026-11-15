@@ -47,7 +47,7 @@ export interface EmailCampaign {
 
 export const DEFAULT_BREVO_CONFIG: BrevoConfig = {
   apiKey: (import.meta as any).env?.VITE_BREVO_SMTP_KEY || (import.meta as any).env?.VITE_BREVO_API_KEY || '',
-  senderEmail: 'admin@nanasore.com',
+  senderEmail: 'contact@nanasore.com',
   senderName: 'Nanasore Team',
   endpointUrl: 'https://api.brevo.com/v3',
   isConfigured: false,
@@ -373,7 +373,7 @@ export async function sendBrevoEmail(params: {
   senderName?: string;
 }): Promise<BrevoSendResult> {
   const config = getBrevoEmailConfig();
-  const effectiveSenderEmail = params.senderEmail || config.senderEmail || 'admin@nanasore.com';
+  const effectiveSenderEmail = params.senderEmail || config.senderEmail || 'contact@nanasore.com';
   const effectiveSenderName = params.senderName || config.senderName || 'Nanasore Team';
   const apiKey = config.apiKey;
 

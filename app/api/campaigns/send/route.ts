@@ -107,21 +107,25 @@ export async function POST(req: Request) {
     }
 
     // 4. Construction du payload Brevo v3 avec messageVersions
-    // Normalisation pour assurer le bon rendu des balises {{params.FIRSTNAME}} et {{FIRSTNAME}}
+    // Normalisation pour assurer le bon rendu des balises de personnalisation
     const normalizedHtmlContent = htmlContent
-      .replace(/\{\{FIRSTNAME\}\}/g, '{{params.FIRSTNAME}}')
-      .replace(/\{\{LASTNAME\}\}/g, '{{params.LASTNAME}}')
-      .replace(/\{\{SHOP_NAME\}\}/g, senderName)
-      .replace(/\{\{PROMO_CODE\}\}/g, 'PROMO20');
+      .replace(/\{\{(FIRSTNAME|firstname|prenom|PRENOM)\}\}/gi, '{{params.FIRSTNAME}}')
+      .replace(/\{\{(LASTNAME|lastname|nom|NOM)\}\}/gi, '{{params.LASTNAME}}')
+      .replace(/\{\{(NAME|name)\}\}/gi, '{{params.NAME}}')
+      .replace(/\{\{(EMAIL|email)\}\}/gi, '{{params.EMAIL}}')
+      .replace(/\{\{(SHOP_NAME|shop_name|boutique)\}\}/gi, senderName)
+      .replace(/\{\{(PROMO_CODE|promo_code|code_promo)\}\}/gi, 'PROMO20');
+
+    const officialSenderEmail = process.env.BREVO_SENDER_EMAIL || process.env.DEFAULT_SENDER_EMAIL || 'contact@nanasore.com';
 
     const brevoPayload = {
       sender: {
         name: senderName,
-        email: process.env.BREVO_SENDER_EMAIL || (senderEmail.includes('@') ? senderEmail : 'notifications@nanasore.com')
+        email: officialSenderEmail
       },
       replyTo: {
         name: senderName,
-        email: senderEmail.includes('@') ? senderEmail : (process.env.BREVO_SENDER_EMAIL || 'notifications@nanasore.com')
+        email: (senderEmail && senderEmail.includes('@')) ? senderEmail : officialSenderEmail
       },
       subject: subject,
       htmlContent: normalizedHtmlContent,
@@ -134,13 +138,15 @@ export async function POST(req: Request) {
         ],
         params: {
           FIRSTNAME: c.first_name || 'Client',
-          LASTNAME: c.last_name || ''
+          LASTNAME: c.last_name || '',
+          NAME: `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Client',
+          EMAIL: c.email
         }
       }))
     };
 
     // 5. Appel de l'API Brevo v3 (POST https://api.brevo.com/v3/smtp/email)
-    const brevoApiKey = process.env.BREVO_API_KEY || process.env.VITE_BREVO_SMTP_KEY || process.env.VITE_BREVO_API_KEY;
+    const brevoApiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_KEY || process.env.VITE_BREVO_SMTP_KEY || process.env.VITE_BREVO_API_KEY;
 
     let brevoMessageId = `campaign_${Date.now()}`;
     let isBrevoLive = false;
