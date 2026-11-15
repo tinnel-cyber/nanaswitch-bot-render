@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v14-unified-dashboard-appregistry';
+const CACHE_NAME = 'nanasore-v16-docs-unified';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
@@ -151,6 +151,13 @@ self.addEventListener('fetch', (event) => {
             cache.put('/', networkRes.clone());
             return networkRes;
           }
+          // Repli direct réseau SPA vers /index.html si la sous-route renvoie 404
+          const indexRes = await fetch('/index.html');
+          if (indexRes && indexRes.status === 200) {
+            cache.put(req, indexRes.clone());
+            cache.put('/index.html', indexRes.clone());
+            return indexRes;
+          }
         } catch (err) {
           console.log('[ServiceWorker] Hors-ligne : chargement de l’App Shell React depuis le cache');
         }
@@ -162,7 +169,12 @@ self.addEventListener('fetch', (event) => {
         const cachedIndex = (await cache.match('/index.html')) || (await cache.match('/'));
         if (cachedIndex) return cachedIndex;
 
-        return new Response('<!doctype html><html><body><h1>Nanasore Hors-ligne</h1></body></html>', {
+        try {
+          const rootRes = await fetch('/');
+          if (rootRes && rootRes.status === 200) return rootRes;
+        } catch (_) {}
+
+        return (await cache.match('/')) || new Response('<!doctype html><html><head><meta http-equiv="refresh" content="0; url=/"></head><body>Redirection...</body></html>', {
           headers: { 'Content-Type': 'text/html' }
         });
       })()

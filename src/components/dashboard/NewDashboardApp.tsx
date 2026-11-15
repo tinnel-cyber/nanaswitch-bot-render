@@ -42,6 +42,7 @@ import { supabase } from '../../lib/supabase';
 import { submitKycSubmission } from '../../utils/kycService';
 import { KycSubmission } from '../../types';
 import { saveLocalUserLicense, getLocalUserLicense } from '../../services/contextualLicensingService';
+import { EcosystemDocPortalApp } from '../docs/EcosystemDocPortalApp';
 import { 
   collection, 
   doc, 
@@ -225,6 +226,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     return false;
   });
   const [copiedKey, setCopiedKey] = useState('');
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -1043,18 +1045,16 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             <span className="hidden sm:inline">Modules ({activeOmnibarModules.length}/{CANONICAL_APP_REGISTRY.length})</span>
           </button>
 
-          {/* Doc Publique Externe Link (100% Hors Application Protégée) */}
-          <a 
-            href="/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-            title="Consulter la Documentation Développeur Publique (Accès Libre)"
+          {/* Bouton Documentation Publique Intégré */}
+          <button 
+            type="button"
+            onClick={() => setIsDocsOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+            title="Consulter la Documentation Officielle (Accès Libre)"
           >
             <BookOpen className="w-4 h-4 text-blue-600" />
-            <span>Documentation Publique</span>
-            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-          </a>
+            <span className="hidden md:inline">Documentation</span>
+          </button>
 
           {/* User Badge */}
           <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm">
@@ -1285,16 +1285,14 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <span>Recherche & Catalogue Modules</span>
                   <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white text-[#1E40AF] rounded border border-blue-200">Ctrl K</kbd>
                 </button>
-                <a 
-                  href="/docs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2"
+                <button 
+                  type="button"
+                  onClick={() => setIsDocsOpen(true)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer"
                 >
                   <FileText className="w-4 h-4 text-slate-500" />
-                  <span>Consulter la Documentation Publique</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                </a>
+                  <span>Consulter la Documentation</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1429,6 +1427,17 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           setKycForm={setKycForm}
           handleKycSubmit={handleKycSubmit}
         />
+      )}
+
+      {/* PORTAIL DOCUMENTAIRE OFFICIEL INTÉGRÉ (100% IN-APP SANS ERREUR DE NAVIGATION) */}
+      {isDocsOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-50">
+          <EcosystemDocPortalApp 
+            onClose={() => setIsDocsOpen(false)}
+            initialSection="hub"
+            isPublicPortal={true}
+          />
+        </div>
       )}
     </div>
   );
