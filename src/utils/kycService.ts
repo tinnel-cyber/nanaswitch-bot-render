@@ -422,10 +422,19 @@ export async function getIdentificationChain(storeId: string): Promise<Identific
     // Offline fallback
   }
 
-  // 3. Fallback : chaîne par défaut pré-remplie et validée pour Konkobo Telecom
+  // 3. Fallback : seulement pour les comptes de démonstration
+  if (storeId === 'demo' || storeId === 'store-nanasore-main') {
+    return {
+      ...DEFAULT_NANASORE_CHAIN,
+      storeId
+    };
+  }
+
   return {
-    ...DEFAULT_KONKOBO_CHAIN,
-    storeId
+    storeId,
+    currentStep: 1,
+    overallStatus: 'NOT_SUBMITTED',
+    updatedAt: new Date().toISOString()
   };
 }
 

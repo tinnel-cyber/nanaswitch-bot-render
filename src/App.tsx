@@ -3155,6 +3155,8 @@ export default function App() {
     setCustomerOrders([]);
     setSellers([]);
     setActiveSeller(null);
+    safeRemoveItem('nana_merchant_universes');
+    safeRemoveItem('nana_current_app_id');
 
     const targetStoreId =
       user.storeId && user.storeId !== 'store-nana-1'
@@ -3359,6 +3361,22 @@ export default function App() {
     safeRemoveItem('nana_customers');
     safeRemoveItem('nana_losses');
     safeRemoveItem('nana_stock_movements');
+    safeRemoveItem('nana_merchant_universes');
+    safeRemoveItem('nana_current_app_id');
+    safeRemoveItem('nana_konkobo_general_settings');
+    safeRemoveItem('nana_merchant_general_settings');
+    if (typeof window !== 'undefined') {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('nana_merchant_universes') || k.startsWith('nana_id_chain_') || k.startsWith('nana_user_profile_'))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      } catch {}
+    }
     playTapBeep();
   };
 
@@ -5231,7 +5249,7 @@ export default function App() {
                   vendorType: chosenMode === 'creator_trainer' ? 'elearning' : chosenMode === 'hybrid_all' ? 'hybrid' : 'physical'
                 } : {
                   id: 'inst-' + Date.now(),
-                  name: authPayload.name || 'Prof. Ibrahim Konkobo',
+                  name: authPayload.name || 'Formateur Nanasore',
                   email: authPayload.email,
                   role: 'GERANT',
                   sellerMode: chosenMode,
@@ -5330,7 +5348,7 @@ export default function App() {
       <ModuleErrorBoundary moduleName="LMS - Espace Formateur">
         <React.Suspense fallback={<LazyModuleFallback label="Connexion au Tableau de Bord Formateur..." />}>
           <InstructorDashboardView
-            instructorName={currentUser?.name || "Prof. Ibrahim Konkobo"}
+            instructorName={currentUser?.name || "Formateur Nanasore"}
             planName={(() => {
               const currentP = normalizePlanId(subscription || currentUser?.plan);
               if (currentP === 'pro' || currentP === 'elite') return 'Plan Pro 👑 (Cours Illimités)';
@@ -6826,7 +6844,7 @@ export default function App() {
             <ModuleErrorBoundary moduleName="Studio - Thèmes & Vitrine">
               <React.Suspense fallback={<LazyModuleFallback label="Chargement Nanasore Studio..." />}>
                 <StoreStudioPage
-                  storeId={currentUser?.uid || currentUser?.storeId || 'store-konkobo-telecom'}
+                  storeId={getCurrentStoreId()}
                   currentUser={currentUser}
                   subscription={subscription}
                   inventory={inventory}
@@ -7046,6 +7064,7 @@ export default function App() {
             <ModuleErrorBoundary moduleName="Nouveau Tableau de Bord - NanaSwitch & AppRegistry">
               <React.Suspense fallback={<LazyModuleFallback label="Chargement du Nouveau Tableau de Bord..." />}>
                 <NewDashboardApp
+                  currentUser={currentUser}
                   onBack={() => {
                     setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') {
@@ -7941,7 +7960,7 @@ export default function App() {
             <CreateWebinarModal
               isOpen={isGlobalWebinarModalOpen}
               merchantId={getCurrentStoreId()}
-              storeName={currentUser?.storeName || 'ENTREPRISE KONKOBO POUSBILA'}
+              storeName={currentUser?.storeName || currentUser?.name || 'Mon Entreprise'}
               onClose={() => setIsGlobalWebinarModalOpen(false)}
               onOpenNanaGenerator={() => {
                 setIsGlobalWebinarModalOpen(false);
@@ -8024,7 +8043,7 @@ export default function App() {
           <React.Suspense fallback={null}>
             <MerchantFlashAlert
               merchantId={getCurrentStoreId()}
-              storeName={currentUser.storeName || 'ENTREPRISE KONKOBO POUSBILA'}
+              storeName={currentUser.storeName || currentUser.name || 'Mon Entreprise'}
             />
           </React.Suspense>
         )}
@@ -8033,7 +8052,7 @@ export default function App() {
         <React.Suspense fallback={null}>
           <LiveIncomingCallAlert
             merchantId={getCurrentStoreId()}
-            storeName={currentUser?.storeName || 'ENTREPRISE KONKOBO POUSBILA'}
+            storeName={currentUser?.storeName || currentUser?.name || 'Mon Entreprise'}
           />
         </React.Suspense>
 

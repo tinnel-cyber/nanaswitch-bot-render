@@ -373,6 +373,16 @@ export async function logoutUser(): Promise<void> {
       localStorage.removeItem('nana_auth_token');
       localStorage.removeItem('nana_store_sub');
       localStorage.removeItem('nana_current_student');
+      localStorage.removeItem('nana_merchant_universes');
+      localStorage.removeItem('nana_current_app_id');
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('nana_merchant_universes') || k.startsWith('nana_id_chain_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch {}
   }
 }

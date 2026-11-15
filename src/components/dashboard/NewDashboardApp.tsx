@@ -65,6 +65,7 @@ export interface NanaSwitchAppProps {
   initialTab?: string;
   initialAppId?: string;
   className?: string;
+  currentUser?: any;
 }
 
 export type NewDashboardAppProps = NanaSwitchAppProps;
@@ -212,7 +213,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   onBack,
   initialTab = 'dashboard',
   initialAppId,
-  className = ''
+  className = '',
+  currentUser: propCurrentUser
 }) => {
   // State management
   const [apps, setApps] = useState<NanaMerchantApp[]>(INITIAL_APPS);
@@ -228,12 +230,27 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   const [copiedKey, setCopiedKey] = useState('');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    if (propCurrentUser) return propCurrentUser;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nana_store_auth_user');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (propCurrentUser) {
+      setCurrentUser(propCurrentUser);
+    }
+  }, [propCurrentUser]);
 
   useEffect(() => {
     if (supabase) {
       supabase.auth.getUser().then(({ data }) => {
-        if (data?.user) setCurrentUser(data.user);
+        if (data?.user) setCurrentUser((prev: any) => prev || data.user);
       });
       const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.user) setCurrentUser(session.user);
@@ -444,68 +461,115 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     }
   }, [showToast]);
 
-  // Synchronisation des Univers (Supabase + Firestore fallback) au chargement
+  // Synchronisation des Univers (Supabase + Firestore fallback) au chargement hermétique multi-tenant
   useEffect(() => {
     let isMounted = true;
     async function loadMerchantUniverses() {
       setIsSyncing(true);
       try {
-        // 1. Priorité Supabase : table public.universes
+        // Résolution de l'identifiant strict du compte connecté
+        let targetUid = currentUser?.id || currentUser?.uid;
+        if (!targetUid && supabase) {
+          try {
+            const { data } = await supabase.auth.getUser();
+            if (data?.user?.id) targetUid = data.user.id;
+          } catch {}
+        }
+        if (!targetUid && typeof window !== 'undefined') {
+          try {
+            const saved = localStorage.getItem('nana_store_auth_user');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed?.id || parsed?.uid) targetUid = parsed.id || parsed.uid;
+            }
+          } catch {}
+        }
+
+        // Si aucun utilisateur n'est authentifié, sécurité absolue : aucun univers n'est chargé
+        if (!targetUid) {
+          if (isMounted) setApps([]);
+          return;
+        }
+
+        const userStorageKey = `nana_merchant_universes_${targetUid}`;
+
+        // 1. Priorité Supabase : table public.universes filtrée STRICTEMENT par user_id
         if (supabase) {
           try {
             const { data: supaUniverses, error } = await supabase
               .from('universes')
               .select('*')
+              .eq('user_id', targetUid)
               .order('created_at', { ascending: false });
 
-            if (!error && supaUniverses && supaUniverses.length > 0 && isMounted) {
-              const loaded: NanaMerchantApp[] = supaUniverses.map((u: any) => ({
-                id: u.id,
-                name: u.name,
-                sector: u.appellation || u.sector || 'E-commerce & Services',
-                type: u.type || 'entreprise',
-                status: u.status === 'ACTIVE' || u.status === 'VERIFIED' ? 'VERIFIED' : (u.status || 'PENDING_KYC'),
-                createdAt: u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
-                balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-                keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
-                webhook_config: u.webhook_config,
-                integration_mode: u.integration_mode || 'AGREGATED',
-                integration_config: u.integration_config || {
-                  mode: u.integration_mode || 'AGREGATED',
-                  custom_credentials: {}
-                },
-                custom_credentials: u.integration_config?.custom_credentials || {},
-                api_credits_balance: u.settings?.api_credits_balance ?? 5000,
-                api_pricing_config: u.settings?.api_pricing_config || {
-                  cost_per_request_xof: 0.02,
-                  api_credits_balance: 5000,
-                  low_balance_threshold: 500
-                },
-                monthly_usage: u.settings?.monthly_usage || {
-                  month: new Date().toISOString().slice(0, 7),
-                  volume_xof: 0,
-                  transaction_count: 0
-                },
-                kyc_limits: {
-                  tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
-                  max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
-                  description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
-                },
-                kyc: u.kyc_data || {}
-              }));
+            if (!error && isMounted) {
+              if (supaUniverses && supaUniverses.length > 0) {
+                const loaded: NanaMerchantApp[] = supaUniverses.map((u: any) => ({
+                  id: u.id,
+                  name: u.name,
+                  sector: u.appellation || u.sector || 'E-commerce & Services',
+                  type: u.type || 'entreprise',
+                  status: u.status === 'ACTIVE' || u.status === 'VERIFIED' ? 'VERIFIED' : (u.status || 'PENDING_KYC'),
+                  createdAt: u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+                  balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+                  keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
+                  webhook_config: u.webhook_config,
+                  integration_mode: u.integration_mode || 'AGREGATED',
+                  integration_config: u.integration_config || {
+                    mode: u.integration_mode || 'AGREGATED',
+                    custom_credentials: {}
+                  },
+                  custom_credentials: u.integration_config?.custom_credentials || {},
+                  api_credits_balance: u.settings?.api_credits_balance ?? 5000,
+                  api_pricing_config: u.settings?.api_pricing_config || {
+                    cost_per_request_xof: 0.02,
+                    api_credits_balance: 5000,
+                    low_balance_threshold: 500
+                  },
+                  monthly_usage: u.settings?.monthly_usage || {
+                    month: new Date().toISOString().slice(0, 7),
+                    volume_xof: 0,
+                    transaction_count: 0
+                  },
+                  kyc_limits: {
+                    tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
+                    max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
+                    description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
+                  },
+                  kyc: u.kyc_data || {}
+                }));
 
-              setApps(loaded);
-              return;
+                setApps(loaded);
+                try {
+                  localStorage.setItem(userStorageKey, JSON.stringify(loaded));
+                } catch (_) {}
+                return;
+              } else {
+                // Aucun univers trouvé pour cet utilisateur spécifique dans Supabase
+                // Vérifier s'il a un univers local partitionné à son nom
+                try {
+                  const cachedRaw = localStorage.getItem(userStorageKey);
+                  if (cachedRaw) {
+                    const parsed = JSON.parse(cachedRaw);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                      setApps(parsed);
+                      return;
+                    }
+                  }
+                } catch {}
+                setApps([]);
+                return;
+              }
             }
           } catch (supaErr) {
             console.warn('[NANASWITCH] Supabase universes fetch:', supaErr);
           }
         }
 
-        // 2. Fallback Firestore si Supabase n'a pas encore de données
-        if (db) {
+        // 2. Fallback Firestore si Supabase n'a pas encore de données, STRICTEMENT filtré par userId
+        if (db && targetUid) {
           const merchantsRef = collection(db, 'merchants');
-          const snap = await getDocs(query(merchantsRef, limit(20)));
+          const snap = await getDocs(query(merchantsRef, where('userId', '==', targetUid), limit(20)));
           if (!snap.empty && isMounted) {
             const loaded: NanaMerchantApp[] = [];
             snap.forEach((docSnap) => {
@@ -564,6 +628,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
             if (loaded.length > 0) {
               setApps(loaded);
+              try {
+                localStorage.setItem(userStorageKey, JSON.stringify(loaded));
+              } catch (_) {}
             } else {
               setApps([]);
             }
@@ -752,8 +819,16 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     });
 
     // 2. Mise à jour de l'état local et ouverture immédiate du dashboard
-    setApps([newApp, ...apps]);
+    const updatedApps = [newApp, ...apps.filter(a => a.id !== newApp.id)];
+    setApps(updatedApps);
     setSelectedApp(newApp);
+    const targetUid = currentUser?.id || currentUser?.uid;
+    if (targetUid && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`nana_merchant_universes_${targetUid}`, JSON.stringify(updatedApps));
+        localStorage.setItem('nana_current_app_id', newApp.id);
+      } catch {}
+    }
     setIsKycModalOpen(false);
     showToast(
       isByokMode

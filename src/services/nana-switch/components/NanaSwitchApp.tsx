@@ -47,6 +47,7 @@ export interface NanaSwitchAppProps {
   initialTab?: string;
   initialAppId?: string;
   className?: string;
+  currentUser?: any;
 }
 
 export interface AppBalances {
@@ -185,21 +186,8 @@ const PRICING_RULES = [
   { country: 'Bénin 🇧🇯', operator: 'Celtiis Cash', baseRate: '3.2%', margin: '+1.5%', totalFee: '4.7%', minFee: '15 XOF' },
 ];
 
-// Helper de synchronisation avec le cache local pour affichage immédiat
-const STORAGE_KEY_UNIVERSES = 'nana_merchant_universes';
-const getStoredUniverses = (): NanaMerchantApp[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_UNIVERSES);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {
-    console.warn('[STORAGE] Erreur lecture univers locaux :', e);
-  }
-  return [];
-};
+// Helper de synchronisation partitionné par utilisateur pour garantir l'isolation multi-tenant
+const getUserStorageKey = (uid?: string) => uid ? `nana_merchant_universes_${uid}` : 'nana_merchant_universes_guest';
 
 export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   slug = 'nanaswitch',
@@ -208,13 +196,11 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   onBack,
   initialTab = 'dashboard',
   initialAppId,
-  className = ''
+  className = '',
+  currentUser: propCurrentUser
 }) => {
-  // State management (initialisé avec le cache local des univers créés)
-  const [apps, setApps] = useState<NanaMerchantApp[]>(() => {
-    const cached = getStoredUniverses();
-    return cached.length > 0 ? cached : INITIAL_APPS;
-  });
+  // State management (initialisé vide pour ne jamais afficher les univers d'un autre utilisateur)
+  const [apps, setApps] = useState<NanaMerchantApp[]>([]);
   const [selectedApp, setSelectedApp] = useState<NanaMerchantApp | null>(null);
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [isKycModalOpen, setIsKycModalOpen] = useState(() => {
@@ -227,12 +213,27 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    if (propCurrentUser) return propCurrentUser;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nana_store_auth_user');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (propCurrentUser) {
+      setCurrentUser(propCurrentUser);
+    }
+  }, [propCurrentUser]);
 
   useEffect(() => {
     if (supabase) {
       supabase.auth.getUser().then(({ data }) => {
-        if (data?.user) setCurrentUser(data.user);
+        if (data?.user) setCurrentUser((prev: any) => prev || data.user);
       });
       const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session?.user) setCurrentUser(session.user);
@@ -431,77 +432,121 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
   }, [showToast]);
 
-  // Synchronisation des Univers (100% Supabase + cache local)
+  // Synchronisation des Univers hermétique multi-tenant (100% Supabase + cache local sécurisé)
   useEffect(() => {
     let isMounted = true;
     async function loadMerchantUniverses() {
       setIsSyncing(true);
       try {
+        let targetUid = currentUser?.id || currentUser?.uid;
+        if (!targetUid && supabase) {
+          try {
+            const { data } = await supabase.auth.getUser();
+            if (data?.user?.id) targetUid = data.user.id;
+          } catch {}
+        }
+        if (!targetUid && typeof window !== 'undefined') {
+          try {
+            const saved = localStorage.getItem('nana_store_auth_user');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed?.id || parsed?.uid) targetUid = parsed.id || parsed.uid;
+            }
+          } catch {}
+        }
+
+        // Si aucun utilisateur n'est identifié, AUCUN univers d'un tiers ne doit s'afficher
+        if (!targetUid) {
+          if (isMounted) setApps([]);
+          return;
+        }
+
+        const userStorageKey = getUserStorageKey(targetUid);
+
         if (supabase) {
           try {
             const { data: supaUniverses, error } = await supabase
               .from('universes')
               .select('*')
+              .eq('user_id', targetUid)
               .order('created_at', { ascending: false });
 
-            if (!error && supaUniverses && supaUniverses.length > 0 && isMounted) {
-              const loaded: NanaMerchantApp[] = supaUniverses.map((u: any) => ({
-                id: u.id,
-                name: u.name,
-                sector: u.appellation || u.sector || 'E-commerce & Services',
-                type: u.type || 'entreprise',
-                status: u.status === 'ACTIVE' || u.status === 'VERIFIED' ? 'VERIFIED' : (u.status || 'PENDING_KYC'),
-                createdAt: u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
-                balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-                keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
-                webhook_config: u.webhook_config,
-                integration_mode: u.integration_mode || 'AGREGATED',
-                integration_config: u.integration_config || {
-                  mode: u.integration_mode || 'AGREGATED',
-                  custom_credentials: {}
-                },
-                custom_credentials: u.integration_config?.custom_credentials || {},
-                api_credits_balance: u.settings?.api_credits_balance ?? 5000,
-                api_pricing_config: u.settings?.api_pricing_config || {
-                  cost_per_request_xof: 0.02,
-                  api_credits_balance: 5000,
-                  low_balance_threshold: 500
-                },
-                monthly_usage: u.settings?.monthly_usage || {
-                  month: new Date().toISOString().slice(0, 7),
-                  volume_xof: 0,
-                  transaction_count: 0
-                },
-                kyc_limits: {
-                  tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
-                  max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
-                  description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
-                },
-                kyc: u.kyc_data || {}
-              }));
+            if (!error && isMounted) {
+              if (supaUniverses && supaUniverses.length > 0) {
+                const loaded: NanaMerchantApp[] = supaUniverses.map((u: any) => ({
+                  id: u.id,
+                  name: u.name,
+                  sector: u.appellation || u.sector || 'E-commerce & Services',
+                  type: u.type || 'entreprise',
+                  status: u.status === 'ACTIVE' || u.status === 'VERIFIED' ? 'VERIFIED' : (u.status || 'PENDING_KYC'),
+                  createdAt: u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+                  balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+                  keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
+                  webhook_config: u.webhook_config,
+                  integration_mode: u.integration_mode || 'AGREGATED',
+                  integration_config: u.integration_config || {
+                    mode: u.integration_mode || 'AGREGATED',
+                    custom_credentials: {}
+                  },
+                  custom_credentials: u.integration_config?.custom_credentials || {},
+                  api_credits_balance: u.settings?.api_credits_balance ?? 5000,
+                  api_pricing_config: u.settings?.api_pricing_config || {
+                    cost_per_request_xof: 0.02,
+                    api_credits_balance: 5000,
+                    low_balance_threshold: 500
+                  },
+                  monthly_usage: u.settings?.monthly_usage || {
+                    month: new Date().toISOString().slice(0, 7),
+                    volume_xof: 0,
+                    transaction_count: 0
+                  },
+                  kyc_limits: {
+                    tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
+                    max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
+                    description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
+                  },
+                  kyc: u.kyc_data || {}
+                }));
 
-              // Fusion avec le cache local pour ne jamais perdre un univers fraîchement soumis
-              const localCached = getStoredUniverses();
-              const mergedMap = new Map<string, NanaMerchantApp>();
-              localCached.forEach(a => mergedMap.set(a.id, a));
-              loaded.forEach(a => mergedMap.set(a.id, a));
-              const allApps = Array.from(mergedMap.values());
-              setApps(allApps);
-              try {
-                localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(allApps));
-              } catch (_) {}
-              return;
+                setApps(loaded);
+                try {
+                  localStorage.setItem(userStorageKey, JSON.stringify(loaded));
+                } catch (_) {}
+                return;
+              } else {
+                // Aucun univers Supabase pour ce compte : vérifier le cache partitionné propre
+                try {
+                  const cachedRaw = localStorage.getItem(userStorageKey);
+                  if (cachedRaw) {
+                    const parsed = JSON.parse(cachedRaw);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                      setApps(parsed);
+                      return;
+                    }
+                  }
+                } catch {}
+                setApps([]);
+                return;
+              }
             }
           } catch (supaErr) {
             console.warn('[NANASWITCH] Supabase universes fetch:', supaErr);
           }
         }
 
-        // Si Supabase est hors ligne ou vide, utiliser les univers du cache local
-        const localCached = getStoredUniverses();
-        if (localCached.length > 0 && isMounted) {
-          setApps(localCached);
-        }
+        // Si Supabase est indisponible, utiliser le cache partitionné de cet utilisateur uniquement
+        try {
+          const userCache = localStorage.getItem(userStorageKey);
+          if (userCache && isMounted) {
+            const parsed = JSON.parse(userCache);
+            if (Array.isArray(parsed)) {
+              setApps(parsed);
+              return;
+            }
+          }
+        } catch {}
+
+        if (isMounted) setApps([]);
       } catch (err) {
         console.warn('[NANASWITCH APP] Synchronisation silencieuse :', (err as Error).message);
       } finally {
@@ -579,9 +624,13 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
     const updatedApps = [newApp, ...apps.filter(a => a.id !== newApp.id)];
     setApps(updatedApps);
-    try {
-      localStorage.setItem(STORAGE_KEY_UNIVERSES, JSON.stringify(updatedApps));
-    } catch (_) {}
+    const targetUid = currentUser?.id || currentUser?.uid;
+    if (targetUid && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(getUserStorageKey(targetUid), JSON.stringify(updatedApps));
+        localStorage.setItem('nana_current_app_id', newApp.id);
+      } catch (_) {}
+    }
     setSelectedApp(newApp);
     setIsKycModalOpen(false);
     showToast(
@@ -603,7 +652,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
 
         await supabase.from('universes').insert({
           id: newId,
-          ...(currentUser?.id ? { user_id: currentUser.id } : {}),
+          user_id: targetUid || newId,
           name: appDisplayName,
           slug: uniqueSlug,
           appellation: sectorChosen,

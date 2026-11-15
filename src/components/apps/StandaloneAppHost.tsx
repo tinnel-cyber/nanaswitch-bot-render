@@ -371,6 +371,7 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                   <NanaSwitchApp
                     slug={id}
                     embedded={true}
+                    currentUser={currentUser}
                     onBack={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>

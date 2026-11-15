@@ -623,6 +623,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
       // 1. Sauvegarde locale immédiate prioritaire (garantie 100% de fluidité sans blocage réseau)
       try {
+        localStorage.removeItem('nana_merchant_universes');
+        localStorage.removeItem('nana_current_app_id');
         localStorage.setItem('nana_store_auth_user', JSON.stringify(finalStoreUser));
         localStorage.setItem(`nana_user_profile_${uid}`, JSON.stringify(finalStoreUser));
         localStorage.setItem('nana_user_master_pin', masterPinHashed);
