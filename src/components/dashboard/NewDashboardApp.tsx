@@ -931,12 +931,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 tracking-tight text-lg">NanaSwitch</span>
-                <span className="bg-blue-50 text-[#1E40AF] text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border border-blue-200">
-                  {slug ? slug.toUpperCase() : 'CLOUD'}
-                </span>
+                <span className="font-extrabold text-slate-900 tracking-tight text-lg">Dashboard page</span>
               </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">NANASORE TECHNOLOGIES</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">NANASORE</p>
             </div>
           </div>
 
@@ -1258,7 +1255,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-blue-50 text-[#1E40AF] px-3.5 py-1.5 rounded-full text-xs font-bold mb-4 border border-blue-200">
                 <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>Espace Marchand NanaSwitch ({slug})</span>
+                <span>Dashboard page</span>
               </div>
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
                 Bonjour {merchantDisplayName || 'Marchand'}, bienvenue sur votre Dashboard 👋
@@ -1891,7 +1888,7 @@ function TabCheckoutSessions() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Sessions Checkout Hébergées</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Gérez les sessions d'achat intégrées via l'API NanaSwitch Checkout.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Gérez les sessions d'achat intégrées via l'API Checkout.</p>
       </div>
 
       <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm text-center max-w-xl mx-auto space-y-4">
@@ -2374,7 +2371,7 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono font-black text-sm tracking-wider text-slate-200">NANASWITCH / XOF</span>
+                <span className="font-mono font-black text-sm tracking-wider text-slate-200">NANASORE / XOF</span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-blue-950 text-blue-400 border border-blue-800/60 uppercase">
                   Revenus Cumulés
                 </span>
@@ -2664,7 +2661,7 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
               </h2>
             </div>
             <p className="text-xs text-slate-400 font-medium mt-1">
-              Bougies minces représentant les 27 applications NanaSwitch. La couleur reflète le comportement et la souscription active de l'utilisateur.
+              Bougies minces représentant les 27 modules et services de l'écosystème. La couleur reflète le comportement et la souscription active de l'utilisateur.
             </p>
           </div>
 
@@ -3156,7 +3153,7 @@ function TabPricing() {
                 <th className="py-3 px-2">Pays & Zone</th>
                 <th className="py-3 px-2">Opérateur Mobile</th>
                 <th className="py-3 px-2">Coût Opérateur</th>
-                <th className="py-3 px-2">Marge NanaSwitch</th>
+                <th className="py-3 px-2">Marge Nanasore</th>
                 <th className="py-3 px-2">Taux Total Appliqué</th>
                 <th className="py-3 px-2">Minimum / Tx</th>
               </tr>
@@ -3186,7 +3183,7 @@ function TabSupport({ showToast }: { showToast: (m: string) => void }) {
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Support Technique & Assistance</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Assistance 24/7 dédiée aux partenaires NanaSwitch.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Assistance 24/7 dédiée aux marchands et partenaires.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-3">
