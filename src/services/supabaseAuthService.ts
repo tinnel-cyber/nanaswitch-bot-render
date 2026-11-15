@@ -166,14 +166,48 @@ export async function registerWithEmail(
   });
 
   if (error) {
-    console.error('[SUPABASE AUTH] Erreur inscription :', error.message);
-    let msg = error.message;
-    if (msg.includes('User already registered') || msg.includes('already registered')) {
-      msg = 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.';
-    } else if (msg.includes('Error sending confirmation email')) {
-      msg = "Supabase n'a pas pu envoyer l'e-mail de confirmation via votre relais SMTP (rejet Brevo). Dans votre console Supabase (Auth > Providers > Email), désactivez 'Confirm email' pour valider les inscriptions immédiatement sans blocage.";
+    console.warn('[SUPABASE AUTH] Inscription via GoTrue client notice :', error.message);
+    if (error.message.includes('User already registered') || error.message.includes('already registered')) {
+      throw new Error('Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.');
     }
-    throw new Error(msg);
+
+    // Basculement direct et transparent vers Brevo pour délivrer l'e-mail de confirmation
+    try {
+      const serverRes = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+          fullName: resolvedName,
+          name: resolvedName,
+          sellerMode
+        })
+      });
+      const serverData = await serverRes.json();
+      if (serverData.success) {
+        return {
+          id: serverData.userId || 'usr_' + Date.now(),
+          uid: serverData.userId || 'usr_' + Date.now(),
+          email: cleanEmail,
+          displayName: resolvedName,
+          name: resolvedName,
+          fullName: resolvedName,
+          emailVerified: false,
+          providerData: [{ providerId: 'password' }],
+          role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+          sellerMode
+        };
+      } else if (serverData.error) {
+        throw new Error(serverData.error);
+      }
+    } catch (fallbackErr: any) {
+      if (fallbackErr?.message && !fallbackErr.message.includes('fetch')) {
+        throw fallbackErr;
+      }
+    }
+
+    throw new Error("Impossible d'envoyer l'e-mail de confirmation. Veuillez vérifier votre adresse e-mail ou réessayer.");
   }
 
   const u = data.user;

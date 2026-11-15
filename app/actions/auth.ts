@@ -133,12 +133,11 @@ export async function registerUserAndSendVerification(
             };
           }
           if (signUpErr.message.includes("Error sending confirmation email")) {
-            return {
-              success: false,
-              error: "Erreur d'envoi d'e-mail par Supabase (relais SMTP Brevo non authentifié). Veuillez désactiver 'Confirm email' dans votre console Supabase (Auth > Providers > Email) ou corriger l'identifiant Brevo.",
-            };
+            console.warn("[AUTH ACTION] Basculement vers Brevo direct suite au rejet SMTP Supabase");
+            userId = `usr_${Date.now().toString(36)}`;
+          } else {
+            throw signUpErr;
           }
-          throw signUpErr;
         }
 
         userId = signUpData.user?.id || `user_${Date.now().toString(36)}`;

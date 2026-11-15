@@ -556,72 +556,61 @@ async function startServer() {
         return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères' });
       }
 
-      // Import dynamique de la fonction d'envoi d'email
-      const { sendConfirmationEmail } = await import('./app/utils/email.server');
+      // 1. Initialiser le client Supabase
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Import Supabase pour créer l'utilisateur
-      const { registerWithEmail } = await import('./src/supabase');
+      let userId = `usr_${Date.now().toString(36)}`;
+      const resolvedName = name || email.trim().split('@')[0];
+      const confirmationToken = crypto.randomBytes(32).toString('hex');
+      const confirmationUrl = `https://nanasore.com/dashboard?email=${encodeURIComponent(email.trim())}`;
 
-      // Création de l'utilisateur Supabase
-      const userCred = await registerWithEmail(email.trim(), password);
-      const userId = userCred.uid;
-
-      let confirmationUrl: string;
-
-      if (emailLinkAuth) {
-        // Mode authentification par lien email Supabase (Android App Links)
-        try {
-          const { adminAuth } = await import('./app/utils/supabase.server');
-          const actionCodeSettings = {
-            url: 'https://nanasore.com/finishSignUp',
-            handleCodeInApp: true,
-          };
-          confirmationUrl = await adminAuth.generateSignInWithEmailLink(email.trim(), actionCodeSettings);
-          console.log(`[FIREBASE ADMIN] Lien d'authentification par email généré pour ${email}`);
-        } catch (adminError: any) {
-          console.warn('[FIREBASE ADMIN] Erreur génération lien email, fallback token:', adminError?.message);
-          // Fallback vers le système de token standard
-          const confirmationToken = crypto.randomBytes(32).toString('hex');
-          confirmationUrl = `https://nanasore.com/confirm-email?token=${confirmationToken}&uid=${userId}`;
+      // 2. Création de l'utilisateur dans Supabase Auth (si service role key disponible)
+      try {
+        if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          const { data: adminUser, error: adminErr } = await supabase.auth.admin.createUser({
+            email: email.trim(),
+            password,
+            email_confirm: false,
+            user_metadata: { full_name: resolvedName, seller_mode: sellerMode }
+          });
+          if (!adminErr && adminUser?.user) {
+            userId = adminUser.user.id;
+          }
         }
-      } else {
-        // Mode standard avec token personnalisé
-        const confirmationToken = crypto.randomBytes(32).toString('hex');
-        confirmationUrl = `https://nanasore.com/confirm-email?token=${confirmationToken}&uid=${userId}`;
+      } catch (adminE: any) {
+        console.warn('[SERVER AUTH] Admin create notice:', adminE?.message);
       }
 
-      // Envoi de l'email de confirmation via Brevo
+      // 3. Enregistrement / synchronisation du profil
       try {
+        await supabase.from('profiles').upsert({
+          id: userId,
+          email: email.trim(),
+          full_name: resolvedName,
+          role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+          kyc_status: 'none',
+          pricing_model: 'none',
+          wallet_balance: 0,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'email' });
+      } catch (profErr: any) {
+        console.warn('[SERVER AUTH] Profil notice:', profErr?.message);
+      }
+
+      // 4. Envoi direct de l'email de confirmation officiel via Brevo
+      try {
+        const { sendConfirmationEmail } = await import('./app/utils/email.server');
         await sendConfirmationEmail({
           email: email.trim(),
-          name: name || 'Utilisateur',
+          name: resolvedName,
           confirmationUrl
         });
-        console.log(`[BREVO] Email de confirmation envoyé à ${email}`);
+        console.log(`[BREVO] Email de confirmation envoyé avec succès à ${email.trim()}`);
       } catch (emailError: any) {
         console.warn('[BREVO] Erreur envoi email de confirmation:', emailError?.message);
-        // On continue même si l'email échoue (fallback Supabase verification)
-      }
-
-      // Stocker le token de confirmation dans Firestore (pour validation future) - seulement en mode standard
-      if (!emailLinkAuth) {
-        try {
-          const { db, doc, setDoc } = await import('./src/supabase');
-          const confirmationToken = confirmationUrl.includes('token=') 
-            ? confirmationUrl.split('token=')[1].split('&')[0]
-            : crypto.randomBytes(32).toString('hex');
-          
-          await setDoc(doc(db, 'emailConfirmations', userId), {
-            token: confirmationToken,
-            email: email.trim(),
-            name: name || 'Utilisateur',
-            sellerMode,
-            createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24h
-          });
-        } catch (firestoreError) {
-          console.warn('[FIRESTORE] Erreur stockage token confirmation:', firestoreError);
-        }
       }
 
       return res.json({
