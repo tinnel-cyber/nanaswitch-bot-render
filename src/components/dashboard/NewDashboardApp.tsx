@@ -263,13 +263,28 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
   const merchantDisplayName = useMemo(() => {
     if (!currentUser) return '';
-    return (
+    // 1. Nom officiel issu des métadonnées du compte
+    const directName =
       currentUser.user_metadata?.full_name ||
       currentUser.user_metadata?.name ||
+      currentUser.fullName ||
       currentUser.displayName ||
-      (currentUser.email ? currentUser.email.split('@')[0] : '')
-    );
-  }, [currentUser]);
+      currentUser.name;
+    if (directName && directName.trim()) return directName.trim();
+
+    // 2. Nom officiel issu des univers ou KYC déjà renseignés
+    const appWithKyc = apps?.find(a => a?.kyc?.fullName || a?.kyc?.managerName);
+    if (appWithKyc?.kyc?.fullName || appWithKyc?.kyc?.managerName) {
+      return (appWithKyc.kyc.fullName || appWithKyc.kyc.managerName).trim();
+    }
+
+    // 3. Repli élégant sur le préfixe de l'email avec majuscule
+    if (currentUser.email) {
+      const rawPrefix = currentUser.email.split('@')[0];
+      return rawPrefix.charAt(0).toUpperCase() + rawPrefix.slice(1);
+    }
+    return 'Marchand';
+  }, [currentUser, apps]);
 
   /* Auto-open KYC Modal on create URL param */
   useEffect(() => {
