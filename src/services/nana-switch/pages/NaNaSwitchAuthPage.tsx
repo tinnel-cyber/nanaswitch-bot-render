@@ -39,13 +39,8 @@ import {
 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, signInWithGoogle } from '../../../services/supabaseAuthService';
 import { supabase } from '../../../lib/supabase';
-import { auth, db } from '../../../firebase';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signInWithPopup,
-  User as SupabaseUser
-} from 'firebase/auth';
+import { auth, db, SafeAuthUser } from '../../../firebase';
+type SupabaseUser = SafeAuthUser;
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { hashPin } from '../../../utils/nanaSwitchPinCrypto';

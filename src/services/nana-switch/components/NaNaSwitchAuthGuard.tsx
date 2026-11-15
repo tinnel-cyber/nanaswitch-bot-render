@@ -14,14 +14,14 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { auth, db } from '../../../firebase';
-import { onAuthStateChanged, signOut as firebaseSignOut, User as SupabaseUser } from 'firebase/auth';
+import { auth, db, SafeAuthUser } from '../../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { Zap, ShieldCheck, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { playTapBeep } from '../../../utils/audio';
 import { NaNaSwitchLogo } from './NaNaSwitchLogo';
 
-export type FirebaseUser = SupabaseAuthUser;
+export type SupabaseUser = SafeAuthUser;
+export type FirebaseUser = SafeAuthUser;
 
 export interface SwitchAccountData {
   uid: string;
@@ -61,7 +61,7 @@ export const useSwitchAccount = (): SwitchAccountContextValue => {
       refreshSwitchAccount: async () => {},
       signOutSwitch: async () => {
         try {
-          await firebaseSignOut(auth);
+          await auth.signOut();
         } catch (e) {
           console.warn(e);
         }
@@ -122,7 +122,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   const signOutSwitch = useCallback(async () => {
     playTapBeep();
     try {
-      await firebaseSignOut(auth);
+      await auth.signOut();
       setSupabaseUser(null);
       setSwitchAccount(null);
       if (typeof window !== 'undefined') {
@@ -140,7 +140,7 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
 
   // Surveillance Supabase Auth & Validation du document switch_accounts/{uid}
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = auth.onAuthStateChanged(async (user: any) => {
       setSupabaseUser(user);
       if (!user) {
         setSwitchAccount(null);
