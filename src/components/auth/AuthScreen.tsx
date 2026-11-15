@@ -195,13 +195,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     playTapBeep();
 
     try {
-      let resolvedEmail = isTeacher ? "formateur@google.nanasore.ci" : "commercant@google.nanasore.ci";
-      let resolvedName = isTeacher ? "Prof. Ibrahim Konkobo" : "Commerçant Nanasore";
-
       const userCred = await signInWithGoogle();
+      let resolvedEmail = userCred?.email || "";
+      let resolvedName = userCred?.displayName || (isTeacher ? "Formateur" : "Commerçant");
+
       if (userCred) {
-        if (userCred.email) resolvedEmail = userCred.email;
-        if (userCred.displayName) resolvedName = userCred.displayName;
         if (userCred.id) {
           try {
             await supabase.from('profiles').upsert({
@@ -574,7 +572,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={isTeacher ? "formateur@moncampus.com" : "contact@maboutique.ci"}
+                  placeholder={isTeacher ? "formateur@moncampus.com" : "contact@maboutique.com"}
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition text-sm shadow-sm"
                 />
               </div>

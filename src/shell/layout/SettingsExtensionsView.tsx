@@ -356,40 +356,26 @@ export const SettingsExtensionsView: React.FC<SettingsExtensionsViewProps> = ({
     setIsSendingCampaign(true);
 
     let recipients: EmailRecipient[] = [];
-    if (campaignTargetAudience === 'ALL_CUSTOMERS') {
-      recipients = customers.length > 0 
-        ? customers.map(c => ({ email: `${c.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@client-nana.com`, name: c.name }))
-        : [
-            { email: 'amadou.diallo@gmail.com', name: 'Amadou Diallo' },
-            { email: 'fatou.kone@yahoo.fr', name: 'Fatoumata Koné' },
-            { email: 'ibrahim.oued@sahel.bf', name: 'Ibrahim Ouédraogo' },
-            { email: 'mariam.bamba@orange.ci', name: 'Mariam Bamba' }
-          ];
-    } else if (campaignTargetAudience === 'DEBT_CUSTOMERS') {
-      const debtCust = customers.filter(c => c.totalDebt && c.totalDebt > 0);
-      recipients = debtCust.length > 0
-        ? debtCust.map(c => ({ email: `${c.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@client-nana.com`, name: c.name }))
-        : [
-            { email: 'moussa.kone@gmail.com', name: 'Moussa Koné' },
-            { email: 'adama.traore@yahoo.fr', name: 'Adama Traoré' }
-          ];
-    } else if (campaignTargetAudience === 'VIP_CUSTOMERS') {
-      recipients = (customers.slice(0, 5)).map(c => ({
-        email: `${c.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@client-nana.com`,
-        name: c.name
-      }));
-      if (recipients.length === 0) {
-        recipients = [
-          { email: 'vip.client1@nana.com', name: 'Client VIP 1' },
-          { email: 'vip.client2@nana.com', name: 'Client VIP 2' }
-        ];
-      }
-    } else {
+    if (campaignTargetAudience === 'CUSTOM_LIST') {
       const rawList = campaignCustomEmails.split(',').map(e => e.trim()).filter(e => e.includes('@'));
       recipients = rawList.map(e => ({ email: e, name: e.split('@')[0] }));
-      if (recipients.length === 0) {
-        recipients = [{ email: 'client.direct@gmail.com', name: 'Client Direct' }];
+    } else {
+      // Filtrer uniquement les clients ayant renseigné une adresse e-mail réelle et valide
+      const validCustomers = customers.filter(c => (c as any).email && typeof (c as any).email === 'string' && (c as any).email.includes('@'));
+      if (campaignTargetAudience === 'DEBT_CUSTOMERS') {
+        const debtCust = validCustomers.filter(c => c.totalDebt && c.totalDebt > 0);
+        recipients = debtCust.map(c => ({ email: (c as any).email, name: c.name }));
+      } else if (campaignTargetAudience === 'VIP_CUSTOMERS') {
+        recipients = validCustomers.slice(0, 10).map(c => ({ email: (c as any).email, name: c.name }));
+      } else {
+        recipients = validCustomers.map(c => ({ email: (c as any).email, name: c.name }));
       }
+    }
+
+    if (recipients.length === 0) {
+      alert("Aucune adresse e-mail valide trouvée pour cette audience. Veuillez renseigner des e-mails réels dans l'option 'Liste personnalisée'.");
+      setIsSendingCampaign(false);
+      return;
     }
 
     const { campaign, result } = await launchBrevoCampaign({

@@ -60,7 +60,7 @@ export const MOCK_STUDENT_ROSTER: StudentRosterItem[] = [
   {
     studentId: 'std-4',
     studentName: 'Fatoumata Diallo',
-    studentEmail: 'fatou.boutique@abidjan-commerce.ci',
+    studentEmail: 'fatou.boutique@abidjan-commerce.com',
     studentAvatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
     enrolledAt: Date.now() - 1000 * 60 * 60 * 24 * 3,
     progressPercentage: 45,
@@ -171,7 +171,7 @@ export const MOCK_ASSIGNMENT_SUBMISSIONS: AssignmentSubmission[] = [
     assignmentTitle: 'Script de Vente en Direct & Tunnel WhatsApp 1-Clic',
     studentId: 'std-4',
     studentName: 'Fatoumata Diallo',
-    studentEmail: 'fatou.boutique@abidjan-commerce.ci',
+    studentEmail: 'fatou.boutique@abidjan-commerce.com',
     studentAvatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
     courseId: 'telecom-fintech-masterclass',
     courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce UEMOA',

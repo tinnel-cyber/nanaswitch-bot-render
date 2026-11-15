@@ -184,7 +184,7 @@ const INITIAL_CRM_USERS: CrmUserRecord[] = [
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
     companyName: 'Ivoire Agro Hub',
     country: { code: 'CI', name: 'Côte d’Ivoire', flag: '🇨🇮' },
-    email: 'f.bamba@ivoireagro.ci',
+    email: 'f.bamba@ivoireagro.com',
     phone: '+225 07 89 45 12',
     isWhatsAppVerified: true,
     subscribedModules: ['Espace Étudiants', 'Live/Webinaires', 'Signature Authentifiée', 'Connecteurs (WooCommerce, Brevo, Twilio, WhatsApp)'],
@@ -365,7 +365,7 @@ const INITIAL_AUTOMATION_LOGS: AutomationLogItem[] = [
     connector: 'Brevo Marketing',
     event: 'email.contract_delivered',
     status: '200_OK',
-    payloadPreview: '{ recipient: "f.bamba@ivoireagro.ci", templateId: "docu_signed_v2" }'
+    payloadPreview: '{ recipient: "f.bamba@ivoireagro.com", templateId: "docu_signed_v2" }'
   },
   {
     id: 'log-3',
