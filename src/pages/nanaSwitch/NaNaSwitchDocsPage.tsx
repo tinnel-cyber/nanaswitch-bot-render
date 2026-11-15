@@ -1,5 +1,6 @@
 /**
- * Re-export de compatibilité vers src/services/nana-switch/pages/NaNaSwitchDocsPage.tsx
+ * Documentation Publique Officielle de l'Écosystème Nanasore
+ * Re-exporte le portail documentaire souverain épuré.
  */
-export * from '../../services/nana-switch/pages/NaNaSwitchDocsPage';
-export { default } from '../../services/nana-switch/pages/NaNaSwitchDocsPage';
+export * from '../docs/EcosystemDocsPage';
+export { default } from '../docs/EcosystemDocsPage';
