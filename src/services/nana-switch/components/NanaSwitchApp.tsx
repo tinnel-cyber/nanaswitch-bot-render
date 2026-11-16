@@ -22,7 +22,8 @@ import {
   ExternalLink, FileText, ChevronRight, LogOut, RefreshCw, Filter, Download,
   Send, ShieldAlert, BookOpen, Layers, Lock, Sparkles, AlertCircle, Upload, FileCheck, ArrowLeft,
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
-  TrendingUp, Activity, DollarSign, Zap, Maximize2, Info
+  TrendingUp, Activity, DollarSign, Zap, Maximize2, Info,
+  LayoutGrid, Blocks
 } from 'lucide-react';
 import { DeveloperTab } from '../../../components/dashboard/DeveloperTab';
 import { KycVolumeLimitCard } from '../../../components/dashboard/KycVolumeLimitCard';
@@ -1088,11 +1089,11 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
                   { id: 'wallet', label: 'Wallet & Solde', icon: Wallet },
                   { id: 'transactions', label: 'Transactions', icon: CreditCard },
                   { id: 'links', label: 'Liens de paiement', icon: Link2 },
-                  { id: 'checkout', label: 'Sessions Checkout', icon: ShoppingCart },
+                  { id: 'checkout', label: 'Services et Applications', icon: LayoutGrid },
                   { id: 'customers', label: 'Base Clients', icon: Users },
                   { id: 'analytics', label: 'Statistiques & Ventes', icon: BarChart3 },
                   { id: 'payouts', label: 'Retraits & Reversements', icon: ArrowUpRight },
-                  { id: 'developer', label: 'Clés API & Accès', icon: Key },
+                  { id: 'developer', label: 'Intégrations', icon: Blocks },
                   { id: 'webhooks', label: 'Configuration Webhooks', icon: Radio },
                   { id: 'webhook_logs', label: 'Journal des Webhooks', icon: History },
                   { id: 'disputes', label: 'Litiges & Remboursements', icon: AlertTriangle },
@@ -1537,42 +1538,8 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
           )}
         </div>
 
-        {/* Right Column: Quick API Credentials & Gateway Status */}
+        {/* Right Column: Gateway Status */}
         <div className="space-y-6">
-          
-          {/* API Keys Card */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Key className="w-4 h-4 text-[#1E40AF]" />
-                <span>Clés API Live</span>
-              </h3>
-              <button onClick={() => setActiveTab('developer')} className="text-xs text-[#1E40AF] font-bold hover:underline">Gérer</button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Clé Publique</label>
-                <div className="flex items-center gap-2 mt-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <code className="text-slate-800 font-mono text-[11px] truncate flex-1">{app.keys?.pk || 'ns_live_pk_...'}</code>
-                  <button onClick={() => copyToClipboard(app.keys?.pk, 'Clé Publique')} className="text-slate-400 hover:text-slate-700">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Secret Webhook</label>
-                <div className="flex items-center gap-2 mt-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                  <code className="text-slate-800 font-mono text-[11px] truncate flex-1">{app.keys?.whSecret || 'ns_whsec_...'}</code>
-                  <button onClick={() => copyToClipboard(app.keys?.whSecret, 'Secret Webhook')} className="text-slate-400 hover:text-slate-700">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Active Gateways Status */}
           <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden space-y-4 border border-slate-800">
             <div className="flex items-center justify-between">
@@ -1580,14 +1547,13 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-blue-200">Routage Actif UEMOA</p>
-              <h4 className="text-xl font-bold mt-0.5">SasPay & Sebpay Dual Engine</h4>
+              <p className="text-sm font-semibold text-blue-200">Routage Intelligent Multi-Pays</p>
+              <h4 className="text-xl font-bold mt-0.5">Routeur Dynamique Nanasore Engine</h4>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Basculement automatique sans interruption en cas de maintenance Orange Money ou Moov Africa.
+              Basculement automatique intelligent sans interruption pour tous les opérateurs et paiements internationaux.
             </p>
           </div>
-
         </div>
 
       </div>

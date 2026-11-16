@@ -219,7 +219,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
             <KeyRound className="w-7 h-7 text-[#1E40AF]" />
-            Développeur & Clés API
+            Intégrations & Développeur
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
             Gérez votre mode d'intégration, vos clés d'authentification Zero-Trust et vos passerelles directes.
@@ -302,7 +302,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
               )}
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-              Routeur direct avec vos propres clés SasPay & Sebpay. Marge commission : 0%. Débit : 0,02 XOF / requête.
+              Routeur direct avec le Routeur Dynamique Nanasore Engine. Marge commission : 0%. Débit : 0,02 XOF / requête.
             </p>
           </div>
         </button>
@@ -466,7 +466,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
               <div className="text-xs text-slate-600 space-y-1">
                 <p className="font-bold text-slate-900">Routage Direct et Indépendance Bancaire</p>
                 <p className="leading-relaxed">
-                  Vos transactions transitent directement par vos propres comptes SasPay/Sebpay sans commission de switch. Facturation à l'usage : 0,02 XOF par transaction (décompté de votre solde de crédits).
+                  Vos transactions transitent directement par le Routeur Dynamique Nanasore Engine sans commission de switch. Facturation à l'usage : 0,02 XOF par transaction (décompté de votre solde de crédits).
                 </p>
               </div>
             </div>
@@ -477,13 +477,13 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
               <div className="border-t border-slate-100 pt-5">
                 <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mb-4">
                   <Server className="w-4 h-4 text-amber-600" />
-                  1. Passerelle SasPay (Orange BF, Moov BF, Wave)
+                  1. Routeur Dynamique Nanasore Engine - Passerelle Principale (Mobile Money BF, Wave, etc.)
                 </h4>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700">
-                      SasPay API Key (Clé Maîtresse)
+                      Clé d'API Passerelle Principale (Live Key)
                     </label>
                     <button
                       type="button"
@@ -498,11 +498,11 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                     type={showSaspayKey ? 'text' : 'password'}
                     value={saspayApiKey}
                     onChange={(e) => setSaspayApiKey(e.target.value)}
-                    placeholder="sas_live_xxxxxxxxxxxxxxxxxxxxxxxx"
+                    placeholder="live_key_xxxxxxxxxxxxxxxxxxxxxxxx"
                     className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Générée depuis votre console SasPay Dashboard. Les espaces superflus sont automatiquement nettoyés.
+                    Générée depuis votre console de routage. Les espaces superflus sont automatiquement nettoyés.
                   </p>
                 </div>
               </div>
@@ -510,7 +510,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
               <div className="border-t border-slate-100 pt-5">
                 <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 mb-4">
                   <Server className="w-4 h-4 text-purple-600" />
-                  2. Passerelle Sebpay (LigdiCash, Bénin, Côte d'Ivoire, Hosted Checkout)
+                  2. Routeur Dynamique Nanasore Engine - Passerelle Secondaire (Zone UEMOA & Hosted Checkout)
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -551,7 +551,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Requis pour l'initialisation des Hosted Sessions Checkout Sebpay et l'API v1 Collections.
+                  Requis pour l'initialisation des Hosted Sessions Checkout et l'API v1 Collections du Routeur Dynamique Nanasore Engine.
                 </p>
               </div>
 
