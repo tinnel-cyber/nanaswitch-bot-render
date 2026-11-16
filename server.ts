@@ -546,6 +546,7 @@ async function startServer() {
   // ─── KYC & Nouveaux Comptes / Univers Marchands ──────────────────────────────
   const KYC_DATA_DIR = path.join(process.cwd(), 'data');
   const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
+  const UNIVERSES_DATA_FILE = path.join(KYC_DATA_DIR, 'universes.json');
 
   function getStoredKycSubmissions(): any[] {
     try {
@@ -567,6 +568,45 @@ async function startServer() {
       fs.writeFileSync(KYC_DATA_FILE, JSON.stringify(subs, null, 2), 'utf-8');
     } catch (e) {
       console.warn('[SERVER KYC] Erreur écriture fichier kyc_submissions.json:', e);
+    }
+  }
+
+  function getStoredUniverses(): any[] {
+    try {
+      if (fs.existsSync(UNIVERSES_DATA_FILE)) {
+        const raw = fs.readFileSync(UNIVERSES_DATA_FILE, 'utf-8');
+        const parsed = JSON.parse(raw) || [];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('[SERVER UNIVERSES] Erreur lecture universes.json:', e);
+    }
+    // Si universes.json est vide, reconstruire à partir des soumissions KYC existantes
+    const kycSubs = getStoredKycSubmissions();
+    if (kycSubs.length > 0) {
+      return kycSubs.map(s => ({
+        id: s.storeId || s.id,
+        name: s.storeName || s.companyName || s.fullName || 'Univers Marchand',
+        sector: s.activityDomain || s.sector || 'E-commerce & Vente',
+        type: s.type || s.accountType || 'entreprise',
+        status: s.status === 'verified' || s.status === 'approved' ? 'VERIFIED' : 'PENDING_KYC',
+        userId: s.userId,
+        createdAt: s.submittedAt ? String(s.submittedAt).slice(0, 10) : new Date().toISOString().slice(0, 10),
+        balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+        kyc: s
+      }));
+    }
+    return [];
+  }
+
+  function saveStoredUniverses(univs: any[]): void {
+    try {
+      if (!fs.existsSync(KYC_DATA_DIR)) {
+        fs.mkdirSync(KYC_DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(UNIVERSES_DATA_FILE, JSON.stringify(univs, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[SERVER UNIVERSES] Erreur écriture universes.json:', e);
     }
   }
 
@@ -665,6 +705,71 @@ async function startServer() {
     }
   });
 
+  // 2.bis Gestion des Univers Marchands (Persistance permanente des cartes univers)
+  app.get('/api/universes', async (req, res) => {
+    try {
+      const { userId, storeId, userEmail } = req.query || {};
+      let univs = getStoredUniverses();
+      if (storeId) {
+        univs = univs.filter(u => u.id === storeId || u.storeId === storeId);
+      } else if (userId || userEmail) {
+        const filtered = univs.filter(u => {
+          if (userId && (u.userId === userId || u.user_id === userId || u.id === userId || u.tenant_id === userId)) return true;
+          if (userEmail && (
+            u.email === userEmail ||
+            u.userEmail === userEmail ||
+            u.kyc?.userEmail === userEmail ||
+            u.kyc?.companyEmail === userEmail ||
+            u.kyc?.email === userEmail
+          )) return true;
+          return false;
+        });
+        if (filtered.length > 0) {
+          univs = filtered;
+        }
+      }
+      return res.json({ success: true, universes: univs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message, universes: [] });
+    }
+  });
+
+  app.post('/api/universes', async (req, res) => {
+    try {
+      const universe = req.body || {};
+      if (!universe.id) {
+        return res.status(400).json({ success: false, error: 'Identifiant d\'univers manquant' });
+      }
+
+      const existing = getStoredUniverses();
+      const updated = [universe, ...existing.filter((u: any) => u.id !== universe.id)];
+      saveStoredUniverses(updated);
+
+      // Enregistrement miroir dans Supabase table app_registry (toujours disponible et permissive)
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          await supabase.from('app_registry').upsert({
+            key: `universe_${universe.id}`,
+            name: universe.name || 'Univers Marchand',
+            category: 'Univers Marchand',
+            tenant_id: universe.userId || universe.id,
+            config_json: universe,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+        }
+      } catch (eReg) {
+        console.warn('[SERVER UNIVERSES] Supabase app_registry notice:', eReg);
+      }
+
+      console.log(`[SERVER UNIVERSES] Univers enregistré avec succès : ${universe.name} (${universe.id})`);
+      return res.json({ success: true, universe });
+    } catch (err: any) {
+      console.error('[SERVER UNIVERSES] Erreur enregistrement:', err);
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', async (req, res) => {
     try {
@@ -701,6 +806,23 @@ async function startServer() {
       }
 
       saveStoredKycSubmissions(updated);
+
+      // Mettre à jour l'univers dans universes.json
+      try {
+        const univs = getStoredUniverses();
+        const updatedUnivs = univs.map((u: any) => {
+          if (u.id === storeId || u.userId === userId || u.storeId === storeId) {
+            return {
+              ...u,
+              status: isApproved ? 'VERIFIED' : 'REJECTED'
+            };
+          }
+          return u;
+        });
+        saveStoredUniverses(updatedUnivs);
+      } catch (eUnivLocal) {
+        console.warn('[SERVER UNIVERSES] Mise à jour universes.json notice:', eUnivLocal);
+      }
 
       // Synchronisation Supabase profiles
       try {

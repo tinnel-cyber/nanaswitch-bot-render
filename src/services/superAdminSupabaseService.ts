@@ -434,6 +434,46 @@ export async function updateKycStatusInSupabase(
         .eq('email', userIdOrStoreId);
     }
 
+    // 4.bis Mettre à jour l'univers dans Supabase app_registry
+    try {
+      const { data: regItem } = await supabase
+        .from('app_registry')
+        .select('*')
+        .eq('key', `universe_${userIdOrStoreId}`)
+        .maybeSingle();
+
+      if (regItem && regItem.config_json) {
+        const updatedConf = {
+          ...regItem.config_json,
+          status: isVerified ? 'VERIFIED' : 'REJECTED'
+        };
+        await supabase
+          .from('app_registry')
+          .update({
+            config_json: updatedConf,
+            updated_at: now
+          })
+          .eq('key', `universe_${userIdOrStoreId}`);
+      }
+    } catch (regErr) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice update app_registry:', regErr);
+    }
+
+    // 4.ter Notification au serveur persistant /api/admin/kyc/validate
+    try {
+      await fetch('/api/admin/kyc/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: userIdOrStoreId,
+          userId: userIdOrStoreId,
+          action: isVerified ? 'approve' : 'reject',
+          adminEmail,
+          rejectionReason
+        })
+      });
+    } catch (_) {}
+
     // 5. Synchroniser le cache local pour les univers enregistrés localement
     if (typeof window !== 'undefined') {
       try {
