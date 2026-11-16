@@ -710,6 +710,47 @@ async function startServer() {
           const foundSub = updated.find((s: any) => s.storeId === storeId || s.id === storeId || s.userId === userId);
           const emailTarget = foundSub?.userEmail || foundSub?.businessData?.companyEmail || req.body?.userEmail || (typeof userId === 'string' && userId.includes('@') ? userId : null);
 
+          // 1. Mettre à jour public.universes
+          try {
+            const targetUnivId = storeId || userId;
+            if (targetUnivId) {
+              await supabase.from('universes').update({
+                status: isApproved ? 'VERIFIED' : 'REJECTED',
+                updated_at: new Date().toISOString()
+              }).or(`id.eq.${targetUnivId},user_id.eq.${targetUnivId}`);
+            }
+          } catch (eUniv) {
+            console.warn('[SERVER KYC] Update universes notice:', eUniv);
+          }
+
+          // 2. Mettre à jour public.account_activations
+          try {
+            const targetActId = storeId || userId;
+            if (targetActId) {
+              await supabase.from('account_activations').update({
+                status: isApproved ? 'approved' : 'rejected',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: adminEmail,
+                admin_notes: isApproved ? 'Validé par Super Admin' : (rejectionReason || 'Dossier rejeté')
+              }).or(`organization_id.eq.${targetActId},user_id.eq.${targetActId}`);
+            }
+          } catch (eAct) {
+            console.warn('[SERVER KYC] Update account_activations notice:', eAct);
+          }
+
+          // 3. Mettre à jour public.organizations
+          try {
+            if (storeId) {
+              await supabase.from('organizations').update({
+                status: isApproved ? 'ACTIVE' : 'REJECTED',
+                updated_at: new Date().toISOString()
+              }).eq('id', storeId);
+            }
+          } catch (eOrg) {
+            console.warn('[SERVER KYC] Update organizations notice:', eOrg);
+          }
+
+          // 4. Mettre à jour public.profiles
           if (userId && isUuid(userId)) {
             await supabase.from('profiles').update({
               kyc_status: isApproved ? 'full' : 'none',
@@ -731,7 +772,7 @@ async function startServer() {
               updated_at: new Date().toISOString()
             }).eq('email', emailTarget);
           }
-          console.log(`[SERVER KYC] Supabase profile mis à jour : kyc_status=${isApproved ? 'full' : 'none'}`);
+          console.log(`[SERVER KYC] Supabase profile & univers mis à jour : status=${isApproved ? 'VERIFIED' : 'REJECTED'}`);
         }
       } catch (supaErr) {
         console.warn('[SERVER KYC] Supabase profiles approve sync notice:', supaErr);

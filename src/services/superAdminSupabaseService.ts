@@ -371,7 +371,48 @@ export async function updateKycStatusInSupabase(
     const now = new Date().toISOString();
     const isUuid = (val: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
-    // 1. Mettre à jour profiles par UUID si valide
+    // 1. Mettre à jour la table public.universes (statut VERIFIED ou REJECTED)
+    try {
+      await supabase
+        .from('universes')
+        .update({
+          status: isVerified ? 'VERIFIED' : 'REJECTED',
+          updated_at: now
+        })
+        .or(`id.eq.${userIdOrStoreId},user_id.eq.${userIdOrStoreId}`);
+    } catch (univErr) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice update universes status:', univErr);
+    }
+
+    // 2. Mettre à jour la table account_activations (statut approved ou rejected)
+    try {
+      await supabase
+        .from('account_activations')
+        .update({
+          status: isVerified ? 'approved' : 'rejected',
+          reviewed_at: now,
+          reviewed_by: adminEmail,
+          admin_notes: rejectionReason || (isVerified ? 'Dossier vérifié et validé par la conformité' : 'Dossier non validé')
+        })
+        .or(`organization_id.eq.${userIdOrStoreId},user_id.eq.${userIdOrStoreId}`);
+    } catch (actErr) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice update account_activations status:', actErr);
+    }
+
+    // 3. Mettre à jour la table organizations (statut ACTIVE ou REJECTED)
+    try {
+      await supabase
+        .from('organizations')
+        .update({
+          status: isVerified ? 'ACTIVE' : 'REJECTED',
+          updated_at: now
+        })
+        .eq('id', userIdOrStoreId);
+    } catch (orgErr) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice update organizations status:', orgErr);
+    }
+
+    // 4. Mettre à jour profiles par UUID si valide
     if (isUuid(userIdOrStoreId)) {
       await supabase
         .from('profiles')
@@ -382,7 +423,7 @@ export async function updateKycStatusInSupabase(
         })
         .eq('id', userIdOrStoreId);
     } else if (userIdOrStoreId && typeof userIdOrStoreId === 'string' && userIdOrStoreId.includes('@')) {
-      // 2. Mettre à jour profiles par email si disponible
+      // Mettre à jour profiles par email si disponible
       await supabase
         .from('profiles')
         .update({
@@ -391,6 +432,31 @@ export async function updateKycStatusInSupabase(
           updated_at: now
         })
         .eq('email', userIdOrStoreId);
+    }
+
+    // 5. Synchroniser le cache local pour les univers enregistrés localement
+    if (typeof window !== 'undefined') {
+      try {
+        const localKeys = Object.keys(localStorage).filter(k => k.startsWith('nana_merchant_universes'));
+        localKeys.forEach(k => {
+          try {
+            const val = JSON.parse(localStorage.getItem(k) || '');
+            if (Array.isArray(val)) {
+              let modified = false;
+              const updatedArr = val.map((u: any) => {
+                if (u.id === userIdOrStoreId || u.userId === userIdOrStoreId || u.storeId === userIdOrStoreId) {
+                  modified = true;
+                  return { ...u, status: isVerified ? 'VERIFIED' : 'REJECTED' };
+                }
+                return u;
+              });
+              if (modified) {
+                localStorage.setItem(k, JSON.stringify(updatedArr));
+              }
+            }
+          } catch (_) {}
+        });
+      } catch (_) {}
     }
 
     return true;
