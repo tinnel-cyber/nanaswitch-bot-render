@@ -2886,7 +2886,21 @@ export default function App() {
   });
   const [globalProFeatureTab, setGlobalProFeatureTab] = useState<
     'CUSTOM_DOMAIN' | 'SOVEREIGN_GATEWAY' | 'EMPLOYEE_MANAGEMENT' | 'TRACKING_PIXELS_CRM' | 'WHITE_LABEL' | null
-  >(null);
+  >(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p === '/tracking-crm' || p === '/dashboard/tracking-crm' || p.includes('pixel')) {
+        return 'TRACKING_PIXELS_CRM';
+      }
+      if (p === '/gateway' || p === '/dashboard/gateway') {
+        return 'SOVEREIGN_GATEWAY';
+      }
+      if (p === '/employees' || p === '/dashboard/employees') {
+        return 'EMPLOYEE_MANAGEMENT';
+      }
+    }
+    return null;
+  });
   const [activeReceiptData, setActiveReceiptData] = useState<ReceiptData | null>(null);
   const [lastSaleToast, setLastSaleToast] = useState<string | null>(null);
   const [securityToast, setSecurityToast] = useState<{ message: string; type?: string } | null>(null);
@@ -2941,7 +2955,15 @@ export default function App() {
         setGlobalProFeatureTab('SOVEREIGN_GATEWAY');
         return;
       }
-      if (keyUpper === 'TRACKING_PIXELS_CRM' || keyUpper === 'TRACKING_CRM' || modId === 'pixels-crm' || modId === 'tracking-pixels') {
+      if (
+        keyUpper === 'TRACKING_PIXELS_CRM' || 
+        keyUpper === 'TRACKING_CRM' || 
+        modId === 'pixels-crm' || 
+        modId === 'tracking-pixels' ||
+        modId.includes('pixel') ||
+        rawPath.includes('tracking') ||
+        rawPath.includes('pixel')
+      ) {
         setGlobalProFeatureTab('TRACKING_PIXELS_CRM');
         return;
       }
