@@ -34,14 +34,41 @@ export interface UseActiveOmnibarAppsResult {
 }
 
 /**
- * Fusionne le catalogue officiel des 27 applications, services, modules et outils avec le dictionnaire Firebase RTDB
+ * Fusionne le catalogue officiel avec l'état d'activation
+ * EXCLUSION STRICTE : Wameet, NaNa Switch Cloud et tout module Super Admin sont retirés de l'omnibar car en construction ou réservés.
  */
 function mergeModulesWithRemoteData(
   remoteData: Record<string, any> | null | undefined
 ): ActiveOmnibarModule[] {
   const safeData = remoteData || {};
 
-  return OFFICIAL_MODULES.map((official) => {
+  const visibleModules = OFFICIAL_MODULES.filter((official) => {
+    // 1. Retirer obligatoirement Wameet
+    if (official.id === 'wameet' || official.slug === 'wameet' || official.aliases?.includes('wameet')) {
+      return false;
+    }
+    // 2. Retirer obligatoirement NaNa Switch Cloud
+    if (official.id === 'nana-switch' || official.slug === 'nana-switch' || official.name.toLowerCase().includes('switch cloud')) {
+      return false;
+    }
+    // 3. Retirer les modules en construction
+    if (official.isUnderConstruction) {
+      return false;
+    }
+    // 4. Retirer tout module contenant un lien ou rôle Super Admin
+    if (
+      official.requiredRoles?.includes('SUPER_ADMIN') ||
+      official.requiredRoles?.includes('super_admin') ||
+      official.category?.toLowerCase().includes('super admin') ||
+      official.name?.toLowerCase().includes('super admin') ||
+      official.route?.toLowerCase().includes('super-admin')
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  return visibleModules.map((official) => {
     let rawVal = safeData[official.id];
     if (rawVal === undefined && official.aliases) {
       for (const alias of official.aliases) {

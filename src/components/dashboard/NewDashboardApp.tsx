@@ -23,7 +23,8 @@ import {
   Send, ShieldAlert, BookOpen, Layers, Lock, Sparkles, AlertCircle, Upload, FileCheck, ArrowLeft,
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
   TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2,
-  LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical
+  LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical,
+  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
@@ -37,6 +38,11 @@ import {
   ModuleType
 } from '../../config/appRegistry';
 import { useActiveOmnibarApps } from '../../hooks/useActiveOmnibarApps';
+import { 
+  toggleModuleStatus, 
+  getLocalTenantModules, 
+  MODULE_TOGGLED_EVENT 
+} from '../../services/moduleActivationService';
 import { ProFeaturesModal, ProFeatureTab } from '../../shell/modals/ProFeaturesModal';
 import { db, auth } from '../../firebase';
 import { supabase } from '../../lib/supabase';
@@ -3209,90 +3215,461 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
   );
 }
 
-/* 5. TAB: SERVICES ET APPLICATIONS (MODULAIRE & VISITES) */
-function TabServicesAndApps({ app, showToast, setActiveTab }: { app?: NanaMerchantApp; showToast: (m: string, t?: any) => void; setActiveTab?: (t: string) => void }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'VISITED' | 'PAYMENT' | 'MARKETING' | 'CAMPUS' | 'TOOLS'>('ALL');
-  const [showApiSnippet, setShowApiSnippet] = useState(false);
+/* 5. TAB: SERVICES ET APPLICATIONS (MODULAIRE, SOUVERAIN & EN PRODUCTION RÉELLE) */
+interface ServiceModuleDefinition {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  route: string;
+  pricingType: 'FREE' | 'PAY_AS_GO' | 'SUBSCRIPTION';
+  pricingBadge: string;
+  icon: React.ComponentType<{ className?: string }>;
+  gradient: string;
+  isAi: boolean;
+}
 
-  // Liste des modules visités par l'utilisateur
-  const [visitedIds, setVisitedIds] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('nanasore_visited_modules');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return ['emailing', 'checkout', 'nana-wallet', 'store-builder', 'vip-lounge', 'virtual-campus'];
+const OFFICIAL_PRODUCTION_MODULES: ServiceModuleDefinition[] = [
+  // --- MODULES GRATUITS (Inclus d'office mais retirables à la volonté du marchand) ---
+  {
+    id: 'inventory',
+    name: 'Stock & Inventaire Intelligent',
+    category: 'Gestion & Stock',
+    description: 'Suivi en temps réel des quantités, alertes de rupture et valorisation marchande automatique.',
+    route: '/dashboard/inventaire',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: Boxes,
+    gradient: 'from-blue-600 to-indigo-700',
+    isAi: false
+  },
+  {
+    id: 'debts',
+    name: 'Gestion des Dettes & Ardoises',
+    category: 'Trésorerie & Crédit',
+    description: 'Carnet des ardoises clients, suivi des échéanciers et relances WhatsApp directes en un clic.',
+    route: '/dashboard/dettes',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: BookMarked,
+    gradient: 'from-amber-600 to-orange-700',
+    isAi: false
+  },
+  {
+    id: 'analytics',
+    name: 'Analytique & Courbe des Gains',
+    category: 'Statistiques & Performance',
+    description: 'Graphiques d\'évolution du chiffre d\'affaires, marges bénéficiaires et produits phares.',
+    route: '/dashboard/rapports',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: BarChart3,
+    gradient: 'from-emerald-600 to-teal-700',
+    isAi: false
+  },
+  {
+    id: 'studio',
+    name: 'Vitrine en Ligne (E-Shop)',
+    category: 'Commerce & Vente',
+    description: 'Boutique web connectée avec panier d\'achats, commande WhatsApp et catalogue synchronisé.',
+    route: '/dashboard/vitrine',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: Store,
+    gradient: 'from-blue-700 to-cyan-600',
+    isAi: false
+  },
+  {
+    id: 'theme-builder',
+    name: 'Studio de Thèmes & Vitrine',
+    category: 'Design & Vitrine',
+    description: 'Sélection et personnalisation visuelle intégrale des thèmes graphiques de votre boutique en ligne.',
+    route: '/dashboard/vitrine',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: Palette,
+    gradient: 'from-purple-600 to-indigo-700',
+    isAi: false
+  },
+  {
+    id: 'nanamarket',
+    name: 'NaNa Market • Annuaire B2B2C',
+    category: 'Place de Marché',
+    description: 'Référencement au sein de la place de marché nationale et annuaire des marchands vérifiés Nanasore.',
+    route: '/dashboard/market',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: Globe,
+    gradient: 'from-teal-600 to-cyan-700',
+    isAi: false
+  },
+  {
+    id: 'excel',
+    name: 'Import & Export Excel / CSV',
+    category: 'Données & Catalogues',
+    description: 'Importation en masse de catalogues d\'articles, mises à jour des prix et export comptable.',
+    route: '/dashboard/inventaire/excel',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: FileSpreadsheet,
+    gradient: 'from-emerald-700 to-green-600',
+    isAi: false
+  },
+  {
+    id: 'scanner',
+    name: 'Scanner Code-Barres & Douchette',
+    category: 'Matériel POS & Caisse',
+    description: 'Détection instantanée des articles par douchette USB physique laser ou caméra mobile.',
+    route: '/dashboard/scanner',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: QrCode,
+    gradient: 'from-slate-700 to-slate-900',
+    isAi: false
+  },
+  {
+    id: 'vendor-upload',
+    name: 'Espace Upload Académique & Vendeur',
+    category: 'Stockage & Documents',
+    description: 'Dépôt sécurisé de cours, devoirs et fichiers numériques vendeurs avec compression ZIP et R2.',
+    route: '/academic/upload',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: UploadCloud,
+    gradient: 'from-indigo-600 to-blue-700',
+    isAi: false
+  },
+  {
+    id: 'kyc',
+    name: 'Chaîne d\'Identification KYC & Sécurité',
+    category: 'Conformité & Légal',
+    description: 'Vérification réglementaire des pièces d\'identité, RCCM, IFU et relèvement de plafonds officiels.',
+    route: '/dashboard/kyc',
+    pricingType: 'FREE',
+    pricingBadge: 'Gratuit • Inclus',
+    icon: ShieldCheck,
+    gradient: 'from-emerald-600 to-teal-800',
+    isAi: false
+  },
+
+  // --- MODULES PAY-AS-YOU-GO (À l'usage direct, activables et retirables) ---
+  {
+    id: 'emailing',
+    name: 'Studio E-mailing & Campagnes Pro',
+    category: 'Marketing & Audience',
+    description: 'Éditeur visuel d\'e-mails sans code, segmentation avancée d\'audience et diffusion par quotas.',
+    route: '/dashboard/marketing/emailing',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • Par quota',
+    icon: Mail,
+    gradient: 'from-blue-600 to-indigo-700',
+    isAi: false
+  },
+  {
+    id: 'nanagenerator',
+    name: 'Nanagénérateur AI (Studio Vidéo & Visuel)',
+    category: 'Intelligence Artificielle',
+    description: 'Génération neuronale de vidéos de vente publicitaires et visuels produits haute conversion par IA.',
+    route: '/dashboard/ai-studio',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • 0.02 XOF/req',
+    icon: Sparkles, // VRAIE IA UNIQUEMENT
+    gradient: 'from-violet-600 to-purple-800',
+    isAi: true
+  },
+  {
+    id: 'gateway',
+    name: 'Passerelle Souveraine / Clés API Directes',
+    category: 'Intégration & Développeur',
+    description: 'Intégration directe des API souveraines Nanasore, webhooks temps réel et génération de tokens.',
+    route: '/dashboard/gateway',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • 0.02 XOF/req',
+    icon: Key,
+    gradient: 'from-slate-800 to-blue-900',
+    isAi: false
+  },
+  {
+    id: 'pixels-crm',
+    name: 'Pixels de Tracking & Ads (Meta, TikTok)',
+    category: 'Publicité & CRM',
+    description: 'Suivi et optimisation des conversions avec les pixels Facebook Meta, Google Analytics et TikTok Ads.',
+    route: '/dashboard/tracking-crm',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • À l\'usage',
+    icon: Activity,
+    gradient: 'from-rose-600 to-pink-700',
+    isAi: false
+  },
+  {
+    id: 'webinar',
+    name: 'Studio de Direct Live & Webinaire',
+    category: 'Direct Live & Vente',
+    description: 'Diffusion vidéo interactive en direct avec vente de produits et checkout direct pendant le streaming.',
+    route: '/dashboard/lives',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • À la session',
+    icon: Camera,
+    gradient: 'from-rose-500 to-red-600',
+    isAi: false
+  },
+  {
+    id: 'cvpro',
+    name: 'CVPro & Attestations Numériques',
+    category: 'Documents & Carrière',
+    description: 'Génération de CV professionnels haute définition, attestations et portfolios numériques vendeurs.',
+    route: '/dashboard/cv',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • Par document',
+    icon: FileText,
+    gradient: 'from-sky-600 to-blue-800',
+    isAi: false
+  },
+  {
+    id: 'docusign',
+    name: 'DocuSign Hub & Contrats Signés',
+    category: 'Signature Électronique',
+    description: 'Signature numérique légale de contrats commerciaux, bons de commande et accords de partenariat.',
+    route: '/dashboard/docusign',
+    pricingType: 'PAY_AS_GO',
+    pricingBadge: 'Pay-as-you-go • Par signature',
+    icon: FileCheck,
+    gradient: 'from-teal-600 to-emerald-800',
+    isAi: false
+  },
+
+  // --- MODULES SUR SOUSCRIPTION DE PLAN (Non gratuits - activation par l'utilisateur) ---
+  {
+    id: 'pos',
+    name: 'Caisse Tactile Magasin (POS Comptoir)',
+    category: 'Commerce & Comptoir Magasin',
+    description: 'Point de vente tactile pour encaissement physique au comptoir, tickets de caisse et QR Code.',
+    route: '/dashboard/pos',
+    pricingType: 'SUBSCRIPTION', // NON GRATUIT FORMELLEMENT
+    pricingBadge: 'Souscription de Plan requise',
+    icon: ShoppingCart,
+    gradient: 'from-emerald-500 to-teal-700',
+    isAi: false
+  },
+  {
+    id: 'ultimate-funnel',
+    name: 'Ultimate Funnel Builder',
+    category: 'Tunnels de Vente',
+    description: 'Constructeur de tunnels haute conversion avec upsells 1-clic, downsells et order bumps intégrés.',
+    route: '/dashboard/funnel/ultimate',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: TrendingUp,
+    gradient: 'from-orange-500 to-red-600',
+    isAi: false
+  },
+  {
+    id: 'modular-funnel',
+    name: 'Funnel Builder Modulaire',
+    category: 'Tunnels de Vente',
+    description: 'Concepteur modulaire drag & drop par blocs pour créer des parcours de conversion personnalisés.',
+    route: '/dashboard/funnel/modular',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: Layers,
+    gradient: 'from-amber-500 to-orange-600',
+    isAi: false
+  },
+  {
+    id: 'deal-builder',
+    name: 'Public Deal Page Builder',
+    category: 'Offres Flash & Vente',
+    description: 'Créateur de pages d\'offres flash et de deals publics physiques à conversion immédiate.',
+    route: '/dashboard/funnel/physical',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: Tag,
+    gradient: 'from-pink-600 to-rose-700',
+    isAi: false
+  },
+  {
+    id: 'cours-forge',
+    name: 'Cours Forge (Atelier Pédagogique)',
+    category: 'Formation & E-learning',
+    description: 'Atelier complet de conception et génération de formations, modules vidéo et quiz interactifs.',
+    route: '/dashboard/courses/create',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: BookOpen,
+    gradient: 'from-cyan-600 to-blue-700',
+    isAi: false
+  },
+  {
+    id: 'course-create',
+    name: 'Centre de Gestion Pédagogique Formateur',
+    category: 'Formation & Enseignement',
+    description: 'Correction des devoirs, suivi personnalisé des cohortes et accompagnement des apprenants.',
+    route: '/dashboard/formateur',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: GraduationCap,
+    gradient: 'from-blue-600 to-indigo-800',
+    isAi: false
+  },
+  {
+    id: 'team-employees',
+    name: 'Gestion des Employés / Caissiers & RH',
+    category: 'Sécurité & Personnel',
+    description: 'Attribution de droits d\'accès par code PIN, caissiers multiples et traçabilité nominative des ventes.',
+    route: '/dashboard/staff',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: Users,
+    gradient: 'from-slate-700 to-blue-900',
+    isAi: false
+  },
+  {
+    id: 'partner',
+    name: 'Espace Partenaire & Affiliation Pro',
+    category: 'Croissance & Réseau',
+    description: 'Programme d\'affiliation avec calcul automatisé des commissions et tableaux de bord de parrainage.',
+    route: '/dashboard/partenaire',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: Award,
+    gradient: 'from-violet-600 to-purple-800',
+    isAi: false
+  },
+  {
+    id: 'ai-advisor',
+    name: 'Directeur de Croissance • Agent Nsore',
+    category: 'Intelligence Artificielle & Conseil',
+    description: 'Directeur IA d\'orientation commerciale Nanasore, arbitrage de rentabilité et accompagnement KYC.',
+    route: '/dashboard/ai-advisor',
+    pricingType: 'SUBSCRIPTION',
+    pricingBadge: 'Souscription de Plan requise',
+    icon: Bot, // VRAIE IA UNIQUEMENT
+    gradient: 'from-blue-700 to-indigo-900',
+    isAi: true
+  }
+];
+
+function TabServicesAndApps({ 
+  app, 
+  showToast, 
+  setActiveTab 
+}: { 
+  app?: NanaMerchantApp; 
+  showToast: (m: string, t?: any) => void; 
+  setActiveTab?: (t: string) => void; 
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<'ACTIVATED' | 'ALL' | 'FREE' | 'PAY_AS_GO' | 'SUBSCRIPTION'>('ACTIVATED');
+  const [showApiSnippet, setShowApiSnippet] = useState(false);
+  const [isTogglingId, setIsTogglingId] = useState<string | null>(null);
+
+  const tenantId = app?.id || 'default_tenant';
+
+  // État local des activations des modules pour ce tenant
+  const [tenantModules, setTenantModules] = useState<Record<string, { enabled: boolean; updatedAt: number }>>(() => {
+    return getLocalTenantModules(tenantId);
   });
 
-  const handleOpenApp = (mod: AppRegistryItem) => {
-    const updated = Array.from(new Set([mod.id, ...visitedIds]));
-    setVisitedIds(updated);
-    try {
-      localStorage.setItem('nanasore_visited_modules', JSON.stringify(updated));
-    } catch (e) {}
+  // Rechargement sur changement de tenant ou événement global
+  useEffect(() => {
+    setTenantModules(getLocalTenantModules(tenantId));
 
-    showToast(`Accès à l'application ${mod.appName}`, 'success');
+    const handleModuleToggled = (event: any) => {
+      if (event.detail && (!event.detail.tenantId || event.detail.tenantId === tenantId)) {
+        setTenantModules(prev => ({
+          ...prev,
+          [event.detail.moduleId]: event.detail.payload
+        }));
+      }
+    };
+
+    window.addEventListener(MODULE_TOGGLED_EVENT, handleModuleToggled);
+    return () => {
+      window.removeEventListener(MODULE_TOGGLED_EVENT, handleModuleToggled);
+    };
+  }, [tenantId]);
+
+  // Vérificateur strict d'activation d'un module
+  // RÈGLE : Les modules gratuits et pay-as-you-go sont présents par défaut (true), sauf si le marchand les a expressément retirés (false).
+  // La caisse et les modules sur souscription sont désactivés par défaut (false), et nécessitent activation par l'utilisateur.
+  const isModuleActive = (mod: ServiceModuleDefinition): boolean => {
+    const entry = tenantModules[mod.id];
+    if (entry && typeof entry.enabled === 'boolean') {
+      return entry.enabled;
+    }
+    // Présence par défaut pour les modules gratuits et pay-as-go
+    if (mod.pricingType === 'FREE' || mod.pricingType === 'PAY_AS_GO') {
+      return true;
+    }
+    // La caisse et les modules par souscription nécessitent une activation volontaire
+    return false;
+  };
+
+  // Bascule d'activation ou retrait à volonté
+  const handleToggleModule = async (mod: ServiceModuleDefinition, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsTogglingId(mod.id);
+    const currentlyActive = isModuleActive(mod);
+    const targetStatus = !currentlyActive;
+
+    try {
+      await toggleModuleStatus(mod.id, targetStatus, tenantId);
+      setTenantModules(prev => ({
+        ...prev,
+        [mod.id]: { enabled: targetStatus, updatedAt: Date.now() }
+      }));
+
+      if (targetStatus) {
+        showToast(`Application "${mod.name}" activée et intégrée à votre univers !`, 'success');
+      } else {
+        showToast(`Application "${mod.name}" retirée de votre univers.`, 'info');
+      }
+    } catch (err: any) {
+      showToast(`Erreur lors de la modification : ${err?.message || 'Action impossible'}`, 'error');
+    } finally {
+      setIsTogglingId(null);
+    }
+  };
+
+  const handleOpenModule = (mod: ServiceModuleDefinition) => {
+    if (!isModuleActive(mod)) {
+      showToast(`Ce module n'est pas encore activé. Activez-le pour ouvrir son espace dédié.`, 'info');
+      return;
+    }
+    showToast(`Accès à l'application ${mod.name}`, 'success');
     if (mod.route) {
       setTimeout(() => {
         window.location.href = mod.route;
-      }, 400);
+      }, 300);
     }
   };
 
-  const getModuleVisuals = (id: string) => {
-    switch (id) {
-      case 'emailing':
-        return { icon: Mail, gradient: 'from-blue-600 to-indigo-700', bgIcon: 'bg-indigo-50 text-indigo-600', tag: 'Marketing & Audience' };
-      case 'checkout':
-        return { icon: ShoppingCart, gradient: 'from-emerald-500 to-teal-700', bgIcon: 'bg-emerald-50 text-emerald-600', tag: 'Caisse & Paiement' };
-      case 'nana-wallet':
-        return { icon: Wallet, gradient: 'from-blue-700 to-cyan-600', bgIcon: 'bg-blue-50 text-blue-700', tag: 'Portefeuille & Virements' };
-      case 'store-builder':
-      case 'academic-upload':
-      case 'store-studio':
-        return { icon: Building2, gradient: 'from-amber-500 to-orange-600', bgIcon: 'bg-amber-50 text-amber-600', tag: 'Boutique & E-commerce' };
-      case 'vip-lounge':
-        return { icon: Crown, gradient: 'from-amber-400 to-yellow-600', bgIcon: 'bg-amber-50 text-amber-600', tag: 'Communautés VIP' };
-      case 'webinar':
-      case 'live-session':
-        return { icon: Camera, gradient: 'from-rose-500 to-pink-600', bgIcon: 'bg-rose-50 text-rose-600', tag: 'Lives & Masterclasses' };
-      case 'virtual-campus':
-      case 'student-dashboard':
-      case 'instructor-hub':
-        return { icon: BookOpen, gradient: 'from-cyan-600 to-blue-700', bgIcon: 'bg-cyan-50 text-cyan-600', tag: 'Formations & Étudiants' };
-      case 'saas-admin':
-      case 'developer':
-        return { icon: Code2, gradient: 'from-slate-700 to-slate-900', bgIcon: 'bg-slate-100 text-slate-700', tag: 'Intégrations & API' };
-      case 'affiliate':
-        return { icon: Percent, gradient: 'from-violet-600 to-purple-700', bgIcon: 'bg-purple-50 text-purple-600', tag: 'Affiliation & Ventes' };
-      case 'crm':
-        return { icon: Users, gradient: 'from-sky-500 to-blue-600', bgIcon: 'bg-sky-50 text-sky-600', tag: 'Relations Clients' };
-      case 'doc-sign':
-        return { icon: FileText, gradient: 'from-teal-600 to-emerald-700', bgIcon: 'bg-teal-50 text-teal-600', tag: 'Signatures & Contrats' };
-      default:
-        return { icon: Sparkles, gradient: 'from-blue-600 to-indigo-600', bgIcon: 'bg-blue-50 text-blue-600', tag: 'Service Écosystème' };
-    }
-  };
+  // Calcul du nombre de modules activés
+  const activatedCount = useMemo(() => {
+    return OFFICIAL_PRODUCTION_MODULES.filter(m => isModuleActive(m)).length;
+  }, [tenantModules, tenantId]);
 
-  const filteredApps = useMemo(() => {
-    return APPS_REGISTRY.filter(item => {
-      // Filtre catégorie
-      if (selectedCategory === 'VISITED' && !visitedIds.includes(item.id)) return false;
-      if (selectedCategory === 'PAYMENT' && !item.category.includes('Paiement') && !item.category.includes('Vente') && item.id !== 'checkout' && item.id !== 'nana-wallet') return false;
-      if (selectedCategory === 'MARKETING' && !item.category.includes('Marketing') && !item.category.includes('Communication') && item.id !== 'emailing') return false;
-      if (selectedCategory === 'CAMPUS' && !item.category.includes('Formation') && !item.category.includes('Académique') && item.id !== 'virtual-campus' && item.id !== 'student-dashboard') return false;
-      if (selectedCategory === 'TOOLS' && item.category.includes('Paiement') && item.category.includes('Marketing')) return false;
+  // Filtrage selon la sélection et la recherche
+  const filteredModules = useMemo(() => {
+    return OFFICIAL_PRODUCTION_MODULES.filter(mod => {
+      const active = isModuleActive(mod);
 
-      // Filtre recherche texte
+      // Filtre de vue
+      if (selectedFilter === 'ACTIVATED' && !active) return false;
+      if (selectedFilter === 'FREE' && mod.pricingType !== 'FREE') return false;
+      if (selectedFilter === 'PAY_AS_GO' && mod.pricingType !== 'PAY_AS_GO') return false;
+      if (selectedFilter === 'SUBSCRIPTION' && mod.pricingType !== 'SUBSCRIPTION') return false;
+
+      // Filtre de recherche
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        return item.appName.toLowerCase().includes(q) ||
-               item.shortDescription.toLowerCase().includes(q) ||
-               item.category.toLowerCase().includes(q);
+        return mod.name.toLowerCase().includes(q) ||
+               mod.description.toLowerCase().includes(q) ||
+               mod.category.toLowerCase().includes(q);
       }
       return true;
     });
-  }, [selectedCategory, searchQuery, visitedIds]);
+  }, [selectedFilter, searchQuery, tenantModules, tenantId]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -3306,27 +3683,27 @@ function TabServicesAndApps({ app, showToast, setActiveTab }: { app?: NanaMercha
             <div>
               <h1 className="text-2xl font-black text-slate-900 tracking-tight">Services et Applications</h1>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Chaque module visité et disponible s'affiche sous forme d'application interactive prête à l'emploi.
+                Gérez librement les applications de votre univers. Activez ou retirez chaque module à volonté selon vos besoins réels.
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-extrabold bg-blue-50 text-[#1E40AF] border border-blue-200">
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            {APPS_REGISTRY.length} Applications Connectées
+            {activatedCount} Modules Activés dans cet univers
           </span>
         </div>
       </div>
 
-      {/* Barre de recherche et Filtres par Catégorie */}
+      {/* Barre de recherche et Pilules de filtrage */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-200/90 shadow-xs">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
-            placeholder="Rechercher une application, un service ou un module (ex: Emailing, Caisse, Campus...)"
+            placeholder="Rechercher un module (ex: E-mailing, Stock, Vitrine, Documents, Facturation...)"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] text-slate-800"
@@ -3336,94 +3713,163 @@ function TabServicesAndApps({ app, showToast, setActiveTab }: { app?: NanaMercha
         {/* Pilules de filtrage */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 md:pb-0">
           {[
-            { id: 'ALL', label: 'Toutes' },
-            { id: 'VISITED', label: `⭐ Récemment Visités (${visitedIds.length})` },
-            { id: 'PAYMENT', label: '💳 Paiement & Vente' },
-            { id: 'MARKETING', label: '✉️ Marketing' },
-            { id: 'CAMPUS', label: '🎓 Campus' },
-          ].map(cat => (
+            { id: 'ACTIVATED', label: `⭐ Mes Modules Activés (${activatedCount})` },
+            { id: 'ALL', label: `Tous les Modules (${OFFICIAL_PRODUCTION_MODULES.length})` },
+            { id: 'FREE', label: '🎁 Gratuits & Inclus' },
+            { id: 'PAY_AS_GO', label: '⚡ Pay-as-you-go' },
+            { id: 'SUBSCRIPTION', label: '💎 Sur Souscription / Plan' },
+          ].map(filter => (
             <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                selectedCategory === cat.id
+              key={filter.id}
+              onClick={() => setSelectedFilter(filter.id as any)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                selectedFilter === filter.id
                   ? 'bg-[#1E40AF] text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
               }`}
             >
-              {cat.label}
+              {filter.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Grille des Applications */}
+      {/* État vide si aucun module ne correspond au filtre */}
+      {filteredModules.length === 0 && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-12 text-center shadow-xs flex flex-col items-center justify-center">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#1E40AF] flex items-center justify-center mb-3">
+            <LayoutGrid className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">Aucun module dans cette sélection</h3>
+          <p className="text-xs text-slate-500 max-w-md mt-1 mb-5">
+            {selectedFilter === 'ACTIVATED'
+              ? 'Vous n\'avez activé aucun module pour le moment. Parcourez la liste complète pour activer ceux nécessaires à votre activité.'
+              : 'Aucun module ne correspond aux critères de recherche actuels.'}
+          </p>
+          {selectedFilter === 'ACTIVATED' && (
+            <button
+              onClick={() => setSelectedFilter('ALL')}
+              className="px-4 py-2 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white text-xs font-bold rounded-xl transition shadow-sm cursor-pointer"
+            >
+              Découvrir tous les modules disponibles
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Grille des Applications Réelles en Production */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredApps.map(mod => {
-          const visual = getModuleVisuals(mod.id);
-          const ModIcon = visual.icon;
-          const isVisited = visitedIds.includes(mod.id);
+        {filteredModules.map(mod => {
+          const ModIcon = mod.icon;
+          const active = isModuleActive(mod);
+          const isProcessing = isTogglingId === mod.id;
 
           return (
             <div
               key={mod.id}
-              onClick={() => handleOpenApp(mod)}
-              className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs hover:shadow-lg hover:border-[#1E40AF]/40 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden"
+              className={`bg-white rounded-3xl border p-5 shadow-xs transition-all flex flex-col justify-between relative overflow-hidden group ${
+                active 
+                  ? 'border-slate-200/90 hover:border-[#1E40AF]/50 hover:shadow-lg' 
+                  : 'border-slate-200/60 bg-slate-50/50 opacity-90 hover:opacity-100'
+              }`}
             >
               <div>
-                {/* Header Carte : Logo & Badges */}
+                {/* Header Carte : Logo représentatif & Badges */}
                 <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${visual.gradient} text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform shrink-0`}>
+                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${mod.gradient} text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform shrink-0`}>
                     <ModIcon className="w-6 h-6" />
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    {isVisited && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 shadow-xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        Visité
+                    {/* Badge d'activation */}
+                    {active ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Actif dans l'espace
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                        Non activé
                       </span>
                     )}
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                      {mod.priceMonthly === 0 ? 'Inclus d\'office' : `${(mod.priceMonthly / 1000).toFixed(0)}k XOF/m`}
+
+                    {/* Badge de modèle tarifaire */}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      mod.pricingType === 'FREE' 
+                        ? 'bg-emerald-50 text-emerald-700' 
+                        : mod.pricingType === 'PAY_AS_GO' 
+                          ? 'bg-cyan-50 text-cyan-800' 
+                          : 'bg-amber-50 text-amber-800'
+                    }`}>
+                      {mod.pricingBadge}
                     </span>
                   </div>
                 </div>
 
-                {/* Titre & Catégorie */}
+                {/* Catégorie & Titre */}
                 <span className="text-[10px] font-extrabold text-[#1E40AF] uppercase tracking-wider block">
-                  {visual.tag}
+                  {mod.category}
                 </span>
                 <h3 className="font-extrabold text-slate-900 text-sm mt-0.5 group-hover:text-[#1E40AF] transition-colors leading-snug">
-                  {mod.appName}
+                  {mod.name}
                 </h3>
 
-                {/* Description */}
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed line-clamp-2 font-medium">
-                  {mod.shortDescription}
+                {/* Description concise */}
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed font-medium">
+                  {mod.description}
                 </p>
               </div>
 
-              {/* Pied de Carte : Palmarès & Action */}
-              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-[10px] font-bold text-slate-400 truncate max-w-[170px]">
-                  {mod.palmares || 'Certifié Nanasore'}
-                </span>
+              {/* Actions : Activer / Retirer à la volonté du marchand & Ouvrir */}
+              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                
+                {/* Bouton de bascule Retirer / Activer */}
+                {active ? (
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleModule(mod, e)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition cursor-pointer"
+                    title="Retirer ce module de votre univers"
+                  >
+                    <Power className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-500" />
+                    <span>Retirer</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleModule(mod, e)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black text-white bg-[#1E40AF] hover:bg-[#1E3A8A] transition shadow-xs cursor-pointer"
+                    title="Activer ce module dans votre univers"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Activer</span>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  className="px-3 py-1.5 bg-blue-50 text-[#1E40AF] font-bold rounded-xl group-hover:bg-[#1E40AF] group-hover:text-white transition flex items-center gap-1.5 text-xs shadow-xs"
-                >
-                  <span>Ouvrir</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </button>
+                {/* Bouton d'accès si actif */}
+                {active ? (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModule(mod)}
+                    className="px-3.5 py-1.5 bg-blue-50 hover:bg-[#1E40AF] text-[#1E40AF] hover:text-white font-black rounded-xl transition flex items-center gap-1.5 text-xs shadow-xs cursor-pointer"
+                  >
+                    <span>Ouvrir</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-semibold text-slate-400 italic">
+                    {mod.pricingType === 'SUBSCRIPTION' ? 'Sur souscription' : 'Prêt à l\'activation'}
+                  </span>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Accordéon Intégration API Checkout (Pour les développeurs et marchands B2B) */}
+      {/* Accordéon Intégration API Checkout & Hosted Sessions */}
       <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-lg space-y-4">
         <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowApiSnippet(!showApiSnippet)}>
           <div className="flex items-center gap-3">
