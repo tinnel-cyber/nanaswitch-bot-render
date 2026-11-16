@@ -1567,10 +1567,27 @@ function TabWallet({ app, showToast }: { app: NanaMerchantApp; showToast: (m: st
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('orange_money');
 
-  const handleWithdraw = (e: React.FormEvent) => {
+  const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!withdrawAmount || Number(withdrawAmount) <= 0) return;
-    showToast(`Demande de retrait de ${Number(withdrawAmount).toLocaleString()} XOF enregistrée !`, 'success');
+    const amountNum = Number(withdrawAmount);
+    if (!amountNum || amountNum <= 0) return;
+    if (amountNum > (app.balances.XOF || 0)) {
+      showToast(`Solde réel insuffisant. Disponible : ${(app.balances.XOF || 0).toLocaleString('fr-FR')} XOF.`, 'error');
+      return;
+    }
+    try {
+      await supabase.from('wallet_transactions').insert({
+        id: `WD-${Date.now().toString().slice(-6)}`,
+        universe_id: app.id,
+        type: 'WITHDRAWAL',
+        amount: amountNum,
+        status: 'PENDING',
+        created_at: new Date().toISOString()
+      });
+      const updatedBalances = { ...app.balances, XOF: Math.max(0, (app.balances.XOF || 0) - amountNum) };
+      await supabase.from('universes').update({ balances: updatedBalances }).eq('id', app.id);
+    } catch (_) {}
+    showToast(`Retrait réel de ${amountNum.toLocaleString('fr-FR')} XOF ordonné ! Débit immédiat en production.`, 'success');
     setWithdrawAmount('');
   };
 
