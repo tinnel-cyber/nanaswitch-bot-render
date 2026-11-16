@@ -24,7 +24,7 @@ import {
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
   TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2,
   LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical,
-  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power
+  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
@@ -350,6 +350,17 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const [proFeatureModalTab, setProFeatureModalTab] = useState<ProFeatureTab | null>(null);
   const { activeModules: activeOmnibarModules, isModuleActive, toggleModule } = useActiveOmnibarApps();
+  const hasNavigatedBackRef = useRef<boolean>(false);
+
+  const handleBackToUniverses = useCallback(() => {
+    hasNavigatedBackRef.current = true;
+    setSelectedApp(null);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('nana_current_app_id');
+      } catch {}
+    }
+  }, []);
 
   const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ message, type });
@@ -798,8 +809,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     };
   }, [currentUser]);
 
-  // Détection du target appId initial si passé via prop
+  // Détection du target appId initial si passé via prop (respecte le clic retour de l'utilisateur)
   useEffect(() => {
+    if (hasNavigatedBackRef.current) return;
     const target = appId || initialAppId;
     if (target) {
       const match = apps.find(a => a.id === target);
@@ -1205,12 +1217,13 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
       {/* TOP NAVBAR (Bleu Royal #1E40AF / #2563EB & Blanc Cassé) */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 py-3.5 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           
           {/* Logo et Slug Label */}
           <div 
             className="flex items-center gap-2.5 cursor-pointer group" 
-            onClick={() => { setSelectedApp(null); }}
+            onClick={handleBackToUniverses}
+            title="Revenir à la sélection des Univers"
           >
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white shadow-lg shadow-blue-600/20 font-black text-xl transition group-hover:scale-105">
               N
@@ -1223,13 +1236,25 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             </div>
           </div>
 
-          {/* Active Application & Activity Domain Header */}
+          {/* Active Application & Back Navigation */}
           {selectedApp && (
-            <div className="hidden md:flex items-center gap-3 pl-4 border-l border-slate-200">
+            <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
+              {/* Bouton retour universel direct */}
+              <button 
+                type="button"
+                onClick={handleBackToUniverses}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-[#1E40AF] bg-slate-100 hover:bg-blue-50 border border-slate-200 transition cursor-pointer shadow-xs"
+                title="Retourner à tous les univers"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                <span>Tous les Univers</span>
+              </button>
+
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => setSelectedApp(null)} 
-                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition shadow-xs cursor-pointer"
+                  type="button"
+                  onClick={handleBackToUniverses} 
+                  className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition border border-slate-200 shadow-xs cursor-pointer"
                   title="Changer d'univers"
                 >
                   <div className={`w-2 h-2 rounded-full ${selectedApp.status === 'PENDING_KYC' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shrink-0`} />
@@ -1237,7 +1262,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <span className="font-mono text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-white rounded border border-slate-200">
                     {selectedApp.id}
                   </span>
-                  <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
 
                 {/* Badge Statut Validation au niveau de l'ID du compte */}
@@ -1252,13 +1276,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                     <span>Compte approuvé</span>
                   </span>
                 )}
-                
-                {/* Appellation d'activité Badge à côté du numéro de compte */}
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-blue-50 text-[#1E40AF] border border-blue-200/90 shadow-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#1E40AF]" />
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500/80">Appellation :</span>
-                  <span>{selectedApp.sector || selectedApp.kyc?.sector || 'E-commerce & Vente en ligne'}</span>
-                </span>
               </div>
             </div>
           )}
@@ -1358,7 +1375,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               
               {/* Back to universes list button */}
               <button 
-                onClick={() => setSelectedApp(null)}
+                type="button"
+                onClick={handleBackToUniverses}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-600 hover:text-[#1E40AF] hover:bg-blue-50/50 rounded-xl transition cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 text-[#1E40AF]" />
@@ -1524,7 +1542,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} />}
             {activeTab === 'webhook_logs' && <TabWebhookLogs />}
             {activeTab === 'disputes' && <TabDisputes />}
-            {activeTab === 'pricing' && <TabPricing />}
+            {activeTab === 'pricing' && <TabPricing app={selectedApp} showToast={showToast} />}
             {activeTab === 'support' && <TabSupport app={selectedApp} showToast={showToast} />}
             {activeTab === 'settings' && <TabSettings app={selectedApp} onUpgradeClick={() => setIsKycModalOpen(true)} />}
           </main>
@@ -1617,6 +1635,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <div
                     key={app.id}
                     onClick={() => {
+                      hasNavigatedBackRef.current = false;
                       setSelectedApp(app);
                       if (isVerified) {
                         showToast(`Bienvenue dans votre univers ${app.name} !`, 'success');
@@ -2635,7 +2654,7 @@ function TabWallet({
         <div className="lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-              <Coins className="w-4 h-4 text-[#1E40AF]" />
+              <Wallet className="w-4 h-4 text-[#1E40AF]" />
               <span>Vos Soldes Multi-Devises Réels</span>
             </h3>
             <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
@@ -2646,11 +2665,11 @@ function TabWallet({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { code: 'XOF', name: 'Franc CFA (UEMOA)', val: app.balances.XOF, flag: '🇧🇫', primary: true },
-              { code: 'USD', name: 'Dollar Américain', val: app.balances.USD, flag: '🇺🇸' },
-              { code: 'XAF', name: 'Franc CFA (CEMAC)', val: app.balances.XAF, flag: '🇨🇲' },
-              { code: 'GNF', name: 'Franc Guinéen', val: app.balances.GNF, flag: '🇬🇳' },
-              { code: 'GHS', name: 'Cedi Ghanéen', val: app.balances.GHS, flag: '🇬🇭' },
+              { code: 'XOF', name: 'Franc CFA (XOF)', val: app?.balances?.XOF || 0, flag: '🇧🇫', primary: true },
+              { code: 'USD', name: 'Dollar Américain', val: app?.balances?.USD || 0, flag: '🇺🇸' },
+              { code: 'XAF', name: 'Franc CFA (XAF)', val: app?.balances?.XAF || 0, flag: '🇨🇲' },
+              { code: 'GNF', name: 'Franc Guinéen', val: app?.balances?.GNF || 0, flag: '🇬🇳' },
+              { code: 'GHS', name: 'Cedi Ghanéen', val: app?.balances?.GHS || 0, flag: '🇬🇭' },
             ].map(b => (
               <div key={b.code} className={`p-5 rounded-2xl border transition-all ${
                 b.primary 
@@ -4314,22 +4333,23 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
             </h1>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Supabase Realtime Live
+              Synchronisation Cloud Direct
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Courbe TradingView du chiffre d'affaires cumulé en direct pour l'univers <span className="font-bold text-slate-800">{app?.name || 'Univers Principal'}</span> ({app?.appellation || 'Marchand'}).
+            Courbe d'activité et chiffre d'affaires cumulé en direct pour l'univers <span className="font-bold text-slate-800">{app?.name || 'Univers Principal'}</span>.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => loadSalesData()}
-            className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-50 transition shadow-xs flex items-center gap-1.5 text-xs font-semibold"
+            className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-50 transition shadow-xs flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
             title="Rafraîchir les données de ventes"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#1E40AF]' : ''}`} />
-            Sync
+            Sync Cloud
           </button>
         </div>
       </div>
@@ -4402,20 +4422,20 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Succès Réseau</span>
             <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              UEMOA
+              Global
             </span>
           </div>
           <p className="text-xl md:text-2xl font-black text-emerald-600 mt-2 tracking-tight">
             99.85%
           </p>
-          <p className="text-[10px] text-slate-400 font-medium mt-1">Orange, MTN, Wave, Moov</p>
+          <p className="text-[10px] text-slate-400 font-medium mt-1">Orange, MTN, Wave, Moov, Cartes & Virement</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-0 group-hover:opacity-100 transition"></div>
         </div>
       </div>
 
-      {/* SECTION COURBE PROFESSIONNELLE TRADINGVIEW */}
+      {/* SECTION COURBE DU CHIFFRE D'AFFAIRES & ACTIVITÉ */}
       <div className="bg-[#0B0F19] text-white rounded-3xl p-6 border border-slate-800 shadow-2xl relative overflow-hidden">
-        {/* En-tête TradingView avec Symbole, Prix & Sélecteur d'intervalles */}
+        {/* En-tête de la courbe avec Devise, Statut & Sélecteur d'intervalles */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800/90">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-2xl bg-[#1E40AF]/20 border border-[#1E40AF]/40 flex items-center justify-center text-[#3B82F6]">
@@ -4423,11 +4443,11 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono font-black text-sm tracking-wider text-slate-200">NANASORE / XOF</span>
+                <span className="font-mono font-black text-sm tracking-wider text-slate-200">NANASORE / MULTI-DEVISES</span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-blue-950 text-blue-400 border border-blue-800/60 uppercase">
                   Revenus Cumulés
                 </span>
-                <span className="text-[10px] text-slate-500 font-medium">1D • Direct Supabase</span>
+                <span className="text-[10px] text-slate-400 font-medium">Temps Réel • Synchronisation Cloud</span>
               </div>
               <div className="flex items-baseline gap-3 mt-1">
                 <span className="text-2xl md:text-3xl font-black text-white font-mono tracking-tight">
@@ -4692,44 +4712,46 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
             </span>
           </div>
           <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500">
-            <span>TABLE: public.sales</span>
+            <span>Flux Cloud Sécurisé</span>
             <span>•</span>
-            <span>RLS ISOLATION ACTIVE</span>
+            <span>Données Transactionnelles Authentifiées</span>
             <span>•</span>
-            <span className="text-emerald-400 font-bold">WEBSOCKET CONNECTED</span>
+            <span className="text-emerald-400 font-bold">EN DIRECT</span>
           </div>
         </div>
       </div>
 
-      {/* SECTION BOUGIES MINCES DES MODULES (COMPORTEMENT UTILISATEUR) */}
+      {/* SECTION PERFORMANCE & STATUT DES MODULES DE L'ÉCOSYSTÈME */}
       <div className="bg-[#0B0F19] text-white rounded-3xl p-6 border border-slate-800 shadow-xl space-y-6">
-        {/* Header & Légende des 4 couleurs de bougies */}
+        {/* Header & Filtres par statut */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-amber-400" />
               <h2 className="text-lg font-black tracking-tight text-white">
-                Comportement & Statut des Modules de l'Écosystème
+                Statut & Performance des 27 Modules de l'Écosystème
               </h2>
             </div>
             <p className="text-xs text-slate-400 font-medium mt-1">
-              Bougies minces représentant les 27 modules et services de l'écosystème. La couleur reflète le comportement et la souscription active de l'utilisateur.
+              Surveillance continue des applications activées, canaux d'encaissement et services souscrits au sein de votre univers.
             </p>
           </div>
 
-          {/* Filtres d'affichage des bougies */}
+          {/* Filtres d'affichage */}
           <div className="flex flex-wrap items-center gap-1.5 bg-[#070A11] p-1.5 rounded-xl border border-slate-800 self-start">
             <button
+              type="button"
               onClick={() => setModuleFilter('ALL')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
                 moduleFilter === 'ALL' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
               Tous ({moduleCandles.length})
             </button>
             <button
+              type="button"
               onClick={() => setModuleFilter('ACTIVE')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
                 moduleFilter === 'ACTIVE' ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700' : 'text-emerald-400 hover:text-emerald-300'
               }`}
             >
@@ -4737,8 +4759,9 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
               Actifs / Gratuits
             </button>
             <button
+              type="button"
               onClick={() => setModuleFilter('PENDING')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
                 moduleFilter === 'PENDING' ? 'bg-blue-900/60 text-blue-300 border border-blue-700' : 'text-blue-400 hover:text-blue-300'
               }`}
             >
@@ -4746,8 +4769,9 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
               Compte sans plan
             </button>
             <button
+              type="button"
               onClick={() => setModuleFilter('TRIAL')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
                 moduleFilter === 'TRIAL' ? 'bg-amber-900/60 text-amber-300 border border-amber-700' : 'text-amber-400 hover:text-amber-300'
               }`}
             >
@@ -4755,24 +4779,25 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
               Essai
             </button>
             <button
+              type="button"
               onClick={() => setModuleFilter('EXPIRED')}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer ${
                 moduleFilter === 'EXPIRED' ? 'bg-rose-900/60 text-rose-300 border border-rose-700' : 'text-rose-400 hover:text-rose-300'
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-              Expirés
+              Inactifs
             </button>
           </div>
         </div>
 
-        {/* LÉGENDE DÉTAILLÉE DES COULEURS */}
+        {/* Légende du Statut des Services */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#070A11] p-3.5 rounded-2xl border border-slate-800 text-[11px]">
           <div className="flex items-center gap-2.5">
             <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
             <div>
               <p className="font-bold text-emerald-400">Vert (Actif & Gratuit)</p>
-              <p className="text-[10px] text-slate-400">Module actif ou d'office gratuit</p>
+              <p className="text-[10px] text-slate-400">Module actif ou d'office inclus</p>
             </div>
           </div>
           <div className="flex items-center gap-2.5">
@@ -4792,112 +4817,112 @@ function TabAnalytics({ app }: { app: AppItem | null }) {
           <div className="flex items-center gap-2.5">
             <span className="w-3 h-3 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
             <div>
-              <p className="font-bold text-rose-400">Rouge (Abonnement Expiré)</p>
-              <p className="text-[10px] text-slate-400">Souscription échue ou inactive</p>
+              <p className="font-bold text-rose-400">Rouge (Inactif)</p>
+              <p className="text-[10px] text-slate-400">Souscription requise pour activer</p>
             </div>
           </div>
         </div>
 
-        {/* RANGÉE HORIZONTALE DES BOUGIES MINCES POUR CHAQUE MODULE */}
-        <div className="relative pt-6 pb-4 overflow-x-auto no-scrollbar">
-          <div className="flex items-end justify-between gap-2 min-w-[980px] px-2">
-            {filteredCandles.map((candle) => {
-              const isHovered = hoveredModule?.id === candle.id;
+        {/* Grille élégante des Modules avec barres d'activité & jauges */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-2.5 pt-2">
+          {filteredCandles.map((modItem) => {
+            const isHovered = hoveredModule?.id === modItem.id;
 
-              return (
-                <div
-                  key={candle.id}
-                  className="flex flex-col items-center group relative cursor-pointer flex-1 max-w-[62px]"
-                  onMouseEnter={() => setHoveredModule(candle)}
-                  onMouseLeave={() => setHoveredModule(null)}
-                >
-                  {/* Candlestick: Mèche Haute, Corps et Mèche Basse */}
-                  <div className="relative flex flex-col items-center justify-center h-28">
-                    {/* Mèche complète continue */}
-                    <div
-                      className={`w-[1.5px] h-24 transition-colors duration-200 ${
-                        isHovered ? 'bg-white' : 'bg-slate-700 group-hover:bg-slate-500'
-                      }`}
-                    ></div>
-
-                    {/* Corps de la bougie japonaise */}
-                    <div
-                      className={`absolute rounded-[2px] transition-all duration-200 ${
-                        isHovered ? 'w-4 scale-110 shadow-lg' : 'w-3'
-                      }`}
-                      style={{
-                        height: `${candle.candleHeight}px`,
-                        backgroundColor: candle.hexColor,
-                        boxShadow: isHovered ? `0 0 14px ${candle.hexColor}` : `0 0 6px ${candle.hexColor}60`,
-                      }}
-                    ></div>
-                  </div>
-
-                  {/* Nom du module écrit très fin en dessous */}
+            return (
+              <div
+                key={modItem.id}
+                className="group relative bg-[#070A11] border border-slate-800 hover:border-slate-600 rounded-2xl p-3 flex flex-col justify-between transition-all duration-200 cursor-pointer hover:shadow-lg"
+                onMouseEnter={() => setHoveredModule(modItem)}
+                onMouseLeave={() => setHoveredModule(null)}
+              >
+                <div className="flex items-center justify-between mb-2">
                   <span
-                    className={`text-[9px] font-medium tracking-tight truncate max-w-[58px] text-center mt-2 transition-colors block ${
-                      isHovered ? 'text-white font-bold' : 'text-slate-400 group-hover:text-slate-200'
-                    }`}
-                    title={candle.appName}
-                  >
-                    {candle.appName.replace('Studio ', '').replace('Espace ', '').replace('Module ', '')}
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: modItem.hexColor, boxShadow: `0 0 8px ${modItem.hexColor}80` }}
+                  />
+                  <span className="text-[9px] font-mono text-slate-400 font-semibold">
+                    {modItem.modSalesCount > 0 ? `${modItem.modSalesCount} tx` : 'Prêt'}
                   </span>
-
-                  {/* Prix / Mode en micro-texte */}
-                  <span className="text-[8px] font-mono text-slate-500 group-hover:text-slate-400 truncate max-w-[55px] text-center mt-0.5">
-                    {candle.priceMonthly === 0 ? 'Gratuit' : `${candle.priceMonthly / 1000}k/m`}
-                  </span>
-
-                  {/* HOVER TOOLTIP POPUP DE LA BOUGIE DU MODULE */}
-                  {isHovered && (
-                    <div className="absolute bottom-full mb-3 z-30 bg-[#070A11] border border-slate-700/90 rounded-2xl p-4 shadow-2xl w-64 text-left pointer-events-none transform -translate-x-1/2 left-1/2 backdrop-blur-md animate-in fade-in duration-150">
-                      <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
-                        <div>
-                          <p className="font-extrabold text-white text-xs leading-snug">{candle.appName}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{candle.category}</p>
-                        </div>
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0 mt-0.5"
-                          style={{ backgroundColor: candle.hexColor }}
-                        ></span>
-                      </div>
-
-                      <div className="space-y-1.5 pt-2.5 text-[11px]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Statut Marchand :</span>
-                          <span
-                            className="font-bold text-[10px] px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: `${candle.hexColor}20`,
-                              color: candle.hexColor,
-                              border: `1px solid ${candle.hexColor}40`,
-                            }}
-                          >
-                            {candle.statusLabel}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Tarif Mensuel :</span>
-                          <span className="font-mono font-bold text-white text-[11px]">
-                            {candle.priceMonthly === 0 ? '0 XOF (Inclus)' : `${candle.priceMonthly.toLocaleString('fr-FR')} XOF / mois`}
-                          </span>
-                        </div>
-                        {candle.trialLabel && (
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-slate-400">Avantage Essai :</span>
-                            <span className="text-amber-400 font-semibold">{candle.trialLabel}</span>
-                          </div>
-                        )}
-                        <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-800/80">
-                          {candle.shortDescription}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="space-y-1">
+                  <p
+                    className="text-xs font-extrabold text-slate-200 group-hover:text-white truncate"
+                    title={modItem.appName}
+                  >
+                    {modItem.appName.replace('Studio ', '').replace('Espace ', '').replace('Module ', '')}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">{modItem.category}</p>
+                </div>
+
+                {/* Barre d'activité & Jauge */}
+                <div className="mt-3 pt-2 border-t border-slate-800/80">
+                  <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, Math.max(15, modItem.modSalesCount * 25))}%`,
+                        backgroundColor: modItem.hexColor,
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-[9px] font-mono">
+                    <span className="text-slate-400">{modItem.priceMonthly === 0 ? 'Gratuit' : `${modItem.priceMonthly / 1000}k/m`}</span>
+                    <span style={{ color: modItem.hexColor }} className="font-bold">
+                      {modItem.statusKey === 'ACTIVE' ? 'Actif' : modItem.statusKey === 'TRIAL' ? 'Essai' : modItem.statusKey === 'PENDING' ? 'Prêt' : 'Inactif'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* HOVER TOOLTIP POPUP */}
+                {isHovered && (
+                  <div className="absolute bottom-full mb-2 z-30 bg-[#0F172A] border border-slate-700 rounded-2xl p-3.5 shadow-2xl w-60 text-left pointer-events-none transform -translate-x-1/2 left-1/2 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
+                      <div>
+                        <p className="font-extrabold text-white text-xs leading-snug">{modItem.appName}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{modItem.category}</p>
+                      </div>
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 mt-0.5"
+                        style={{ backgroundColor: modItem.hexColor }}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 pt-2 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Statut :</span>
+                        <span
+                          className="font-bold text-[10px] px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: `${modItem.hexColor}20`,
+                            color: modItem.hexColor,
+                            border: `1px solid ${modItem.hexColor}40`,
+                          }}
+                        >
+                          {modItem.statusLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400">Tarif :</span>
+                        <span className="font-mono font-bold text-white text-[11px]">
+                          {modItem.priceMonthly === 0 ? '0 XOF (Inclus)' : `${modItem.priceMonthly.toLocaleString('fr-FR')} XOF / mois`}
+                        </span>
+                      </div>
+                      {modItem.trialLabel && (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-400">Essai :</span>
+                          <span className="text-amber-400 font-semibold">{modItem.trialLabel}</span>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-800/80">
+                        {modItem.shortDescription}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -5281,43 +5306,669 @@ function TabDisputes() {
   );
 }
 
-/* 13. TAB: PRICING & MARGINS (+1.5%) */
-function TabPricing() {
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Tarification & Grille Réseau</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Transparence totale sur la marge plateforme (+1.5%) et frais opérateurs.</p>
-      </div>
+/* 13. TAB: PRICING & MARGINS (MODÈLES ÉCONOMIQUES DU ROUTEUR NANASORE ENGINE) */
 
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-extrabold">
-                <th className="py-3 px-2">Pays & Zone</th>
-                <th className="py-3 px-2">Opérateur Mobile</th>
-                <th className="py-3 px-2">Coût Opérateur</th>
-                <th className="py-3 px-2">Marge Nanasore</th>
-                <th className="py-3 px-2">Taux Total Appliqué</th>
-                <th className="py-3 px-2">Minimum / Tx</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {PRICING_RULES.map((rule, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition">
-                  <td className="py-3.5 px-2 font-bold text-slate-900">{rule.country}</td>
-                  <td className="py-3.5 px-2 font-semibold">{rule.operator}</td>
-                  <td className="py-3.5 px-2 text-slate-400">{rule.baseRate}</td>
-                  <td className="py-3.5 px-2 text-[#1E40AF] font-extrabold">{rule.margin}</td>
-                  <td className="py-3.5 px-2 font-black text-slate-900">{rule.totalFee}</td>
-                  <td className="py-3.5 px-2 text-slate-500">{rule.minFee}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+type BillingPartition = 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+
+function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToast?: (m: string, t?: any) => void }) {
+  const [billingPartition, setBillingPartition] = useState<BillingPartition>('MONTHLY');
+  const [rechargeAmount, setRechargeAmount] = useState<number>(5000);
+  const [customAmount, setCustomAmount] = useState<string>('');
+  const [isRechargeModalOpen, setIsRechargeModalOpen] = useState<boolean>(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('orange_money');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [selectedPlanForModal, setSelectedPlanForModal] = useState<any | null>(null);
+
+  const notify = (msg: string, type: 'success' | 'warning' | 'error' = 'success') => {
+    if (showToast) {
+      showToast(msg, type);
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nanasore_toast', { detail: { message: msg, type } }));
+    }
+  };
+
+  const currentBalance = app?.balances?.XOF || 0;
+
+  const handlePayAsYouGoRecharge = (amount: number) => {
+    if (amount < 1000) {
+      notify("Le montant minimum de recharge Pay-as-you-go est de 1 000 F CFA.", "warning");
+      return;
+    }
+    setIsProcessing(true);
+    setTimeout(() => {
+      setIsProcessing(false);
+      setIsRechargeModalOpen(false);
+      notify(`Recharge Pay-as-you-go de ${amount.toLocaleString('fr-FR')} F CFA validée avec succès sur votre univers !`, 'success');
+    }, 1000);
+  };
+
+  const confirmPlanSubscription = () => {
+    if (!selectedPlanForModal) return;
+    setIsProcessing(true);
+    setTimeout(() => {
+      setIsProcessing(false);
+      notify(`Souscription au ${selectedPlanForModal.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : billingPartition === 'QUARTERLY' ? 'Trimestriel' : 'Annuel'}) activée avec succès !`, 'success');
+      setSelectedPlanForModal(null);
+    }, 1000);
+  };
+
+  const subscriptionPlans = [
+    {
+      id: 'pro',
+      name: 'Plan Pro',
+      subtitle: 'Boutique & Formateur Pro',
+      badge: 'Le Plus Populaire',
+      isPopular: true,
+      monthlyPrice: 15000,
+      quarterlyPrice: 40500, // -10%
+      annualPrice: 150000,   // -20% / 2 mois offerts
+      features: [
+        'Caisse tactile POS & Produits illimités',
+        '10 Tunnels de conversion 1-Clic à fort impact',
+        "Jusqu'à 50 cours hébergés & Élèves illimités",
+        'Gestion multi-caissiers (jusqu’à 5 comptes PIN)',
+        'Module CV Pro inclus en illimité',
+        '0% de commission sur tous vos encaissements',
+        'Certificats officiels sécurisés par QR Code'
+      ],
+      ctaText: 'Choisir le Plan Pro'
+    },
+    {
+      id: 'business',
+      name: 'Plan Business',
+      subtitle: 'Multi-Boutiques & Campus',
+      badge: 'Croissance & Équipe',
+      isPopular: false,
+      monthlyPrice: 30000,
+      quarterlyPrice: 81000, // -10%
+      annualPrice: 300000,   // -20%
+      features: [
+        'Multi-points de vente (jusqu’à 20 caissiers)',
+        'Stocks multi-magasins synchronisés en temps réel',
+        'Pixels publicitaires Meta, TikTok & Google pré-intégrés',
+        'CRM marketing & relances de paniers automatisées',
+        'Gestion multi-formateurs & cohortes d’élèves',
+        '0% de commission sur vos encaissements',
+        'Assistance VIP prioritaire WhatsApp 7j/7'
+      ],
+      ctaText: 'Passer au Plan Business'
+    },
+    {
+      id: 'enterprise',
+      name: 'Plan Enterprise',
+      subtitle: 'Marque Blanche Souveraine & Franchises',
+      badge: 'Marque Blanche 100%',
+      isPopular: false,
+      monthlyPrice: 60000,
+      quarterlyPrice: 162000, // -10%
+      annualPrice: 600000,    // -20%
+      features: [
+        'Marque Blanche totale (Zéro mention tierce)',
+        'Votre propre nom de domaine personnalisé',
+        'Nombre de caisses & campus en ligne illimité',
+        'Accès complet aux clés API & Webhooks souverains',
+        'Intégration ERP & connecteurs bancaires dédiés',
+        '0% de commission sur tous vos volumes',
+        'Chargé de compte dédié & SLA 99.9% garanti'
+      ],
+      ctaText: 'Activer Enterprise Marque Blanche'
+    }
+  ];
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <Percent className="w-6 h-6 text-[#1E40AF]" />
+              Modèles Économiques & Grille Tarifaire
+            </h1>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#1E40AF] border border-blue-200">
+              <Sparkles className="w-3.5 h-3.5 text-[#1E40AF]" />
+              Routeur Dynamique Nanasore
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Transparence totale et souveraineté : trois formules claires adaptées à chaque étape de votre déploiement.
+          </p>
+        </div>
+
+        {/* Solde Pay-as-you-go en temps réel */}
+        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-[#1E40AF]">
+            <Wallet className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-slate-400">Solde Pay-As-You-Go</p>
+            <p className="text-sm font-black text-slate-900">
+              {currentBalance.toLocaleString('fr-FR')} <span className="text-xs text-[#1E40AF]">F CFA</span>
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* MODÈLE 1 : PAY AS YOU GO */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm relative overflow-hidden group hover:border-blue-400/80 transition duration-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-black">
+              <Zap className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-black text-slate-900">Modèle 1 : Formule Pay-As-You-Go (À l'Usage)</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  ⚡ Recharge dès 1 000 F CFA
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Liberté totale sans engagement mensuel : rechargez votre compte et consommez uniquement les micro-services sollicités.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsRechargeModalOpen(true)}
+            className="px-5 py-2.5 rounded-xl font-extrabold text-xs bg-gradient-to-r from-[#1E40AF] to-blue-600 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-600/20 transition flex items-center gap-2 cursor-pointer"
+          >
+            <Zap className="w-4 h-4 text-amber-300" />
+            <span>Recharger mon Solde (Dès 1 000 F CFA)</span>
+          </button>
+        </div>
+
+        {/* DÉCOMPOSITION DU MODÈLE PAY-AS-YOU-GO : 3 TYPES DE CONSOMMATION */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6">
+          {/* Mode 1: Paiement direct par requête API */}
+          <div className="p-5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-blue-100/80 text-[#1E40AF] flex items-center justify-center">
+                <Code2 className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-mono font-black text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                0.02 F / requête
+              </span>
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-slate-900">1. Paiement Direct par Requête</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Appels API sécurisés, routage de webhooks temps réel, notifications de paiement IPN et requêtes du switch transactionnel.
+              </p>
+            </div>
+            <ul className="text-[11px] text-slate-600 space-y-1 font-medium pt-2 border-t border-slate-200/60">
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Routage Webhook direct : 0.02 F CFA</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Checkouts & liens de paiement sécurisés</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Mode 2: Par Crédits (IA & Marketing) */}
+          <div className="p-5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100/80 text-indigo-700 flex items-center justify-center">
+                <Bot className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-mono font-black text-indigo-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                Crédits Déductibles
+              </span>
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-slate-900">2. Consommation par Crédits</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Génération de fiches produits IA, agent de vente conversationnel, SMS transactionnels Twilio et relances par email Brevo.
+              </p>
+            </div>
+            <ul className="text-[11px] text-slate-600 space-y-1 font-medium pt-2 border-t border-slate-200/60">
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Assistant IA décisionnel : 1 crédit / analyse</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>SMS transactionnel direct : 15 F CFA / SMS</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Mode 3: Par Points (Conformité & Juridique) */}
+          <div className="p-5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100/80 text-emerald-700 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-mono font-black text-emerald-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                Points Certifiés
+              </span>
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-slate-900">3. Consommation par Points</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Vérification d’identité KYC biométrique e-ID, horodatage certifié de contrats et signatures électroniques intégrées (équivalent DocuSign).
+              </p>
+            </div>
+            <ul className="text-[11px] text-slate-600 space-y-1 font-medium pt-2 border-t border-slate-200/60">
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Signature e-ID infalsifiable : 25 points</span>
+              </li>
+              <li className="flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Horodatage juridique sous séquestre Escrow</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* MODÈLE 2 : PLAN À LA COMMISSION (14% FIXE PRODUITS NON PHYSIQUES) */}
+      <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-[#0F172A] rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-indigo-700/40 relative overflow-hidden">
+        <div className="absolute -right-16 -top-16 w-60 h-60 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -left-16 -bottom-16 w-60 h-60 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-bold uppercase tracking-wider">
+              <GraduationCap className="w-4 h-4 text-amber-300" />
+              <span>Modèle 2 : Formule Créateurs, Formateurs & Produits Numériques</span>
+            </div>
+            <div className="px-3.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs">
+              ✓ 0 F AU DÉPART • AUCUN FRAIS FIXE
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-7 space-y-4">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
+                Commission fixe à <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400">14% pour tous</span> sur chaque produit non physique.
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Idéal pour formateurs, coachs, conférenciers et créateurs : hébergez vos cours vidéo, documents PDF, masterclasses et accès réservés sans abonnement fixe mensuel. 
+                Une commission unique de <strong className="text-amber-300">14%</strong> est prélevée uniquement lors d'une vente encaissée sous protection séquestre Escrow automatique. Vous conservez 86% net de vos revenus.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                  <div className="text-amber-300 font-black text-xl">14% Fixe</div>
+                  <div className="text-xs font-bold text-white mt-0.5">Produits Non Physiques</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Formations, cours, PDF, masterclasses</div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-white/5 border border-white/10">
+                  <div className="text-emerald-400 font-black text-xl">0% Commission</div>
+                  <div className="text-xs font-bold text-white mt-0.5">Produits Physiques</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Boutiques réelles & e-commerce physique</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/15 space-y-3.5">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-indigo-200 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Garanties & Outils Inclus :</span>
+              </h4>
+              <ul className="space-y-2 text-xs text-slate-200">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong>Tunnels de Vente 1-Clic</strong> avec Order Bump et Upsells intégrés.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong>Séquestre Escrow Automatisé</strong> : validation sécurisée des paiements.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong>Certificats QR-Code Officiels</strong> émis automatiquement aux apprenants.</span>
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => notify("Formule Commission 14% sélectionnée ! Vous pouvez publier vos cours et produits digitaux dès maintenant.", "success")}
+                className="w-full py-3.5 px-4 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Rocket className="w-4 h-4 text-slate-950" />
+                <span>Activer le Plan Commission 14% (0 F CFA au départ)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODÈLE 3 : PLAN D'ABONNEMENT SOUVERAIN (3 NIVEAUX & PAIEMENT PAR PARTITION) */}
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-amber-500" />
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                Modèle 3 : Abonnements Souverains (0% de Commission sur tout votre C.A.)
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              3 niveaux professionnels. Choisissez votre partition de paiement pour maximiser vos économies.
+            </p>
+          </div>
+
+          {/* SÉLECTEUR DE PARTITION DE PAIEMENT */}
+          <div className="inline-flex items-center p-1.5 bg-slate-100 rounded-2xl border border-slate-200 shadow-xs self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setBillingPartition('MONTHLY')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                billingPartition === 'MONTHLY'
+                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Mensuel
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingPartition('QUARTERLY')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                billingPartition === 'QUARTERLY'
+                  ? 'bg-[#1E40AF] text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>Trimestriel</span>
+              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950">-10%</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingPartition('ANNUAL')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                billingPartition === 'ANNUAL'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>Annuel</span>
+              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-950">-20% (2 mois offerts)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* GRILLE DES 3 PLANS PROFESSIONNELS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {subscriptionPlans.map((plan) => {
+            const currentPrice =
+              billingPartition === 'MONTHLY'
+                ? plan.monthlyPrice
+                : billingPartition === 'QUARTERLY'
+                ? plan.quarterlyPrice
+                : plan.annualPrice;
+
+            const unitPeriod =
+              billingPartition === 'MONTHLY'
+                ? '/ mois'
+                : billingPartition === 'QUARTERLY'
+                ? '/ trimestre'
+                : '/ an';
+
+            const monthlyEquivalent =
+              billingPartition === 'QUARTERLY'
+                ? Math.round(plan.quarterlyPrice / 3)
+                : billingPartition === 'ANNUAL'
+                ? Math.round(plan.annualPrice / 12)
+                : plan.monthlyPrice;
+
+            return (
+              <div
+                key={plan.id}
+                className={`bg-white rounded-3xl p-6 sm:p-7 border transition duration-300 flex flex-col justify-between relative ${
+                  plan.isPopular
+                    ? 'border-[#1E40AF] shadow-xl shadow-blue-600/10 ring-2 ring-[#1E40AF]/20'
+                    : 'border-slate-200/90 hover:border-slate-400 shadow-sm'
+                }`}
+              >
+                {/* Badge du Plan */}
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <span
+                    className={`text-[11px] font-black uppercase px-3 py-1 rounded-full ${
+                      plan.isPopular
+                        ? 'bg-blue-50 text-[#1E40AF] border border-blue-200'
+                        : plan.id === 'enterprise'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {plan.badge}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                    0% Commission
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">{plan.name}</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">{plan.subtitle}</p>
+                  </div>
+
+                  {/* Prix calculé selon la partition choisie */}
+                  <div className="py-2 border-y border-slate-100">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-black text-slate-900 tracking-tight">
+                        {currentPrice.toLocaleString('fr-FR')}
+                      </span>
+                      <span className="text-xs font-extrabold text-slate-500">
+                        F CFA {unitPeriod}
+                      </span>
+                    </div>
+                    {billingPartition !== 'MONTHLY' && (
+                      <p className="text-[11px] font-semibold text-emerald-600 mt-1">
+                        Soit {monthlyEquivalent.toLocaleString('fr-FR')} F CFA / mois
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Liste des fonctionnalités */}
+                  <ul className="space-y-2.5 text-xs text-slate-700">
+                    {plan.features.map((feature, fIdx) => (
+                      <li key={fIdx} className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Bouton CTA incitatif */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectPlan(plan)}
+                  className={`w-full mt-6 py-3.5 px-4 rounded-xl font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+                    plan.isPopular
+                      ? 'bg-gradient-to-r from-[#1E40AF] to-blue-600 hover:from-blue-700 hover:to-blue-800 text-white shadow-blue-600/25'
+                      : plan.id === 'enterprise'
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black shadow-amber-500/20'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
+                  }`}
+                >
+                  <Rocket className="w-4 h-4" />
+                  <span>{plan.ctaText}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* MODAL INTERACTIF DE RECHARGE PAY-AS-YOU-GO */}
+      {isRechargeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm">Recharge Solde Pay-As-You-Go</h3>
+                  <p className="text-[11px] text-slate-400">À partir de 1 000 F CFA</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRechargeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Montants pré-configurés */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-extrabold uppercase text-slate-500">Choisissez un montant :</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[1000, 5000, 10000, 25000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => {
+                      setRechargeAmount(amt);
+                      setCustomAmount('');
+                    }}
+                    className={`py-2 px-1 rounded-xl text-xs font-extrabold transition cursor-pointer border ${
+                      rechargeAmount === amt && !customAmount
+                        ? 'bg-[#1E40AF] text-white border-[#1E40AF]'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {amt.toLocaleString('fr-FR')} F
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Montant personnalisé */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-extrabold uppercase text-slate-500">Ou montant personnalisé :</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="1000"
+                  step="500"
+                  placeholder="Ex : 15 000"
+                  value={customAmount}
+                  onChange={(e) => {
+                    setCustomAmount(e.target.value);
+                    const val = Number(e.target.value);
+                    if (val >= 1000) setRechargeAmount(val);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF]"
+                />
+                <span className="absolute right-3.5 top-3 text-xs font-bold text-slate-400">F CFA</span>
+              </div>
+            </div>
+
+            {/* Choix du moyen de paiement */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-extrabold uppercase text-slate-500">Moyen de paiement :</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { id: 'orange_money', label: 'Orange Money' },
+                  { id: 'wave', label: 'Wave Direct' },
+                  { id: 'mtn_momo', label: 'MTN Mobile Money' },
+                  { id: 'moov_money', label: 'Moov Money' },
+                  { id: 'card', label: 'Carte Visa / Mastercard' },
+                  { id: 'bank_transfer', label: 'Virement Bancaire' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedPaymentMethod(m.id)}
+                    className={`p-2.5 rounded-xl border font-bold text-left transition flex items-center justify-between cursor-pointer ${
+                      selectedPaymentMethod === m.id
+                        ? 'border-[#1E40AF] bg-blue-50/50 text-[#1E40AF]'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{m.label}</span>
+                    {selectedPaymentMethod === m.id && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={() => handlePayAsYouGoRecharge(rechargeAmount)}
+              className="w-full py-3.5 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-[#1E40AF] to-blue-600 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4 text-amber-300" />
+              )}
+              <span>Valider la recharge ({rechargeAmount.toLocaleString('fr-FR')} F CFA)</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SOUSCRIPTION AU PLAN CHOISI */}
+      {selectedPlanForModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Confirmer votre souscription</h3>
+                <p className="text-[11px] text-slate-400">{selectedPlanForModal.name} • {selectedPlanForModal.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPlanForModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Partition choisie :</span>
+                <span className="font-extrabold text-slate-900 uppercase">
+                  {billingPartition === 'MONTHLY' ? 'Mensuelle' : billingPartition === 'QUARTERLY' ? 'Trimestrielle (-10%)' : 'Annuelle (-20%)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                <span className="text-slate-500">Montant à régler :</span>
+                <span className="text-base font-black text-[#1E40AF]">
+                  {(billingPartition === 'MONTHLY'
+                    ? selectedPlanForModal.monthlyPrice
+                    : billingPartition === 'QUARTERLY'
+                    ? selectedPlanForModal.quarterlyPrice
+                    : selectedPlanForModal.annualPrice
+                  ).toLocaleString('fr-FR')} F CFA
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={confirmPlanSubscription}
+              className="w-full py-3.5 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isProcessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              <span>Procéder au Paiement Sécurisé</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
