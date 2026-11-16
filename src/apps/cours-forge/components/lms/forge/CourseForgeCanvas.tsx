@@ -1214,10 +1214,10 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
               target="_blank"
               rel="noreferrer"
               className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-bold text-xs transition border border-blue-500/30 flex items-center gap-1.5 cursor-pointer"
-              title="Téléverser des cours ou supports dans le vault Cloudflare R2 (Compression ZIP)"
+              title="Téléverser des cours ou supports dans le coffre Cloud souverain (Compression ZIP)"
             >
               <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Upload R2</span>
+              <span className="hidden sm:inline">Upload Cloud</span>
             </a>
           </div>
 

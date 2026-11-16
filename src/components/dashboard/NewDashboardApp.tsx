@@ -5031,7 +5031,7 @@ function TabDisputes() {
 
 /* 13. TAB: PRICING & MARGINS (MODÈLES ÉCONOMIQUES DU ROUTEUR NANASORE ENGINE) */
 
-type BillingPartition = 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+type BillingPartition = 'MONTHLY' | 'ANNUAL';
 
 function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToast?: (m: string, t?: any) => void }) {
   const [billingPartition, setBillingPartition] = useState<BillingPartition>('MONTHLY');
@@ -5071,15 +5071,13 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
     return total;
   }, [selectedModularParts]);
 
-  // Prix calculé selon la partition de durée choisie
+  // Prix calculé selon la partition de durée choisie (Mensuel ou Annuel -20%)
   const modularCurrentPrice = useMemo(() => {
     if (billingPartition === 'MONTHLY') return modularMonthlyBase;
-    if (billingPartition === 'QUARTERLY') return Math.round(modularMonthlyBase * 3 * 0.9);
     return Math.round(modularMonthlyBase * 12 * 0.8); // Annuel : -20% (soit 2.4 mois offerts)
   }, [modularMonthlyBase, billingPartition]);
 
   const modularMonthlyEquivalent = useMemo(() => {
-    if (billingPartition === 'QUARTERLY') return Math.round(modularCurrentPrice / 3);
     if (billingPartition === 'ANNUAL') return Math.round(modularCurrentPrice / 12);
     return modularMonthlyBase;
   }, [modularCurrentPrice, billingPartition, modularMonthlyBase]);
@@ -5105,7 +5103,6 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
       subtitle: activeNames.join(' • '),
       badge: isAllModularSelected ? 'Pack Tout-en-Un • Économie 5 000 F/m' : 'Partition Modulaire',
       monthlyPrice: modularMonthlyBase,
-      quarterlyPrice: Math.round(modularMonthlyBase * 3 * 0.9),
       annualPrice: Math.round(modularMonthlyBase * 12 * 0.8),
       features: activeNames,
       ctaText: 'Valider mon abonnement à la carte'
@@ -5142,7 +5139,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
-      notify(`Souscription au ${selectedPlanForModal.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : billingPartition === 'QUARTERLY' ? 'Trimestriel' : 'Annuel'}) activée avec succès !`, 'success');
+      notify(`Souscription au ${selectedPlanForModal.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : 'Annuel'}) activée avec succès !`, 'success');
       setSelectedPlanForModal(null);
     }, 1000);
   };
@@ -5155,7 +5152,6 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
       badge: 'Le Plus Populaire',
       isPopular: true,
       monthlyPrice: 15000,
-      quarterlyPrice: 40500, // -10%
       annualPrice: 150000,   // -20% / 2 mois offerts
       features: [
         'Caisse tactile POS & Produits illimités',
@@ -5175,7 +5171,6 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
       badge: 'Croissance & Équipe',
       isPopular: false,
       monthlyPrice: 30000,
-      quarterlyPrice: 81000, // -10%
       annualPrice: 300000,   // -20%
       features: [
         'Multi-points de vente (jusqu’à 20 caissiers)',
@@ -5195,7 +5190,6 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
       badge: 'Marque Blanche 100%',
       isPopular: false,
       monthlyPrice: 60000,
-      quarterlyPrice: 162000, // -10%
       annualPrice: 600000,    // -20%
       features: [
         'Marque Blanche totale (Zéro mention tierce)',
@@ -5465,18 +5459,6 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
             </button>
             <button
               type="button"
-              onClick={() => setBillingPartition('QUARTERLY')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
-                billingPartition === 'QUARTERLY'
-                  ? 'bg-[#1E40AF] text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <span>Trimestriel</span>
-              <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950">-10%</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setBillingPartition('ANNUAL')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
                 billingPartition === 'ANNUAL'
@@ -5554,7 +5536,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
                   <span className="text-xs font-bold text-slate-400">F CFA / mois</span>
                 </div>
                 <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-                  {billingPartition === 'QUARTERLY' ? 'Soit 4 500 F/m (-10%)' : billingPartition === 'ANNUAL' ? 'Soit 4 000 F/m (-20%)' : '0% commission encaissements'}
+                  {billingPartition === 'ANNUAL' ? 'Soit 4 000 F/m (-20% / 2 mois offerts)' : '0% commission encaissements'}
                 </p>
               </div>
             </div>
@@ -5597,7 +5579,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
                   <span className="text-xs font-bold text-slate-400">F CFA / mois</span>
                 </div>
                 <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-                  {billingPartition === 'QUARTERLY' ? 'Soit 4 500 F/m (-10%)' : billingPartition === 'ANNUAL' ? 'Soit 4 000 F/m (-20%)' : 'Pixels & tracking sans limite'}
+                  {billingPartition === 'ANNUAL' ? 'Soit 4 000 F/m (-20% / 2 mois offerts)' : 'Pixels & tracking sans limite'}
                 </p>
               </div>
             </div>
@@ -5640,7 +5622,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
                   <span className="text-xs font-bold text-slate-400">F CFA / mois</span>
                 </div>
                 <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-                  {billingPartition === 'QUARTERLY' ? 'Soit 9 000 F/m (-10%)' : billingPartition === 'ANNUAL' ? 'Soit 8 000 F/m (-20%)' : 'Élèves & cours illimités'}
+                  {billingPartition === 'ANNUAL' ? 'Soit 8 000 F/m (-20% / 2 mois offerts)' : 'Élèves & cours illimités'}
                 </p>
               </div>
             </div>
@@ -5682,7 +5664,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
                   <span className="text-[10px] text-slate-500 line-through">20 000 F</span>
                 </div>
                 <p className="text-[10px] text-amber-300 font-semibold mt-0.5">
-                  {billingPartition === 'QUARTERLY' ? 'Soit 13 500 F/m (-10%)' : billingPartition === 'ANNUAL' ? 'Soit 12 000 F/m (-20%)' : 'Économie immédiate de 5 000 F CFA'}
+                  {billingPartition === 'ANNUAL' ? 'Soit 12 000 F/m (-20% / 2 mois offerts)' : 'Économie immédiate de 5 000 F CFA'}
                 </p>
               </div>
             </div>
@@ -5704,7 +5686,7 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
                 )}
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Partition : <strong className="text-white">{billingPartition === 'MONTHLY' ? 'Facturation Mensuelle' : billingPartition === 'QUARTERLY' ? 'Facturation Trimestrielle (-10%)' : 'Facturation Annuelle (-20% / 2 mois offerts)'}</strong>
+                Partition : <strong className="text-white">{billingPartition === 'MONTHLY' ? 'Facturation Mensuelle' : 'Facturation Annuelle (-20% / 2 mois offerts)'}</strong>
                 {billingPartition !== 'MONTHLY' && ` • Soit ${modularMonthlyEquivalent.toLocaleString('fr-FR')} F CFA / mois`}
               </p>
             </div>
@@ -5748,21 +5730,15 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
             const currentPrice =
               billingPartition === 'MONTHLY'
                 ? plan.monthlyPrice
-                : billingPartition === 'QUARTERLY'
-                ? plan.quarterlyPrice
                 : plan.annualPrice;
 
             const unitPeriod =
               billingPartition === 'MONTHLY'
                 ? '/ mois'
-                : billingPartition === 'QUARTERLY'
-                ? '/ trimestre'
                 : '/ an';
 
             const monthlyEquivalent =
-              billingPartition === 'QUARTERLY'
-                ? Math.round(plan.quarterlyPrice / 3)
-                : billingPartition === 'ANNUAL'
+              billingPartition === 'ANNUAL'
                 ? Math.round(plan.annualPrice / 12)
                 : plan.monthlyPrice;
 

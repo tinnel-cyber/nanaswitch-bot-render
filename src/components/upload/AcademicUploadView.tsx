@@ -69,7 +69,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
     return initialRole;
   });
 
-  const [destination, setDestination] = useState<'R2' | 'SUPABASE'>('R2');
+  const [destination, setDestination] = useState<'VAULT' | 'CLOUD'>('VAULT');
 
   // Vendor Digital Product Form State
   const [productName, setProductName] = useState('');
@@ -100,45 +100,65 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
     productName?: string;
   } | null>(null);
 
-  // Digital Orders for Presigned Downloads Space
-  const [orders, setOrders] = useState<MockDigitalOrder[]>([
-    {
-      orderId: 'CMD-9841',
-      productName: 'Masterclass Remix & Cloudflare R2 Architecture',
-      category: 'Formation & E-Book PDF',
-      fileType: 'PDF',
-      fileSize: '14.8 Mo',
-      purchaseDate: '12 Novembre 2026',
-      fileKey: 'products/vendors/masterclass-nextjs-r2.pdf',
-      isPaid: true,
-      downloadUrl: '/download/CMD-9841',
-      expiresInSeconds: 3600
-    },
-    {
-      orderId: 'CMD-7712',
-      productName: 'Bundle UI Kits & Templates E-Commerce WhatsApp',
-      category: 'Templates & Code Source',
-      fileType: 'ZIP',
-      fileSize: '48.2 Mo',
-      purchaseDate: '10 Novembre 2026',
-      fileKey: 'products/vendors/templates-ui-ecommerce.zip',
-      isPaid: true,
-      downloadUrl: '/download/CMD-7712',
-      expiresInSeconds: 3600
-    },
-    {
-      orderId: 'CMD-5540',
-      productName: 'Pack Vidéos Accélérateur Vente Caisse POS',
-      category: 'Formation Vidéo MP4',
-      fileType: 'MP4',
-      fileSize: '128.5 Mo',
-      purchaseDate: '08 Novembre 2026',
-      fileKey: 'products/vendors/formation-video-whatsapp.mp4',
-      isPaid: true,
-      downloadUrl: '/download/CMD-5540',
-      expiresInSeconds: 3600
-    }
-  ]);
+  // Digital Orders pour l'espace de téléchargement sécurisé (100% réel, zéro mock)
+  const [orders, setOrders] = useState<MockDigitalOrder[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(true);
+
+  // Chargement réel des commandes numériques depuis la base de données
+  useEffect(() => {
+    let isMounted = true;
+    const loadRealDigitalOrders = async () => {
+      try {
+        setIsLoadingOrders(true);
+        const userId = currentUser?.id || currentUser?.uid;
+
+        // Requête Supabase réelle sur les commandes
+        let query = supabase
+          .from('orders')
+          .select('id, total, status, created_at, customer_id, items, file_key, payment_method')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (userId) {
+          query = query.or(`customer_id.eq.${userId},user_id.eq.${userId}`);
+        }
+
+        const { data, error } = await query;
+
+        if (!error && data && data.length > 0 && isMounted) {
+          const itemsList: MockDigitalOrder[] = data.map((o: any, idx: number) => {
+            const firstItem = Array.isArray(o.items) && o.items.length > 0 ? o.items[0] : null;
+            const pName = firstItem?.name || firstItem?.title || o.product_name || `Produit Numérique #${o.id?.slice(0, 6) || idx + 1}`;
+            const ext = o.file_key?.split('.').pop()?.toUpperCase() || 'PDF';
+
+            return {
+              orderId: `CMD-${String(o.id || idx + 1).slice(-4).toUpperCase()}`,
+              productName: pName,
+              category: firstItem?.category || 'Formation & E-Book',
+              fileType: ext,
+              fileSize: firstItem?.size || 'Archive Sécurisée',
+              purchaseDate: o.created_at ? new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : "Récemment",
+              fileKey: o.file_key || `products/digital/${o.id || idx}.pdf`,
+              isPaid: o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'SUCCESS',
+              downloadUrl: `/download/CMD-${String(o.id || idx + 1).slice(-4).toUpperCase()}`,
+              expiresInSeconds: 3600
+            };
+          });
+          setOrders(itemsList);
+        } else if (isMounted) {
+          setOrders([]);
+        }
+      } catch (err) {
+        console.warn("Info chargement des commandes numériques authentiques:", err);
+        if (isMounted) setOrders([]);
+      } finally {
+        if (isMounted) setIsLoadingOrders(false);
+      }
+    };
+
+    loadRealDigitalOrders();
+    return () => { isMounted = false; };
+  }, [currentUser?.id, currentUser?.uid]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -178,13 +198,13 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
 
       if (activeTab === 'vendor') {
         fileKey = `products/vendors/${vendorId}/${timestamp}_${sanitizedName}`;
-        storageTargetName = destination === 'R2' ? 'Cloudflare R2 Digital Vault' : 'Supabase Storage';
+        storageTargetName = destination === 'VAULT' ? 'Coffre Cloud Haute Sécurité' : 'Stockage Cloud Souverain';
       } else if (activeTab === 'professeur') {
         fileKey = `academic/courses/${courseId}/${timestamp}_${sanitizedName}`;
-        storageTargetName = destination === 'R2' ? 'Cloudflare R2 Digital Vault' : 'Supabase Storage';
+        storageTargetName = destination === 'VAULT' ? 'Coffre Cloud Haute Sécurité' : 'Stockage Cloud Souverain';
       } else {
         fileKey = `academic/submissions/${studentNumber}/${timestamp}_${sanitizedName}`;
-        storageTargetName = 'Supabase Storage (academic_uploads)';
+        storageTargetName = 'Stockage Cloud Souverain (academic_uploads)';
       }
 
       setUploadProgress(45);
@@ -303,7 +323,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
         <div className="flex items-center gap-3">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Vault R2 & Supabase Sécurisé</span>
+            <span>Coffre Cloud Souverain Sécurisé</span>
           </span>
           <span className="font-mono text-xs text-slate-400 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
             Jetons Pré-signés 3600s
@@ -317,7 +337,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Studio Upload Vendeur & Téléchargement Sécurisé R2</span>
+            <span>Studio Upload Vendeur & Téléchargements Sécurisés</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Espace Produits Numériques, Upload Vendeur & Liens Pré-signés
@@ -351,7 +371,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
                 <span className="text-[10px] bg-blue-500/20 text-blue-300 font-extrabold px-1.5 py-0.2 rounded">PRO</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Mettre en vente des e-books, packs ZIP, vidéos et templates avec prix & R2.
+                Mettre en vente des e-books, packs ZIP, vidéos et templates avec accès sécurisé.
               </p>
             </div>
           </button>
@@ -374,7 +394,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <h3 className="text-xs font-black text-white">Téléchargements Clients</h3>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-1.5 py-0.2 rounded">R2 SIGNÉ</span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-1.5 py-0.2 rounded">LIEN SÉCURISÉ</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Espace client des liens pré-signés temporaires (expiration 1 heure).
@@ -417,10 +437,10 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
             <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-3">
               <Lock className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-bold text-sm text-emerald-300">Architecture des Liens Pré-Signés Cloudflare R2</h4>
+                <h4 className="font-bold text-sm text-emerald-300">Architecture des Liens Pré-Signés Sécurisés (Anti-Piratage)</h4>
                 <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                   Chaque lien de téléchargement est cryptographiquement signé avec une clé HMAC secrète et expire automatiquement après <strong>3 600 secondes (1 heure)</strong>.
-                  Cette sécurité protège les vendeurs contre le partage frauduleux et garantit un débit de téléchargement direct depuis le CDN mondial.
+                  Cette sécurité protège les vendeurs contre le partage frauduleux et garantit un débit de téléchargement direct et authentifié.
                 </p>
               </div>
             </div>
@@ -430,47 +450,60 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
                 Vos Produits Numériques Disponibles au Téléchargement ({orders.length})
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {orders.map((order) => (
-                  <div
-                    key={order.orderId}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-sm hover:border-emerald-500/50 transition group"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          {order.fileType} • {order.fileSize}
-                        </span>
-                        <span className="font-mono text-xs font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
-                          {order.orderId}
-                        </span>
+              {isLoadingOrders ? (
+                <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 text-xs">
+                  Chargement de vos accès numériques sécurisés en cours...
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
+                  <p className="text-white font-bold text-sm">Aucun produit numérique en attente de téléchargement</p>
+                  <p className="text-slate-400 text-xs">
+                    Vos achats de formations, e-books et documents sous licence apparaîtront automatiquement ici dès la confirmation de votre commande.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {orders.map((order) => (
+                    <div
+                      key={order.orderId}
+                      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-sm hover:border-emerald-500/50 transition group"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {order.fileType} • {order.fileSize}
+                          </span>
+                          <span className="font-mono text-xs font-bold text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+                            {order.orderId}
+                          </span>
+                        </div>
+
+                        <h4 className="text-sm font-extrabold text-white group-hover:text-emerald-300 transition line-clamp-2">
+                          {order.productName}
+                        </h4>
+                        <p className="text-xs text-slate-400 mt-1">{order.category}</p>
+
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-800/80">
+                          <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Validité du jeton : 1 heure (3600s)</span>
+                        </div>
                       </div>
 
-                      <h4 className="text-sm font-extrabold text-white group-hover:text-emerald-300 transition line-clamp-2">
-                        {order.productName}
-                      </h4>
-                      <p className="text-xs text-slate-400 mt-1">{order.category}</p>
-
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-3 pt-3 border-t border-slate-800/80">
-                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Validité du jeton : 1 heure (3600s)</span>
+                      <div className="pt-2">
+                        <a
+                          href={order.downloadUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition active:scale-[0.98]"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Télécharger via Lien Sécurisé</span>
+                        </a>
                       </div>
                     </div>
-
-                    <div className="pt-2">
-                      <a
-                        href={order.downloadUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition active:scale-[0.98]"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>Télécharger via Lien Signé R2</span>
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -487,7 +520,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
                   <span>Mettre en Ligne un Produit Numérique Marchand</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Compression automatique en mémoire RAM (zlib niveau 9) et hébergement haute vitesse dans le coffre Cloudflare R2.
+                  Compression automatique en mémoire RAM (zlib niveau 9) et hébergement haute vitesse dans le coffre Cloud sécurisé.
                 </p>
               </div>
 
@@ -503,31 +536,31 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label
-                  onClick={() => setDestination('R2')}
+                  onClick={() => setDestination('VAULT')}
                   className={`p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer transition ${
-                    destination === 'R2'
+                    destination === 'VAULT'
                       ? 'bg-blue-500/15 border-blue-500 text-blue-300 ring-1 ring-blue-500/40'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                   }`}
                 >
                   <HardDrive className="w-5 h-5 text-blue-400 shrink-0" />
                   <div>
-                    <span className="text-xs font-bold block text-white">Cloudflare R2 Digital Vault (Recommandé)</span>
+                    <span className="text-xs font-bold block text-white">Coffre Cloud Haute Sécurité (Recommandé)</span>
                     <span className="text-[10px] text-slate-400">Liens signés temporaires (3600s), anti-hotlinking & très gros fichiers</span>
                   </div>
                 </label>
 
                 <label
-                  onClick={() => setDestination('SUPABASE')}
+                  onClick={() => setDestination('CLOUD')}
                   className={`p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer transition ${
-                    destination === 'SUPABASE'
+                    destination === 'CLOUD'
                       ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/40'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                   }`}
                 >
                   <Cloud className="w-5 h-5 text-emerald-400 shrink-0" />
                   <div>
-                    <span className="text-xs font-bold block text-white">Supabase Storage</span>
+                    <span className="text-xs font-bold block text-white">Stockage Cloud Standard</span>
                     <span className="text-[10px] text-slate-400">Idéal pour e-books PDF et fichiers légers (&lt; 50 Mo)</span>
                   </div>
                 </label>

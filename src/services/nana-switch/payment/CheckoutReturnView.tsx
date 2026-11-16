@@ -313,7 +313,7 @@ export const CheckoutReturnView: React.FC<CheckoutReturnViewProps> = ({ onBackTo
                       Vos Accès Produits Numériques
                     </h4>
                     <p className="text-[11px] text-blue-200">
-                      Lien pré-signé sécurisé Cloudflare R2 • Expire dans 1 heure (3600s)
+                      Lien pré-signé sécurisé Cloud Souverain • Expire dans 1 heure (3600s)
                     </p>
                   </div>
                 </div>

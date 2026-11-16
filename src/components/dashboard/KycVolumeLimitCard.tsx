@@ -23,15 +23,31 @@ export const KycVolumeLimitCard: React.FC<KycVolumeLimitCardProps> = ({
   onUpgradeClick,
   className = ''
 }) => {
-  // Détermination du profil KYC : 'INDIVIDUAL' vs 'ENTERPRISE'
-  const isEnterprise = app.type === 'entreprise' || app.kyc_limits?.tier === 'ENTERPRISE';
-  const tier: 'INDIVIDUAL' | 'ENTERPRISE' = isEnterprise ? 'ENTERPRISE' : 'INDIVIDUAL';
+  // Détermination stricte du profil KYC : Particulier (1 000 000 XOF) vs Entreprise (5 000 000 XOF)
+  const isParticulier = 
+    app.type === 'particulier' || 
+    (app as any).accountType === 'particulier' || 
+    app.kyc?.accountType === 'particulier' || 
+    (app.kyc as any)?.type === 'particulier' ||
+    app.kyc_limits?.tier === 'INDIVIDUAL';
 
-  // Plafond mensuel en XOF
-  const maxLimit = app.custom_monthly_limit_xof || (isEnterprise ? 5000000 : 1000000);
+  const isEnterprise = !isParticulier && (
+    app.type === 'entreprise' || 
+    app.type === 'business' || 
+    (app as any).accountType === 'entreprise' ||
+    app.kyc?.accountType === 'entreprise' ||
+    app.kyc_limits?.tier === 'ENTERPRISE'
+  );
 
-  // Volume consommé pour le mois en cours
-  const currentVolume = app.monthly_usage?.volume_xof ?? (isEnterprise ? 3850000 : 850000);
+  // Plafond mensuel légal strict en XOF :
+  // - Particulier : 1 000 000 XOF / mois
+  // - Entreprise : 5 000 000 XOF / mois (ou extension Super Admin validée)
+  const maxLimit = isParticulier
+    ? 1000000
+    : (app.custom_monthly_limit_xof || (app.kyc_limits?.max_monthly_volume_xof ?? 5000000));
+
+  // Volume réel consommé pour le mois civil en cours (100% réel, zéro mock)
+  const currentVolume = Number(app.monthly_usage?.volume_xof) || 0;
   const remainingVolume = Math.max(0, maxLimit - currentVolume);
   const percentage = Math.min(100, Math.round((currentVolume / maxLimit) * 100));
 
