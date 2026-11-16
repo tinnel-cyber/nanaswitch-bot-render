@@ -54,18 +54,20 @@ export async function exportResumeToHdPdf(
       }
     }
 
-    // 2. Clone isolé dans un conteneur visible dans document.body mais hors de vue (top: 0, left: 0, opacity: 0.01)
-    // Cela permet au moteur de rendu du navigateur de calculer parfaitement toutes les couleurs réelles
+    // 2. Clone isolé dans un conteneur placé hors-champ mais avec opacité 100%
+    // CRITIQUE : Ne JAMAIS appliquer opacity < 1 sur le conteneur car html2canvas calcule les styles réels
+    // et applique globalAlpha sur le canvas, ce qui délavait/blanchissait les couleurs du CV.
     sandboxContainer = document.createElement('div');
     sandboxContainer.id = 'cv-export-sandbox-isolated';
     sandboxContainer.style.position = 'fixed';
     sandboxContainer.style.top = '0';
-    sandboxContainer.style.left = '0';
+    sandboxContainer.style.left = '-9999px';
     sandboxContainer.style.width = '794px';
     sandboxContainer.style.height = '1123px';
     sandboxContainer.style.overflow = 'hidden';
     sandboxContainer.style.zIndex = '-9999';
-    sandboxContainer.style.opacity = '0.01';
+    sandboxContainer.style.opacity = '1';
+    sandboxContainer.style.visibility = 'visible';
     sandboxContainer.style.pointerEvents = 'none';
     sandboxContainer.style.backgroundColor = '#ffffff';
 
@@ -80,25 +82,26 @@ export async function exportResumeToHdPdf(
     clonedCv.style.maxHeight = '1123px';
     clonedCv.style.boxShadow = 'none';
     clonedCv.style.filter = 'none';
+    clonedCv.style.opacity = '1';
     clonedCv.style.colorAdjust = 'exact';
     (clonedCv.style as any).webkitPrintColorAdjust = 'exact';
 
     sandboxContainer.appendChild(clonedCv);
     document.body.appendChild(sandboxContainer);
 
-    // Pause minimale de peinture
-    await new Promise((r) => setTimeout(r, 100));
+    // Pause minimale de peinture du navigateur pour calcul complet des styles et couleurs
+    await new Promise((r) => setTimeout(r, 120));
 
     if (onProgress) onProgress('RENDERING');
 
-    // 3. Capture Canvas Haute Résolution (scale: 2 = 1588 x 2246 px)
+    // 3. Capture Canvas Haute Résolution (scale: 2 = 1588 x 2246 px pour 300 DPI)
     const canvasPromise = html2canvas(clonedCv, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
-      imageTimeout: 5000,
+      imageTimeout: 6000,
       width: 794,
       height: 1123,
       x: 0,
@@ -120,14 +123,14 @@ export async function exportResumeToHdPdf(
 
     if (onProgress) onProgress('COMPRESSING');
 
-    // 4. Algorithme de Compression Forte Automatique Sans Dégradation de Couleur
-    // Facteur qualité 0.83 : Sweet-spot optimal human-eye lossless (réduit le poids de 75-80% tout en gardant textes nets & couleurs vives)
-    let compressionQuality = 0.83;
+    // 4. Algorithme de Compression Forte Haute Fidélité Couleur
+    // Ratio optimal : Qualité JPEG 0.82 (préserve le contraste des textes et l'éclat des couleurs tout en réduisant le poids à ~300 Ko)
+    let compressionQuality = 0.82;
     let imgData = canvas.toDataURL('image/jpeg', compressionQuality);
 
-    // Seconde passe adaptative si fichier trop volumineux (> 1.2 Mo)
-    if (imgData.length > 1_250_000) {
-      compressionQuality = 0.77;
+    // Seconde passe adaptative si l'image dépasse 1 Mo
+    if (imgData.length > 1_000_000) {
+      compressionQuality = 0.75;
       imgData = canvas.toDataURL('image/jpeg', compressionQuality);
     }
 

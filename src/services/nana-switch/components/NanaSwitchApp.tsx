@@ -2918,10 +2918,10 @@ function LegacyTabDeveloperOld({ app, copyToClipboard, showToast }: { app: NanaM
               <input 
                 type="text" 
                 readOnly 
-                value={app.keys?.pk || 'ns_live_pk_8f93a2e1c4b70129a007b'}
+                value={app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}
                 className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800"
               />
-              <button onClick={() => copyToClipboard(app.keys?.pk, 'Clé Publique')} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition">
+              <button onClick={() => copyToClipboard(app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : ''), 'Clé Publique')} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition cursor-pointer">
                 Copier
               </button>
             </div>
@@ -2930,23 +2930,24 @@ function LegacyTabDeveloperOld({ app, copyToClipboard, showToast }: { app: NanaM
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-slate-700">Clé Secrète (Secret Key)</label>
-              {app.keys?.rawSk && (
-                <button onClick={() => setShowSk(!showSk)} className="text-[11px] text-[#1E40AF] font-bold flex items-center gap-1">
-                  {showSk ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  {showSk ? 'Masquer' : 'Afficher'}
-                </button>
-              )}
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Chiffrée Zero-Trust
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <input 
-                type={showSk ? 'text' : 'password'} 
+                type="password" 
                 readOnly 
-                value={app.keys?.rawSk || app.keys?.skHash || '$2a$10$e89abF...hidden'}
-                className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-600 font-semibold"
+                value={app.keys?.rawSk || app.keys?.skHash || 'ns_live_sk_••••••••••••••••••••••••••••••••'}
+                className="w-full bg-slate-100/80 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs text-slate-600 font-semibold cursor-not-allowed select-none"
               />
               {app.keys?.rawSk && (
-                <button onClick={() => copyToClipboard(app.keys?.rawSk, 'Clé Secrète')} className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition">
-                  Copier
+                <button 
+                  onClick={() => copyToClipboard(`export NANASWITCH_SECRET_KEY="${app.keys?.rawSk}"`, 'Commande Export')} 
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer shrink-0"
+                  title="Copier la commande d'exportation d'environnement"
+                >
+                  Copier Commande
                 </button>
               )}
             </div>

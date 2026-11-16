@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Server,
   Layers,
-  Sparkles,
+  Terminal,
   Info,
   Lock,
   PlusCircle,
@@ -354,54 +354,104 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                   <input 
                     type="text" 
                     readOnly 
-                    value={app.keys?.pk || 'ns_live_pk_8f93a2e1c4b70129a007b'}
+                    value={app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}
                     className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs font-bold text-slate-800 select-all"
                   />
                   <button 
-                    onClick={() => copyToClipboard(app.keys?.pk || 'ns_live_pk_8f93a2e1c4b70129a007b', 'Clé Publique')} 
-                    className="px-5 py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm"
+                    onClick={() => copyToClipboard(app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : ''), 'Clé Publique')} 
+                    className="px-5 py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
                   >
                     <Copy className="w-3.5 h-3.5" />
                     Copier
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Utilisée pour identifier votre marchand dans les scripts SDK ou le widget de paiement.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Identifiant public utilisé pour initialiser le SDK ou le widget de paiement côté client.</p>
               </div>
 
-              {/* Secret Key */}
+              {/* Secret Key - Sécurisée & Accessible par commande sans affichage en clair */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700">
-                    Clé Secrète NanaSwitch (Secret Key)
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Clé Secrète NanaSwitch (Secret Key)</span>
                   </label>
-                  {app.keys?.rawSk && (
-                    <button 
-                      onClick={() => setShowSk(!showSk)} 
-                      className="text-[11px] text-[#1E40AF] hover:underline font-bold flex items-center gap-1"
-                    >
-                      {showSk ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      {showSk ? 'Masquer' : 'Afficher'}
-                    </button>
-                  )}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Chiffrée Zero-Trust (Bcrypt / SHA-256)
+                  </span>
                 </div>
+
                 <div className="flex items-center gap-2">
-                  <input 
-                    type={showSk ? 'text' : 'password'} 
-                    readOnly 
-                    value={app.keys?.rawSk || app.keys?.skHash || '$2a$10$e89abF...hidden'}
-                    className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-600 font-semibold select-all"
-                  />
+                  <div className="relative flex-1">
+                    <input 
+                      type="password" 
+                      readOnly 
+                      value={app.keys?.rawSk || app.keys?.skHash || 'ns_live_sk_••••••••••••••••••••••••••••••••'}
+                      className="w-full bg-slate-100/80 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-600 font-semibold select-none cursor-not-allowed"
+                    />
+                  </div>
                   {app.keys?.rawSk && (
                     <button 
                       onClick={() => copyToClipboard(app.keys?.rawSk, 'Clé Secrète')} 
-                      className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm"
+                      className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+                      title="Copier la clé secrète dans le presse-papier sans l'afficher en clair"
                     >
                       <Copy className="w-3.5 h-3.5" />
-                      Copier
+                      Copier Clé
                     </button>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Nécessaire pour signer vos requêtes HTTP sécurisées côté serveur (Header <code>Authorization: Bearer ns_live_sk_...</code>).</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Par mesure de sécurité stricte, la clé secrète n'est jamais affichée en clair sur l'écran. Utilisez les commandes sécurisées ci-dessous pour l'intégrer à votre serveur.
+                </p>
+
+                {/* Commandes d'accès sécurisées pour le terminal et serveur */}
+                <div className="mt-3 p-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                      <Terminal className="w-4 h-4 text-emerald-400" />
+                      <span>Accès Sécurisé par Commande CLI / Terminal</span>
+                    </div>
+                  </div>
+
+                  {/* Commande 1 : Export de variable d'environnement */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>1. Définir la variable d'environnement serveur :</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(`export NANASWITCH_SECRET_KEY="${app.keys?.rawSk || 'ns_live_sk_...'}"`, 'Commande Export')}
+                        className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Copier commande
+                      </button>
+                    </div>
+                    <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-emerald-300 overflow-x-auto select-all border border-slate-800">
+                      export NANASWITCH_SECRET_KEY="{app.keys?.rawSk ? '••••••••••••••••••••••••••••••••' : '$VOTRE_CLE_SECRETE'}"
+                    </div>
+                  </div>
+
+                  {/* Commande 2 : Requête cURL API d'exemple */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>2. Tester l'authentification avec cURL :</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(`curl -X POST https://nana-payment-api.onrender.com/v1/switch/session/initialize \\\n  -H "Authorization: Bearer ${app.keys?.rawSk || '$NANASWITCH_SECRET_KEY'}" \\\n  -H "x-nanaswitch-key: ${app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"amount": 5000, "currency": "XOF", "merchant_id": "${app.id}"}'`, 'Commande cURL')}
+                        className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Copier cURL
+                      </button>
+                    </div>
+                    <pre className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-slate-300 overflow-x-auto select-all border border-slate-800 leading-relaxed">
+{`curl -X POST https://nana-payment-api.onrender.com/v1/switch/session/initialize \\
+  -H "Authorization: Bearer \${NANASWITCH_SECRET_KEY}" \\
+  -H "x-nanaswitch-key: ${app.keys?.pk ? app.keys.pk.slice(0, 16) + '...' : 'ns_live_pk_...'}" \\
+  -H "Content-Type: application/json"`}
+                    </pre>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -516,13 +566,13 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                      Sebpay Public Key
+                      Clé Publique Passerelle Secondaire (Public Key)
                     </label>
                     <input
                       type="text"
                       value={sebpayPublicKey}
                       onChange={(e) => setSebpayPublicKey(e.target.value)}
-                      placeholder="seb_pk_live_xxxxxxxxxxxxxxxx"
+                      placeholder="pk_live_xxxxxxxxxxxxxxxx"
                       className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                     />
                   </div>
@@ -530,7 +580,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-slate-700">
-                        Sebpay Secret Key
+                        Clé Secrète Passerelle Secondaire (Secret Key)
                       </label>
                       <button
                         type="button"
@@ -545,7 +595,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                       type={showSebpaySecret ? 'text' : 'password'}
                       value={sebpaySecretKey}
                       onChange={(e) => setSebpaySecretKey(e.target.value)}
-                      placeholder="seb_sk_live_xxxxxxxxxxxxxxxx"
+                      placeholder="sk_live_xxxxxxxxxxxxxxxx"
                       className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                     />
                   </div>

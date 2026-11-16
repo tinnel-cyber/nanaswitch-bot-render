@@ -644,13 +644,13 @@ export const FunnelSettingsModal = ({
                         {/* Note technique Apex */}
                         <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between gap-2">
                           <span>
-                            Pour le domaine racine sans sous-domaine (ex: <code className="text-slate-300 font-mono">mondomaine.com</code>), créez un enregistrement <strong className="text-slate-200">A</strong> pointant vers <code className="text-amber-400 font-mono">199.36.158.100</code>.
+                            Pour le domaine racine (ex: <code className="text-slate-300 font-mono">mondomaine.com</code>), utilisez le CNAME Flattening / ALIAS vers <code className="text-amber-400 font-mono">cname.nanasore.com</code> (Réseau Cloudflare SSL Edge) ou créez un sous-domaine <code className="text-slate-300 font-mono">www</code>.
                           </span>
                           <button
                             type="button"
-                            onClick={() => copyToClipboard('199.36.158.100', 'apex')}
+                            onClick={() => copyToClipboard('cname.nanasore.com', 'apex')}
                             className="p-1 shrink-0 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
-                            title="Copier l'adresse IP"
+                            title="Copier la cible Cloudflare"
                           >
                             {copiedField === 'apex' ? <CheckCheck className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                           </button>

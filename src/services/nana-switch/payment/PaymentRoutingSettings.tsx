@@ -15,7 +15,7 @@ import {
   HelpCircle, 
   Server, 
   Radio, 
-  Sparkles,
+  Info,
   ExternalLink,
   ChevronRight,
   AlertCircle,
@@ -52,22 +52,22 @@ export interface SovereignProviderOption {
 
 export const SOVEREIGN_PROVIDERS: SovereignProviderOption[] = [
   {
-    id: 'sebpay',
-    name: 'SebPay Live Production',
+    id: 'nanasore_engine',
+    name: 'Routeur Dynamique Nanasore Engine',
     countryScope: '20 Pays Africains (Zone UEMOA, CEMAC, Afrique de l’Est/Centrale & Diaspora)',
-    badge: 'Passerelle 20 Pays (Officielle)',
-    docUrl: 'https://sebpay.bj',
-    publicKeyPlaceholder: 'pk_live_HHxzZ2CNfZpcioxCUhIyi9ufsgV0relupjuNDBDo',
-    secretKeyPlaceholder: 'sk_live_vvCQ1dGUl4h7FqBG645Es19w4L1E827UuR25fPPkMzH68kGEoG8tW41gHDW6'
+    badge: 'Routeur Multi-Réseaux Haute Disponibilité',
+    docUrl: 'https://docs.nanasore.com',
+    publicKeyPlaceholder: 'pk_live_xxxxxxxxxxxxxxxxxxxxxxxx',
+    secretKeyPlaceholder: 'sk_live_xxxxxxxxxxxxxxxxxxxxxxxx'
   },
   {
     id: 'render_fixie',
-    name: 'Micro-Service Render & Fixie',
+    name: 'Passerelle Dédiée IP Statique Sécurisée',
     countryScope: 'Passerelle Dédiée 0 Carte Bancaire (IP Statique Whitelistée)',
     badge: 'IP Statique Fixie',
-    docUrl: 'https://dashboard.render.com',
-    publicKeyPlaceholder: 'https://nana-payment-api.onrender.com',
-    secretKeyPlaceholder: 'konkobo_telecom_webhook_secret_key_2026'
+    docUrl: 'https://docs.nanasore.com',
+    publicKeyPlaceholder: 'https://api.votre-domaine.com',
+    secretKeyPlaceholder: 'whsec_xxxxxxxxxxxxxxxxxxxxxxxx'
   },
   {
     id: 'fedapay',
@@ -610,7 +610,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
                   isFree ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                 }`}>
-                  {isFree ? <Crown className="w-3.5 h-3.5 text-amber-600" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {isFree ? <Crown className="w-3.5 h-3.5 text-amber-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />}
                   <span>{isFree ? 'Réservé Starter & Pro' : '0% Commission'}</span>
                 </span>
               </div>
@@ -823,7 +823,7 @@ export const PaymentRoutingSettings: React.FC<PaymentRoutingSettingsProps> = ({
             </div>
 
             <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 flex items-start gap-2 text-[11px] text-indigo-900">
-              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
               <span>
                 <strong>Règle par défaut :</strong> Si aucune méthode n'est décochée, toutes les options ci-dessus restent actives par défaut dans la passerelle client pour ne bloquer aucun paiement.
               </span>

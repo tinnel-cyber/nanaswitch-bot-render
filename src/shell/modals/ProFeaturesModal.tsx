@@ -5,7 +5,7 @@ import {
   Zap,
   Users,
   BarChart3,
-  Sparkles,
+  Palette,
   X,
   Crown,
   CheckCircle2,
@@ -98,28 +98,50 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
     setDomainSaved(true);
     setTimeout(() => setDomainSaved(false), 3000);
 
-    // Synchronisation Firestore Multi-Tenant (tenants et stores)
+    // Synchronisation Supabase & Enregistrement Cloudflare Custom Hostname API
     try {
       await saveTenantCustomDomain(storeId, clean, {
         storeName: currentUser?.storeName,
         vendorType: currentUser?.vendorType || 'ecommerce',
         logoUrl: currentUser?.avatarUrl,
       });
+
+      // Déclenchement de l'enregistrement Cloudflare Custom Hostname côté serveur Express
+      await fetch('/api/domains/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: storeId, domain: clean })
+      }).catch((err) => console.warn('[CLOUDFLARE REGISTER WARNING]', err));
     } catch (err) {
-      console.warn('[WHITE-LABEL] Erreur synchro domaine storage:', err);
+      console.warn('[WHITE-LABEL] Erreur synchro domaine:', err);
     }
   };
 
-  const handleVerifyDns = () => {
+  const handleVerifyDns = async () => {
     if (!customDomain.trim()) return;
     playTapBeep();
     setIsCheckingDns(true);
     setDnsStatus('CHECKING');
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/domains/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: storeId })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.is_active || data?.domain_status === 'active') {
+        setDnsStatus('CONFIGURED');
+        playValidationBeep();
+      } else {
+        setDnsStatus('IDLE');
+        alert("En attente de propagation DNS. Assurez-vous d'avoir configuré le CNAME vers cname.nanasore.com chez votre registraire.");
+      }
+    } catch (err) {
+      console.warn('[DNS VERIFY EXCEPTION]', err);
+      setDnsStatus('ERROR');
+    } finally {
       setIsCheckingDns(false);
-      setDnsStatus('CONFIGURED');
-      playValidationBeep();
-    }, 1500);
+    }
   };
 
   // =========================================================================
@@ -374,7 +396,7 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
     {
       id: 'WHITE_LABEL' as ProFeatureTab,
       label: 'Marque Blanche 100%',
-      icon: Sparkles,
+      icon: Palette,
       color: 'text-purple-400',
       activeBorder: 'border-purple-500',
       bgActive: 'bg-purple-500/10'
@@ -546,9 +568,9 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
                     </div>
 
                     <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                      <span className="text-[10px] uppercase font-mono text-purple-400 font-bold">2. Enregistrement A (Domaine racine)</span>
+                      <span className="text-[10px] uppercase font-mono text-purple-400 font-bold">2. Enregistrement Racine (Apex @)</span>
                       <p className="text-[11px] text-slate-300 font-mono">Hôte : <span className="text-amber-300">@</span></p>
-                      <p className="text-[11px] text-slate-300 font-mono">Valeur : <span className="text-emerald-400">199.36.158.100</span></p>
+                      <p className="text-[11px] text-slate-300 font-mono">Type : <span className="text-emerald-400">ALIAS / CNAME Flattening vers cname.nanasore.com</span></p>
                     </div>
                   </div>
 
@@ -575,7 +597,7 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
                     {dnsStatus === 'CONFIGURED' && (
                       <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>DNS Vérifié • Certificat SSL Let's Encrypt Actif 🔒</span>
+                        <span>DNS Vérifié • Certificat SSL Cloudflare Actif 🔒</span>
                       </span>
                     )}
                   </div>
@@ -1002,7 +1024,7 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
             <div className="space-y-6 animate-in fade-in duration-200 max-w-2xl mx-auto">
               <div className="space-y-1">
                 <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <Palette className="w-4 h-4 text-purple-400" />
                   <span>Marque Blanche & Suppression des Mentions NaNa</span>
                 </h3>
                 <p className="text-xs text-slate-400">
