@@ -24,7 +24,7 @@ import { StoreProductItem } from './types';
 import { triggerOpenFunnel } from '../../../../themes/themeUtils';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
-import { recordUnifiedOrder } from '../../../../utils/firestoreService';
+import { recordUnifiedOrder } from '../../../../services/supabaseOrderService';
 
 export interface CartItem {
   id: string; // product.id ou composite

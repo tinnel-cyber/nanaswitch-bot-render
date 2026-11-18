@@ -35,7 +35,7 @@ import { addToSmartCart } from './SmartSlideOutCartDrawer';
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
 import { trackViewContent, trackInitiateCheckout, trackWLead } from '../../../../utils/pixelTrackingEngine';
-import { recordWLeadOrder } from '../../../../utils/firestoreService';
+import { recordWLeadOrder } from '../../../../services/supabaseOrderService';
 
 export interface DigitalWideProductViewProps {
   product: StoreProductItem;
@@ -209,6 +209,7 @@ export const DigitalWideProductView: React.FC<DigitalWideProductViewProps> = ({
   isAdminPreview = false
 }) => {
   const effectiveWPhone = wPhone || whatsappPhone;
+  const effectiveMerchantId = (product as any).vendorId || (product as any).storeId || effectiveWPhone || 'merchant-direct';
   // 1. DÉCLARATION STRICTE DE TOUS LES HOOKS AU SOMMET DU COMPOSANT (ZÉRO ERREUR #310)
   const [isPlayingVideo, setIsPlayingVideo] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'curriculum' | 'license'>('curriculum');
@@ -802,7 +803,7 @@ export const DigitalWideProductView: React.FC<DigitalWideProductViewProps> = ({
                 <BuyerLiveCallButton
                   productId={product.id}
                   productName={product.name}
-                  sellerId={merchantId}
+                  sellerId={effectiveMerchantId}
                   buttonText="📹 Voir en Direct • Live Shopping"
                   className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
                 />

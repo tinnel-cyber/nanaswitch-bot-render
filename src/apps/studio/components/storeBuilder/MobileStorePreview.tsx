@@ -17,12 +17,7 @@ import {
 } from '../../../../types';
 import { ProductDetailModal } from './ProductDetailModal';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { 
-  saveStoreDocument, 
-  DEFAULT_PLATFORM_SUBSCRIPTIONS, 
-  subscribeToPlatformSubscriptions,
-  subscribeToCentralPaymentConfig
-} from '../../../../utils/firestoreService';
+import { recordUnifiedOrder, subscribeToCentralPaymentConfig } from '../../../../services/supabaseOrderService';
 import { 
   DEFAULT_CENTRAL_PAYMENT_CONFIG,
   SUPPORTED_COUNTRIES,
@@ -378,7 +373,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
       };
 
       try {
-        await saveStoreDocument('orders', newOrder, storeId);
+        await recordUnifiedOrder(newOrder, storeId);
       } catch (e) {
         console.warn('[STOREFRONT] Erreur enregistrement commande auto-paid :', e);
       }
@@ -428,7 +423,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
     };
 
     try {
-      await saveStoreDocument('orders', newOrder, storeId);
+      await recordUnifiedOrder(newOrder, storeId);
     } catch (e) {
       console.warn('[STOREFRONT] Erreur enregistrement commande auto-paid :', e);
     }
@@ -595,7 +590,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
     };
 
     try {
-      await saveStoreDocument('orders', newOrder, storeId);
+      await recordUnifiedOrder(newOrder, storeId);
     } catch (e) {
       console.warn('[STOREFRONT] Erreur enregistrement commande COD :', e);
     }
@@ -647,7 +642,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
     };
 
     try {
-      await saveStoreDocument('orders', newOrder, storeId);
+      await recordUnifiedOrder(newOrder, storeId);
     } catch (e) {
       console.warn('[STOREFRONT] Erreur enregistrement commande MOMO :', e);
     }
@@ -699,7 +694,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
     };
 
     try {
-      await saveStoreDocument('orders', newOrder, storeId);
+      await recordUnifiedOrder(newOrder, storeId);
     } catch (e) {
       console.warn('[STOREFRONT] Erreur enregistrement commande Carte :', e);
     }
@@ -753,7 +748,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
     };
 
     try {
-      await saveStoreDocument('orders', newOrder, storeId);
+      await recordUnifiedOrder(newOrder, storeId);
     } catch (e) {
       console.warn('[STOREFRONT] Erreur enregistrement commande Crypto :', e);
     }

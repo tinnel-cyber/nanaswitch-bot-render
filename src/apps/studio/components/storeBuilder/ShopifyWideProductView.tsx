@@ -35,7 +35,7 @@ import { addToSmartCart } from './SmartSlideOutCartDrawer';
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
 import { trackViewContent, trackInitiateCheckout, trackWLead } from '../../../../utils/pixelTrackingEngine';
-import { recordWLeadOrder } from '../../../../utils/firestoreService';
+import { recordWLeadOrder } from '../../../../services/supabaseOrderService';
 import { 
   getSmartShortDescription, 
   getSmartRichDescription, 
@@ -98,6 +98,7 @@ export const ShopifyWideProductView: React.FC<ShopifyWideProductViewProps> = ({
   isAdminPreview = false
 }) => {
   const effectiveWPhone = wPhone || wNumber;
+  const effectiveMerchantId = (product as any).vendorId || (product as any).storeId || effectiveWPhone || 'merchant-direct';
   // =========================================================================
   // HOOKS REACT STRICTEMENT AU DESSUS (Règle React #310 Zéro Erreur)
   // =========================================================================
@@ -1197,7 +1198,7 @@ export const ShopifyWideProductView: React.FC<ShopifyWideProductViewProps> = ({
                 <BuyerLiveCallButton
                   productId={currentProduct.id}
                   productName={currentProduct.name}
-                  sellerId={merchantId}
+                  sellerId={effectiveMerchantId}
                   buttonText="📹 Voir en Direct • Live Shopping (Daily.co)"
                   className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
                 />

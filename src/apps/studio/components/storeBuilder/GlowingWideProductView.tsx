@@ -32,7 +32,7 @@ import { BuyerLiveCallButton } from '../../../../components/live/BuyerLiveCallBu
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
 import { trackViewContent, trackInitiateCheckout, trackWLead } from '../../../../utils/pixelTrackingEngine';
-import { recordWLeadOrder } from '../../../../utils/firestoreService';
+import { recordWLeadOrder } from '../../../../services/supabaseOrderService';
 
 export interface GlowingWideProductViewProps {
   product: StoreProductItem;
@@ -129,6 +129,7 @@ export const GlowingWideProductView: React.FC<GlowingWideProductViewProps> = ({
   isAdminPreview = false
 }) => {
   const effectiveWPhone = wPhone || whatsappPhone;
+  const effectiveMerchantId = (product as any).vendorId || (product as any).storeId || effectiveWPhone || 'merchant-direct';
   // =========================================================================
   // HOOKS REACT STRICTEMENT AU DESSUS (Règle React #310 Zéro Erreur)
   // =========================================================================
@@ -731,7 +732,7 @@ export const GlowingWideProductView: React.FC<GlowingWideProductViewProps> = ({
             <BuyerLiveCallButton
               productId={currentProduct.id}
               productName={currentProduct.name}
-              sellerId={merchantId}
+              sellerId={effectiveMerchantId}
               buttonText="📹 Voir en Direct • Live Shopping"
               className="w-full h-12 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-sm rounded-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
             />

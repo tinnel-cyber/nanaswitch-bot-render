@@ -6,8 +6,8 @@
  * 
  * Respecte strictement les règles d'architecture Dual-Domain (nanasore.com & nsore.shop) :
  * 1. Initialisation de l'état à NULL (Zéro Fallback Précoce sur 'theme-default')
- * 2. Verrou de rendu : Tant que Firestore n'a pas répondu, monte exclusivement <StorefrontNeutralLoader />
- * 3. Résolution Firestore autoritaire (sans AUCUNE lecture depuis le localStorage)
+ * 2. Verrou de rendu : Tant que Supabase n'a pas répondu, monte exclusivement <StorefrontNeutralLoader />
+ * 3. Résolution Supabase autoritaire (sans AUCUNE lecture depuis le localStorage)
  * 4. Détection du paramètre URL ?f=:funnelSlug ou ?funnel= pour ouverture immédiate du <SlideOutFunnelDrawer />
  * 5. Isolation totale : Seul le thème résolu est monté dans le DOM, accompagné uniquement du tiroir et de la pastille de rappel.
  */
@@ -95,7 +95,7 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
   // Mémoire du dernier tunnel fermé (pastille de rappel flottante)
   const [lastClosedFunnel, setLastClosedFunnel] = useState<ClosedFunnelState | null>(null);
 
-  // Résolution Cloud Firestore autoritaire du Thème et des Métadonnées Storefront
+  // Résolution Supabase autoritaire du Thème et des Métadonnées Storefront
   useEffect(() => {
     let isCancelled = false;
 
@@ -323,11 +323,11 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
     }
   }, [props.isAdminPreview]);
 
-  // Résolution et adaptation de la personnalisation modulaire (Priorité prop Studio > Firestore)
+  // Résolution et adaptation de la personnalisation modulaire (Priorité prop Studio > Supabase)
   const rawCustomConfig = useMemo(() => {
     const fromProps = props.customConfig;
-    const fromFirestore = storeData?.themeCustomization || (storeData?.customization ? { customization: storeData.customization } : null);
-    const merged = fromProps || fromFirestore || {};
+    const fromSupabase = storeData?.themeCustomization || (storeData?.customization ? { customization: storeData.customization } : null);
+    const merged = fromProps || fromSupabase || {};
     if (storeData?.customization && !merged.customization) {
       return { ...merged, customization: storeData.customization };
     }
@@ -338,7 +338,7 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
     return normalizeModularCustomization(rawCustomConfig, props.storeConfig || storeData);
   }, [rawCustomConfig, props.storeConfig, storeData]);
 
-  // Fusion transparente des données Firestore & CustomConfig dans storeConfig (Exécuté inconditionnellement avant tout return)
+  // Fusion transparente des données Supabase & CustomConfig dans storeConfig (Exécuté inconditionnellement avant tout return)
   const effectiveStoreConfig = useMemo(() => {
     return {
       ...props.storeConfig,
@@ -479,7 +479,7 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
   }, [dynamicAccentColor, resolvedThemeId]);
 
   // =========================================================================
-  // 2. VERROU DE RENDU : Tant que Firestore n'a pas répondu, affiche le Loader neutre.
+  // 2. VERROU DE RENDU : Tant que Supabase n'a pas répondu, affiche le Loader neutre.
   // STRICT RULES OF HOOKS : ABSOLUMENT TOUS LES HOOKS SONT EXÉCUTÉS AU-DESSUS !
   // AUCUN HOOK NE SE TROUVE EN DESSOUS DE CE RETURN !
   // =========================================================================

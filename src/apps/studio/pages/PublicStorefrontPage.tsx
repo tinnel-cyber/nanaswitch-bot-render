@@ -246,7 +246,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     });
   }, [storeConfig.fbPixelId, storeConfig.tiktokPixelId, (storeConfig as any).themeCustomization]);
 
-  // Chargement des données de la boutique et de son catalogue depuis Firestore avec synchronisation du cache
+  // Chargement des données de la boutique et de son catalogue depuis Supabase (SQL & Realtime) avec synchronisation du cache
   useEffect(() => {
     if (isSandboxMode) return; // Mode Sandbox : les données proviennent du brouillon admin local
     const storeIdToUse = actualStoreId || targetStoreId;
