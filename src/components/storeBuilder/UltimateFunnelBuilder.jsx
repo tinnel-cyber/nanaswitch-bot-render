@@ -805,6 +805,27 @@ export const UltimateFunnelBuilder = ({
     const cleanCustomDomain = rawCustom ? cleanDomain(rawCustom) : null;
     const isRealCustom = updatedSettings.hostingType === 'custom_domain' && cleanCustomDomain && !cleanCustomDomain.endsWith('.nanasore.com') && !cleanCustomDomain.endsWith('.nsore.shop');
 
+    const updatedBlocks = currentStepBlocks.map((b) => {
+      if (b.type === 'hero_live_masterclass' || b.type === 'hero') {
+        return {
+          ...b,
+          data: {
+            ...b.data,
+            headline: updatedSettings.funnelTitle || b.data?.headline,
+            subheadline: updatedSettings.funnelSubtitle || b.data?.subheadline,
+            instructorName: updatedSettings.instructorName || b.data?.instructorName,
+            instructorRole: updatedSettings.instructorRole || b.data?.instructorRole,
+            price: Number(updatedSettings.salePrice) || b.data?.price,
+            originalPrice: Number(updatedSettings.originalPrice) || b.data?.originalPrice,
+            promoBadge: updatedSettings.discountBadge || b.data?.promoBadge,
+            btnBgColor: updatedSettings.primaryColor || b.data?.btnBgColor || '#f59e0b',
+            accentColor: updatedSettings.accentColor || b.data?.accentColor || '#fbbf24'
+          }
+        };
+      }
+      return b;
+    });
+
     const funnelPayload = {
       id: targetSubdomain,
       slug: targetSubdomain,
@@ -825,8 +846,18 @@ export const UltimateFunnelBuilder = ({
       products: activeSource ? [activeSource] : [],
       source: activeSource,
       steps: funnelCanvasData,
-      blocks: currentStepBlocks,
-      settings: updatedSettings,
+      blocks: updatedBlocks,
+      brandColor: updatedSettings.primaryColor || '#f59e0b',
+      primaryColor: updatedSettings.primaryColor || '#f59e0b',
+      accentColor: updatedSettings.accentColor || '#fbbf24',
+      bgColor: updatedSettings.bgColor || '#090d16',
+      settings: {
+        ...updatedSettings,
+        brandColor: updatedSettings.primaryColor || '#f59e0b',
+        primaryColor: updatedSettings.primaryColor || '#f59e0b',
+        accentColor: updatedSettings.accentColor || '#fbbf24',
+        bgColor: updatedSettings.bgColor || '#090d16'
+      },
       funnelType: 'ultimate',
       funnelStudio: 'ultimate_studio',
       linkPrefix: 'f',
@@ -846,7 +877,7 @@ export const UltimateFunnelBuilder = ({
       try { onSave(funnelPayload); } catch (e) {}
     }
 
-    triggerToast(`✅ Tunnel enregistré ! Lien direct : https://nanasore.com/f/${targetSubdomain} ✨`);
+    triggerToast(`✅ Tunnel enregistré ! Lien direct : https://nsore.shop/f/${targetSubdomain} ✨`);
     try { playCashChime(); } catch (e) {}
     setIsCustomizationModalOpen(false);
   };
@@ -1193,7 +1224,7 @@ export const UltimateFunnelBuilder = ({
     if (isRealCustom && cleanCustomDomain) {
       triggerToast(`💾 Tunnel enregistré et lié au domaine : https://${cleanCustomDomain} ⚡`);
     } else {
-      triggerToast(`💾 Tunnel enregistré ! Lien direct : https://nanasore.com/f/${effectiveSubdomain}`);
+      triggerToast(`💾 Tunnel enregistré ! Lien direct : https://nsore.shop/f/${effectiveSubdomain}`);
     }
     setTimeout(() => setSaveStatus('idle'), 2500);
   };
@@ -1235,8 +1266,8 @@ export const UltimateFunnelBuilder = ({
   };
 
   const funnelOrigin = typeof window !== 'undefined'
-    ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
-    : 'https://nanasore.com';
+    ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nsore.shop')
+    : 'https://nsore.shop';
   const publicFunnelUrl = useMemo(() => {
     if (customizationSettings.hostingType === 'custom_domain' && customizationSettings.customDomain) {
       return `https://${customizationSettings.customDomain.replace(/^https?:\/\//, '')}`;
@@ -3028,13 +3059,13 @@ export const UltimateFunnelBuilder = ({
                             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
                               <div>
                                 <span className="text-[10px] text-slate-400 block font-sans">Cible / Valeur :</span>
-                                <span className="font-bold text-amber-300">hosting.nanasore.com</span>
+                                <span className="font-bold text-amber-300">hosting.nsore.shop</span>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  navigator.clipboard.writeText('hosting.nanasore.com');
-                                  triggerToast('Cible "hosting.nanasore.com" copiée ! ✓');
+                                  navigator.clipboard.writeText('hosting.nsore.shop');
+                                  triggerToast('Cible "hosting.nsore.shop" copiée ! ✓');
                                   try { playValidationBeep(); } catch (e) {}
                                 }}
                                 className="p-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white transition cursor-pointer"
@@ -3051,7 +3082,7 @@ export const UltimateFunnelBuilder = ({
                           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                           <div>
                             <span className="text-slate-200 font-bold">Domaine racine (sans www) : </span>
-                            Créez un enregistrement <code className="text-amber-300 font-mono">CNAME</code> ou <code className="text-amber-300 font-mono">A</code> pointant vers <code className="text-amber-300 font-mono">cname.nanasore.com</code> (Réseau Cloudflare Edge & SSL automatique).
+                            Créez un enregistrement <code className="text-amber-300 font-mono">CNAME</code> ou <code className="text-amber-300 font-mono">A</code> pointant vers <code className="text-amber-300 font-mono">cname.nsore.shop</code> (Réseau Cloudflare Edge & SSL automatique).
                           </div>
                         </div>
 
@@ -3078,7 +3109,7 @@ export const UltimateFunnelBuilder = ({
                       </div>
                       <div className="flex items-center rounded-xl bg-slate-950 border border-slate-800 focus-within:border-amber-400 transition overflow-hidden">
                         <span className="bg-slate-900 px-3.5 py-2.5 text-xs text-amber-400 font-mono font-bold border-r border-slate-800 select-none shrink-0">
-                          https://nanasore.com/f/
+                          https://nsore.shop/f/
                         </span>
                         <input
                           type="text"
@@ -3090,7 +3121,7 @@ export const UltimateFunnelBuilder = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const fullUrl = `https://nanasore.com/f/${tempSettings.subdomain || 'mon-tunnel'}`;
+                            const fullUrl = `https://nsore.shop/f/${tempSettings.subdomain || 'mon-tunnel'}`;
                             navigator.clipboard.writeText(fullUrl);
                             triggerToast('Lien copié : ' + fullUrl);
                             try { playCashChime(); } catch (e) {}
@@ -3104,7 +3135,7 @@ export const UltimateFunnelBuilder = ({
                       </div>
                       <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Votre tunnel est automatiquement prêt sur : <strong className="text-amber-300 font-mono">https://nanasore.com/f/{tempSettings.subdomain || 'mon-tunnel'}</strong> (1 clic, sans configuration DNS).</span>
+                        <span>Votre tunnel est automatiquement prêt sur : <strong className="text-amber-300 font-mono">https://nsore.shop/f/{tempSettings.subdomain || 'mon-tunnel'}</strong> (1 clic, sans configuration DNS).</span>
                       </p>
                     </div>
                   )}

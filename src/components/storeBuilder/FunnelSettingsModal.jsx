@@ -462,7 +462,7 @@ export const FunnelSettingsModal = ({
                       {/* Champ d'entrée composé (Input Group) */}
                       <div className="flex items-center rounded-xl bg-slate-950 border border-slate-800 focus-within:border-indigo-500 transition overflow-hidden">
                         <span className="px-3.5 py-2.5 text-xs font-mono font-bold text-indigo-400 bg-slate-900 border-r border-slate-800 select-none shrink-0">
-                          https://nanasore.com/t/
+                          https://nsore.shop/t/
                         </span>
                         <input
                           type="text"
@@ -476,7 +476,7 @@ export const FunnelSettingsModal = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const url = `https://nanasore.com/t/${funnelSettings.subdomain || 'mon-offre'}`;
+                            const url = `https://nsore.shop/t/${funnelSettings.subdomain || 'mon-offre'}`;
                             copyToClipboard(url, 'subdomain');
                           }}
                           className="mr-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-xs"
@@ -505,12 +505,12 @@ export const FunnelSettingsModal = ({
                         {funnelSettings.subdomain && (
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-mono text-emerald-400 truncate font-semibold">
-                              https://nanasore.com/t/{funnelSettings.subdomain}
+                              https://nsore.shop/t/{funnelSettings.subdomain}
                             </span>
                             <button
                               type="button"
                               onClick={() => {
-                                const url = `https://nanasore.com/t/${funnelSettings.subdomain}`;
+                                const url = `https://nsore.shop/t/${funnelSettings.subdomain}`;
                                 copyToClipboard(url, 'subdomain_preview');
                               }}
                               className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1 underline transition cursor-pointer"
@@ -628,11 +628,11 @@ export const FunnelSettingsModal = ({
                           <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
                             <div>
                               <span className="text-[10px] text-slate-400 block font-sans">Cible / Valeur :</span>
-                              <span className="font-bold text-amber-300">cname.nanasore.com</span>
+                              <span className="font-bold text-amber-300">cname.nsore.shop</span>
                             </div>
                             <button
                               type="button"
-                              onClick={() => copyToClipboard('cname.nanasore.com', 'target')}
+                              onClick={() => copyToClipboard('cname.nsore.shop', 'target')}
                               className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
                               title="Copier la valeur cible"
                             >
@@ -644,11 +644,11 @@ export const FunnelSettingsModal = ({
                         {/* Note technique Apex */}
                         <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between gap-2">
                           <span>
-                            Pour le domaine racine (ex: <code className="text-slate-300 font-mono">mondomaine.com</code>), utilisez le CNAME Flattening / ALIAS vers <code className="text-amber-400 font-mono">cname.nanasore.com</code> (Réseau Cloudflare SSL Edge) ou créez un sous-domaine <code className="text-slate-300 font-mono">www</code>.
+                            Pour le domaine racine (ex: <code className="text-slate-300 font-mono">mondomaine.com</code>), utilisez le CNAME Flattening / ALIAS vers <code className="text-amber-400 font-mono">cname.nsore.shop</code> (Réseau Cloudflare SSL Edge) ou créez un sous-domaine <code className="text-slate-300 font-mono">www</code>.
                           </span>
                           <button
                             type="button"
-                            onClick={() => copyToClipboard('cname.nanasore.com', 'apex')}
+                            onClick={() => copyToClipboard('cname.nsore.shop', 'apex')}
                             className="p-1 shrink-0 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
                             title="Copier la cible Cloudflare"
                           >
@@ -1197,12 +1197,12 @@ export const FunnelSettingsModal = ({
                   if (isRealCustom && cleanCustomDomain) {
                     triggerToast(`⚡ Domaine personnalisé https://${cleanCustomDomain} relié avec succès au tunnel !`);
                   } else {
-                    triggerToast(`⚡ Tunnel enregistré ! Lien direct : https://nanasore.com/t/${cleanSub}`);
+                    triggerToast(`⚡ Tunnel enregistré ! Lien direct : https://nsore.shop/t/${cleanSub}`);
                   }
                   onClose();
                 } catch (err) {
                   console.error('[FunnelSettingsModal] Erreur sauvegarde storage:', err);
-                  triggerToast(`✅ Paramètres enregistrés localement : https://nanasore.com/t/${cleanSub}`);
+                  triggerToast(`✅ Paramètres enregistrés localement : https://nsore.shop/t/${cleanSub}`);
                   onClose();
                 } finally {
                   setIsSaving(false);

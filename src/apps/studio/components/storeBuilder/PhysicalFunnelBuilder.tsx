@@ -936,7 +936,7 @@ export const PhysicalFunnelBuilder: React.FC<{
                 </div>
                 <div className="flex items-center justify-between text-[10.5px] text-slate-400">
                   <span>Lien client externe pour publicités TikTok, Facebook et WhatsApp.</span>
-                  <span className="text-slate-500 font-mono text-[9.5px]">Prévis. interne : nanasore.com/c/{funnelConfig.slug}</span>
+                  <span className="text-slate-500 font-mono text-[9.5px]">Prévis. interne : nsore.shop/c/{funnelConfig.slug}</span>
                 </div>
 
                 {/* Bouton d'action QR Code Magique direct */}

@@ -245,7 +245,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const heroProps = heroBlock?.props || {};
 
   return (
-    <div className={`min-h-screen w-full bg-[#070b14] text-slate-100 flex flex-col font-sans select-none overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar ${className}`}>
+    <div className={`min-h-screen w-full bg-[#070b14] text-slate-100 flex flex-col font-sans overflow-x-hidden ${className}`}>
       
       {/* 1. Header d'assurance Express */}
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-lg">

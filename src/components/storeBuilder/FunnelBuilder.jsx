@@ -2104,8 +2104,8 @@ export const FunnelBuilder = ({
     if (onSave) onSave(funnelPayload);
 
     const origin = typeof window !== 'undefined'
-      ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
-      : 'https://nanasore.com';
+      ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nsore.shop')
+      : 'https://nsore.shop';
     const directUrl = isRealCustom && cleanCustomDomain
       ? `https://${cleanCustomDomain}`
       : `${origin}/t/${effectiveSlug}`;
@@ -2165,8 +2165,8 @@ export const FunnelBuilder = ({
       return `https://${cleanCustom}`;
     }
     const origin = typeof window !== 'undefined'
-      ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nanasore.com')
-      : 'https://nanasore.com';
+      ? (window.location.hostname.includes('localhost') ? window.location.origin : 'https://nsore.shop')
+      : 'https://nsore.shop';
     return `${origin}/t/${effectiveFunnelSlug}`;
   }, [funnelSettings?.customDomain, funnelSettings?.hostingMode, effectiveFunnelSlug]);
 
@@ -4340,7 +4340,7 @@ export const FunnelBuilder = ({
                   <button
                     type="button"
                     onClick={async () => {
-                      const currentUrl = data.targetUrl || (typeof window !== 'undefined' ? window.location.href : 'https://nanasore.com');
+                      const currentUrl = data.targetUrl || (typeof window !== 'undefined' ? window.location.href : 'https://nsore.shop');
                       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
                         try {
                           await navigator.share({
