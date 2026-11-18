@@ -72,44 +72,53 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
   useEffect(() => {
     let isCancelled = false;
 
+    const cleanSlug = (slug || '').toLowerCase().trim().replace(/^(?:[fct][\/-]|funnel-|tunnel-)/i, '').replace(/[^a-z0-9-]/g, '') || slug;
+
     // 1. Nettoyage immédiat des caches locaux obsolètes ou corrompus
-    const cacheKey = funnelType ? `nana_funnel_${funnelType}_${slug}` : `nana_funnel_${slug}`;
-    const saved = localStorage.getItem(cacheKey) || localStorage.getItem(`nana_funnel_f_${slug}`) || localStorage.getItem(`nana_funnel_${slug}`);
+    const cacheKey = funnelType ? `nana_funnel_${funnelType}_${cleanSlug}` : `nana_funnel_${cleanSlug}`;
+    const saved = localStorage.getItem(cacheKey) ||
+      localStorage.getItem(`nana_funnel_f-${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_f_${cleanSlug}`) ||
+      localStorage.getItem(`nana_funnel_${cleanSlug}`) ||
+      (cleanSlug.includes('ia') ? (localStorage.getItem('nana_funnel_f-ia-masterclass') || localStorage.getItem('nana_funnel_f_ia-masterclass') || localStorage.getItem('nana_funnel_ia-masterclass') || localStorage.getItem('nana_funnel_ia')) : null);
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const str = JSON.stringify(parsed).toLowerCase();
-        // Si le cache local contient l'ancien mock ou un état non-fini sans blocs, on le purge
+        const payload = parsed.template_data || parsed;
+        const str = JSON.stringify(payload).toLowerCase();
+        // Si le cache local contient l'ancien mock montre, on le purge
         if (
           str.includes('montre') ||
           str.includes('chronographe') ||
           str.includes('523275335684') ||
-          str.includes('pousbila telecom - offre exclusive') ||
-          !parsed.blocks ||
-          parsed.blocks.length <= 2
+          str.includes('pousbila telecom - offre exclusive')
         ) {
           localStorage.removeItem(cacheKey);
-          localStorage.removeItem(`nana_funnel_f_${slug}`);
-          localStorage.removeItem(`nana_funnel_${slug}`);
+          localStorage.removeItem(`nana_funnel_f-${cleanSlug}`);
+          localStorage.removeItem(`nana_funnel_f_${cleanSlug}`);
+          localStorage.removeItem(`nana_funnel_${cleanSlug}`);
           localStorage.removeItem(`nana_funnel_pous`);
           localStorage.removeItem(`nana_funnel_pous.nanasore.com`);
-        } else if (parsed && parsed.blocks && parsed.blocks.length > 2) {
-          setFunnel(parsed);
+        } else if (payload && (payload.blocks || payload.steps || payload.title)) {
+          setFunnel(payload);
         }
       } catch {}
     }
 
-    // 2. Récupération asynchrone Firestore PRIORITAIRE (Network-First)
-    getFunnelBySlug(slug, funnelType).then((remoteFunnel) => {
+    // 2. Récupération asynchrone Firestore/Supabase PRIORITAIRE (Network-First)
+    getFunnelBySlug(cleanSlug, funnelType).then((remoteFunnel) => {
       if (isCancelled) return;
       if (remoteFunnel) {
-        const str = JSON.stringify(remoteFunnel).toLowerCase();
+        const payload = remoteFunnel.template_data || remoteFunnel;
+        const str = JSON.stringify(payload).toLowerCase();
         if (!str.includes('montre') && !str.includes('523275335684')) {
-          setFunnel(remoteFunnel);
+          setFunnel(payload);
           try {
-            localStorage.setItem(cacheKey, JSON.stringify(remoteFunnel));
-            localStorage.setItem(`nana_funnel_f_${slug}`, JSON.stringify(remoteFunnel));
-            localStorage.setItem(`nana_funnel_${slug}`, JSON.stringify(remoteFunnel));
+            localStorage.setItem(cacheKey, JSON.stringify(payload));
+            localStorage.setItem(`nana_funnel_f-${cleanSlug}`, JSON.stringify(payload));
+            localStorage.setItem(`nana_funnel_f_${cleanSlug}`, JSON.stringify(payload));
+            localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(payload));
           } catch {}
         }
       }
@@ -439,16 +448,28 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   </div>
                 )}
 
-                {/* Image Showcase Standard CRO (Aspect Video, Haute Vitesse, Sans Bloquer le Touch Mobile) */}
+                {/* Image Showcase Standard CRO avec Animation Flottante 3D */}
                 {img && (
                   <div className="my-3 relative w-full max-w-md mx-auto">
-                    <div className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center">
+                    <motion.div
+                      animate={{
+                        y: [0, -8, 0],
+                        rotate: [0, 0.6, -0.6, 0]
+                      }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: 'easeInOut'
+                      }}
+                      className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center pointer-events-none"
+                      style={{ borderColor: `${brandColor}40` }}
+                    >
                       <img
                         src={img}
                         alt={headline}
                         className="w-full h-full object-cover"
                       />
-                    </div>
+                    </motion.div>
                   </div>
                 )}
 

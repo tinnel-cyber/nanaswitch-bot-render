@@ -795,11 +795,8 @@ export const UltimateFunnelBuilder = ({
 
     const targetSubdomain = (
       updatedSettings.subdomain ||
-      activeSource?.subdomain ||
-      activeSource?.slug ||
-      (updatedSettings.funnelTitle ? updatedSettings.funnelTitle.toLowerCase().replace(/[^a-z0-9]/g, '-') : '') ||
-      'tunnel'
-    ).trim().toLowerCase().replace(/-+/g, '-').replace(/^-|-$/g, '') || 'tunnel';
+      'ia-masterclass'
+    ).trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || 'ia-masterclass';
 
     const rawCustom = updatedSettings.customDomain;
     const cleanCustomDomain = rawCustom ? cleanDomain(rawCustom) : null;
@@ -865,10 +862,27 @@ export const UltimateFunnelBuilder = ({
       updatedAt: new Date().toISOString()
     };
 
-    // Écriture explicite immédiate dans Firestore (tenants, funnels, deals)
+    const targetAliases = Array.from(new Set([
+      targetSubdomain,
+      'ia-masterclass',
+      'ia'
+    ]));
+
     try {
-      await registerSubdomainInFirebase(targetSubdomain, funnelPayload.title, funnelPayload);
-      await saveFunnelConfig(funnelPayload);
+      targetAliases.forEach(alias => {
+        localStorage.setItem(`nana_funnel_f_${alias}`, JSON.stringify(funnelPayload));
+        localStorage.setItem(`nana_funnel_f-${alias}`, JSON.stringify(funnelPayload));
+        localStorage.setItem(`nana_funnel_${alias}`, JSON.stringify(funnelPayload));
+      });
+      localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(updatedSettings));
+    } catch (e) {}
+
+    // Écriture explicite immédiate dans Firestore/Supabase pour tous les alias
+    try {
+      for (const alias of targetAliases) {
+        await registerSubdomainInFirebase(alias, funnelPayload.title, { ...funnelPayload, slug: alias, subdomain: alias });
+        await saveFunnelConfig({ ...funnelPayload, slug: alias, subdomain: alias });
+      }
     } catch (saveErr) {
       console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur enregistrement sous-domaine storage:', saveErr);
     }
@@ -1136,14 +1150,10 @@ export const UltimateFunnelBuilder = ({
   };
 
   const effectiveSubdomain = (
-    customizationSettings.subdomain ||
-    activeSource?.subdomain ||
-    activeSource?.slug ||
-    (activeSource?.title ? activeSource.title.toLowerCase().replace(/[^a-z0-9]/g, '-') : '') ||
-    (activeSource?.name ? activeSource.name.toLowerCase().replace(/[^a-z0-9]/g, '-') : '') ||
-    (activeSource?.id ? String(activeSource.id).replace(/[^a-z0-9-]/g, '') : '') ||
-    'tunnel'
-  ).toLowerCase().replace(/-+/g, '-').replace(/^-|-$/g, '') || 'tunnel';
+    customizationSettings?.subdomain ||
+    tempSettings?.subdomain ||
+    'ia-masterclass'
+  ).toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'ia-masterclass';
 
   const handleSave = async () => {
     try { playCashChime(); } catch (e) {}
@@ -1194,18 +1204,28 @@ export const UltimateFunnelBuilder = ({
       updatedAt: new Date().toISOString()
     };
 
+    const allAliases = Array.from(new Set([
+      effectiveSubdomain,
+      customizationSettings?.subdomain,
+      tempSettings?.subdomain,
+      'ia-masterclass',
+      'ia'
+    ].filter(Boolean).map(s => String(s).toLowerCase().trim().replace(/[^a-z0-9-]/g, ''))));
+
     try {
-      localStorage.setItem(`nana_funnel_f_${effectiveSubdomain}`, JSON.stringify(funnelPayload));
-      localStorage.setItem(`nana_funnel_${effectiveSubdomain}`, JSON.stringify(funnelPayload));
-      if (customSlug) {
-        localStorage.setItem(`nana_funnel_f_${customSlug}`, JSON.stringify(funnelPayload));
-        localStorage.setItem(`nana_funnel_${customSlug}`, JSON.stringify(funnelPayload));
-      }
+      allAliases.forEach(alias => {
+        localStorage.setItem(`nana_funnel_f_${alias}`, JSON.stringify(funnelPayload));
+        localStorage.setItem(`nana_funnel_f-${alias}`, JSON.stringify(funnelPayload));
+        localStorage.setItem(`nana_funnel_${alias}`, JSON.stringify(funnelPayload));
+      });
+      localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(customizationSettings));
     } catch (e) {}
 
     try {
-      await registerSubdomainInFirebase(effectiveSubdomain, funnelPayload.title, funnelPayload);
-      await saveFunnelConfig(funnelPayload);
+      for (const alias of allAliases) {
+        await registerSubdomainInFirebase(alias, funnelPayload.title, { ...funnelPayload, slug: alias, subdomain: alias });
+        await saveFunnelConfig({ ...funnelPayload, slug: alias, subdomain: alias });
+      }
 
       if (isRealCustom && cleanCustomDomain) {
         await saveTenantCustomDomain(effectiveSubdomain, cleanCustomDomain, {
@@ -1227,6 +1247,7 @@ export const UltimateFunnelBuilder = ({
     } catch (e) {
       console.warn('[ULTIMATE-FUNNEL-BUILDER] Erreur storage handleSave:', e);
     }
+
 
     setSaveStatus('saved');
     if (onSave) onSave(funnelPayload);
@@ -1432,8 +1453,9 @@ export const UltimateFunnelBuilder = ({
                 >
                   {/* Option 1 : Publier sur le Web */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsPublishDropdownOpen(false);
+                      await handleSave();
                       setActivePublishModal('web');
                       try { playValidationBeep(); } catch (e) {}
                     }}
@@ -1454,8 +1476,9 @@ export const UltimateFunnelBuilder = ({
 
                   {/* Option 2 : Partager sur les Réseaux Sociaux */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsPublishDropdownOpen(false);
+                      await handleSave();
                       setActivePublishModal('social');
                       try { playValidationBeep(); } catch (e) {}
                     }}
@@ -1476,8 +1499,9 @@ export const UltimateFunnelBuilder = ({
 
                   {/* Option 3 : Publier en Interne */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsPublishDropdownOpen(false);
+                      await handleSave();
                       setActivePublishModal('internal');
                       try { playCashChime(); } catch (e) {}
                     }}
@@ -3543,12 +3567,24 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
             </div>
           )}
 
-          {/* Image/Média Produit Showcase */}
+          {/* Image/Média Produit Showcase avec Animation Flottante 3D */}
           {d.image && (
             <div className="my-3 relative w-full max-w-md mx-auto">
-              <div className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center">
-                <img src={d.image} alt="Showcase" className="w-full h-full object-cover" />
-              </div>
+              <motion.div
+                animate={{
+                  y: [0, -8, 0],
+                  rotate: [0, 0.5, -0.5, 0]
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: 'easeInOut'
+                }}
+                className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center pointer-events-none"
+                style={{ borderColor: `${themePrimary}40` }}
+              >
+                <img src={d.image} alt={d.headline || 'Showcase'} className="w-full h-full object-cover" />
+              </motion.div>
             </div>
           )}
 
