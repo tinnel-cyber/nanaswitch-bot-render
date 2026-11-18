@@ -21,8 +21,8 @@
 
 import crypto from 'crypto';
 import type { Request, Response, Express } from 'express';
-import { db } from '../firebase';
 import {
+  db,
   collection,
   addDoc,
   getDocs,
@@ -31,7 +31,7 @@ import {
   serverTimestamp,
   doc,
   setDoc
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 
 export interface ResonanceRecord {
   id?: string;

@@ -12,8 +12,8 @@
 
 import crypto from 'crypto';
 import type { Request, Response, Express } from 'express';
-import { db } from '../firebase';
 import {
+  db,
   collection,
   doc,
   setDoc,
@@ -22,7 +22,7 @@ import {
   query,
   where,
   addDoc
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 
 export interface WameetConsultationRecord {
   id: string; // wameetId
