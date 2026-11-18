@@ -1,11 +1,15 @@
 /**
  * ==============================================================================
- * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Northflank
+ * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Render & Northflank
+ * ==============================================================================
+ * Architecture Dual-Cloud Haute Disponibilité avec Failover automatique.
+ * Backend Principal : Render (https://nanaswitch-bot-render-0kqp.onrender.com)
+ * Backend Secondaire : Northflank (https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run)
  * ==============================================================================
  */
 
-// Cible Northflank : https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run
-const RENDER_BACKEND_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+const PRIMARY_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
+const SECONDARY_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
 
 // En-têtes "hop-by-hop" standard HTTP à ne pas relayer directement
 const HOP_BY_HOP_HEADERS = new Set([
@@ -40,7 +44,7 @@ export default {
       return new Response(JSON.stringify({
         success: true,
         message: "Cache Cloudflare Worker purgé avec succès",
-        target: RENDER_BACKEND_ORIGIN,
+        primary: PRIMARY_ORIGIN,
         timestamp: new Date().toISOString()
       }, null, 2), {
         status: 200,
@@ -52,61 +56,113 @@ export default {
       });
     }
 
-    // 1. Détermination du backend (Northflank ou fallback)
-    let backendOrigin = RENDER_BACKEND_ORIGIN;
-    const configuredBackend = env && (env.BACKEND_URL || env.NORTHFLANK_BACKEND_URL || env.RENDER_BACKEND_URL);
+    // 1. Détermination du pool de backends (Render primaire en ligne + Northflank secondaire)
+    let primaryOrigin = PRIMARY_ORIGIN;
+    let fallbackOrigin = SECONDARY_ORIGIN;
+
+    const configuredBackend = env && (env.BACKEND_URL || env.RENDER_BACKEND_URL);
     if (configuredBackend && !configuredBackend.includes("nanasore.onrender.com")) {
-      backendOrigin = configuredBackend.startsWith("http")
+      primaryOrigin = configuredBackend.startsWith("http")
         ? configuredBackend
         : `https://${configuredBackend}`;
     }
 
-    // 2. Construction de l'URL cible conservant exactement pathname et query params
-    const targetUrl = new URL(url.pathname + url.search, backendOrigin);
-
-    // 3. Duplication et transmission des en-têtes
-    const proxyHeaders = new Headers();
-    for (const [key, value] of request.headers.entries()) {
-      const lower = key.toLowerCase();
-      // On retire le Host header d'origine (nanasore.com) pour que Render reconnaisse son propre domaine
-      if (!HOP_BY_HOP_HEADERS.has(lower) && lower !== "host") {
-        proxyHeaders.set(key, value);
-      }
+    const configuredSecondary = env && env.NORTHFLANK_BACKEND_URL;
+    if (configuredSecondary) {
+      fallbackOrigin = configuredSecondary.startsWith("http")
+        ? configuredSecondary
+        : `https://${configuredSecondary}`;
     }
 
-    // Le Host envoyé à Render DOIT être nanaswitch-bot-render-0kqp.onrender.com
-    proxyHeaders.set("Host", targetUrl.host);
-    proxyHeaders.set("X-Forwarded-Host", url.hostname);
-    proxyHeaders.set("X-Forwarded-Proto", url.protocol.replace(":", ""));
-    const clientIp = request.headers.get("cf-connecting-ip");
-    if (clientIp) {
-      proxyHeaders.set("X-Real-IP", clientIp);
-      proxyHeaders.set("X-Forwarded-For", clientIp);
-    }
-
-    // 4. Préservation de la méthode HTTP et du corps de la requête (Body)
+    // 2. Préparation du corps de la requête pour réessai idempotent éventuel
     const method = request.method.toUpperCase();
     const hasRequestBody = !["GET", "HEAD"].includes(method);
-    const body = hasRequestBody ? request.body : undefined;
-
-    const proxyRequestInit = {
-      method,
-      headers: proxyHeaders,
-      body,
-      redirect: "manual",
-    };
-
-    if (hasRequestBody && body) {
-      proxyRequestInit.duplex = "half";
+    let requestBodyBuffer = null;
+    if (hasRequestBody && request.body) {
+      requestBodyBuffer = await request.arrayBuffer();
     }
 
-    try {
-      // 5. Acheminement transparent vers Render
-      const backendResponse = await fetch(targetUrl.toString(), proxyRequestInit);
+    // 3. Helper d'acheminement vers un backend spécifique
+    const tryProxy = async (originUrl) => {
+      const targetUrl = new URL(url.pathname + url.search, originUrl);
+      const proxyHeaders = new Headers();
 
-      // Duplication des en-têtes retournés par Render
+      for (const [key, value] of request.headers.entries()) {
+        const lower = key.toLowerCase();
+        if (!HOP_BY_HOP_HEADERS.has(lower) && lower !== "host") {
+          proxyHeaders.set(key, value);
+        }
+      }
+
+      proxyHeaders.set("Host", targetUrl.host);
+      proxyHeaders.set("X-Forwarded-Host", url.hostname);
+      proxyHeaders.set("X-Forwarded-Proto", url.protocol.replace(":", ""));
+      const clientIp = request.headers.get("cf-connecting-ip");
+      if (clientIp) {
+        proxyHeaders.set("X-Real-IP", clientIp);
+        proxyHeaders.set("X-Forwarded-For", clientIp);
+      }
+
+      const proxyInit = {
+        method,
+        headers: proxyHeaders,
+        body: requestBodyBuffer ? requestBodyBuffer.slice(0) : undefined,
+        redirect: "manual",
+      };
+
+      if (hasRequestBody && requestBodyBuffer) {
+        proxyInit.duplex = "half";
+      }
+
+      const backendResponse = await fetch(targetUrl.toString(), proxyInit);
+      return { backendResponse, targetUrl };
+    };
+
+    try {
+      // 4. Tentative sur le backend principal (Render)
+      let activeTargetUrl = null;
+      let activeResponse = null;
+
+      try {
+        const result = await tryProxy(primaryOrigin);
+        activeResponse = result.backendResponse;
+        activeTargetUrl = result.targetUrl;
+
+        // Si le backend principal retourne 502/503 (ex: "no healthy upstream"), tenter le secondaire
+        if (activeResponse.status >= 502 && fallbackOrigin && fallbackOrigin !== primaryOrigin) {
+          console.warn(`[FAILOVER_TRIGGER] Statut ${activeResponse.status} sur ${primaryOrigin}, bascule vers ${fallbackOrigin}`);
+          try {
+            const fallbackResult = await tryProxy(fallbackOrigin);
+            if (fallbackResult.backendResponse.status < 500) {
+              activeResponse = fallbackResult.backendResponse;
+              activeTargetUrl = fallbackResult.targetUrl;
+            }
+          } catch (eFallback) {
+            console.warn("[FAILOVER_FAILED]", eFallback);
+          }
+        }
+      } catch (errPrimary) {
+        console.warn(`[PRIMARY_FAILED] ${errPrimary.message}, tentative sur le secours...`);
+        if (fallbackOrigin && fallbackOrigin !== primaryOrigin) {
+          const fallbackResult = await tryProxy(fallbackOrigin);
+          activeResponse = fallbackResult.backendResponse;
+          activeTargetUrl = fallbackResult.targetUrl;
+        } else {
+          throw errPrimary;
+        }
+      }
+
+      // Si le backend renvoie toujours une erreur 503/502 (ex: cold start Render ou Northflank down)
+      if (activeResponse.status >= 502) {
+        const responseText = await activeResponse.clone().text();
+        if (responseText.includes("no healthy upstream") || responseText.includes("upstream connect error") || activeResponse.status === 503) {
+          throw new Error("Backend 503 Unavailable : " + responseText.slice(0, 100));
+        }
+      }
+
+      // 5. Duplication et transmission saine des en-têtes
       const responseHeaders = new Headers();
-      for (const [key, value] of backendResponse.headers.entries()) {
+      for (const [key, value] of activeResponse.headers.entries()) {
         if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
           responseHeaders.set(key, value);
         }
@@ -115,9 +171,9 @@ export default {
       // Marqueur de diagnostic Edge
       responseHeaders.set("X-Served-By", "nanasore-cloudflare-worker-proxy");
 
-      return new Response(backendResponse.body, {
-        status: backendResponse.status,
-        statusText: backendResponse.statusText,
+      return new Response(activeResponse.body, {
+        status: activeResponse.status,
+        statusText: activeResponse.statusText,
         headers: responseHeaders,
       });
 
@@ -133,15 +189,14 @@ export default {
           JSON.stringify({
             success: false,
             error: "BACKEND_UNAVAILABLE",
-            message: "Le serveur Nanasore (Render) est temporairement injoignable ou en cours de réveil.",
-            details: error?.message || "Cold start Render en cours",
-            target: targetUrl.hostname,
+            message: "Le serveur Nanasore est en cours de synchronisation. Veuillez réessayer dans quelques secondes.",
+            details: error?.message || "Cold start en cours",
           }),
           {
             status: 503,
             headers: {
               "Content-Type": "application/json",
-              "Retry-After": "8",
+              "Retry-After": "4",
               "Cache-Control": "no-cache, no-store, must-revalidate",
               "X-Served-By": "Nanasore-Edge-Error-Guard",
             },
@@ -149,14 +204,14 @@ export default {
         );
       }
 
-      // Écran de réveil élégant pour navigateurs Web
+      // Écran de réveil élégant pour navigateurs Web (Remplace 'no healthy upstream' par le loader officiel Nanasore)
       const coldStartHtml = `<!doctype html>
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="6" />
-    <title>Nanasore — Démarrage du service</title>
+    <meta http-equiv="refresh" content="4" />
+    <title>Nanasore — Démarrage sécurisé</title>
     <style>
       body {
         margin: 0;
@@ -171,8 +226,8 @@ export default {
         padding: 20px;
       }
       .card {
-        background: rgba(13, 21, 39, 0.75);
-        border: 1px solid rgba(59, 130, 246, 0.35);
+        background: rgba(13, 21, 39, 0.85);
+        border: 1px solid rgba(59, 130, 246, 0.4);
         border-radius: 24px;
         padding: 36px 28px;
         max-width: 440px;
@@ -198,7 +253,7 @@ export default {
         width: 40%;
         background: linear-gradient(90deg, #2563eb, #22d3ee);
         border-radius: 9999px;
-        animation: pulse 1.5s infinite ease-in-out;
+        animation: pulse 1.2s infinite ease-in-out;
       }
       @keyframes pulse {
         0% { left: -40%; width: 40%; }
@@ -211,18 +266,18 @@ export default {
   <body>
     <div class="card">
       <h1>Nana<span class="accent">sore</span></h1>
-      <p>Connexion sécurisée en cours. Le serveur sur Render se réveille, actualisation automatique dans quelques secondes...</p>
+      <p>Connexion sécurisée en cours. Initialisation des services, actualisation automatique dans un instant...</p>
       <div class="loader"><div class="loader-bar"></div></div>
-      <div class="footer">Statut 503 — Réveil automatique actif</div>
+      <div class="footer">Synchronisation Edge active — Chargement immédiat</div>
     </div>
   </body>
 </html>`;
 
       return new Response(coldStartHtml, {
-        status: 503,
+        status: 200,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
-          "Retry-After": "6",
+          "Retry-After": "4",
           "Cache-Control": "no-cache, no-store, must-revalidate",
           "X-Served-By": "Nanasore-Edge-ColdStart-Guard",
         },

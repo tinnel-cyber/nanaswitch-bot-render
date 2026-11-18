@@ -1608,7 +1608,7 @@ async function startServer() {
     process.env.VITE_API_URL ||
     process.env.PAYMENT_API_URL || 
     process.env.VITE_PAYMENT_API_URL || 
-    'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
+    'https://nanaswitch-bot-render-0kqp.onrender.com';
 
   // Endpoint Diagnostic IP Statique Fixie vue par les banques partenaires
   app.get('/api/payment/ip', async (req, res) => {

@@ -9,7 +9,7 @@
  */
 
 // 1. URL API Backend Principale
-export const DEFAULT_API_URL = 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
+export const DEFAULT_API_URL = 'https://nanaswitch-bot-render-0kqp.onrender.com';
 
 export function getApiBaseUrl(): string {
   if (typeof import.meta !== 'undefined' && import.meta.env) {
