@@ -1226,26 +1226,6 @@ const SuperAdminToolbar: React.FC<SuperAdminToolbarProps> = ({
           </div>
         </div>
       )}
-
-      {/* Bouton Flottant en bas à droite */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          type="button"
-          onClick={() => {
-            playTapBeep();
-            onToggleEditMode();
-          }}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl font-black text-xs shadow-2xl transition-all duration-300 cursor-pointer active:scale-95 border ${
-            isEditMode
-              ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-300 shadow-amber-950/60'
-              : 'bg-slate-900/95 hover:bg-slate-850 text-white border-slate-700 shadow-black/80'
-          }`}
-          title="Permet au Super Admin de personnaliser et réorganiser la vue formateur"
-        >
-          <GripVertical className="w-4 h-4 text-indigo-400" />
-          <span>{isEditMode ? 'Enregistrer la disposition' : 'Réorganiser le tableau de bord'}</span>
-        </button>
-      </div>
     </>
   );
 };
