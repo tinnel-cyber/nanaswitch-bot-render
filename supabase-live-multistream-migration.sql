@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Si la table existait déjà sans ces colonnes, on les ajoute en toute sécurité
+ALTER TABLE public.push_subscriptions
+  ADD COLUMN IF NOT EXISTS store_slug TEXT,
+  ADD COLUMN IF NOT EXISTS user_id TEXT,
+  ADD COLUMN IF NOT EXISTS p256dh TEXT,
+  ADD COLUMN IF NOT EXISTS auth TEXT,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
 -- Indexation pour recherche rapide par boutique ou par vendeur
 CREATE INDEX IF NOT EXISTS idx_push_subs_store_slug ON public.push_subscriptions(store_slug);
 CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON public.push_subscriptions(user_id);
