@@ -24,3 +24,6 @@ export type { HlsLivePlayerProps } from './HlsLivePlayer';
 
 export { LiveMultistreamStudioModal } from './LiveMultistreamStudioModal';
 export type { LiveMultistreamStudioModalProps } from './LiveMultistreamStudioModal';
+
+export { LiveSubscribeButton } from './LiveSubscribeButton';
+export type { LiveSubscribeButtonProps } from './LiveSubscribeButton';

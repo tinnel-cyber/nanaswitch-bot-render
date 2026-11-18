@@ -20,7 +20,10 @@ export interface SupabasePushNotificationPayload {
 }
 
 // Clé publique VAPID pour les Pushs du navigateur standard (RFC 8291)
-export const VAPID_PUBLIC_KEY = 'BOJi7t22t5CwP1jETmiQAQ-1fn3w7Z8EltEIw_pfbTRB6p68AwMrFwPync8PNNVHwOxGAPBVxWlG6B3HSMXRLwo';
+export const VAPID_PUBLIC_KEY = 
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY) ||
+  (typeof process !== 'undefined' && process.env?.VAPID_PUBLIC_KEY) ||
+  'BPEjL4pdmUAfIC5tzapvW_kGem9woSuIPr8zerD45g5-IAYWNNQ8UL466CvEt__oP20wabjzNWxmEerEAyCdBYs';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -80,7 +83,7 @@ export async function emitLiveToast(
  * 3. Enregistrement de l'abonnement Web Push standard dans Supabase SQL
  * Utilise le Service Worker unifié /sw.js
  */
-export async function registerWebPushSubscription(userId?: string): Promise<PushSubscription | null> {
+export async function registerWebPushSubscription(userId?: string, storeSlug?: string): Promise<PushSubscription | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.info('[SupabaseNotification] Les notifications Web Push ne sont pas supportées.');
     return null;
@@ -109,8 +112,9 @@ export async function registerWebPushSubscription(userId?: string): Promise<Push
       const endpoint = subJson.endpoint || '';
       const p256dh = subJson.keys?.p256dh || '';
       const auth = subJson.keys?.auth || '';
+      const cleanSlug = storeSlug ? String(storeSlug).trim().replace(/[^a-zA-Z0-9_-]/g, '') : null;
 
-      // Sauvegarde dans la table Supabase push_subscriptions
+      // 1. Sauvegarde dans la table Supabase push_subscriptions
       try {
         await supabase
           .from('push_subscriptions')
@@ -119,13 +123,27 @@ export async function registerWebPushSubscription(userId?: string): Promise<Push
             p256dh,
             auth,
             user_id: userId || 'anonymous',
+            store_slug: cleanSlug,
             updated_at: new Date().toISOString()
           }, { onConflict: 'endpoint' });
       } catch (sqlErr) {
         console.warn('[SupabaseNotification] Note: Sauvegarde table push_subscriptions :', sqlErr);
       }
 
-      console.log('[SupabaseNotification] Souscription Web Push enregistrée avec succès.');
+      // 2. Enregistrement miroir auprès du backend API (Northflank)
+      try {
+        fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription: subJson,
+            storeSlug: cleanSlug,
+            userId: userId || 'anonymous'
+          })
+        }).catch(() => {});
+      } catch (_) {}
+
+      console.log(`[SupabaseNotification] Souscription Web Push enregistrée avec succès (Boutique: ${cleanSlug || 'globale'}).`);
     }
 
     return subscription;

@@ -546,9 +546,76 @@ async function startServer() {
         return res.status(400).json({ success: false, error: error.message, code: error.code });
       }
 
+      // Notification Push immédiate au vendeur via Web Push
+      const merchantTargetId = organizationId || organization_id || sellerName || 'default_merchant';
+      import('./src/server/webPushService').then(({ sendNewOrderPushToSeller }) => {
+        sendNewOrderPushToSeller({
+          merchantId: merchantTargetId,
+          orderId: data?.id || data?.transaction_id || `cmd_${Date.now()}`,
+          customerName: customerName || customer_name || 'Client',
+          totalAmount: unitPrice ? unitPrice * qty : (data?.amount || qty),
+          productName: prodId
+        }).catch(err => console.warn('[PUSH SALE NOTIFY ERROR]', err));
+      }).catch(() => {});
+
       return res.json({ success: true, transaction: data });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du traitement de la vente' });
+    }
+  });
+
+  // API Enregistrement des Abonnements Web Push (avec storeSlug pour Lives Shopping)
+  app.post('/api/push/subscribe', async (req, res) => {
+    try {
+      const { subscription, storeSlug, userId } = req.body || {};
+      if (!subscription || !subscription.endpoint) {
+        return res.status(400).json({ success: false, error: 'Abonnement Push manquant.' });
+      }
+
+      const { supabase } = await import('./app/utils/supabase.server');
+      const endpoint = subscription.endpoint;
+      const p256dh = subscription.keys?.p256dh || '';
+      const auth = subscription.keys?.auth || '';
+      const cleanSlug = storeSlug ? String(storeSlug).replace(/[^a-zA-Z0-9_-]/g, '') : null;
+
+      const { error } = await supabase.from('push_subscriptions').upsert({
+        endpoint,
+        p256dh,
+        auth,
+        user_id: userId || 'anonymous',
+        store_slug: cleanSlug,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'endpoint' });
+
+      if (error) {
+        console.warn('[PUSH SUBSCRIBE SUPABASE WARN]', error.message);
+      }
+
+      return res.json({ success: true, message: 'Abonnement enregistré avec succès.', storeSlug: cleanSlug });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur enregistrement abonnement.' });
+    }
+  });
+
+  // API Déclenchement d'alerte Live Shopping aux abonnés d'une boutique
+  app.post('/api/push/send-live-alert', async (req, res) => {
+    try {
+      const { storeSlug, storeName, customTitle, customBody } = req.body || {};
+      if (!storeSlug) {
+        return res.status(400).json({ success: false, error: 'storeSlug requis.' });
+      }
+
+      const { sendLiveShoppingPushToStoreSubscribers } = await import('./src/server/webPushService');
+      const result = await sendLiveShoppingPushToStoreSubscribers({
+        storeSlug,
+        storeName: storeName || storeSlug,
+        customTitle,
+        customBody
+      });
+
+      return res.json({ success: true, result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur déclenchement push live.' });
     }
   });
 
@@ -1710,6 +1777,17 @@ async function startServer() {
       const provider = txData.provider || 'WAVE';
 
       console.log(`[SUCCESS] Webhook validé par HMAC SHA-256 pour ${userId} sur ${courseId} (Tx: ${txId})`);
+
+      // Déclencheur Web Push temps réel vers le marchand / formateur
+      import('./src/server/webPushService').then(({ sendNewOrderPushToSeller }) => {
+        sendNewOrderPushToSeller({
+          merchantId: userId,
+          orderId: txId,
+          customerName: txData.customerName || 'Acheteur',
+          totalAmount: amount,
+          productName: courseId
+        }).catch(pushErr => console.warn('[PAYMENT PUSH NOTIFY ERROR]', pushErr));
+      }).catch(() => {});
 
       return res.status(200).json({
         success: true,

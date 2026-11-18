@@ -135,13 +135,14 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && !isTestE
       }).catch(() => {});
     }
 
-    // Désactivation et désenregistrement des workers Firebase
+    // Désactivation et désenregistrement des anciens workers Firebase
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         registrations.forEach((reg) => {
-          if (reg.active?.scriptURL?.includes('sw.js')) {
+          const url = reg.active?.scriptURL || '';
+          if (url.includes('firebase') || url.includes('firebase-messaging-sw')) {
             reg.unregister().then(() => {
-              console.log('[Worker Purge] Ancien worker Firebase désactivé avec succès.');
+              console.log('[Worker Purge] Ancien worker Firebase désactivé avec succès :', url);
             }).catch(() => {});
           }
         });
@@ -163,6 +164,21 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && !isTestE
         console.warn('[PWA] Échec enregistrement Service Worker :', err);
       });
   };
+
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'UNREGISTER_FIREBASE_SW') {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => {
+          const url = reg.active?.scriptURL || '';
+          if (url.includes('firebase') || url.includes('firebase-messaging-sw')) {
+            reg.unregister().then(() => {
+              console.log('[Worker Purge] Service worker Firebase désinscrit via activate SW :', url);
+            }).catch(() => {});
+          }
+        });
+      }).catch(() => {});
+    }
+  });
 
   if (document.readyState === 'complete') {
     registerSW();

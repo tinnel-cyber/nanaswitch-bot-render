@@ -68,6 +68,7 @@
     "react-leaflet": "^5.0.0",
     "replicate": "^1.4.0",
     "undici": "^6.21.1",
+    "web-push": "^4.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -75,6 +76,7 @@
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "javascript-obfuscator": "^5.9.0",

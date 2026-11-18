@@ -34,6 +34,7 @@ import { LiveClassroomInteractivePanel, LivePanelTab } from '../../../components
 import { LiveInstructorControlBar } from '../../../components/live/LiveInstructorControlBar';
 import { LiveShareModal } from '../../../components/live/LiveShareModal';
 import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
+import { LiveSubscribeButton } from '../../../components/live/LiveSubscribeButton';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
@@ -234,6 +235,16 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
             <span className="hidden md:inline">{isHostMode ? 'Console Formateur Active' : 'Mode Formateur'}</span>
           </button>
 
+          {/* Bouton d'abonnement aux notifications Push de la boutique pour les acheteurs */}
+          {!isHostMode && (
+            <LiveSubscribeButton
+              storeSlug={resolvedSlug}
+              storeName={session.storeName}
+              variant="outline"
+              className="hidden sm:flex"
+            />
+          )}
+
           {/* Action Droite : Bouton 1-Clic "📲 Partager ce Live" */}
           <button
             type="button"
@@ -416,6 +427,27 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 </p>
               )}
             </div>
+
+            {/* Bannière Abonnement Alertes Live pour Acheteurs */}
+            {!isHostMode && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-slate-900 border border-blue-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-black text-white flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                    Ne manquez aucun direct de {session.storeName}
+                  </span>
+                  <p className="text-[11px] text-slate-300">
+                    Soyez prévenu instantanément sur votre téléphone dès le lancement du prochain Live Shopping.
+                  </p>
+                </div>
+                <LiveSubscribeButton
+                  storeSlug={resolvedSlug}
+                  storeName={session.storeName}
+                  variant="solid"
+                  className="w-full sm:w-auto shrink-0 justify-center"
+                />
+              </div>
+            )}
 
             {/* Carrousel Produits Incitatif Défilant en Continu sous la Vidéo */}
             <div className="bg-white text-slate-900 rounded-3xl p-4 sm:p-5 shadow-xl border border-slate-100">

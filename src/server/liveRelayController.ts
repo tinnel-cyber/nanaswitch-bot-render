@@ -509,6 +509,14 @@ export async function handleStartLiveSession(req: Request, res: Response): Promi
   const whipUrl = `https://p01--nanasore-live--p8yx28yyjhbx.code.run/${cleanSlug}/whip`;
   const hlsUrl = `https://p02--nanasore-live--p8yx28yyjhbx.code.run/${cleanSlug}/index.m3u8`;
 
+  // Déclencheur temps réel automatique : Envoi réel Web Push à tous les abonnés du store_slug
+  import('./webPushService').then(({ sendLiveShoppingPushToStoreSubscribers }) => {
+    sendLiveShoppingPushToStoreSubscribers({
+      storeSlug: cleanSlug,
+      storeName: hostName || title || cleanSlug
+    }).catch(pushErr => console.warn('[LIVE START PUSH ERROR]', pushErr));
+  }).catch(() => {});
+
   res.json({
     success: true,
     liveId,
