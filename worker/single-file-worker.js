@@ -19,8 +19,8 @@ export default {
 
     // Hôtes de destination
     const FRONTEND_HOST = env.FRONTEND_HOST || "nanasore.com";
-    const PAYMENT_HOST = env.PAYMENT_HOST || "p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
-    const RENDER_HOST = env.BACKEND_URL || env.NORTHFLANK_BACKEND_URL || env.RENDER_BACKEND_URL || "p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+    const PAYMENT_HOST = env.PAYMENT_HOST || env.PAYMENT_API_URL || "nanaswitch-bot-render-0kqp.onrender.com";
+    const RENDER_HOST = env.BACKEND_URL || env.RENDER_BACKEND_URL || "nanaswitch-bot-render-0kqp.onrender.com";
 
     // 1. Réponse immédiate aux requêtes de pré-vol CORS (OPTIONS)
     if (request.method === "OPTIONS") {
