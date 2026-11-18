@@ -1161,12 +1161,21 @@ export default function App() {
     return null;
   });
 
-  // Détection URL publique Smart Checkout (/checkout/:productId ou /checkout ou /caisse ou ?checkout=... / ?plan=...)
+  // Détection URL publique Smart Checkout (/checkout/:productId ou /checkout ou /caisse ou ?checkout=...)
   const [publicCheckoutId, setPublicCheckoutId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
-      const queryPlanOrId = params.get('plan') || params.get('planId') || params.get('productId') || params.get('checkout');
+
+      // Ne jamais intercepter sur les écrans d'inscription, connexion ou accueil
+      if (
+        pathname === '/register' || 
+        pathname === '/login' || 
+        pathname.startsWith('/register') || 
+        pathname.startsWith('/auth')
+      ) {
+        return null;
+      }
 
       if (pathname.startsWith('/checkout/')) {
         const parts = pathname.split('/checkout/');
@@ -1175,9 +1184,11 @@ export default function App() {
         }
       }
       if (pathname === '/checkout' || pathname === '/caisse' || pathname === '/pay') {
-        return queryPlanOrId || 'pro';
+        return params.get('productId') || params.get('plan') || params.get('planId') || 'pro';
       }
-      return queryPlanOrId || (params.has('checkout') ? (params.get('checkout') || 'pro') : null);
+      if (params.has('checkout')) {
+        return params.get('checkout') || params.get('productId') || params.get('plan') || 'pro';
+      }
     }
     return null;
   });
@@ -6305,9 +6316,16 @@ export default function App() {
             // Obligation absolue de créer son compte et son univers AVANT le règlement
             if (!currentUser || !currentUser.storeId) {
               if (typeof window !== 'undefined') {
+                const effectivePrice = price || (
+                  planId === 'enterprise' || planId === 'elite' 
+                    ? (isAnnual ? 600000 : 60000) 
+                    : planId === 'business' 
+                    ? (isAnnual ? 300000 : 30000) 
+                    : (isAnnual ? 150000 : 15000)
+                );
                 localStorage.setItem('nana_pending_subscription_plan', JSON.stringify({
                   planId,
-                  price: price || (planId === 'enterprise' ? (isAnnual ? 600000 : 60000) : planId === 'business' ? (isAnnual ? 300000 : 30000) : planId === 'pro' ? (isAnnual ? 150000 : 15000) : 5000),
+                  price: effectivePrice,
                   isAnnual: Boolean(isAnnual),
                   timestamp: Date.now()
                 }));

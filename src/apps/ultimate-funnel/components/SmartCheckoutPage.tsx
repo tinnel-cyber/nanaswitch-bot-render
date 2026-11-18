@@ -39,31 +39,25 @@ export const SmartCheckoutPage: React.FC<SmartCheckoutPageProps> = ({
 
     const effectiveId = (productId || planParam || 'pro').toLowerCase();
 
-    // 1. Formule Starter (5 000 F CFA / mois ou 50 000 F CFA / an)
-    if (effectiveId === 'starter' || effectiveId === 'plan_starter' || effectiveId === 'plan-starter') {
-      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 50000 : 5000));
-      return {
-        id: 'plan_starter',
-        name: nameParam || (isAnnual ? 'Abonnement Starter Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Starter Nanasore • Licence Mensuelle POS'),
-        price,
-        originalPrice: Math.round(price * 1.3),
-        itemType: 'subscription',
-        imageUrl: '',
-        description: descParam || 'Licence Starter : Caisse tactile POS, encaissements directs, gestion catalogue et reçus thermiques. 0% de commission.'
-      };
-    }
-
-    // 2. Formule Pro (15 000 F CFA / mois ou 150 000 F CFA / an) - Le plus populaire
-    if (effectiveId === 'pro' || effectiveId === 'plan_pro' || effectiveId === 'plan-pro' || effectiveId === 'caisse') {
+    // 1. Formule Pro (15 000 F CFA / mois ou 150 000 F CFA / an) - Le choix recommandé
+    if (
+      effectiveId === 'starter' || 
+      effectiveId === 'pro' || 
+      effectiveId === 'plan_pro' || 
+      effectiveId === 'plan-pro' || 
+      effectiveId === 'plan_starter' || 
+      effectiveId === 'plan-starter' || 
+      effectiveId === 'caisse'
+    ) {
       const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 150000 : 15000));
       return {
         id: 'plan_pro',
-        name: nameParam || (isAnnual ? 'Abonnement Pro Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Pro Nanasore • Boutique & Formateur Hybride'),
+        name: nameParam || (isAnnual ? 'Abonnement Plan Pro Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Plan Pro Nanasore • Boutique & Formateur Pro'),
         price,
         originalPrice: Math.round(price * 1.3),
         itemType: 'subscription',
         imageUrl: '',
-        description: descParam || 'Licence Pro : Caisse POS & Tunnels illimités, jusqu\'à 50 cours hébergés, multi-caissiers PIN, Live Shopping et 0% de commission.'
+        description: descParam || 'Licence Pro : Caisse POS tactile, produits illimités, jusqu\'à 50 cours hébergés, multi-caissiers PIN, Live Shopping et 0% de commission.'
       };
     }
 
