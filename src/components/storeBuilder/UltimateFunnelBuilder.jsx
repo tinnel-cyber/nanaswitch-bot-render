@@ -73,7 +73,7 @@ import {
 } from 'lucide-react';
 import { formatCFA, playTapBeep, playValidationBeep, playCancelSound, playCashChime } from '../../utils/audio';
 import { incrementStoredFunnelsCount } from '../../utils/planFeatures';
-import { saveFunnelConfig, registerSubdomainInFirebase } from '../../services/omniFunnelService';
+import { saveFunnelConfig, registerSubdomainInFirebase, getFunnelBySlug } from '../../services/omniFunnelService';
 import { FUNNEL_PALETTES, DEFAULT_PALETTE, resolveFunnelTheme, resolveBlockButton, alpha } from '../../lib/funnelColorLibrary';
 import { saveTenantCustomDomain, cleanDomain } from '../../services/tenantDomainService';
 import { AutoplayVideoBlock, DEFAULT_AUTOPLAY_VIDEO_DATA } from '../cro/AutoplayVideoBlock';
@@ -501,22 +501,31 @@ export const UltimateFunnelBuilder = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Génération dynamique des blocs pour les 4 étapes selon les données reçues
+  // Génération dynamique des blocs pour les 4 étapes selon les données reçues et les paramètres sauvegardés
   const [funnelCanvasData, setFunnelCanvasData] = useState(() => {
-    return {
+    const initTitle = customizationSettings?.funnelTitle || activeSource.title;
+    const initSubtitle = customizationSettings?.funnelSubtitle || activeSource.subtitle;
+    const initInstructor = customizationSettings?.instructorName || activeSource.instructor;
+    const initRole = customizationSettings?.instructorRole || activeSource.category;
+    const initPrice = Number(customizationSettings?.salePrice) || activeSource.price || 35000;
+    const initOrigPrice = Number(customizationSettings?.originalPrice) || activeSource.originalPrice || 75000;
+    const initImage = customizationSettings?.ogImageUrl || activeSource.image;
+    const initBadge = customizationSettings?.discountBadge || '⚡ OFFRE DE LANCEMENT EXCLUSIVE';
+
+    const defaultSteps = {
       optin: [
         {
           id: 'block-optin-hero',
           type: 'hero_live_masterclass',
           name: 'Hero 3D Live & Masterclass',
           data: {
-            headline: `Accédez Gratuitement à l'Avant-Première : ${activeSource.title}`,
-            subheadline: `Animé par ${activeSource.instructor}. Réservez votre accès avant la fermeture des inscriptions.`,
+            headline: `Accédez Gratuitement à l'Avant-Première : ${initTitle}`,
+            subheadline: `Animé par ${initInstructor}. Réservez votre accès avant la fermeture des inscriptions.`,
             promoBadge: '🎁 ACCÈS PRIVILÈGE 100% GRATUIT',
-            instructorName: activeSource.instructor,
-            instructorRole: activeSource.category,
+            instructorName: initInstructor,
+            instructorRole: initRole,
             instructorAvatar: activeSource.instructorAvatar,
-            image: activeSource.image,
+            image: initImage,
             buttonText: 'Réserver Ma Place Gratuite Maintenant ⚡'
           }
         },
@@ -539,16 +548,16 @@ export const UltimateFunnelBuilder = ({
           type: 'hero_live_masterclass',
           name: 'Hero 3D Live & Masterclass',
           data: {
-            headline: activeSource.title,
-            subheadline: activeSource.subtitle,
-            promoBadge: '⚡ OFFRE DE LANCEMENT EXCLUSIVE',
-            instructorName: activeSource.instructor,
-            instructorRole: activeSource.category,
+            headline: initTitle,
+            subheadline: initSubtitle,
+            promoBadge: initBadge,
+            instructorName: initInstructor,
+            instructorRole: initRole,
             instructorAvatar: activeSource.instructorAvatar,
-            image: activeSource.image,
-            price: activeSource.price || 35000,
-            originalPrice: activeSource.originalPrice || 75000,
-            buttonText: `Rejoindre le Programme • ${formatCFA(activeSource.price || 35000)} 🚀`
+            image: initImage,
+            price: initPrice,
+            originalPrice: initOrigPrice,
+            buttonText: `Rejoindre le Programme • ${formatCFA(initPrice)} 🚀`
           }
         },
         {
@@ -590,7 +599,7 @@ export const UltimateFunnelBuilder = ({
           type: 'instructor_bio',
           name: 'Fiche Formateur & Certifications',
           data: {
-            name: activeSource.instructor,
+            name: initInstructor,
             title: 'Expert Agréé • NaNa Academy',
             bio: 'Spécialiste reconnu pour son approche concrète axée sur les résultats rapides et mesurables.',
             avatar: activeSource.instructorAvatar,
@@ -637,7 +646,7 @@ export const UltimateFunnelBuilder = ({
             headline: '🚨 ATTENDEZ ! Ajoutez 1 Heure de Coaching Privé 1-on-1 (-65%)',
             subheadline: 'Une séance stratégique confidentielle avec votre instructeur pour auditer votre projet.',
             promoBadge: 'OFFRE COMPLÉMENTAIRE PRIVILÈGE',
-            instructorName: activeSource.instructor,
+            instructorName: initInstructor,
             instructorRole: 'Séance Privée Zoom / Daily.co',
             instructorAvatar: activeSource.instructorAvatar,
             image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&auto=format&fit=crop&q=80',
@@ -656,10 +665,10 @@ export const UltimateFunnelBuilder = ({
             headline: 'Dernière Chance : Accédez au Pack Résumés & Replays Seuls 🏷️',
             subheadline: 'Si le programme complet dépasse votre budget actuel, gardez les enregistrements essentiels.',
             promoBadge: 'TARIF SAUVETAGE ÉTUDIANT',
-            instructorName: activeSource.instructor,
+            instructorName: initInstructor,
             instructorRole: 'Pack Replay Seul',
             instructorAvatar: activeSource.instructorAvatar,
-            image: activeSource.image,
+            image: initImage,
             price: 12500,
             originalPrice: 25000,
             buttonText: 'PROFITER DU PACK REPLAY À 12 500 F CFA 🚀'
@@ -667,7 +676,84 @@ export const UltimateFunnelBuilder = ({
         }
       ]
     };
+
+    try {
+      const slugToLoad = (customizationSettings?.subdomain || 'ia-masterclass').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'ia-masterclass';
+      const rawSaved = localStorage.getItem(`nana_funnel_f_${slugToLoad}`) ||
+        localStorage.getItem(`nana_funnel_f-${slugToLoad}`) ||
+        localStorage.getItem(`nana_funnel_${slugToLoad}`);
+      if (rawSaved) {
+        const parsed = JSON.parse(rawSaved);
+        const payload = parsed.template_data || parsed;
+        if (payload?.steps && Array.isArray(payload.steps.sales) && payload.steps.sales.length > 0) {
+          return {
+            ...defaultSteps,
+            ...payload.steps
+          };
+        }
+        if (Array.isArray(payload?.blocks) && payload.blocks.length > 0) {
+          return {
+            ...defaultSteps,
+            sales: payload.blocks
+          };
+        }
+      }
+    } catch (e) {}
+
+    return defaultSteps;
   });
+
+  // Synchronisation au montage avec Supabase (Network-First) pour que l'éditeur affiche exactement ce qui est publié en ligne
+  useEffect(() => {
+    let isCancelled = false;
+    const slugToLoad = (customizationSettings?.subdomain || 'ia-masterclass').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'ia-masterclass';
+    getFunnelBySlug(slugToLoad, 'f').then((remoteFunnel) => {
+      if (isCancelled || !remoteFunnel) return;
+      const payload = remoteFunnel.template_data || remoteFunnel;
+      if (!payload || typeof payload !== 'object') return;
+
+      const remoteTheme = resolveFunnelTheme(payload);
+      const remoteSettings = payload.settings || {};
+      const heroBlock = (payload.blocks || payload.steps?.sales || []).find(b => b.type === 'hero_live_masterclass' || b.type === 'hero');
+      const heroData = heroBlock?.data || heroBlock?.props || {};
+
+      const syncedSettings = {
+        ...customizationSettings,
+        ...remoteSettings,
+        themePreset: remoteTheme.id,
+        primaryColor: remoteTheme.primary,
+        accentColor: remoteTheme.accent,
+        bgColor: remoteTheme.bg,
+        funnelTitle: heroData.headline || payload.title || remoteSettings.funnelTitle || customizationSettings.funnelTitle,
+        funnelSubtitle: heroData.subheadline || payload.subtitle || remoteSettings.funnelSubtitle || customizationSettings.funnelSubtitle,
+        salePrice: Number(heroData.price) || Number(payload.salePrice) || Number(remoteSettings.salePrice) || customizationSettings.salePrice,
+        originalPrice: Number(heroData.originalPrice) || Number(payload.originalPrice) || Number(remoteSettings.originalPrice) || customizationSettings.originalPrice,
+        instructorName: heroData.instructorName || remoteSettings.instructorName || customizationSettings.instructorName,
+        instructorRole: heroData.instructorRole || remoteSettings.instructorRole || customizationSettings.instructorRole,
+        discountBadge: heroData.promoBadge || remoteSettings.discountBadge || customizationSettings.discountBadge,
+        ogImageUrl: heroData.image || payload.ogImageUrl || remoteSettings.ogImageUrl || customizationSettings.ogImageUrl
+      };
+
+      setCustomizationSettings(syncedSettings);
+      setTempSettings(syncedSettings);
+
+      if (payload.steps && Array.isArray(payload.steps.sales) && payload.steps.sales.length > 0) {
+        setFunnelCanvasData(prev => ({
+          ...prev,
+          ...payload.steps
+        }));
+      } else if (Array.isArray(payload.blocks) && payload.blocks.length > 0) {
+        setFunnelCanvasData(prev => ({
+          ...prev,
+          sales: payload.blocks
+        }));
+      }
+    }).catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -682,68 +768,77 @@ export const UltimateFunnelBuilder = ({
       localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(updatedSettings));
     } catch (e) {}
 
-    // Synchronisation en direct sur tous les blocs du Canvas
-    setFunnelCanvasData(prev => {
-      const updated = { ...prev };
-      
-      if (updated.sales) {
-        updated.sales = updated.sales.map(block => {
-          const cleanBlockData = { ...(block.data || {}) };
-          if (!cleanBlockData.customBtnColor) {
-            delete cleanBlockData.btnBgColor;
-            delete cleanBlockData.btnTextColor;
-            delete cleanBlockData.glowColor;
-          }
-          if (block.type === 'hero_live_masterclass') {
-            return {
-              ...block,
-              data: {
-                ...cleanBlockData,
-                headline: updatedSettings.funnelTitle,
-                subheadline: updatedSettings.funnelSubtitle,
-                instructorName: updatedSettings.instructorName,
-                instructorRole: updatedSettings.instructorRole,
-                price: Number(updatedSettings.salePrice) || block.data.price,
-                originalPrice: Number(updatedSettings.originalPrice) || block.data.originalPrice,
-                promoBadge: updatedSettings.discountBadge || block.data.promoBadge,
-                buttonText: `Rejoindre le Programme • ${formatCFA(Number(updatedSettings.salePrice) || 35000)} 🚀`
-              }
-            };
-          }
-          if (block.type === 'pricing_checkout_cta' || block.type === 'checkout_express_oneclick') {
-            return {
-              ...block,
-              data: {
-                ...cleanBlockData,
-                price: Number(updatedSettings.salePrice) || block.data.price,
-                originalPrice: Number(updatedSettings.originalPrice) || block.data.originalPrice
-              }
-            };
-          }
-          return { ...block, data: cleanBlockData };
-        });
-      }
+    // Calcul synchrone des étapes nettoyées pour qu'elles soient immédiatement écrites dans Supabase & localStorage
+    const computedSteps = { ...funnelCanvasData };
+    if (computedSteps.sales) {
+      computedSteps.sales = computedSteps.sales.map(block => {
+        const cleanBlockData = { ...(block.data || {}) };
+        if (!cleanBlockData.customBtnColor) {
+          delete cleanBlockData.btnBgColor;
+          delete cleanBlockData.btnTextColor;
+          delete cleanBlockData.glowColor;
+        }
+        if (!cleanBlockData.customBlockBg) {
+          delete cleanBlockData.bgColor;
+        }
+        if (block.type === 'hero_live_masterclass' || block.type === 'hero') {
+          return {
+            ...block,
+            data: {
+              ...cleanBlockData,
+              headline: updatedSettings.funnelTitle || cleanBlockData.headline,
+              subheadline: updatedSettings.funnelSubtitle || cleanBlockData.subheadline,
+              instructorName: updatedSettings.instructorName || cleanBlockData.instructorName,
+              instructorRole: updatedSettings.instructorRole || cleanBlockData.instructorRole,
+              price: Number(updatedSettings.salePrice) || cleanBlockData.price,
+              originalPrice: Number(updatedSettings.originalPrice) || cleanBlockData.originalPrice,
+              promoBadge: updatedSettings.discountBadge || cleanBlockData.promoBadge,
+              buttonText: `Rejoindre le Programme • ${formatCFA(Number(updatedSettings.salePrice) || cleanBlockData.price || 35000)} 🚀`
+            }
+          };
+        }
+        if (block.type === 'pricing_checkout_cta' || block.type === 'checkout_express_oneclick') {
+          return {
+            ...block,
+            data: {
+              ...cleanBlockData,
+              price: Number(updatedSettings.salePrice) || cleanBlockData.price,
+              originalPrice: Number(updatedSettings.originalPrice) || cleanBlockData.originalPrice
+            }
+          };
+        }
+        return { ...block, data: cleanBlockData };
+      });
+    }
 
-      if (updated.optin) {
-        updated.optin = updated.optin.map(block => {
-          if (block.type === 'hero_live_masterclass') {
-            return {
-              ...block,
-              data: {
-                ...block.data,
-                headline: `Accédez Gratuitement à l'Avant-Première : ${updatedSettings.funnelTitle}`,
-                subheadline: `Animé par ${updatedSettings.instructorName}. Réservez votre accès avant la fermeture des inscriptions.`,
-                instructorName: updatedSettings.instructorName,
-                instructorRole: updatedSettings.instructorRole
-              }
-            };
-          }
-          return block;
-        });
-      }
+    if (computedSteps.optin) {
+      computedSteps.optin = computedSteps.optin.map(block => {
+        const cleanBlockData = { ...(block.data || {}) };
+        if (!cleanBlockData.customBtnColor) {
+          delete cleanBlockData.btnBgColor;
+          delete cleanBlockData.btnTextColor;
+          delete cleanBlockData.glowColor;
+        }
+        if (!cleanBlockData.customBlockBg) {
+          delete cleanBlockData.bgColor;
+        }
+        if (block.type === 'hero_live_masterclass') {
+          return {
+            ...block,
+            data: {
+              ...cleanBlockData,
+              headline: `Accédez Gratuitement à l'Avant-Première : ${updatedSettings.funnelTitle}`,
+              subheadline: `Animé par ${updatedSettings.instructorName}. Réservez votre accès avant la fermeture des inscriptions.`,
+              instructorName: updatedSettings.instructorName,
+              instructorRole: updatedSettings.instructorRole
+            }
+          };
+        }
+        return { ...block, data: cleanBlockData };
+      });
+    }
 
-      return updated;
-    });
+    setFunnelCanvasData(computedSteps);
 
     const targetSubdomain = (
       updatedSettings.subdomain ||
@@ -754,31 +849,10 @@ export const UltimateFunnelBuilder = ({
     const cleanCustomDomain = rawCustom ? cleanDomain(rawCustom) : null;
     const isRealCustom = updatedSettings.hostingType === 'custom_domain' && cleanCustomDomain && !cleanCustomDomain.endsWith('.nanasore.com') && !cleanCustomDomain.endsWith('.nsore.shop');
 
-    const updatedBlocks = currentStepBlocks.map((b) => {
-      if (b.type === 'hero_live_masterclass' || b.type === 'hero') {
-        return {
-          ...b,
-          data: {
-            ...b.data,
-            headline: updatedSettings.funnelTitle || b.data?.headline,
-            subheadline: updatedSettings.funnelSubtitle || b.data?.subheadline,
-            instructorName: updatedSettings.instructorName || b.data?.instructorName,
-            instructorRole: updatedSettings.instructorRole || b.data?.instructorRole,
-            price: Number(updatedSettings.salePrice) || b.data?.price,
-            originalPrice: Number(updatedSettings.originalPrice) || b.data?.originalPrice,
-            promoBadge: updatedSettings.discountBadge || b.data?.promoBadge
-            // Couleurs NON copiées dans les blocs : elles héritent du thème global
-            // (sinon l'ancienne couleur restait figée dans la vue en ligne).
-          }
-        };
-      }
-      return b;
-    });
-
     const savedTheme = resolveFunnelTheme({ settings: updatedSettings });
-    const salesBlocks = (funnelCanvasData?.sales && funnelCanvasData.sales.length > 0)
-      ? funnelCanvasData.sales.map(b => updatedBlocks.find(u => u.id === b.id) || b)
-      : updatedBlocks;
+    const salesBlocks = (computedSteps.sales && computedSteps.sales.length > 0)
+      ? computedSteps.sales
+      : currentStepBlocks;
 
     const funnelPayload = {
       id: targetSubdomain,
@@ -799,7 +873,7 @@ export const UltimateFunnelBuilder = ({
       product: activeSource || null,
       products: activeSource ? [activeSource] : [],
       source: activeSource,
-      steps: funnelCanvasData,
+      steps: computedSteps,
       // La vue en ligne affiche toujours la page de vente (et non l'étape ouverte dans l'éditeur)
       blocks: salesBlocks,
       brandColor: savedTheme.primary,
@@ -1081,10 +1155,12 @@ export const UltimateFunnelBuilder = ({
 
   const updateSelectedBlock = (field, value) => {
     if (!selectedBlockId) return;
+    let targetBlockType = null;
     setFunnelCanvasData(prev => ({
       ...prev,
       [activeStepId]: prev[activeStepId].map(block => {
         if (block.id === selectedBlockId) {
+          targetBlockType = block.type;
           return {
             ...block,
             data: {
@@ -1096,6 +1172,32 @@ export const UltimateFunnelBuilder = ({
         return block;
       })
     }));
+
+    // Synchronisation bidirectionnelle : si l'utilisateur modifie le Hero de la page de vente dans l'inspecteur,
+    // on synchronise immédiatement customizationSettings et tempSettings pour éviter tout écrasement ultérieur.
+    if (activeStepId === 'sales' && (targetBlockType === 'hero_live_masterclass' || targetBlockType === 'hero' || selectedBlockId === 'block-sales-hero')) {
+      const settingsMap = {
+        headline: 'funnelTitle',
+        subheadline: 'funnelSubtitle',
+        price: 'salePrice',
+        originalPrice: 'originalPrice',
+        promoBadge: 'discountBadge',
+        instructorName: 'instructorName',
+        instructorRole: 'instructorRole',
+        image: 'ogImageUrl'
+      };
+      const settingKey = settingsMap[field];
+      if (settingKey) {
+        setCustomizationSettings(prev => {
+          const next = { ...prev, [settingKey]: value };
+          try {
+            localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(next));
+          } catch (e) {}
+          return next;
+        });
+        setTempSettings(prev => ({ ...prev, [settingKey]: value }));
+      }
+    }
   };
 
   const applyCodeInjection = () => {
@@ -1123,6 +1225,25 @@ export const UltimateFunnelBuilder = ({
     const cleanCustomDomain = rawCustom ? cleanDomain(rawCustom) : null;
     const isRealCustom = customizationSettings.hostingType === 'custom_domain' && cleanCustomDomain && !cleanCustomDomain.endsWith('.nanasore.com') && !cleanCustomDomain.endsWith('.nsore.shop');
 
+    const cleanedSteps = {};
+    Object.keys(funnelCanvasData || {}).forEach(stepKey => {
+      cleanedSteps[stepKey] = (funnelCanvasData[stepKey] || []).map(b => {
+        const cleanData = { ...(b.data || {}) };
+        if (!cleanData.customBtnColor) {
+          delete cleanData.btnBgColor;
+          delete cleanData.btnTextColor;
+          delete cleanData.glowColor;
+        }
+        if (!cleanData.customBlockBg) {
+          delete cleanData.bgColor;
+        }
+        return { ...b, data: cleanData };
+      });
+    });
+
+    const salesBlocks = (cleanedSteps.sales && cleanedSteps.sales.length > 0) ? cleanedSteps.sales : currentStepBlocks;
+    const heroSales = salesBlocks.find(b => b.type === 'hero_live_masterclass' || b.type === 'hero')?.data || {};
+
     const funnelPayload = {
       id: effectiveSubdomain,
       slug: effectiveSubdomain,
@@ -1130,28 +1251,32 @@ export const UltimateFunnelBuilder = ({
       productId: activeSource?.id || effectiveSubdomain,
       customDomain: isRealCustom ? cleanCustomDomain : null,
       hostingType: isRealCustom ? 'custom_domain' : 'path',
-      title: customizationSettings.funnelTitle || activeSource?.title || 'Tunnel de Vente',
-      funnelTitle: customizationSettings.funnelTitle || activeSource?.title || 'Tunnel de Vente',
-      subtitle: customizationSettings.funnelSubtitle || activeSource?.subtitle || '',
-      metaTitle: customizationSettings.metaTitle || customizationSettings.funnelTitle || activeSource?.title || 'Offre Spéciale',
-      metaDescription: customizationSettings.metaDescription || customizationSettings.funnelSubtitle || 'Vente flash et commande rapide.',
-      ogImageUrl: customizationSettings.ogImageUrl || activeSource?.image || '',
-      salePrice: Number(customizationSettings.salePrice) || activeSource?.price || 25000,
-      originalPrice: Number(customizationSettings.originalPrice) || (customizationSettings.salePrice ? Number(customizationSettings.salePrice) * 1.5 : 45000),
+      title: heroSales.headline || customizationSettings.funnelTitle || activeSource?.title || 'Tunnel de Vente',
+      funnelTitle: heroSales.headline || customizationSettings.funnelTitle || activeSource?.title || 'Tunnel de Vente',
+      subtitle: heroSales.subheadline || customizationSettings.funnelSubtitle || activeSource?.subtitle || '',
+      metaTitle: customizationSettings.metaTitle || heroSales.headline || customizationSettings.funnelTitle || activeSource?.title || 'Offre Spéciale',
+      metaDescription: customizationSettings.metaDescription || heroSales.subheadline || customizationSettings.funnelSubtitle || 'Vente flash et commande rapide.',
+      ogImageUrl: heroSales.image || customizationSettings.ogImageUrl || activeSource?.image || '',
+      salePrice: Number(heroSales.price) || Number(customizationSettings.salePrice) || activeSource?.price || 25000,
+      originalPrice: Number(heroSales.originalPrice) || Number(customizationSettings.originalPrice) || (customizationSettings.salePrice ? Number(customizationSettings.salePrice) * 1.5 : 45000),
       merchantWhatsapp: customizationSettings.merchantWhatsapp || '',
       currency: customizationSettings.currency || 'FCFA',
       product: activeSource || null,
       products: activeSource ? [activeSource] : [],
       source: activeSource,
-      steps: funnelCanvasData,
+      steps: cleanedSteps,
       // La vue en ligne affiche toujours la page de vente (et non l'étape ouverte dans l'éditeur)
-      blocks: (funnelCanvasData?.sales && funnelCanvasData.sales.length > 0) ? funnelCanvasData.sales : currentStepBlocks,
+      blocks: salesBlocks,
       brandColor: liveTheme.primary,
       primaryColor: liveTheme.primary,
       accentColor: liveTheme.accent,
       bgColor: liveTheme.bg,
       settings: {
         ...customizationSettings,
+        funnelTitle: heroSales.headline || customizationSettings.funnelTitle,
+        funnelSubtitle: heroSales.subheadline || customizationSettings.funnelSubtitle,
+        salePrice: Number(heroSales.price) || Number(customizationSettings.salePrice),
+        originalPrice: Number(heroSales.originalPrice) || Number(customizationSettings.originalPrice),
         brandColor: liveTheme.primary,
         primaryColor: liveTheme.primary,
         accentColor: liveTheme.accent,
@@ -1176,7 +1301,7 @@ export const UltimateFunnelBuilder = ({
         localStorage.setItem(`nana_funnel_f-${alias}`, JSON.stringify(funnelPayload));
         localStorage.setItem(`nana_funnel_${alias}`, JSON.stringify(funnelPayload));
       });
-      localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(customizationSettings));
+      localStorage.setItem('nana_funnel_custom_settings', JSON.stringify(funnelPayload.settings));
     } catch (e) {}
 
     try {
@@ -2178,12 +2303,24 @@ export const UltimateFunnelBuilder = ({
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">Couleur d'Accent</span>
-                      <input
-                        type="color"
-                        value={currentSelectedBlock.data?.accentColor || customizationSettings?.primaryColor || '#f59e0b'}
-                        onChange={(e) => updateSelectedBlock('accentColor', e.target.value)}
-                        className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {currentSelectedBlock.data?.accentColor && (
+                          <button
+                            type="button"
+                            onClick={() => updateSelectedBlock('accentColor', undefined)}
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            title="Réinitialiser à la couleur du thème"
+                          >
+                            Thème
+                          </button>
+                        )}
+                        <input
+                          type="color"
+                          value={currentSelectedBlock.data?.accentColor || customizationSettings?.primaryColor || '#f59e0b'}
+                          onChange={(e) => updateSelectedBlock('accentColor', e.target.value)}
+                          className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -2216,12 +2353,30 @@ export const UltimateFunnelBuilder = ({
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">Fond du Bloc</span>
-                      <input
-                        type="color"
-                        value={currentSelectedBlock.data.bgColor || '#090d16'}
-                        onChange={(e) => updateSelectedBlock('bgColor', e.target.value)}
-                        className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {(currentSelectedBlock.data?.customBlockBg || currentSelectedBlock.data?.bgColor) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateSelectedBlock('customBlockBg', false);
+                              updateSelectedBlock('bgColor', undefined);
+                            }}
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            title="Réinitialiser au fond du thème"
+                          >
+                            Thème
+                          </button>
+                        )}
+                        <input
+                          type="color"
+                          value={currentSelectedBlock.data.bgColor || customizationSettings?.bgColor || '#090d16'}
+                          onChange={(e) => {
+                            updateSelectedBlock('customBlockBg', true);
+                            updateSelectedBlock('bgColor', e.target.value);
+                          }}
+                          className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2622,6 +2777,7 @@ export const UltimateFunnelBuilder = ({
                                     data: {
                                       ...(b.data || {}),
                                       customBtnColor: false,
+                                      customBlockBg: false,
                                       btnBgColor: undefined,
                                       btnTextColor: undefined,
                                       glowColor: undefined,

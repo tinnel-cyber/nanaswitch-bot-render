@@ -821,50 +821,25 @@ export async function getFunnelBySlug(slug: string, typeHint?: string): Promise<
 
   const typeKey = `${normType}-${cleanSlug}`;
 
-  // 0. Priorité 0 : Récupération Supabase (public.funnels) & cache local (0ms)
+  // 0. Priorité 0 (NETWORK-FIRST) : Récupération directe dans Supabase SQL (public.funnels)
+  // Garantit que toute modification enregistrée sur nanasore.com est immédiatement visible sur nsore.shop
   try {
-    const cachedTyped = localStorage.getItem(`nana_funnel_${typeKey}`) ||
-      localStorage.getItem(`nana_funnel_${normType}-${cleanSlug}`) ||
-      localStorage.getItem(`nana_funnel_c-${cleanSlug}`) ||
-      localStorage.getItem(`nana_funnel_${cleanSlug}`);
-    if (cachedTyped) {
-      const parsed = JSON.parse(cachedTyped);
-      if (parsed && (parsed.blocks || parsed.steps || parsed.title)) {
-        return parsed;
-      }
-    }
-
     const { data: supaRow, error } = await supabase
       .from('funnels')
-      .select('template_data, title, slug, is_published')
+      .select('template_data, title, slug, is_published, updated_at')
       .eq('slug', cleanSlug)
       .maybeSingle();
 
     if (!error && supaRow?.template_data && Object.keys(supaRow.template_data).length > 0) {
+      const freshData = supaRow.template_data;
       try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(supaRow.template_data));
-        localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(supaRow.template_data));
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(freshData));
+          localStorage.setItem(`nana_funnel_${normType}_${cleanSlug}`, JSON.stringify(freshData));
+          localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(freshData));
+        }
       } catch (e) {}
-      return supaRow.template_data;
-    }
-  } catch (supaErr) {
-    console.warn('[OMNI-FUNNEL] Supabase getFunnelBySlug notice:', supaErr);
-  }
-
-  // 1. Priorité Supabase SQL (public.funnels)
-  try {
-    const { data: supaRow, error } = await supabase
-      .from('funnels')
-      .select('template_data, title, slug, is_published')
-      .eq('slug', cleanSlug)
-      .maybeSingle();
-
-    if (!error && supaRow?.template_data && Object.keys(supaRow.template_data).length > 0) {
-      try {
-        localStorage.setItem(`nana_funnel_${typeKey}`, JSON.stringify(supaRow.template_data));
-        localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(supaRow.template_data));
-      } catch (e) {}
-      return supaRow.template_data;
+      return freshData;
     }
   } catch (supaErr) {
     console.warn('[OMNI-FUNNEL] Supabase getFunnelBySlug notice:', supaErr);

@@ -74,40 +74,38 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
     let isCancelled = false;
 
     const cleanSlug = (slug || '').toLowerCase().trim().replace(/^(?:[fct][\/-]|funnel-|tunnel-)/i, '').replace(/[^a-z0-9-]/g, '') || slug;
-
-    // 1. Nettoyage immédiat des caches locaux obsolètes ou corrompus
     const cacheKey = funnelType ? `nana_funnel_${funnelType}_${cleanSlug}` : `nana_funnel_${cleanSlug}`;
-    const saved = localStorage.getItem(cacheKey) ||
-      localStorage.getItem(`nana_funnel_f-${cleanSlug}`) ||
-      localStorage.getItem(`nana_funnel_f_${cleanSlug}`) ||
-      localStorage.getItem(`nana_funnel_${cleanSlug}`) ||
-      (cleanSlug.includes('ia') ? (localStorage.getItem('nana_funnel_f-ia-masterclass') || localStorage.getItem('nana_funnel_f_ia-masterclass') || localStorage.getItem('nana_funnel_ia-masterclass') || localStorage.getItem('nana_funnel_ia')) : null);
 
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const payload = parsed.template_data || parsed;
-        const str = JSON.stringify(payload).toLowerCase();
-        // Si le cache local contient l'ancien mock montre, on le purge
-        if (
-          str.includes('montre') ||
-          str.includes('chronographe') ||
-          str.includes('523275335684') ||
-          str.includes('pousbila telecom - offre exclusive')
-        ) {
-          localStorage.removeItem(cacheKey);
-          localStorage.removeItem(`nana_funnel_f-${cleanSlug}`);
-          localStorage.removeItem(`nana_funnel_f_${cleanSlug}`);
-          localStorage.removeItem(`nana_funnel_${cleanSlug}`);
-          localStorage.removeItem(`nana_funnel_pous`);
-          localStorage.removeItem(`nana_funnel_pous.nanasore.com`);
-        } else if (payload && (payload.blocks || payload.steps || payload.title)) {
-          setFunnel(payload);
-        }
-      } catch {}
-    }
+    const loadLocalFallback = () => {
+      const saved = localStorage.getItem(cacheKey) ||
+        localStorage.getItem(`nana_funnel_f-${cleanSlug}`) ||
+        localStorage.getItem(`nana_funnel_f_${cleanSlug}`) ||
+        localStorage.getItem(`nana_funnel_${cleanSlug}`) ||
+        (cleanSlug.includes('ia') ? (localStorage.getItem('nana_funnel_f-ia-masterclass') || localStorage.getItem('nana_funnel_f_ia-masterclass') || localStorage.getItem('nana_funnel_ia-masterclass') || localStorage.getItem('nana_funnel_ia')) : null);
 
-    // 2. Récupération asynchrone Firestore/Supabase PRIORITAIRE (Network-First)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const payload = parsed.template_data || parsed;
+          const str = JSON.stringify(payload).toLowerCase();
+          if (
+            str.includes('montre') ||
+            str.includes('chronographe') ||
+            str.includes('523275335684') ||
+            str.includes('pousbila telecom - offre exclusive')
+          ) {
+            localStorage.removeItem(cacheKey);
+            localStorage.removeItem(`nana_funnel_f-${cleanSlug}`);
+            localStorage.removeItem(`nana_funnel_f_${cleanSlug}`);
+            localStorage.removeItem(`nana_funnel_${cleanSlug}`);
+          } else if (payload && (payload.blocks || payload.steps || payload.title)) {
+            setFunnel(payload);
+          }
+        } catch {}
+      }
+    };
+
+    // Récupération Supabase PRIORITAIRE (Network-First) pour garantir une parité 1:1 inter-domaines (nanasore.com -> nsore.shop)
     getFunnelBySlug(cleanSlug, funnelType).then((remoteFunnel) => {
       if (isCancelled) return;
       if (remoteFunnel) {
@@ -121,9 +119,14 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             localStorage.setItem(`nana_funnel_f_${cleanSlug}`, JSON.stringify(payload));
             localStorage.setItem(`nana_funnel_${cleanSlug}`, JSON.stringify(payload));
           } catch {}
+          return;
         }
       }
-    }).catch(console.warn);
+      loadLocalFallback();
+    }).catch((err) => {
+      console.warn('[PublicDealPageView] Fallback cache local suite à erreur réseau:', err);
+      if (!isCancelled) loadLocalFallback();
+    });
 
     return () => {
       isCancelled = true;
@@ -388,6 +391,8 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-6 space-y-6 pb-20">
         {normalizedFunnel.blocks.filter((b: any) => b.visible !== false).map((block: any) => {
           const blockProps = block.props || block.data || {};
+          const blockBg = blockProps.bgColor && blockProps.bgColor !== 'transparent' ? blockProps.bgColor : undefined;
+          const blockAccent = blockProps.accentColor || accentColor;
           const isHero = block.type === 'HERO_PRODUCT' || block.type === 'hero' || block.type === 'hero_live_masterclass' || block.type === 'hero_3d_product' || block.type === 'hero_vsl';
           const isScarcity = block.type === 'SCARCITY_URGENCY' || block.type === 'urgency';
           const isCountdownTimer = block.type === 'countdown_timer';
@@ -417,7 +422,8 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             return (
               <section
                 key={block.id}
-                className="p-5 sm:p-7 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4 shadow-xl flex flex-col items-center text-center transition-all"
+                style={{ backgroundColor: blockBg }}
+                className={`p-5 sm:p-7 rounded-3xl ${blockBg ? '' : 'bg-slate-900/90'} border border-slate-800 space-y-4 shadow-xl flex flex-col items-center text-center transition-all`}
               >
                 {badge && (
                   <div
@@ -486,7 +492,10 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                     </span>
                   )}
                   {(blockProps.discountBadge || blockProps.discount) && (
-                    <span className="px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-xs font-black border border-rose-500/30">
+                    <span
+                      style={{ backgroundColor: alpha(brandColor, 0.15), color: brandColor, borderColor: alpha(brandColor, 0.35) }}
+                      className="px-2.5 py-0.5 rounded-md text-xs font-black border"
+                    >
                       {blockProps.discountBadge || blockProps.discount}
                     </span>
                   )}
@@ -512,7 +521,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isCountdownTimer) {
             return (
-              <div key={block.id} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-center max-w-md mx-auto w-full space-y-2 shadow-lg">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`p-4 rounded-2xl ${blockBg ? '' : 'bg-slate-900/90'} border border-slate-800 text-center max-w-md mx-auto w-full space-y-2 shadow-lg`}
+              >
                 <div className="text-[11px] font-black tracking-wider flex items-center justify-center gap-1.5" style={{ color: brandColor }}>
                   <Clock className="w-3.5 h-3.5" />
                   <span>{blockProps.title || '🚨 CETTE OFFRE SPÉCIALE PREND FIN DANS :'}</span>
@@ -526,7 +539,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                     {String(blockProps.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block font-sans text-slate-400">MINUTES</span>
                   </div>
                   <span className="text-white">:</span>
-                  <div className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-rose-400">
+                  <div style={{ color: brandColor }} className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl">
                     {String(blockProps.initialSeconds || 45).padStart(2, '0')}<span className="text-[10px] block font-sans text-slate-400">SECONDES</span>
                   </div>
                 </div>
@@ -536,16 +549,20 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isSeatsBar) {
             return (
-              <div key={block.id} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 max-w-md mx-auto w-full space-y-2 shadow-lg">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`p-3.5 rounded-2xl ${blockBg ? '' : 'bg-slate-900/90'} border border-slate-800 max-w-md mx-auto w-full space-y-2 shadow-lg`}
+              >
                 <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="flex items-center gap-1.5 text-rose-400">
+                  <span className="flex items-center gap-1.5" style={{ color: brandColor }}>
                     <Flame className="w-3.5 h-3.5" />
                     <span>{blockProps.text || 'Dernières places disponibles avant clôture définitive !'}</span>
                   </span>
                   <span className="font-mono text-slate-400">{blockProps.percentage || 84}% Réservé</span>
                 </div>
                 <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
-                  <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${brandColor}, ${accentColor})`, width: `${blockProps.percentage || 84}%` }} />
+                  <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${brandColor}, ${blockAccent})`, width: `${blockProps.percentage || 84}%` }} />
                 </div>
               </div>
             );
@@ -553,7 +570,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isSyllabus) {
             return (
-              <div key={block.id} className="space-y-4 py-2 text-left max-w-2xl mx-auto w-full">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`space-y-4 py-2 text-left max-w-2xl mx-auto w-full ${blockBg ? 'p-4 rounded-3xl' : ''}`}
+              >
                 <div className="text-center">
                   <h3 className="text-base font-black text-white">{blockProps.headline || 'Le Programme Structuré pour Réussir'}</h3>
                   {blockProps.subheadline && <p className="text-xs mt-1 text-slate-400">{blockProps.subheadline}</p>}
@@ -571,7 +592,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                         </div>
                       </div>
                       {m.duration && (
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: accentColor, backgroundColor: alpha(accentColor, 0.14) }}>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: blockAccent, backgroundColor: alpha(blockAccent, 0.14) }}>
                           {m.duration}
                         </span>
                       )}
@@ -584,7 +605,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isInstructor) {
             return (
-              <div key={block.id} className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full shadow-lg">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`p-5 rounded-3xl ${blockBg ? '' : 'bg-slate-900/90'} border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full shadow-lg`}
+              >
                 {blockProps.avatar && (
                   <img src={blockProps.avatar} alt={blockProps.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: alpha(brandColor, 0.4) }} />
                 )}
@@ -606,7 +631,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isFaq) {
             return (
-              <div key={block.id} className="space-y-3 py-2 max-w-2xl mx-auto text-left w-full">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`space-y-3 py-2 max-w-2xl mx-auto text-left w-full ${blockBg ? 'p-4 rounded-3xl' : ''}`}
+              >
                 <h4 className="text-sm font-black text-center mb-3 text-white">{blockProps.headline || 'Questions Fréquentes'}</h4>
                 {(blockProps.items || []).map((item: any, idx: number) => (
                   <div key={idx} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1 shadow-lg">
@@ -625,7 +654,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             const btnBg = ctaBtn.bg;
             const btnText = ctaBtn.text;
             return (
-              <div key={block.id} className="text-center py-4 space-y-2 max-w-md mx-auto w-full">
+              <div
+                key={block.id}
+                style={{ backgroundColor: blockBg }}
+                className={`text-center py-4 space-y-2 max-w-md mx-auto w-full ${blockBg ? 'p-4 rounded-3xl' : ''}`}
+              >
                 <a
                   href="#inline-checkout"
                   className="w-full py-4 px-6 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
