@@ -10,44 +10,133 @@ interface SmartCheckoutPageProps {
   merchantId?: string;
   onBack?: () => void;
   className?: string;
+  planName?: string;
+  amount?: number;
+  isAnnual?: boolean;
 }
 
 export const SmartCheckoutPage: React.FC<SmartCheckoutPageProps> = ({
   productId,
   merchantId,
   onBack,
-  className = ''
+  className = '',
+  planName: propPlanName,
+  amount: propAmount,
+  isAnnual: propIsAnnual
 }) => {
-  // Initialisation dynamique du produit ciblé
+  // Initialisation 100% dynamique du produit ciblé (URL Params + Props + ProductId)
   const [product] = useState<FunnelProductItem>(() => {
-    if (
-      productId.includes('elite') || 
-      productId.includes('20') || 
-      productId === 'nanasore_elite_20_pays' || 
-      productId === 'caisse' || 
-      productId === 'checkout'
-    ) {
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const planParam = (urlParams?.get('plan') || urlParams?.get('planId') || '').toLowerCase();
+    const cycleParam = (urlParams?.get('cycle') || urlParams?.get('period') || '').toLowerCase();
+    const amountParam = urlParams?.get('amount') || urlParams?.get('price') || '';
+    const nameParam = urlParams?.get('name') || urlParams?.get('title') || propPlanName || '';
+    const descParam = urlParams?.get('desc') || urlParams?.get('description') || '';
+
+    const isAnnual = propIsAnnual !== undefined 
+      ? propIsAnnual 
+      : (cycleParam === 'annual' || cycleParam === 'year' || cycleParam === 'annuel' || cycleParam === '12');
+
+    const effectiveId = (productId || planParam || 'pro').toLowerCase();
+
+    // 1. Formule Starter (5 000 F CFA / mois ou 50 000 F CFA / an)
+    if (effectiveId === 'starter' || effectiveId === 'plan_starter' || effectiveId === 'plan-starter') {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 50000 : 5000));
       return {
-        id: 'nanasore_elite_20_pays',
-        name: 'Abonnement Élite Nanasore POS • Licence Multi-Pays (20 Pays)',
-        price: 15000,
-        originalPrice: 25000,
-        itemType: 'digital',
+        id: 'plan_starter',
+        name: nameParam || (isAnnual ? 'Abonnement Starter Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Starter Nanasore • Licence Mensuelle POS'),
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
         imageUrl: '',
-        description: 'Licence officielle multi-pays : encaissement temps réel Sebpay dans 20 pays, multi-caisses illimitées, IA Nanasore et support prioritaire 24/7.'
+        description: descParam || 'Licence Starter : Caisse tactile POS, encaissements directs, gestion catalogue et reçus thermiques. 0% de commission.'
       };
     }
+
+    // 2. Formule Pro (15 000 F CFA / mois ou 150 000 F CFA / an) - Le plus populaire
+    if (effectiveId === 'pro' || effectiveId === 'plan_pro' || effectiveId === 'plan-pro' || effectiveId === 'caisse') {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 150000 : 15000));
+      return {
+        id: 'plan_pro',
+        name: nameParam || (isAnnual ? 'Abonnement Pro Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Pro Nanasore • Boutique & Formateur Hybride'),
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: descParam || 'Licence Pro : Caisse POS & Tunnels illimités, jusqu\'à 50 cours hébergés, multi-caissiers PIN, Live Shopping et 0% de commission.'
+      };
+    }
+
+    // 3. Formule Business (30 000 F CFA / mois ou 300 000 F CFA / an)
+    if (effectiveId === 'business' || effectiveId === 'plan_business' || effectiveId === 'plan-business') {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 300000 : 30000));
+      return {
+        id: 'plan_business',
+        name: nameParam || (isAnnual ? 'Abonnement Business Nanasore • Licence Annuelle (-20%)' : 'Abonnement Business Nanasore • Multi-Boutiques & Campus'),
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: descParam || 'Licence Business : Multi-points de vente (20 caissiers), stocks synchronisés, Pixels Meta/TikTok et CRM marketing automatisé.'
+      };
+    }
+
+    // 4. Formule Enterprise / Élite (60 000 F CFA / mois ou 600 000 F CFA / an)
+    if (
+      effectiveId === 'enterprise' || 
+      effectiveId === 'elite' || 
+      effectiveId === 'plan_enterprise' || 
+      effectiveId === 'nanasore_elite_20_pays'
+    ) {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 600000 : 60000));
+      return {
+        id: 'plan_enterprise',
+        name: nameParam || (isAnnual ? 'Abonnement Enterprise Nanasore • Licence Annuelle Marque Blanche' : 'Abonnement Enterprise / Élite • Marque Blanche 100% Souveraine'),
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: descParam || 'Licence Enterprise : Marque Blanche intégrale (nom de domaine dédié), caisses & campus illimités, API/Webhooks et SLA 99.9% garanti.'
+      };
+    }
+
+    // 5. Formule Modulaire Sur-Mesure ou montant passé via l'URL
+    if (effectiveId === 'custom_modular' || amountParam) {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 150000 : 15000));
+      return {
+        id: 'custom_modular',
+        name: nameParam || 'Formule Modulaire Nanasore Sur-Mesure',
+        price,
+        originalPrice: Math.round(price * 1.25),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: descParam || 'Formule sur-mesure configurée selon vos piliers d\'activité (Caisse POS, Vitrine Web, Formateur Académie).'
+      };
+    }
+
+    // 6. Masterclass / Formations
+    if (effectiveId.includes('fintech')) {
+      return {
+        id: productId,
+        name: nameParam || 'Masterclass Systèmes Hybrides & Monétique UEMOA',
+        price: 45000,
+        originalPrice: 75000,
+        itemType: 'digital',
+        courseId: productId,
+        imageUrl: '',
+        description: 'Formation certifiée avec modules vidéo haute fidélité, exercices pratiques et attestation QR Code officielle.'
+      };
+    }
+
+    // 7. Produit standard / Catalogue boutique
     return {
       id: productId,
-      name: productId.includes('fintech')
-        ? 'Masterclass Systèmes Hybrides & Monétique UEMOA'
-        : 'Produit Vedette NaNa Store Pro',
-      price: productId.includes('fintech') ? 45000 : 15000,
-      originalPrice: productId.includes('fintech') ? 75000 : 25000,
-      itemType: productId.includes('fintech') ? 'digital' : 'physical',
-      courseId: productId.includes('fintech') ? productId : undefined,
+      name: nameParam || 'Produit Vedette NaNa Store Pro',
+      price: propAmount || (amountParam ? Number(amountParam) : 15000),
+      originalPrice: propAmount ? Math.round(propAmount * 1.3) : 25000,
+      itemType: 'physical',
       imageUrl: '',
-      description: 'Article certifié authentique avec garantie fabricant et support VIP 24/7.'
+      description: descParam || 'Article certifié authentique avec garantie fabricant et support VIP 24/7.'
     };
   });
 

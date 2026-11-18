@@ -1161,10 +1161,13 @@ export default function App() {
     return null;
   });
 
-  // Détection URL publique Smart Checkout (/checkout/:productId ou /checkout ou /caisse ou ?checkout=...)
+  // Détection URL publique Smart Checkout (/checkout/:productId ou /checkout ou /caisse ou ?checkout=... / ?plan=...)
   const [publicCheckoutId, setPublicCheckoutId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      const queryPlanOrId = params.get('plan') || params.get('planId') || params.get('productId') || params.get('checkout');
+
       if (pathname.startsWith('/checkout/')) {
         const parts = pathname.split('/checkout/');
         if (parts[1]) {
@@ -1172,10 +1175,9 @@ export default function App() {
         }
       }
       if (pathname === '/checkout' || pathname === '/caisse' || pathname === '/pay') {
-        return 'nanasore_elite_20_pays';
+        return queryPlanOrId || 'pro';
       }
-      const params = new URLSearchParams(window.location.search);
-      return params.get('checkout') || (params.has('checkout') ? 'nanasore_elite_20_pays' : null);
+      return queryPlanOrId || (params.has('checkout') ? (params.get('checkout') || 'pro') : null);
     }
     return null;
   });
@@ -1747,13 +1749,14 @@ export default function App() {
       }
 
       // Smart Checkout
+      const queryPlanOrId = params.get('plan') || params.get('planId') || params.get('productId') || params.get('checkout');
       if (pathname.startsWith('/checkout/')) {
         const p = pathname.split('/checkout/')[1];
-        setPublicCheckoutId(p ? p.split('/')[0].split('?')[0] : 'nanasore_elite_20_pays');
+        setPublicCheckoutId(p ? p.split('/')[0].split('?')[0] : (queryPlanOrId || 'pro'));
       } else if (pathname === '/checkout' || pathname === '/caisse' || pathname === '/pay') {
-        setPublicCheckoutId('nanasore_elite_20_pays');
+        setPublicCheckoutId(queryPlanOrId || 'pro');
       } else {
-        setPublicCheckoutId(params.get('checkout') || (params.has('checkout') ? 'nanasore_elite_20_pays' : null));
+        setPublicCheckoutId(queryPlanOrId || (params.has('checkout') ? (params.get('checkout') || 'pro') : null));
       }
 
       // 1. Nana Funnel Studio 3.0 (/t/:slug, /tunnel/:slug, /vente/:slug) - Lettre 't'
@@ -2701,11 +2704,28 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Nettoyage de tout résidu de plan en attente : interdiction stricte d'ouverture automatique à l'accueil/connexion
+  // Gestion de l'intention d'abonnement en attente et des partenariats
   useEffect(() => {
     try {
       localStorage.removeItem('nana_pending_checkout_plan');
     } catch (e) {}
+
+    // Si l'utilisateur est authentifié avec son univers et qu'une intention d'abonnement était en attente
+    try {
+      const pendingSub = localStorage.getItem('nana_pending_subscription_plan');
+      if (pendingSub && currentUser && (currentUser.storeId || currentUser.id)) {
+        const parsed = JSON.parse(pendingSub);
+        localStorage.removeItem('nana_pending_subscription_plan');
+        if (parsed.planId && parsed.planId !== 'free') {
+          setTimeout(() => {
+            setSelectedCheckoutPlanId(parsed.planId);
+            setIsPaywallModalOpen(true);
+          }, 600);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     try {
       const pendingPartner = localStorage.getItem('nana_pending_partner_intent');
@@ -3280,9 +3300,20 @@ export default function App() {
     }
     setTimeout(() => setLastSaleToast(null), 4000);
 
-    // Nettoyage de tout résidu de plan : interdiction d'ouverture automatique post-inscription
+    // Déclenchement automatique de la souscription d'abonnement si l'utilisateur est venu avec une intention d'achat
     try {
       localStorage.removeItem('nana_pending_checkout_plan');
+      const pendingSub = localStorage.getItem('nana_pending_subscription_plan');
+      if (pendingSub) {
+        const parsed = JSON.parse(pendingSub);
+        localStorage.removeItem('nana_pending_subscription_plan');
+        if (parsed.planId && parsed.planId !== 'free') {
+          setTimeout(() => {
+            setSelectedCheckoutPlanId(parsed.planId);
+            setIsPaywallModalOpen(true);
+          }, 800);
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -6261,7 +6292,7 @@ export default function App() {
               window.history.pushState({}, '', '/auth/teacher');
             }
           }}
-          onCheckout={(planId) => {
+          onCheckout={(planId, price, isAnnual) => {
             if (planId === 'free') {
               if (typeof window !== 'undefined') {
                 window.history.pushState({ intent: 'vendor', plan: 'free' }, '', '/register?intent=vendor&plan=free');
@@ -6269,11 +6300,27 @@ export default function App() {
               setIsEmailAuthScreenOpen(true);
               return;
             }
-            // Accès direct et immédiat à la Caisse de Paiement Smart Checkout
-            setPublicCheckoutId('nanasore_elite_20_pays');
-            if (typeof window !== 'undefined') {
-              window.history.pushState({}, '', '/checkout');
+
+            // Cas 1 : Visiteur sans compte ou sans univers créé
+            // Obligation absolue de créer son compte et son univers AVANT le règlement
+            if (!currentUser || !currentUser.storeId) {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('nana_pending_subscription_plan', JSON.stringify({
+                  planId,
+                  price: price || (planId === 'enterprise' ? (isAnnual ? 600000 : 60000) : planId === 'business' ? (isAnnual ? 300000 : 30000) : planId === 'pro' ? (isAnnual ? 150000 : 15000) : 5000),
+                  isAnnual: Boolean(isAnnual),
+                  timestamp: Date.now()
+                }));
+                window.history.pushState({ intent: 'subscription', plan: planId }, '', `/register?intent=subscription&plan=${planId}`);
+              }
+              setIsEmailAuthScreenOpen(true);
+              return;
             }
+
+            // Cas 2 : Utilisateur déjà connecté avec son univers actif
+            // Présentation des options et configuration des champs avant la caisse
+            setSelectedCheckoutPlanId(planId);
+            setIsPaywallModalOpen(true);
           }}
           onOpenPartnerProgram={() => {
             setShowWelcomeShowcase(false);

@@ -294,6 +294,30 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [product, items, amount, orderDescription]);
 
+  // Détection souveraine d'abonnement / licence SaaS pour affichage visuel dédié
+  const isSubscriptionProduct = useMemo(() => {
+    const id = (resolvedProduct.id || '').toLowerCase();
+    const name = (resolvedProduct.name || '').toLowerCase();
+    const desc = (resolvedProduct.description || '').toLowerCase();
+    return (
+      id.includes('sub') ||
+      id.includes('plan') ||
+      id.includes('nanasore_') ||
+      id.includes('caisse') ||
+      id.includes('elite') ||
+      id.includes('pro') ||
+      id.includes('business') ||
+      id.includes('enterprise') ||
+      id.includes('starter') ||
+      name.includes('abonnement') ||
+      name.includes('licence') ||
+      name.includes('plan ') ||
+      desc.includes('licence') ||
+      desc.includes('abonnement') ||
+      Boolean((resolvedProduct as any).itemType === 'subscription')
+    );
+  }, [resolvedProduct]);
+
   // 3. Navigation d'étapes (Étape 1: Formulaire & Choix, Étape 2B: Mobile Money, Étape 3: Succès)
   const [currentStep, setCurrentStep] = useState<'STEP_1' | 'STEP_2B' | 'STEP_3'>(() => {
     if (typeof window !== 'undefined') {
@@ -884,6 +908,42 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       alt={resolvedProduct.name}
                       className="w-full h-full object-cover"
                     />
+                  ) : isSubscriptionProduct ? (
+                    <div className="w-full h-full p-3.5 flex flex-col justify-between text-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white relative overflow-hidden select-none">
+                      {/* Halos d'ambiance */}
+                      <div className="absolute -top-10 -right-10 w-24 h-24 bg-blue-500/25 rounded-full blur-xl pointer-events-none" />
+                      <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-emerald-500/25 rounded-full blur-xl pointer-events-none" />
+                      
+                      {/* Badge Officiel Sécurisé */}
+                      <div className="flex items-center justify-center gap-1.5 z-10 pt-0.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                          Licence Officielle
+                        </span>
+                      </div>
+
+                      {/* Titre & Prix au centre */}
+                      <div className="my-auto py-1 z-10 space-y-1">
+                        <div className="inline-flex p-2 rounded-xl bg-blue-500/15 border border-blue-400/30 text-blue-300 mb-0.5 shadow-inner">
+                          <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <div className="text-[11px] font-black text-slate-200 uppercase tracking-tight line-clamp-1">
+                          {resolvedProduct.name.replace(/•.*/, '').replace(/Abonnement /i, '')}
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tracking-tight leading-none drop-shadow-sm">
+                          {formatCFA(subtotal)}
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-300 tracking-wide">
+                          {subtotal >= 100000 ? '/ an • 2 mois offerts' : '/ mois • 0% commission'}
+                        </div>
+                      </div>
+
+                      {/* Sceau de réassurance en bas */}
+                      <div className="pt-2 border-t border-white/10 flex items-center justify-center gap-1.5 text-[9px] font-bold text-slate-200 z-10">
+                        <Lock className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>Activation Immédiate • TLS 256-bit</span>
+                      </div>
+                    </div>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-blue-50 to-indigo-50">
                       <ShoppingBag className="w-14 h-14 text-blue-600 stroke-[1.5] mb-2" />
