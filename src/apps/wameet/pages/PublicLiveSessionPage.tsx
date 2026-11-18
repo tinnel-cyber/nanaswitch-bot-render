@@ -33,6 +33,7 @@ import { LiveProductCarousel } from '../../../components/live/LiveProductCarouse
 import { LiveClassroomInteractivePanel, LivePanelTab } from '../../../components/live/LiveClassroomInteractivePanel';
 import { LiveInstructorControlBar } from '../../../components/live/LiveInstructorControlBar';
 import { LiveShareModal } from '../../../components/live/LiveShareModal';
+import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
@@ -109,6 +110,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [selectedFunnelProduct, setSelectedFunnelProduct] = useState<StoreProductItem | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isHostBroadcasterActive, setIsHostBroadcasterActive] = useState<boolean>(false);
+  const [isMultistreamModalOpen, setIsMultistreamModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!initialSession);
 
   // Chargement de la session depuis Supabase / cache local
@@ -262,17 +264,32 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   <span className="text-[11px] text-slate-400">Diffusez en direct via WebRTC WHIP ou pilotez les interactions</span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  setIsHostBroadcasterActive(!isHostBroadcasterActive);
-                }}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-950 transition active:scale-95 cursor-pointer border border-blue-400/30"
-              >
-                <Radio className="w-3.5 h-3.5 animate-pulse" />
-                <span>{isHostBroadcasterActive ? "👁️ Voir l'Aperçu Spectateur" : "📹 Lancer ma Caméra (WHIP Direct)"}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setIsMultistreamModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-extrabold text-xs flex items-center gap-1.5 border border-slate-700 transition active:scale-95 cursor-pointer shadow-md"
+                  title="Configurer le relais simultané vers YouTube, Facebook, TikTok..."
+                >
+                  <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Multistreaming</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setIsHostBroadcasterActive(!isHostBroadcasterActive);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-950 transition active:scale-95 cursor-pointer border border-blue-400/30"
+                >
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>{isHostBroadcasterActive ? "👁️ Voir l'Aperçu Spectateur" : "📹 Lancer ma Caméra (WHIP Direct)"}</span>
+                </button>
+              </div>
             </div>
 
             <LiveInstructorControlBar
@@ -448,6 +465,15 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         storeName={session.storeName}
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
+      />
+
+      {/* 3.B. CONSOLE DE MULTISTREAMING RÉEL (YOUTUBE, FACEBOOK, TIKTOK, INSTAGRAM, ETC.) */}
+      <LiveMultistreamStudioModal
+        isOpen={isMultistreamModalOpen}
+        storeSlug={session.sessionSlug || session.storeId}
+        storeName={session.storeName}
+        liveTitle={session.title}
+        onClose={() => setIsMultistreamModalOpen(false)}
       />
 
       {/* 4. TIROIR TUNNEL (12 BLOCS) DÉPLOYÉ PAR-DESSUS SANS COUPER LE SON NI LA VIDÉO DU LIVE */}

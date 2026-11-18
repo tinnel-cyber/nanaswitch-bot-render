@@ -17,6 +17,8 @@ RUN mkdir -p /app/dist /app/build
 FROM node:26.13.0-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+# Installation de FFmpeg pour le transcodage et relais RTMP multi-plateformes en direct
+RUN apk add --no-cache ffmpeg
 # Plafond mémoire strict pour environnement conteneurisé (VPS / Render) évitant les crashs SIGKILL 137 OOM
 ENV NODE_OPTIONS="--max-old-space-size=512"
 COPY package*.json ./

@@ -35,6 +35,7 @@ import {
 } from '../../../../services/mediaMtxLiveService';
 import { buildStoreHlsUrl, buildStoreWhipUrl } from '../../../../config/liveStreamConfig';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
+import { LiveMultistreamStudioModal } from './LiveMultistreamStudioModal';
 
 export interface WhipLiveBroadcasterProps {
   storeSlug: string;
@@ -60,6 +61,7 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
   const [isMicActive, setIsMicActive] = useState<boolean>(true);
   const [isBroadcasting, setIsBroadcasting] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isMultistreamModalOpen, setIsMultistreamModalOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [liveDurationSec, setLiveDurationSec] = useState<number>(0);
   const timerRef = useRef<any>(null);
@@ -269,15 +271,31 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
             </span>
           </div>
 
-          {/* Bouton de bascule Caméra Avant / Arrière */}
-          <button
-            type="button"
-            onClick={handleToggleFacingMode}
-            className="p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 backdrop-blur-md transition active:scale-95 cursor-pointer shadow-md"
-            title={`Basculer vers la caméra ${facingMode === 'environment' ? 'avant (Selfie)' : 'arrière (Produits)'}`}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          {/* Actions Droite : Multistreaming & Bascule Caméra */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setIsMultistreamModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-full bg-blue-600/80 hover:bg-blue-600 text-white border border-blue-400/40 backdrop-blur-md transition active:scale-95 cursor-pointer shadow-md text-xs font-bold flex items-center gap-1.5"
+              title="Configurer la multidiffusion YouTube, Facebook, TikTok, Instagram..."
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Multistreaming</span>
+            </button>
+
+            {/* Bouton de bascule Caméra Avant / Arrière */}
+            <button
+              type="button"
+              onClick={handleToggleFacingMode}
+              className="p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 backdrop-blur-md transition active:scale-95 cursor-pointer shadow-md"
+              title={`Basculer vers la caméra ${facingMode === 'environment' ? 'avant (Selfie)' : 'arrière (Produits)'}`}
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Message d'erreur s'il y a lieu */}
@@ -369,6 +387,14 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
           )}
         </div>
       </div>
+
+      {/* 5. Modale de Configuration & Pilotage Multistreaming Réel */}
+      <LiveMultistreamStudioModal
+        isOpen={isMultistreamModalOpen}
+        storeSlug={storeSlug}
+        storeName={storeName}
+        onClose={() => setIsMultistreamModalOpen(false)}
+      />
 
     </div>
   );

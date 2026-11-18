@@ -21,3 +21,6 @@ export type { WhipLiveBroadcasterProps } from './WhipLiveBroadcaster';
 
 export { HlsLivePlayer } from './HlsLivePlayer';
 export type { HlsLivePlayerProps } from './HlsLivePlayer';
+
+export { LiveMultistreamStudioModal } from './LiveMultistreamStudioModal';
+export type { LiveMultistreamStudioModalProps } from './LiveMultistreamStudioModal';
