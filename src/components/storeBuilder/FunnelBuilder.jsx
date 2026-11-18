@@ -1369,42 +1369,57 @@ export const FunnelBuilder = ({
   }, [isToolboxOpen, isIconLibraryOpen, isSettingsModalOpen, isAddStepModalOpen, showTemplatesModal, codConfirmOpen]);
 
   // Paramètres Globaux du Funnel (Cerveau)
-  const [funnelSettings, setFunnelSettings] = useState({
-    // Onglet 1: Général
-    funnelName: `${activeProduct.name} - Tunnel de Vente Haute Conversion`,
-    hostingMode: 'subdomain', // 'subdomain' (Gratuit Freemium) | 'custom' (Pro)
-    subdomain: 'boutique-pro',
-    customDomain: 'promo.nana-store.ci',
-    faviconUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=100&q=80',
-    funnelStatus: 'published', // 'published' | 'draft' | 'maintenance'
+  const [funnelSettings, setFunnelSettings] = useState(() => {
+    const s = product?.settings || product?.modular_funnel?.settings || product?.modularFunnel?.settings || {};
+    const existingBrand = product?.brandColor || product?.primaryColor || s.brandColor || s.primaryColor;
+    const initialPreset = s.themePreset || (existingBrand ? (COLOR_PRESETS.find(p => p.primary === existingBrand)?.name || 'Custom') : 'Obsidian Amber (Signature NaNa)');
+    const matchedPreset = COLOR_PRESETS.find(p => p.name === initialPreset);
 
-    // Onglet 2: SEO & Social
-    pageTitle: `${activeProduct.name} • Offre Spéciale NaNa`,
-    pageDescription: activeProduct.description || 'Commandez votre pack exclusif avec livraison rapide et paiement sécurisé.',
-    ogImageUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=1200&q=80',
+    return {
+      // Onglet 1: Général
+      funnelName: s.funnelName || `${activeProduct.name} - Tunnel de Vente Haute Conversion`,
+      hostingMode: s.hostingMode || 'subdomain', // 'subdomain' (Gratuit Freemium) | 'custom' (Pro)
+      subdomain: s.subdomain || 'boutique-pro',
+      customDomain: s.customDomain || 'promo.nana-store.ci',
+      faviconUrl: s.faviconUrl || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=100&q=80',
+      funnelStatus: s.funnelStatus || 'published', // 'published' | 'draft' | 'maintenance'
 
-    // Onglet 3: Tracking & Pixels
-    fbPixelId: '109283746582910',
-    tiktokPixelId: 'C78N987HG54321',
-    posthogId: 'phc_982348572093847',
-    customHeadScripts: '<!-- Google Tag Manager / Meta Pixel Header Scripts -->\n<script>\n  console.log("NaNa Tracking Engine Initialized");\n</script>',
+      // Onglet 2: SEO & Social
+      pageTitle: s.pageTitle || `${activeProduct.name} • Offre Spéciale NaNa`,
+      pageDescription: s.pageDescription || activeProduct.description || 'Commandez votre pack exclusif avec livraison rapide et paiement sécurisé.',
+      ogImageUrl: s.ogImageUrl || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=1200&q=80',
 
-    // Onglet 4: Automatisation CRM
-    crmTag: 'VIP_ACHETEUR_TUNNEL',
-    brevoListId: 'brevo_sales_2026',
-    webhookUrl: 'https://hooks.zapier.com/hooks/catch/123456/nana_order/',
+      // Onglet 3: Tracking & Pixels
+      fbPixelId: s.fbPixelId || '109283746582910',
+      tiktokPixelId: s.tiktokPixelId || 'C78N987HG54321',
+      posthogId: s.posthogId || 'phc_982348572093847',
+      customHeadScripts: s.customHeadScripts || '<!-- Google Tag Manager / Meta Pixel Header Scripts -->\n<script>\n  console.log("NaNa Tracking Engine Initialized");\n</script>',
 
-    // Onglet 5: Paiements
-    currency: 'XOF', // 'XOF' | 'EUR' | 'USD'
-    enableOrangeMoney: true,
-    enableWave: true,
-    enableStripe: true,
+      // Onglet 4: Automatisation CRM
+      crmTag: s.crmTag || 'VIP_ACHETEUR_TUNNEL',
+      brevoListId: s.brevoListId || 'brevo_sales_2026',
+      webhookUrl: s.webhookUrl || 'https://hooks.zapier.com/hooks/catch/123456/nana_order/',
 
-    // Options UI & Moteur
-    themePreset: 'Obsidian Amber (Signature NaNa)',
-    enableStickyMobileBar: true,
-    hapticSoundEnabled: true
+      // Onglet 5: Paiements
+      currency: s.currency || 'XOF', // 'XOF' | 'EUR' | 'USD'
+      enableOrangeMoney: s.enableOrangeMoney !== undefined ? s.enableOrangeMoney : true,
+      enableWave: s.enableWave !== undefined ? s.enableWave : true,
+      enableStripe: s.enableStripe !== undefined ? s.enableStripe : true,
+
+      // Options UI & Moteur
+      themePreset: initialPreset,
+      brandColor: existingBrand || matchedPreset?.primary || '#f59e0b',
+      primaryColor: existingBrand || matchedPreset?.primary || '#f59e0b',
+      bgColor: s.bgColor || matchedPreset?.bg || '#070b14',
+      buttonColor: s.buttonColor || matchedPreset?.button || '#f59e0b',
+      buttonTextColor: s.buttonTextColor || matchedPreset?.buttonText || '#000000',
+      enableStickyMobileBar: s.enableStickyMobileBar !== undefined ? s.enableStickyMobileBar : true,
+      hapticSoundEnabled: s.hapticSoundEnabled !== undefined ? s.hapticSoundEnabled : true
+    };
   });
+
+  const activeBrandColor = funnelSettings.brandColor || funnelSettings.primaryColor || (COLOR_PRESETS.find(p => p.name === funnelSettings.themePreset)?.primary) || '#f59e0b';
+  const activeBtnColor = funnelSettings.buttonColor || activeBrandColor;
 
   // État de sauvegarde & Toast
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -1999,8 +2014,18 @@ export const FunnelBuilder = ({
       activeVariant,
       blocks: canvasBlocks,
       popupBlocks,
+      brandColor: activeBrandColor,
+      primaryColor: activeBrandColor,
+      bgColor: funnelSettings.bgColor || '#070b14',
+      buttonColor: activeBtnColor,
+      buttonTextColor: funnelSettings.buttonTextColor || '#000000',
       settings: {
         ...funnelSettings,
+        brandColor: activeBrandColor,
+        primaryColor: activeBrandColor,
+        bgColor: funnelSettings.bgColor || '#070b14',
+        buttonColor: activeBtnColor,
+        buttonTextColor: funnelSettings.buttonTextColor || '#000000',
         subdomain: effectiveSlug,
         customDomain: isRealCustom ? cleanCustomDomain : '',
         hostingMode: isRealCustom ? 'custom' : 'subdomain'
@@ -2024,7 +2049,7 @@ export const FunnelBuilder = ({
           funnelSlug: effectiveSlug,
           dealSlug: effectiveSlug,
           logoUrl: funnelPayload.ogImageUrl || '',
-          primaryColor: '#10b981',
+          primaryColor: activeBrandColor,
           funnelData: funnelPayload,
           whiteLabel: {
             hidePoweredBy: true,
@@ -2331,8 +2356,11 @@ export const FunnelBuilder = ({
             )}
 
             {data.promoBadge && (
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-black shadow-lg shadow-amber-950/40 animate-pulse">
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
+              <div
+                style={{ backgroundColor: `${activeBrandColor}20`, borderColor: `${activeBrandColor}50`, color: activeBrandColor }}
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black shadow-lg animate-pulse border"
+              >
+                <Flame className="w-3.5 h-3.5" style={{ color: activeBrandColor }} />
                 <span>{data.promoBadge}</span>
               </div>
             )}
@@ -2355,7 +2383,12 @@ export const FunnelBuilder = ({
                   try { playCashChime(); } catch (e) {}
                   triggerToast('⚡ Défilement fluide vers le bon de commande !');
                 }}
-                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-slate-950 text-sm sm:text-base font-black transition flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 cursor-pointer active:scale-95 hover:brightness-110"
+                style={{
+                  backgroundColor: activeBtnColor,
+                  color: funnelSettings.buttonTextColor || '#000000',
+                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                }}
+                className="w-full py-4 px-6 rounded-2xl text-sm sm:text-base font-black transition flex items-center justify-center gap-2 shadow-2xl cursor-pointer active:scale-95 hover:brightness-110"
               >
                 <Zap className="w-5 h-5 fill-current" />
                 <span>{data.ctaText || 'Commander Maintenant & Réclamer les Bonus 🚀'}</span>
@@ -2648,20 +2681,26 @@ export const FunnelBuilder = ({
         return (
           <div className="space-y-6 py-6 px-4">
             <div className="text-center space-y-2 max-w-xl mx-auto">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-black border border-emerald-500/30 inline-block">
+              <span
+                style={{ backgroundColor: `${activeBrandColor}20`, borderColor: `${activeBrandColor}50`, color: activeBrandColor }}
+                className="px-3 py-1 rounded-full text-xs font-black border inline-block"
+              >
                 {data.discountBadge || 'TARIF PRIVILÉGIÉ'}
               </span>
               <h3 className="text-2xl font-black text-white">{data.sectionTitle}</h3>
             </div>
 
             {/* Carte Offre Choc */}
-            <div className="max-w-xl mx-auto rounded-3xl bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-2 border-emerald-500/50 p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden">
+            <div
+              style={{ borderColor: `${activeBrandColor}50` }}
+              className="max-w-xl mx-auto rounded-3xl bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-2 p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden"
+            >
               <div className="text-center space-y-2">
                 <span className="text-xs text-slate-400 uppercase tracking-wider block">Tarif Habituel</span>
                 <span className="text-lg line-through text-slate-500 font-bold">
                   {formatCFA(data.originalPrice || 49000)}
                 </span>
-                <div className="text-3xl sm:text-5xl font-black text-emerald-400 flex items-baseline justify-center gap-2">
+                <div className="text-3xl sm:text-5xl font-black flex items-baseline justify-center gap-2" style={{ color: activeBrandColor }}>
                   <span>{formatCFA(data.discountPrice || 24500)}</span>
                 </div>
               </div>
@@ -2678,7 +2717,7 @@ export const FunnelBuilder = ({
                         <Gift className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         <span className="text-slate-200 truncate">{b.title}</span>
                       </div>
-                      <span className="text-emerald-400 font-bold whitespace-nowrap">
+                      <span className="font-bold whitespace-nowrap" style={{ color: activeBrandColor }}>
                         Offert ({formatCFA(b.value)})
                       </span>
                     </div>
@@ -2697,7 +2736,12 @@ export const FunnelBuilder = ({
                     image: activeProduct?.image || ''
                   });
                 }}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-base font-black transition flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/40 cursor-pointer"
+                style={{
+                  backgroundColor: activeBtnColor,
+                  color: funnelSettings.buttonTextColor || '#000000',
+                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                }}
+                className="w-full py-4 rounded-2xl hover:brightness-110 text-slate-950 text-base font-black transition flex items-center justify-center gap-2 shadow-2xl cursor-pointer"
               >
                 <Zap className="w-5 h-5 fill-current" />
                 <span>{data.ctaText || 'Valider Ma Commande Immédiate ⚡'}</span>
@@ -2714,7 +2758,7 @@ export const FunnelBuilder = ({
         return (
           <div id="checkout" data-block-type="checkout" className="py-6 px-4 space-y-6">
             <div className="text-center space-y-1.5 max-w-xl mx-auto">
-              <span className="text-[10.5px] font-black uppercase tracking-wider text-emerald-400">
+              <span className="text-[10.5px] font-black uppercase tracking-wider" style={{ color: activeBrandColor }}>
                 {data.sectionTag || 'COMMANDE SÉCURISÉE EN 1 MINUTE'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">{data.sectionTitle}</h3>
@@ -2723,7 +2767,10 @@ export const FunnelBuilder = ({
               )}
             </div>
 
-            <div className="max-w-xl mx-auto bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-7 space-y-5 shadow-2xl">
+            <div
+              style={{ borderColor: `${activeBrandColor}50` }}
+              className="max-w-xl mx-auto bg-slate-900 border-2 rounded-3xl p-5 sm:p-7 space-y-5 shadow-2xl"
+            >
               {/* Récapitulatif Produit */}
               <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-2xl border border-slate-800">
                 <img
@@ -2734,10 +2781,10 @@ export const FunnelBuilder = ({
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-white truncate">{data.productName}</h4>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-black text-emerald-400 font-mono">
+                    <span className="text-xs font-black font-mono" style={{ color: activeBrandColor }}>
                       {formatCFA(data.productPrice || 24500)}
                     </span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ color: activeBrandColor, backgroundColor: `${activeBrandColor}18` }}>
                       Livraison {data.deliveryFee || 'GRATUITE'}
                     </span>
                   </div>
@@ -2850,7 +2897,12 @@ export const FunnelBuilder = ({
                     image: data.productImage || activeProduct?.image || ''
                   });
                 }}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-2xl shadow-emerald-500/40 cursor-pointer hover:brightness-110 active:scale-95 transition"
+                style={{
+                  backgroundColor: activeBtnColor,
+                  color: funnelSettings.buttonTextColor || '#000000',
+                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                }}
+                className="w-full py-4 rounded-2xl text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-2xl cursor-pointer hover:brightness-110 active:scale-95 transition"
               >
                 {orderConfirmed ? (
                   <>
@@ -4486,10 +4538,10 @@ export const FunnelBuilder = ({
               }}
               className="w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-1 border select-none"
               style={{
-                backgroundColor: data.buttonColor || '#2563eb',
+                backgroundColor: data.buttonColor || activeBtnColor,
                 color: data.buttonTextColor || '#ffffff',
-                boxShadow: `0 12px 35px ${data.buttonColor || '#2563eb'}50`,
-                borderColor: `${data.buttonColor || '#2563eb'}80`
+                boxShadow: `0 12px 35px ${data.buttonColor || activeBtnColor}50`,
+                borderColor: `${data.buttonColor || activeBtnColor}80`
               }}
             >
               <span>{data.label || 'COMMANDER MAINTENANT ⚡'}</span>
@@ -4649,7 +4701,7 @@ export const FunnelBuilder = ({
         const mins = String(data.countdownMinutes ?? 45).padStart(2, '0');
         const secs = String(liveSeconds ?? 20).padStart(2, '0');
         const bg = data.bgColor || '#450a0a';
-        const accent = data.accentColor || '#f43f5e';
+        const accent = data.accentColor || activeBrandColor;
         const textCol = data.textColor || '#ffffff';
 
         return (
@@ -4835,7 +4887,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'banner_floating_sticky_bottom': {
         const bg = data.bgColor || '#021a12';
-        const accent = data.accentColor || '#10b981';
+        const accent = data.accentColor || activeBrandColor;
 
         return (
           <div
@@ -4902,7 +4954,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'hero_studio_showcase_3d': {
         const bg = data.bgColor || '#060919';
-        const accent = data.accentColor || '#6366f1';
+        const accent = data.accentColor || activeBrandColor;
         const benefits = data.benefits || [
           'Qualité certifiée et contrôlée',
           'Livraison express 24h sécurisée',
@@ -5035,7 +5087,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'hero_vsl_cinematic': {
         const bg = data.bgColor || '#090306';
-        const accent = data.accentColor || '#f43f5e';
+        const accent = data.accentColor || activeBrandColor;
         const guarantees = data.guarantees || [
           'Garantie Inconditionnelle 30 Jours',
           'Accès Immédiat & Téléchargeable',
@@ -5139,7 +5191,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'hero_luxury_signature': {
         const bg = data.bgColor || '#0a0804';
-        const accent = data.accentColor || '#d97706';
+        const accent = data.accentColor || activeBrandColor;
         const bullets = data.bulletPoints || [
           'Matériaux nobles sélectionnés à la main',
           'Garantie Signature 24 Mois Échange à Neuf',
@@ -5242,7 +5294,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'hero_lead_conversion_engine': {
         const bg = data.bgColor || '#04100c';
-        const accent = data.accentColor || '#10b981';
+        const accent = data.accentColor || activeBrandColor;
         const badges = data.paymentBadges || ['Wave', 'Orange Money', 'MTN', 'Cash Livraison'];
 
         return (
@@ -5355,10 +5407,21 @@ export const FunnelBuilder = ({
                 <button
                   key={preset.name}
                   type="button"
-                  onClick={() => setFunnelSettings({ ...funnelSettings, themePreset: preset.name })}
+                  onClick={() => {
+                    try { playTapBeep(); } catch (e) {}
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: preset.name,
+                      brandColor: preset.primary,
+                      primaryColor: preset.primary,
+                      bgColor: preset.bg,
+                      buttonColor: preset.button,
+                      buttonTextColor: preset.buttonText
+                    }));
+                  }}
                   className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition cursor-pointer ${
                     funnelSettings.themePreset === preset.name
-                      ? 'bg-amber-500/15 border-amber-500/50 text-white'
+                      ? 'bg-amber-500/15 border-amber-500/50 text-white ring-1 ring-amber-400'
                       : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
@@ -5371,6 +5434,43 @@ export const FunnelBuilder = ({
                   )}
                 </button>
               ))}
+            </div>
+
+            {/* Sélecteur de couleur personnalisée */}
+            <div className="pt-2 border-t border-slate-900 flex items-center gap-2.5">
+              <label className="text-[10.5px] font-bold text-slate-400 shrink-0">Couleur Sur-Mesure :</label>
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="color"
+                  value={activeBrandColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: 'Custom',
+                      brandColor: val,
+                      primaryColor: val,
+                      buttonColor: val
+                    }));
+                  }}
+                  className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
+                />
+                <input
+                  type="text"
+                  value={activeBrandColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: 'Custom',
+                      brandColor: val,
+                      primaryColor: val,
+                      buttonColor: val
+                    }));
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
@@ -5437,10 +5537,21 @@ export const FunnelBuilder = ({
                 <button
                   key={preset.name}
                   type="button"
-                  onClick={() => setFunnelSettings({ ...funnelSettings, themePreset: preset.name })}
+                  onClick={() => {
+                    try { playTapBeep(); } catch (e) {}
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: preset.name,
+                      brandColor: preset.primary,
+                      primaryColor: preset.primary,
+                      bgColor: preset.bg,
+                      buttonColor: preset.button,
+                      buttonTextColor: preset.buttonText
+                    }));
+                  }}
                   className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition cursor-pointer ${
                     funnelSettings.themePreset === preset.name
-                      ? 'bg-amber-500/15 border-amber-500/50 text-white'
+                      ? 'bg-amber-500/15 border-amber-500/50 text-white ring-1 ring-amber-400'
                       : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
@@ -5453,6 +5564,43 @@ export const FunnelBuilder = ({
                   )}
                 </button>
               ))}
+            </div>
+
+            {/* Sélecteur de couleur personnalisée */}
+            <div className="pt-2 border-t border-slate-900 flex items-center gap-2.5">
+              <label className="text-[10.5px] font-bold text-slate-400 shrink-0">Couleur Sur-Mesure :</label>
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="color"
+                  value={activeBrandColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: 'Custom',
+                      brandColor: val,
+                      primaryColor: val,
+                      buttonColor: val
+                    }));
+                  }}
+                  className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
+                />
+                <input
+                  type="text"
+                  value={activeBrandColor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFunnelSettings(prev => ({
+                      ...prev,
+                      themePreset: 'Custom',
+                      brandColor: val,
+                      primaryColor: val,
+                      buttonColor: val
+                    }));
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
@@ -11601,6 +11749,7 @@ export const FunnelBuilder = ({
             <div
               onDragOver={handleCanvasDragOver}
               onDrop={handleCanvasDrop}
+              style={{ backgroundColor: funnelSettings.bgColor || undefined }}
               className={`transition-all duration-300 h-fit min-h-full relative ${
                 isEditingPopup
                   ? 'w-full max-w-2xl rounded-3xl border-2 border-rose-500/70 shadow-[0_25px_90px_rgba(244,63,94,0.25)] bg-slate-950 ring-4 ring-rose-500/20 pb-20'

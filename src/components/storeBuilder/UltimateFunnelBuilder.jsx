@@ -439,46 +439,48 @@ export const UltimateFunnelBuilder = ({
   const [customizationActiveTab, setCustomizationActiveTab] = useState('theme'); // 'theme' | 'general' | 'pricing' | 'seo' | 'pixels'
 
   const [customizationSettings, setCustomizationSettings] = useState(() => {
+    const passed = initialData?.settings || initialData?.funnelData?.settings || {};
+    const passedBrand = initialData?.brandColor || initialData?.primaryColor || passed.primaryColor || passed.brandColor;
     const defaults = {
-      themePreset: 'gold_luxury',
-      primaryColor: '#f59e0b',
-      accentColor: '#fbbf24',
-      bgColor: '#090d16',
-      fontFamily: 'Inter',
-      borderRadius: 'rounded-2xl',
-      ctaGlow: true,
-      funnelTitle: activeSource?.title || 'Masterclass Complète : Intelligence Artificielle & Automatisation No-Code',
-      funnelSubtitle: activeSource?.subtitle || 'Propulsez votre entreprise au niveau supérieur avec les outils de pointe (Claude, ChatGPT, Make & NaNa).',
-      instructorName: activeSource?.instructor || 'Prof. Amadou Traoré',
-      instructorRole: activeSource?.category || 'Lead AI Architect • Intelligence Artificielle & Business',
-      headerBadge: activeSource?.type === 'course' ? 'Espace Professeurs' : 'Live / Webinaire',
-      logoUrl: activeSource?.instructorAvatar || '',
-      salePrice: activeSource?.price || 35000,
-      originalPrice: activeSource?.originalPrice || 75000,
-      currency: 'F CFA',
-      discountBadge: '-53% OFFRE LIMITÉE',
-      enableWave: true,
-      enableOrangeMoney: true,
-      enableMtnMomo: true,
-      enableMoovMoney: true,
-      enableCard: true,
-      enableCod: true,
-      merchantWhatsapp: '+225 07 00 00 00 00',
-      hostingType: 'subdomain',
-      subdomain: 'ia-masterclass',
-      customDomain: '',
-      metaTitle: activeSource?.title || 'Masterclass IA & No-Code',
-      metaDescription: activeSource?.subtitle || 'Formation exclusive et certification officielle.',
-      ogImageUrl: activeSource?.image || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200',
-      metaPixelId: '',
-      googleAnalyticsId: '',
-      tiktokPixelId: '',
-      webhookUrl: '',
-      redirectAfterPayment: 'auto'
+      themePreset: passed.themePreset || (passedBrand ? (THEME_PRESETS.find(p => p.primary === passedBrand)?.id || 'custom') : 'gold_luxury'),
+      primaryColor: passedBrand || passed.primaryColor || '#f59e0b',
+      accentColor: initialData?.accentColor || passed.accentColor || '#fbbf24',
+      bgColor: initialData?.bgColor || passed.bgColor || '#090d16',
+      fontFamily: passed.fontFamily || 'Inter',
+      borderRadius: passed.borderRadius || 'rounded-2xl',
+      ctaGlow: passed.ctaGlow !== undefined ? passed.ctaGlow : true,
+      funnelTitle: passed.funnelTitle || activeSource?.title || 'Masterclass Complète : Intelligence Artificielle & Automatisation No-Code',
+      funnelSubtitle: passed.funnelSubtitle || activeSource?.subtitle || 'Propulsez votre entreprise au niveau supérieur avec les outils de pointe (Claude, ChatGPT, Make & NaNa).',
+      instructorName: passed.instructorName || activeSource?.instructor || 'Prof. Amadou Traoré',
+      instructorRole: passed.instructorRole || activeSource?.category || 'Lead AI Architect • Intelligence Artificielle & Business',
+      headerBadge: passed.headerBadge || (activeSource?.type === 'course' ? 'Espace Professeurs' : 'Live / Webinaire'),
+      logoUrl: passed.logoUrl || activeSource?.instructorAvatar || '',
+      salePrice: passed.salePrice || activeSource?.price || 35000,
+      originalPrice: passed.originalPrice || activeSource?.originalPrice || 75000,
+      currency: passed.currency || 'F CFA',
+      discountBadge: passed.discountBadge || '-53% OFFRE LIMITÉE',
+      enableWave: passed.enableWave !== undefined ? passed.enableWave : true,
+      enableOrangeMoney: passed.enableOrangeMoney !== undefined ? passed.enableOrangeMoney : true,
+      enableMtnMomo: passed.enableMtnMomo !== undefined ? passed.enableMtnMomo : true,
+      enableMoovMoney: passed.enableMoovMoney !== undefined ? passed.enableMoovMoney : true,
+      enableCard: passed.enableCard !== undefined ? passed.enableCard : true,
+      enableCod: passed.enableCod !== undefined ? passed.enableCod : true,
+      merchantWhatsapp: passed.merchantWhatsapp || '+225 07 00 00 00 00',
+      hostingType: passed.hostingType || 'subdomain',
+      subdomain: passed.subdomain || 'ia-masterclass',
+      customDomain: passed.customDomain || '',
+      metaTitle: passed.metaTitle || activeSource?.title || 'Masterclass IA & No-Code',
+      metaDescription: passed.metaDescription || activeSource?.subtitle || 'Formation exclusive et certification officielle.',
+      ogImageUrl: passed.ogImageUrl || activeSource?.image || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200',
+      metaPixelId: passed.metaPixelId || '',
+      googleAnalyticsId: passed.googleAnalyticsId || '',
+      tiktokPixelId: passed.tiktokPixelId || '',
+      webhookUrl: passed.webhookUrl || '',
+      redirectAfterPayment: passed.redirectAfterPayment || 'auto'
     };
     try {
       const saved = localStorage.getItem('nana_funnel_custom_settings');
-      if (saved) {
+      if (saved && !passedBrand) {
         return { ...defaults, ...JSON.parse(saved) };
       }
     } catch (e) {}
@@ -1143,7 +1145,17 @@ export const UltimateFunnelBuilder = ({
       source: activeSource,
       steps: funnelCanvasData,
       blocks: currentStepBlocks,
-      settings: customizationSettings,
+      brandColor: customizationSettings.primaryColor || '#f59e0b',
+      primaryColor: customizationSettings.primaryColor || '#f59e0b',
+      accentColor: customizationSettings.accentColor || '#fbbf24',
+      bgColor: customizationSettings.bgColor || '#090d16',
+      settings: {
+        ...customizationSettings,
+        brandColor: customizationSettings.primaryColor || '#f59e0b',
+        primaryColor: customizationSettings.primaryColor || '#f59e0b',
+        accentColor: customizationSettings.accentColor || '#fbbf24',
+        bgColor: customizationSettings.bgColor || '#090d16'
+      },
       funnelType: 'ultimate',
       funnelStudio: 'ultimate_studio',
       linkPrefix: 'f',
@@ -1164,7 +1176,7 @@ export const UltimateFunnelBuilder = ({
           funnelSlug: effectiveSubdomain,
           dealSlug: effectiveSubdomain,
           logoUrl: funnelPayload.ogImageUrl || '',
-          primaryColor: funnelPayload.brandColor || '#10b981',
+          primaryColor: funnelPayload.brandColor || '#f59e0b',
           funnelData: funnelPayload,
           whiteLabel: {
             hidePoweredBy: true,
@@ -1838,7 +1850,7 @@ export const UltimateFunnelBuilder = ({
                         </div>
 
                         {/* Composant Visuel de Rendu WYSIWYG */}
-                        {renderWYSIWYGBlock(block, activeSource)}
+                        {renderWYSIWYGBlock(block, activeSource, customizationSettings)}
 
                       </motion.div>
 
@@ -3403,8 +3415,11 @@ export const UltimateFunnelBuilder = ({
 // ============================================================================
 // 5. MOTEUR DE RENDU DES BLOCS DU CANVAS (WYSIWYG RENDERER)
 // ============================================================================
-function renderWYSIWYGBlock(block, activeSource) {
+function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
   const d = block.data || {};
+  const themePrimary = customizationSettings?.primaryColor || '#f59e0b';
+  const themeAccent = customizationSettings?.accentColor || '#fbbf24';
+  const btnBg = (d.btnBgColor && d.btnBgColor !== '#f59e0b') ? d.btnBgColor : themePrimary;
 
   switch (block.type) {
     case 'autoplay_video':
@@ -3420,8 +3435,11 @@ function renderWYSIWYGBlock(block, activeSource) {
       return (
         <div className="flex flex-col items-center text-center">
           {d.promoBadge && (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider uppercase mb-4 bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <Award className="w-3.5 h-3.5" />
+            <div
+              style={{ backgroundColor: `${themePrimary}18`, borderColor: `${themePrimary}45`, color: themePrimary }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider uppercase mb-4 border"
+            >
+              <Award className="w-3.5 h-3.5" style={{ color: themePrimary }} />
               <span>{d.promoBadge}</span>
             </div>
           )}
@@ -3440,7 +3458,7 @@ function renderWYSIWYGBlock(block, activeSource) {
           {d.instructorName && (
             <div className="flex items-center gap-2.5 mb-5 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-800">
               {d.instructorAvatar && (
-                <img src={d.instructorAvatar} alt={d.instructorName} className="w-7 h-7 rounded-full object-cover border border-amber-500/40" />
+                <img src={d.instructorAvatar} alt={d.instructorName} className="w-7 h-7 rounded-full object-cover border" style={{ borderColor: `${themePrimary}60` }} />
               )}
               <span className="text-xs font-bold text-white">{d.instructorName}</span>
               {d.instructorRole && (
@@ -3452,7 +3470,7 @@ function renderWYSIWYGBlock(block, activeSource) {
           {/* Image/Média Produit en Lévitation Continue Framer Motion */}
           {d.image && (
             <div className="my-3 relative w-64 sm:w-80 flex flex-col items-center">
-              <div className="absolute -inset-4 rounded-full blur-2xl opacity-25 bg-amber-500 pointer-events-none" />
+              <div className="absolute -inset-4 rounded-full blur-2xl opacity-25 pointer-events-none" style={{ backgroundColor: themePrimary }} />
               
               <motion.div
                 animate={{
@@ -3487,7 +3505,7 @@ function renderWYSIWYGBlock(block, activeSource) {
 
           {d.price !== undefined && (
             <div className="flex items-baseline justify-center gap-3 my-3">
-              <span className="text-2xl sm:text-4xl font-black text-amber-400">
+              <span className="text-2xl sm:text-4xl font-black" style={{ color: themePrimary }}>
                 {formatCFA(d.price)}
               </span>
               {d.originalPrice && d.originalPrice > d.price && (
@@ -3503,9 +3521,9 @@ function renderWYSIWYGBlock(block, activeSource) {
               <button
                 className="w-full py-3.5 px-6 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
                 style={{
-                  backgroundColor: d.btnBgColor || '#f59e0b',
-                  color: '#000000',
-                  boxShadow: '0 10px 25px rgba(245, 158, 11, 0.3)'
+                  backgroundColor: btnBg,
+                  color: d.btnTextColor || '#000000',
+                  boxShadow: `0 10px 25px ${themePrimary}50`
                 }}
               >
                 <span>{d.buttonText}</span>
@@ -3527,7 +3545,7 @@ function renderWYSIWYGBlock(block, activeSource) {
             {(d.modules || []).map((m, i) => (
               <div key={i} className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xs font-black">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black" style={{ backgroundColor: `${themePrimary}20`, color: themePrimary }}>
                     0{i + 1}
                   </div>
                   <div>
@@ -3535,7 +3553,7 @@ function renderWYSIWYGBlock(block, activeSource) {
                     <span className="text-[10px] text-slate-400">{m.lessons}</span>
                   </div>
                 </div>
-                <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md" style={{ color: themeAccent, backgroundColor: `${themeAccent}18` }}>
                   {m.duration}
                 </span>
               </div>
@@ -3546,8 +3564,8 @@ function renderWYSIWYGBlock(block, activeSource) {
 
     case 'webinar_registration_form':
       return (
-        <div className="max-w-md mx-auto p-5 rounded-3xl bg-slate-900/90 border border-emerald-500/30 text-center space-y-3 shadow-xl">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+        <div className="max-w-md mx-auto p-5 rounded-3xl bg-slate-900/90 text-center space-y-3 shadow-xl border" style={{ borderColor: `${themePrimary}40` }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${themePrimary}20`, color: themePrimary }}>
             <MessageSquare className="w-5 h-5" />
           </div>
           <h3 className="text-sm font-black text-white">{d.headline}</h3>
@@ -3558,7 +3576,7 @@ function renderWYSIWYGBlock(block, activeSource) {
             placeholder="Numéro WhatsApp (+226 70 00 00 00)"
             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
           />
-          <button className="w-full py-3 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs hover:bg-emerald-400 transition cursor-pointer">
+          <button className="w-full py-3 rounded-xl font-black text-xs hover:brightness-110 transition cursor-pointer" style={{ backgroundColor: themePrimary, color: '#000000', boxShadow: `0 10px 25px ${themePrimary}50` }}>
             {d.buttonText}
           </button>
           <p className="text-[10px] text-slate-400">{d.reassurance}</p>
@@ -3568,7 +3586,7 @@ function renderWYSIWYGBlock(block, activeSource) {
     case 'countdown_timer':
       return (
         <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-center max-w-md mx-auto space-y-2">
-          <div className="text-[11px] font-black text-amber-400 tracking-wider flex items-center justify-center gap-1.5">
+          <div className="text-[11px] font-black tracking-wider flex items-center justify-center gap-1.5" style={{ color: themePrimary }}>
             <Clock className="w-3.5 h-3.5" />
             <span>{d.title}</span>
           </div>
@@ -3577,7 +3595,7 @@ function renderWYSIWYGBlock(block, activeSource) {
               {String(d.initialHours || 18).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">HEURES</span>
             </div>
             <span>:</span>
-            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-amber-400">
+            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800" style={{ color: themePrimary }}>
               {String(d.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">MINUTES</span>
             </div>
             <span>:</span>
@@ -3599,7 +3617,7 @@ function renderWYSIWYGBlock(block, activeSource) {
             <span className="text-slate-400 font-mono">{d.percentage}% Réservé</span>
           </div>
           <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full" style={{ width: `${d.percentage}%` }} />
+            <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${themePrimary}, ${themeAccent})`, width: `${d.percentage}%` }} />
           </div>
         </div>
       );
@@ -3610,9 +3628,9 @@ function renderWYSIWYGBlock(block, activeSource) {
           <button
             className="w-full py-4 px-6 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
             style={{
-              backgroundColor: d.btnBgColor || '#f59e0b',
+              backgroundColor: btnBg,
               color: d.btnTextColor || '#000000',
-              boxShadow: d.glowColor ? `0 0 35px ${d.glowColor}` : '0 0 30px rgba(245, 158, 11, 0.45)'
+              boxShadow: d.glowColor ? `0 0 35px ${d.glowColor}` : `0 0 30px ${themePrimary}60`
             }}
           >
             <span>{d.buttonText}</span>
@@ -3625,10 +3643,10 @@ function renderWYSIWYGBlock(block, activeSource) {
     case 'instructor_bio':
       return (
         <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-          <img src={d.avatar} alt={d.name} className="w-16 h-16 rounded-2xl object-cover border border-amber-500/30 shrink-0" />
+          <img src={d.avatar} alt={d.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: `${themePrimary}50` }} />
           <div className="space-y-1">
             <h4 className="text-sm font-black text-white">{d.name}</h4>
-            <p className="text-xs text-amber-400 font-medium">{d.title}</p>
+            <p className="text-xs font-medium" style={{ color: themePrimary }}>{d.title}</p>
             <p className="text-xs text-slate-300 leading-relaxed">{d.bio}</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {(d.badges || []).map((b, idx) => (
@@ -3648,7 +3666,7 @@ function renderWYSIWYGBlock(block, activeSource) {
           {(d.items || []).map((item, idx) => (
             <div key={idx} className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1">
               <h5 className="text-xs font-bold text-white flex items-center gap-2">
-                <span className="text-amber-400">Q :</span> {item.q}
+                <span style={{ color: themePrimary }} className="font-black">Q :</span> {item.q}
               </h5>
               <p className="text-xs text-slate-400 pl-4">{item.a}</p>
             </div>

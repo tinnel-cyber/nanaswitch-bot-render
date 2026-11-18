@@ -170,8 +170,13 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
     );
   }
 
+  const bgCol = funnelData?.settings?.bgColor || funnelData?.bgColor || '#030610';
+
   return (
-    <div className={`min-h-screen w-full bg-[#030610] ${className}`}>
+    <div
+      style={{ backgroundColor: bgCol }}
+      className={`min-h-screen w-full ${className}`}
+    >
       <FunnelBuilder
         product={funnelData}
         isOpen={true}
