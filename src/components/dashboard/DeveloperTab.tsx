@@ -32,7 +32,7 @@ export interface DeveloperTabProps {
 
 const PAYMENT_API_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
   ? 'http://localhost:10000'
-  : 'https://nana-payment-api.onrender.com';
+  : ((import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.VITE_PAYMENT_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run');
 
 export const DeveloperTab: React.FC<DeveloperTabProps> = ({
   app,
@@ -437,7 +437,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                       <span>2. Tester l'authentification avec cURL :</span>
                       <button
                         type="button"
-                        onClick={() => copyToClipboard(`curl -X POST https://nana-payment-api.onrender.com/v1/switch/session/initialize \\\n  -H "Authorization: Bearer ${app.keys?.rawSk || '$NANASWITCH_SECRET_KEY'}" \\\n  -H "x-nanaswitch-key: ${app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"amount": 5000, "currency": "XOF", "merchant_id": "${app.id}"}'`, 'Commande cURL')}
+                        onClick={() => copyToClipboard(`curl -X POST https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/session/initialize \\\n  -H "Authorization: Bearer ${app.keys?.rawSk || '$NANASWITCH_SECRET_KEY'}" \\\n  -H "x-nanaswitch-key: ${app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"amount": 5000, "currency": "XOF", "merchant_id": "${app.id}"}'`, 'Commande cURL')}
                         className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer"
                       >
                         <Copy className="w-3 h-3" />
@@ -445,7 +445,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                       </button>
                     </div>
                     <pre className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-slate-300 overflow-x-auto select-all border border-slate-800 leading-relaxed">
-{`curl -X POST https://nana-payment-api.onrender.com/v1/switch/session/initialize \\
+{`curl -X POST https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/session/initialize \\
   -H "Authorization: Bearer \${NANASWITCH_SECRET_KEY}" \\
   -H "x-nanaswitch-key: ${app.keys?.pk ? app.keys.pk.slice(0, 16) + '...' : 'ns_live_pk_...'}" \\
   -H "Content-Type: application/json"`}

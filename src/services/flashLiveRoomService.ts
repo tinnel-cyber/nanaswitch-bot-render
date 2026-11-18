@@ -38,8 +38,8 @@ export interface InitFlashRoomParams {
 }
 
 const PAYMENT_API_BASE_URL =
-  (typeof process !== 'undefined' && (process as any).env?.VITE_PAYMENT_API_URL) ||
-  'https://nana-payment-api.onrender.com';
+  (typeof process !== 'undefined' && ((process as any).env?.VITE_API_URL || (process as any).env?.VITE_PAYMENT_API_URL)) ||
+  'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
 /**
  * 1. Initialise un salon de Live Shopping éphémère avec expiresAt via Supabase

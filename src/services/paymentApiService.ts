@@ -37,8 +37,8 @@ export interface PaymentInitiateResponse {
   error?: string;
 }
 
-// URL officielle du micro-service Render (avec sortie par IP Statique Fixie)
-export const DEFAULT_PAYMENT_API_URL = 'https://nana-payment-api.onrender.com';
+// URL officielle du micro-service Northflank (avec sortie par IP Statique Fixie)
+export const DEFAULT_PAYMENT_API_URL = 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
 // Adresses IP statiques de sortie Fixie enregistrées auprès de la banque
 export const PRIMARY_FIXIE_IP = '54.195.3.54';
@@ -78,7 +78,10 @@ export function getPaymentApiBaseUrl(): string {
     }
   }
   
-  const envUrl = (import.meta as any).env?.VITE_PAYMENT_API_URL || (typeof process !== 'undefined' && process.env?.VITE_PAYMENT_API_URL);
+  const envUrl = (import.meta as any).env?.VITE_API_URL || 
+    (import.meta as any).env?.VITE_PAYMENT_API_URL || 
+    (import.meta as any).env?.PUBLIC_API_URL ||
+    (typeof process !== 'undefined' && (process.env?.API_URL || process.env?.VITE_API_URL || process.env?.VITE_PAYMENT_API_URL));
   if (envUrl) return envUrl.replace(/\/+$/, '');
 
   return DEFAULT_PAYMENT_API_URL;
@@ -380,11 +383,11 @@ export async function initiateSPayment(params: SCollectionRequest): Promise<SCol
     console.warn('[storage INTENT INIT]', err.message);
   }
 
-  // 2. Appel direct vers le micro-service Render (Passerelle SasPay / NaNaSwitch Live)
+  // 2. Appel direct vers le micro-service Northflank (Passerelle SasPay / NaNaSwitch Live)
   try {
     const payloadWithCallback: SCollectionRequest = {
-      callback_url: 'https://nana-payment-api.onrender.com/api/payment/webhook',
-      callbackUrl: 'https://nana-payment-api.onrender.com/api/payment/webhook',
+      callback_url: `${baseUrl}/api/payment/webhook`,
+      callbackUrl: `${baseUrl}/api/payment/webhook`,
       ...params,
       externalReference,
       external_reference: externalReference,

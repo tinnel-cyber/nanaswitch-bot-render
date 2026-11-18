@@ -739,7 +739,7 @@ async function createSebpayCollection(params) {
     .replace(/^_|_$/g, '') || 'boutique';
 
   const externalReference = params.externalReference || params.external_reference || `nanasore_${cleanShopName}___${orderId}`;
-  const effectiveCallback = callbackUrl || process.env.PAYMENT_CALLBACK_URL || process.env.PAYMENT_WEBHOOK_URL || 'https://nana-payment-api.onrender.com/api/payment/webhook';
+  const effectiveCallback = callbackUrl || process.env.PAYMENT_CALLBACK_URL || process.env.PAYMENT_WEBHOOK_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook';
 
   // Résolution obligatoire du code ISO pays (ex: "BF"), ID et devise (ex: "XOF")
   const resolved = resolveCountryAndCurrency(
@@ -1046,7 +1046,7 @@ async function createSebpayCheckoutSession(params = {}) {
   const formattedPhone = rawPhone ? formatSebpayPhoneNumber(rawPhone, resolvedCountry) : undefined;
 
   const effectiveRedirectUrl = redirectUrl || redirect_url || returnUrl || return_url || 'https://nanasore.com/checkout/return';
-  const effectiveCallbackUrl = callbackUrl || callback_url || process.env.PAYMENT_CALLBACK_URL || 'https://nana-payment-api.onrender.com/api/payment/webhook';
+  const effectiveCallbackUrl = callbackUrl || callback_url || process.env.PAYMENT_CALLBACK_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook';
 
   const body = {
     amount: Math.round(Number(amount)),

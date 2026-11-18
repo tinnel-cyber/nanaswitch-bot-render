@@ -8,6 +8,9 @@ import { LiveOfferHud } from './LiveOfferHud';
 import { LiveChatPanel } from './LiveChatPanel';
 import { LiveMiniPlayer } from './LiveMiniPlayer';
 import { NanasoreLiveCommerceOverlay } from '../../components/live/NanasoreLiveCommerceOverlay';
+import { HlsLivePlayer } from '../../components/live/HlsLivePlayer';
+import { WhipLiveBroadcaster } from '../../components/live/WhipLiveBroadcaster';
+import { buildStoreHlsUrl } from '../../config/liveStreamConfig';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 
 interface FloatingReaction {
@@ -43,6 +46,7 @@ export const LiveStage: React.FC<LiveStageProps> = ({
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
   const [isOutOfView, setIsOutOfView] = useState(false);
   const [isMiniPlayerDismissed, setIsMiniPlayerDismissed] = useState(false);
+  const [isBroadcastingMode, setIsBroadcastingMode] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -131,8 +135,15 @@ export const LiveStage: React.FC<LiveStageProps> = ({
           {/* Sur Mobile : Vidéo épinglée tout en haut (sticky top-[75px] sous le header 75px) */}
           <div className="relative w-full aspect-video rounded-[20px] overflow-hidden live-stage-glow bg-black border border-white/[0.1] select-none group sticky top-[75px] md:static z-30 md:z-auto transition-all">
             
-            {/* 1. Lecteur Vidéo Multi-Flux (HTML5 / YouTube / Twitch) */}
-            {isYouTube ? (
+            {/* 1. Lecteur Vidéo Multi-Flux (WHIP Vendeur / HLS Acheteur / YouTube / Twitch) */}
+            {isHost && isBroadcastingMode ? (
+              <WhipLiveBroadcaster
+                storeSlug={liveId}
+                storeName="Live Stream Pro"
+                className="w-full h-full"
+                onLiveStopped={() => setIsBroadcastingMode(false)}
+              />
+            ) : isYouTube ? (
               <iframe
                 src={`${streamUrl}?autoplay=1&mute=${isMuted ? 1 : 0}&enablejsapi=1&controls=1`}
                 title="Live Stream YouTube"
@@ -147,16 +158,25 @@ export const LiveStage: React.FC<LiveStageProps> = ({
                 className="w-full h-full border-0"
                 allowFullScreen
               />
-            ) : (
+            ) : streamUrl && streamUrl.endsWith('.mp4') ? (
               <video
                 ref={videoRef}
-                src={streamUrl || DEFAULT_DEMO_STREAM_VIDEO}
+                src={streamUrl}
                 autoPlay
                 loop
                 muted={isMuted}
                 playsInline
                 className="w-full h-full object-cover"
                 onPlay={() => setIsPlaying(true)}
+              />
+            ) : (
+              <HlsLivePlayer
+                storeSlug={liveId}
+                src={streamUrl || buildStoreHlsUrl(liveId)}
+                storeName="Live Stream Pro"
+                autoPlay={isPlaying}
+                muted={isMuted}
+                className="w-full h-full"
               />
             )}
 
@@ -184,8 +204,23 @@ export const LiveStage: React.FC<LiveStageProps> = ({
                 </div>
               </div>
 
-              {/* Droite : Contrôles Rapides (Son & Plein Écran) */}
+              {/* Droite : Contrôles Rapides (Studio Vendeur, Son & Plein Écran) */}
               <div className="flex items-center gap-2">
+                {isHost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setIsBroadcastingMode(!isBroadcastingMode);
+                    }}
+                    className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-blue-600/90 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold border border-blue-400/40 backdrop-blur-md transition active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5"
+                    title="Basculer vers la caméra de diffusion"
+                  >
+                    <Radio className="w-3.5 h-3.5 animate-pulse" />
+                    <span className="hidden sm:inline">{isBroadcastingMode ? 'Vue Spectateur' : 'Studio Caméra'}</span>
+                    <span className="sm:hidden">{isBroadcastingMode ? 'Retour' : 'WHIP'}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleToggleSound}

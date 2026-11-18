@@ -30,8 +30,9 @@ export interface WameetEscrowMessage {
 
 // URL de base du micro-service de paiement sur Render (ou fallback local)
 const PAYMENT_API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_PAYMENT_API_URL ||
-  'https://nana-payment-api.onrender.com';
+  'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
 // ============================================================================
 // 2. FONCTION FRONTEND : INITIATION DU PAIEMENT MOBILE MONEY (handlePaymentClick)

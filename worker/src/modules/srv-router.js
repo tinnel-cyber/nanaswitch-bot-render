@@ -16,8 +16,8 @@ const NO_CACHE_HEADERS = {
 
 export async function handleGlobalRouterFallback(request, env, ctx) {
   const url = new URL(request.url);
-  const PRIMARY_FRONTEND = "nanaswitch-bot-render-0kqp.onrender.com";
-  const customBackend = env.RENDER_BACKEND_URL;
+  const PRIMARY_FRONTEND = "p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+  const customBackend = env.BACKEND_URL || env.NORTHFLANK_BACKEND_URL || env.RENDER_BACKEND_URL;
   const renderBackend = (customBackend && customBackend !== "nanasore.onrender.com")
     ? customBackend
     : PRIMARY_FRONTEND;

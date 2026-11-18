@@ -22,6 +22,7 @@ const SYSTEM_DOMAIN_SUFFIXES = [
   '.nsore.shop',
   '.vercel.app',
   '.onrender.com',
+  '.code.run',
   '.pages.dev',
 ];
 

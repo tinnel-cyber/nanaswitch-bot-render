@@ -431,7 +431,7 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
       if (type === TRANSACTION_TYPES.ESCROW) {
         const notifyUrl =
           process.env.PAYMENT_WEBHOOK_URL ||
-          'https://nana-payment-api.onrender.com/api/chat-finance/webhook';
+          'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/chat-finance/webhook';
 
         // 1. Génération du lien de paiement externe CinetPay
         const paymentResult = await generateCinetPayPaymentLink(
@@ -441,7 +441,7 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
             currency,
             description: title || `Smart Escrow: Commande ${transactionId}`,
             notifyUrl,
-            returnUrl: `https://nana-payment-api.onrender.com/payment/success?txId=${transactionId}`,
+            returnUrl: `https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/payment/success?txId=${transactionId}`,
             customerId: senderId,
             customerName: senderName,
             customerPhone: phone || '+22670000000'
@@ -513,7 +513,7 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
       if (type === TRANSACTION_TYPES.CAGNOTTE) {
         const notifyUrl =
           process.env.PAYMENT_WEBHOOK_URL ||
-          'https://nana-payment-api.onrender.com/api/chat-finance/webhook';
+          'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/chat-finance/webhook';
 
         const paymentResult = await generateCinetPayPaymentLink(
           {

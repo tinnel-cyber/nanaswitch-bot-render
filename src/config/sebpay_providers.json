@@ -3,7 +3,7 @@
   "environment": "production",
   "defaultGateway": "sebpay",
   "gatewayBaseUrl": "https://newapi.sebpay.bj/api/v1/",
-  "productionProxy": "https://nana-payment-api.onrender.com",
+  "productionProxy": "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run",
   "staticIp": "54.195.3.54",
   "currencyDefaults": {
     "UEMOA": "XOF",

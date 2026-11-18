@@ -2,13 +2,8 @@
  * ==============================================================================
  * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Render
  * ==============================================================================
- * Cible Render : https://nanaswitch-bot-render-0kqp.onrender.com
- * Rôle : Relaye l'intégralité du trafic (méthodes, query, headers, streaming body)
- *        vers le serveur Render actif en forçant le Host header approprié.
- * ==============================================================================
- */
-
-const RENDER_BACKEND_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
+// Cible Northflank : https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run
+const RENDER_BACKEND_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
 
 // En-têtes "hop-by-hop" standard HTTP à ne pas relayer directement
 const HOP_BY_HOP_HEADERS = new Set([
@@ -55,12 +50,13 @@ export default {
       });
     }
 
-    // 1. Détermination stricte du backend Render (Ignore les vieilles variables d'environnement obsolètes)
+    // 1. Détermination du backend (Northflank ou fallback)
     let backendOrigin = RENDER_BACKEND_ORIGIN;
-    if (env && env.RENDER_BACKEND_URL && !env.RENDER_BACKEND_URL.includes("nanasore.onrender.com")) {
-      backendOrigin = env.RENDER_BACKEND_URL.startsWith("http")
-        ? env.RENDER_BACKEND_URL
-        : `https://${env.RENDER_BACKEND_URL}`;
+    const configuredBackend = env && (env.BACKEND_URL || env.NORTHFLANK_BACKEND_URL || env.RENDER_BACKEND_URL);
+    if (configuredBackend && !configuredBackend.includes("nanasore.onrender.com")) {
+      backendOrigin = configuredBackend.startsWith("http")
+        ? configuredBackend
+        : `https://${configuredBackend}`;
     }
 
     // 2. Construction de l'URL cible conservant exactement pathname et query params

@@ -67,9 +67,11 @@ export interface StartLiveResponse {
   error?: string;
 }
 
+import { getApiBaseUrl } from '../config/liveStreamConfig';
+
 const API_BASE_URL = typeof window !== 'undefined'
-  ? (window.location.hostname === 'localhost' ? 'http://localhost:10000' : 'https://nana-payment-api.onrender.com')
-  : 'https://nana-payment-api.onrender.com';
+  ? (window.location.hostname === 'localhost' ? 'http://localhost:10000' : getApiBaseUrl())
+  : getApiBaseUrl();
 
 /**
  * 1. Déclenche une session Live avec Stream Router & Failover automatique

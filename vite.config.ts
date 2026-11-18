@@ -8,7 +8,10 @@ export default defineConfig(() => {
     define: {
       'process.env.LAMBDA_URL': JSON.stringify(process.env.LAMBDA_URL || process.env.AWS_LAMBDA_URL || process.env.VITE_AWS_LAMBDA_URL || ''),
       'process.env.AWS_LAMBDA_URL': JSON.stringify(process.env.AWS_LAMBDA_URL || process.env.LAMBDA_URL || process.env.VITE_AWS_LAMBDA_URL || ''),
-      'process.env.VITE_PAYMENT_API_URL': JSON.stringify(process.env.VITE_PAYMENT_API_URL || 'https://nana-payment-api.onrender.com'),
+      'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'),
+      'process.env.VITE_PAYMENT_API_URL': JSON.stringify(process.env.VITE_PAYMENT_API_URL || process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'),
+      'process.env.VITE_LIVE_WHIP_URL': JSON.stringify(process.env.VITE_LIVE_WHIP_URL || 'https://p01--nanasore-live--p8yx28yyjhbx.code.run'),
+      'process.env.VITE_LIVE_HLS_URL': JSON.stringify(process.env.VITE_LIVE_HLS_URL || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run'),
       'process.env.AWS_REGION': JSON.stringify(process.env.AWS_REGION || process.env.VITE_AWS_REGION || 'eu-west-3'),
       'process.env.AWS_BUCKET_NAME': JSON.stringify(process.env.AWS_BUCKET_NAME || process.env.VITE_AWS_BUCKET_NAME || 'nsore-video-storage'),
     },
@@ -48,7 +51,7 @@ export default defineConfig(() => {
           secure: false,
         },
         '/api/payment': {
-          target: 'https://nana-payment-api.onrender.com',
+          target: process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run',
           changeOrigin: true,
           secure: true,
         },

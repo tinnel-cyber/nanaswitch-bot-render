@@ -16,8 +16,9 @@ export interface ChatOrderIntentResult {
 }
 
 const PAYMENT_API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_PAYMENT_API_URL ||
-  'https://nana-payment-api.onrender.com';
+  'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
 /**
  * Analyse silencieusement un message ou l'historique du chat pour détecter une intention d'achat.

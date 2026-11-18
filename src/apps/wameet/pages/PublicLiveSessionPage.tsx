@@ -27,6 +27,7 @@ import {
   FALLBACK_LIVE_SESSION 
 } from '../../../services/liveSessionService';
 import { NanasoreOmniPlayer } from '../../../components/live/NanasoreOmniPlayer';
+import { WhipLiveBroadcaster } from '../../../components/live/WhipLiveBroadcaster';
 import { NanasoreLiveCommerceOverlay } from '../../../components/live/NanasoreLiveCommerceOverlay';
 import { LiveProductCarousel } from '../../../components/live/LiveProductCarousel';
 import { LiveClassroomInteractivePanel, LivePanelTab } from '../../../components/live/LiveClassroomInteractivePanel';
@@ -107,6 +108,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [activeClassroomTab, setActiveClassroomTab] = useState<LivePanelTab>('chat');
   const [selectedFunnelProduct, setSelectedFunnelProduct] = useState<StoreProductItem | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [isHostBroadcasterActive, setIsHostBroadcasterActive] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!initialSession);
 
   // Chargement de la session depuis Supabase / cache local
@@ -251,7 +253,28 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         
         {/* Console Formateur / Coach Flottante Supérieure (Si Mode Formateur Activé) */}
         {isHostMode && (
-          <div className="mb-2">
+          <div className="mb-2 space-y-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-blue-500/30">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                <div>
+                  <span className="text-xs font-black text-white block">Console Studio Vendeur / Formateur</span>
+                  <span className="text-[11px] text-slate-400">Diffusez en direct via WebRTC WHIP ou pilotez les interactions</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setIsHostBroadcasterActive(!isHostBroadcasterActive);
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-950 transition active:scale-95 cursor-pointer border border-blue-400/30"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                <span>{isHostBroadcasterActive ? "👁️ Voir l'Aperçu Spectateur" : "📹 Lancer ma Caméra (WHIP Direct)"}</span>
+              </button>
+            </div>
+
             <LiveInstructorControlBar
               session={session}
               onSelectTab={(tab) => {
@@ -319,16 +342,24 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           
           {/* Colonne Gauche (lg:col-span-8) : Lecteur Vidéo + Titre + Carrousel Produits */}
           <div className="lg:col-span-8 space-y-5">
-            {/* Lecteur Caméléon */}
+            {/* Lecteur Caméléon ou Studio Caméra WHIP Vendeur */}
             <div className="rounded-3xl overflow-hidden shadow-2xl bg-black relative">
-              <NanasoreOmniPlayer
-                session={session}
-                isHost={isHostMode}
-                onOpenFunnel={handleOpenFunnel}
-                onBuyWhatsApp={handleBuyWhatsApp}
-                onShareClick={() => setIsShareModalOpen(true)}
-                onUnpinProduct={handleUnpinProduct}
-              />
+              {isHostMode && isHostBroadcasterActive ? (
+                <WhipLiveBroadcaster
+                  storeSlug={session.id || resolvedSlug}
+                  storeName={session.storeName}
+                  onLiveStopped={() => setIsHostBroadcasterActive(false)}
+                />
+              ) : (
+                <NanasoreOmniPlayer
+                  session={session}
+                  isHost={isHostMode}
+                  onOpenFunnel={handleOpenFunnel}
+                  onBuyWhatsApp={handleBuyWhatsApp}
+                  onShareClick={() => setIsShareModalOpen(true)}
+                  onUnpinProduct={handleUnpinProduct}
+                />
+              )}
 
               {/* Moteur E-Commerce & Le Tiroir Nanasore (Supabase Live Sync) */}
               <NanasoreLiveCommerceOverlay

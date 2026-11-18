@@ -503,7 +503,7 @@ async function generateCPaymentUrl(
         currency: 'XOF',
         description: `Wameet Smart Haggle : ${productName}`,
         return_url: `https://wameet.africa/live/payment-success?escrowId=${escrowId}`,
-        notify_url: `https://nana-payment-api.onrender.com/api/webhooks/cinetpay`,
+        notify_url: `${(process.env.API_URL || process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run').replace(/\/+$/, '')}/api/webhooks/cinetpay`,
         customer_name: buyerName || 'Acheteur Wameet',
         customer_surname: 'Client',
         customer_phone_number: buyerPhone || '+2250700000000',

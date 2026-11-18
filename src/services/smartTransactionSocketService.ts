@@ -47,8 +47,9 @@ class SmartTransactionSocketClient {
     }
 
     const apiUrl =
+      (import.meta as any).env?.VITE_API_URL ||
       (import.meta as any).env?.VITE_PAYMENT_API_URL ||
-      'https://nana-payment-api.onrender.com';
+      'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
     const isHttps = apiUrl.startsWith('https://');
     const wsProto = isHttps ? 'wss://' : 'ws://';
     const host = apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');

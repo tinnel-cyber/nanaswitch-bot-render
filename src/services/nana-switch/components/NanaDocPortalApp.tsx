@@ -99,7 +99,7 @@ L'API applique un contrôle strict avant d'autoriser toute transaction ou lien d
 ## 🚀 Spécification des Endpoints d'Intégration
 
 ### Base URL :
-* **Production :** \`https://nana-payment-api.onrender.com\`
+* **Production :** \`https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run\`
 * **Localhost / Staging :** \`http://localhost:10000\`
 
 ### Endpoint 1 : Initiation Universelle & Routage Intelligent
@@ -483,7 +483,7 @@ export function NanaDocPortalApp({
         : `En tant qu'Assistant Spécialisé NanaSwitch Cloud (\`system:nanaswitch_integration_skill\`) :
 Concernant votre demande "${textToSend}" :
 • Assurez-vous d'utiliser vos clés sécurisées (\`ns_live_pk_...\` frontend, \`ns_live_sk_...\` backend).
-• Pour une transaction standard, soumettez votre requête en POST vers \`https://nana-payment-api.onrender.com/v1/switch/route\`.
+• Pour une transaction standard, soumettez votre requête en POST vers \`https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route\`.
 • Les notifications Webhooks doivent obligatoirement être vérifiées via l'en-tête \`x-nanaswitch-signature\` avec votre clé \`ns_whsec_...\`.
 • Souhaitez-vous un exemple spécifique en Node.js, PHP, Python ou WordPress ?`;
 
@@ -2406,7 +2406,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 async function createPayment() {
-  const response = await axios.post('https://nana-payment-api.onrender.com/v1/switch/route', {
+  const response = await axios.post('https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route', {
     amount: 5000,
     currency: 'XOF',
     order_id: 'CMD_12345',
@@ -2432,7 +2432,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 async function createPayment() {
-  const response = await axios.post('https://nana-payment-api.onrender.com/v1/switch/route', {
+  const response = await axios.post('https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route', {
     amount: 5000,
     currency: 'XOF',
     order_id: 'CMD_12345',
@@ -2695,7 +2695,7 @@ def create_payment():
     payload = {
         "amount": 5000, "currency": "XOF", "order_id": "CMD_12345"
     }
-    res = requests.post("https://nana-payment-api.onrender.com/v1/switch/route", json=payload, headers=headers)
+    res = requests.post("https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route", json=payload, headers=headers)
     return res.json()["checkout_url"]
 
 # Verification Webhook HMAC-SHA256
@@ -2723,7 +2723,7 @@ def create_payment():
     payload = {
         "amount": 5000, "currency": "XOF", "order_id": "CMD_12345"
     }
-    res = requests.post("https://nana-payment-api.onrender.com/v1/switch/route", json=payload, headers=headers)
+    res = requests.post("https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route", json=payload, headers=headers)
     return res.json()["checkout_url"]
 
 # Verification Webhook HMAC-SHA256
@@ -2964,7 +2964,7 @@ if __name__ == "__main__":
                           <button
                             onClick={() => copyToClipboard?.(`<?php
 // Initialisation de Paiement
-$ch = curl_init('https://nana-payment-api.onrender.com/v1/switch/route');
+$ch = curl_init('https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
@@ -2993,7 +2993,7 @@ exit;`, 'Code PHP Initialisation')}
                         <pre className="bg-slate-900 text-slate-100 p-5 rounded-2xl font-mono text-[11px] overflow-x-auto leading-relaxed">
 {`<?php
 // Initialisation de Paiement
-$ch = curl_init('https://nana-payment-api.onrender.com/v1/switch/route');
+$ch = curl_init('https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
@@ -3109,7 +3109,7 @@ if (hash_equals($sig_parts['v1'], $computed_sig)) {
                             </div>
                           </div>
                           <button
-                            onClick={() => copyToClipboard?.(`curl -X POST https://nana-payment-api.onrender.com/v1/switch/route \\
+                            onClick={() => copyToClipboard?.(`curl -X POST https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route \\
   -H "Content-Type: application/json" \\
   -H "x-nanaswitch-key: ns_live_pk_12345" \\
   -H "x-nanaswitch-skey: ns_live_sk_67890" \\
@@ -3127,7 +3127,7 @@ if (hash_equals($sig_parts['v1'], $computed_sig)) {
                         </div>
 
                         <pre className="bg-slate-900 text-slate-100 p-5 rounded-2xl font-mono text-[11px] overflow-x-auto leading-relaxed">
-{`curl -X POST https://nana-payment-api.onrender.com/v1/switch/route \\
+{`curl -X POST https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route \\
   -H "Content-Type: application/json" \\
   -H "x-nanaswitch-key: ns_live_pk_12345" \\
   -H "x-nanaswitch-skey: ns_live_sk_67890" \\
@@ -3150,7 +3150,7 @@ if (hash_equals($sig_parts['v1'], $computed_sig)) {
   "amount": 5000,
   "currency": "XOF",
   "status": "PENDING",
-  "checkout_url": "https://nana-payment-api.onrender.com/pay/sw_749102"
+  "checkout_url": "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/pay/sw_749102"
 }`}
                           </pre>
                         </div>
@@ -3703,7 +3703,7 @@ async function handleMobileCheckout() {
               {/* Endpoint & Method */}
               <div className="flex items-center gap-2 p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-xs">
                 <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black">POST</span>
-                <span className="text-blue-300">https://nana-payment-api.onrender.com/v1/switch/route</span>
+                <span className="text-blue-300">https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/v1/switch/route</span>
               </div>
 
               {/* Form Grid */}
@@ -3764,7 +3764,7 @@ async function handleMobileCheckout() {
                         amount: parseInt(testAmount || '5000', 10),
                         currency: testCurrency,
                         status: 'PENDING',
-                        checkout_url: `https://nana-payment-api.onrender.com/pay/${mockTxId}`,
+                        checkout_url: `https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/pay/${mockTxId}`,
                         mode: 'AGREGATED',
                         routing: {
                           operator: 'ORANGE_MONEY_BF',

@@ -406,7 +406,7 @@ class LiveCommerceEngine {
         phone: buyerPhone,
         customerName: buyerName,
         description: `Smart Escrow Live: ${productName}`,
-        callbackUrl: 'https://nana-payment-api.onrender.com/api/chat-finance/webhook'
+        callbackUrl: 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/chat-finance/webhook'
       });
       paymentUrl = sebpayRes.provider_link || sebpayRes.redirectUrl;
     } catch {}

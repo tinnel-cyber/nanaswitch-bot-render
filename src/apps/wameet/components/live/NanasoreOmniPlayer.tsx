@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { LiveSession, LiveAspectRatio, LiveSessionMode, LiveSourceType } from '../../../../types/liveSession';
 import { StoreProductItem } from '../../../../components/storeBuilder/types';
+import { HlsLivePlayer } from './HlsLivePlayer';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface NanasoreOmniPlayerProps {
@@ -563,6 +564,16 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                 className="w-full h-full border-none"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
+              />
+            ) : embedSource.url.includes('.m3u8') || embedSource.url.includes('live') ? (
+              <HlsLivePlayer
+                src={embedSource.url}
+                storeSlug={session.id}
+                storeName={session.storeName}
+                posterUrl={session.posterUrl}
+                autoPlay={isPlaying}
+                muted={isMuted}
+                className="w-full h-full"
               />
             ) : (
               <video

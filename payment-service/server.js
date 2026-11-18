@@ -1170,7 +1170,7 @@ app.post(['/api/payment/sebpay/collections', '/api/payment/sebpay/initiate'], as
       req.body.callbackUrl ||
       process.env.PAYMENT_CALLBACK_URL ||
       process.env.PAYMENT_WEBHOOK_URL ||
-      'https://nana-payment-api.onrender.com/api/payment/webhook';
+      'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook';
 
     const requestedGateway = req.body.gateway || req.query.gateway || switchManager.getPrimaryGateway();
     const autoFailover = req.query.failover !== 'false' && req.body.failover !== false;
@@ -1589,7 +1589,7 @@ app.post(['/api/payment/saspay/payin', '/api/payment/saspay/initiate'], async (r
       req.body.callback_url ||
       req.body.callbackUrl ||
       process.env.PAYMENT_CALLBACK_URL ||
-      'https://nana-payment-api.onrender.com/api/payment/saspay/webhook';
+      'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/saspay/webhook';
 
     const saspayResult = await createSaspayPayin({
       tenantId,
@@ -1675,7 +1675,7 @@ app.post('/api/payment/saspay/payout', async (req, res) => {
       req.body.callback_url ||
       req.body.callbackUrl ||
       process.env.PAYMENT_CALLBACK_URL ||
-      'https://nana-payment-api.onrender.com/api/payment/saspay/webhook';
+      'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/saspay/webhook';
 
     const payoutResult = await createSaspayPayout({
       tenantId,
@@ -2215,7 +2215,7 @@ app.post(['/api/escrow/initiate', '/api/payments/escrow/initiate'], async (req, 
 
     console.log(`[SMART ESCROW INITIATE] ${transactionId} | Article: ${itemTitle} | Montant: ${amount} ${currency}`);
 
-    const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PAYMENT_WEBHOOK_URL || 'https://nana-payment-api.onrender.com/api/payment/webhook';
+    const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PAYMENT_WEBHOOK_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook';
 
     const targetGateway = req.body.gateway || switchManager.getPrimaryGateway();
     const sebpayResult = await switchManager.initiatePaymentWithFailover(targetGateway, {

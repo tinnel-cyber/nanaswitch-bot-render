@@ -66,6 +66,7 @@ import {
 } from './src/server/videoProcessingService';
 import { attachGrowthAdvisorRoutes } from './src/server/growthAdvisorController';
 import { attachCampaignsRoutes } from './src/server/campaignsController';
+import { attachLiveRelayRoutes } from './src/server/liveRelayController';
 
 export { compressVideoTo480p };
 
@@ -182,6 +183,36 @@ async function callGeminiWithRetry(
 
 async function startServer() {
   const app = express();
+
+  // Configuration CORS avancée pour nanasore.com, *.nanasore.com, nsore.shop, *.code.run et environnement local
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      const allowedPatterns = [
+        /^https?:\/\/localhost(:\d+)?$/,
+        /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nanasore\.com$/,
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nsore\.shop$/,
+        /^https:\/\/([a-zA-Z0-9-]+\.)*code\.run$/,
+        /^https:\/\/([a-zA-Z0-9-]+\.)*onrender\.com$/
+      ];
+
+      const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+      if (isAllowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-nanaswitch-key, x-tenant-id, x-requested-with, Accept, Origin');
+      }
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  });
 
   // Security Hardening Headers
   app.use((_req, res, next) => {
@@ -1469,6 +1500,9 @@ async function startServer() {
   // Moteur d'E-mailing Pro Marchand & Relais Brevo API v3 (Campagnes Ciblées & Quotas)
   attachCampaignsRoutes(app);
 
+  // Moteur de Live Streaming WebRTC WHIP / HLS & Relais RTMP MediaMTX (Northflank)
+  attachLiveRelayRoutes(app);
+
   // Proxy endpoint pour Nana-générateur vers backend AWS Lambda officiel (Replicate & HLS centralisé côté AWS Lambda)
   const forwardToAwsLambda = async (req: express.Request, res: express.Response) => {
     try {
@@ -1507,9 +1541,11 @@ async function startServer() {
   // ============================================================================
   const PRIMARY_FIXIE_IP = '54.195.3.54';
   const PAYMENT_API_BASE_URL = 
+    process.env.API_URL ||
+    process.env.VITE_API_URL ||
     process.env.PAYMENT_API_URL || 
     process.env.VITE_PAYMENT_API_URL || 
-    'https://nana-payment-api.onrender.com';
+    'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
   // Endpoint Diagnostic IP Statique Fixie vue par les banques partenaires
   app.get('/api/payment/ip', async (req, res) => {

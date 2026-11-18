@@ -14,7 +14,12 @@ routes = [
 [vars]
 ENVIRONMENT = "production"
 APP_NAME = "Nanasore Edge Router & Stock Circuit Breaker"
-RENDER_BACKEND_URL = "nanaswitch-bot-render-0kqp.onrender.com"
+BACKEND_URL = "p02--nanaswitch-bot--p8yx28yyjhbx.code.run"
+RENDER_BACKEND_URL = "p02--nanaswitch-bot--p8yx28yyjhbx.code.run"
+NORTHFLANK_BACKEND_URL = "p02--nanaswitch-bot--p8yx28yyjhbx.code.run"
+PAYMENT_API_URL = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run"
+LIVE_WHIP_URL = "https://p01--nanasore-live--p8yx28yyjhbx.code.run"
+LIVE_HLS_URL = "https://p02--nanasore-live--p8yx28yyjhbx.code.run"
 
 # Liaison Cloudflare KV pour le cache et circuit breaker de stock temps réel à l'Edge
 [[kv_namespaces]]

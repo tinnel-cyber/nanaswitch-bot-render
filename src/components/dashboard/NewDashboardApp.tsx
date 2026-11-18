@@ -195,10 +195,9 @@ export interface WebhookDeliveryLog {
   date: string;
 }
 
-// Backend Node.js API base resolution
 const PAYMENT_API_BASE = typeof window !== 'undefined' && window.location.hostname === 'localhost'
   ? 'http://localhost:10000'
-  : 'https://nana-payment-api.onrender.com';
+  : ((import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.VITE_PAYMENT_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run');
 
 // --- PRODUCTION INITIAL DATA (Nettoyage complet des fausses cartes mock) ---
 const INITIAL_APPS: NanaMerchantApp[] = [];

@@ -128,6 +128,7 @@ export function isNativeDomain(rawHostname: string): boolean {
     host.includes('firebaseapp.com') ||
     host.includes('cloudflarepreviews.com') ||
     host.includes('workers.dev') ||
+    host.includes('code.run') ||
     host.includes('onrender.com')
   ) {
     return true;

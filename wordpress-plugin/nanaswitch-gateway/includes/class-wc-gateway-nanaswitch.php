@@ -80,7 +80,7 @@ class WC_Gateway_NanaSwitch extends WC_Payment_Gateway {
         $this->public_key     = trim($this->get_option('public_key', ''));
         $this->secret_key     = trim($this->get_option('secret_key', ''));
         $this->webhook_secret = trim($this->get_option('webhook_secret', ''));
-        $this->api_base_url   = untrailingslashit($this->get_option('api_base_url', 'https://nana-payment-api.onrender.com'));
+        $this->api_base_url   = untrailingslashit($this->get_option('api_base_url', 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'));
         $this->debug_log      = 'yes' === $this->get_option('debug_log', 'no');
 
         // Hook de sauvegarde des options d'administration
@@ -165,7 +165,7 @@ class WC_Gateway_NanaSwitch extends WC_Payment_Gateway {
                 'title'       => __('URL Endpoint API NanaSwitch Cloud', 'nanaswitch-gateway'),
                 'type'        => 'text',
                 'description' => __('Serveur d\'API Node.js de production par défaut.', 'nanaswitch-gateway'),
-                'default'     => 'https://nana-payment-api.onrender.com',
+                'default'     => 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run',
             ),
             'debug_log' => array(
                 'title'       => __('Journal de Débogage (Debug Log)', 'nanaswitch-gateway'),
