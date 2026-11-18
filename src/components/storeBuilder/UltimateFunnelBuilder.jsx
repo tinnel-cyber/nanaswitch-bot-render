@@ -1803,6 +1803,7 @@ export const UltimateFunnelBuilder = ({
                             ? 'ring-2 ring-amber-500 bg-amber-500/[0.03] shadow-lg'
                             : 'hover:bg-slate-900/40'
                         }`}
+                        style={{ backgroundColor: block.data?.bgColor || undefined }}
                       >
                         {/* Barre d'actions contextuelle au survol */}
                         <div
@@ -2152,6 +2153,16 @@ export const UltimateFunnelBuilder = ({
                     <label className="block text-xs font-bold text-slate-300">
                       Design & Couleurs
                     </label>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Couleur d'Accent</span>
+                      <input
+                        type="color"
+                        value={currentSelectedBlock.data?.accentColor || customizationSettings?.primaryColor || '#f59e0b'}
+                        onChange={(e) => updateSelectedBlock('accentColor', e.target.value)}
+                        className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
+                      />
+                    </div>
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">Couleur Bouton</span>
@@ -3417,9 +3428,9 @@ export const UltimateFunnelBuilder = ({
 // ============================================================================
 function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
   const d = block.data || {};
-  const themePrimary = customizationSettings?.primaryColor || '#f59e0b';
-  const themeAccent = customizationSettings?.accentColor || '#fbbf24';
-  const btnBg = (d.btnBgColor && d.btnBgColor !== '#f59e0b') ? d.btnBgColor : themePrimary;
+  const themePrimary = d.accentColor || customizationSettings?.primaryColor || '#f59e0b';
+  const themeAccent = d.accentSecondary || customizationSettings?.accentColor || '#fbbf24';
+  const btnBg = (d.btnBgColor && d.btnBgColor !== '#f59e0b') ? d.btnBgColor : (d.buttonColor || themePrimary);
 
   switch (block.type) {
     case 'autoplay_video':
@@ -3599,7 +3610,7 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
               {String(d.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">MINUTES</span>
             </div>
             <span>:</span>
-            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-rose-400">
+            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800" style={{ color: themePrimary }}>
               {String(d.initialSeconds || 45).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">SECONDES</span>
             </div>
           </div>
@@ -3610,7 +3621,7 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
       return (
         <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 max-w-md mx-auto space-y-2">
           <div className="flex items-center justify-between text-xs font-bold">
-            <span className="flex items-center gap-1.5 text-rose-400">
+            <span className="flex items-center gap-1.5" style={{ color: themePrimary }}>
               <Flame className="w-3.5 h-3.5" />
               <span>{d.text}</span>
             </span>

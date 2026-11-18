@@ -1530,6 +1530,45 @@ export const FunnelBuilder = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Synchronisation dynamique quand les données du produit/tunnel changent (vue publique ou chargement asynchrone)
+  useEffect(() => {
+    if (!product) return;
+    const s = product.settings || product.modular_funnel?.settings || product.modularFunnel?.settings || {};
+    const existingBrand = product.brandColor || product.primaryColor || s.brandColor || s.primaryColor;
+    if (existingBrand || s.themePreset || s.bgColor || s.buttonColor) {
+      setFunnelSettings(prev => ({
+        ...prev,
+        ...s,
+        brandColor: existingBrand || prev.brandColor,
+        primaryColor: existingBrand || prev.primaryColor,
+        bgColor: s.bgColor || prev.bgColor,
+        buttonColor: s.buttonColor || existingBrand || prev.buttonColor
+      }));
+    }
+    const incomingBlocks = (product.blocks && Array.isArray(product.blocks) && product.blocks.length > 0)
+      ? product.blocks
+      : (product.modular_funnel?.blocks && Array.isArray(product.modular_funnel.blocks) && product.modular_funnel.blocks.length > 0)
+      ? product.modular_funnel.blocks
+      : null;
+    if (incomingBlocks && incomingBlocks.length > 0) {
+      setFunnelPages(prevPages => {
+        return prevPages.map(page => {
+          if (page.id === 1) {
+            return {
+              ...page,
+              variants: {
+                ...page.variants,
+                A: incomingBlocks
+              },
+              blocks: incomingBlocks
+            };
+          }
+          return page;
+        });
+      });
+    }
+  }, [product]);
+
   // Génération de slug URL propre
   const slugifyPath = useCallback((text) => {
     if (!text) return '/';
@@ -2217,6 +2256,8 @@ export const FunnelBuilder = ({
 
   const renderBlockWYSIWYG = (block) => {
     const data = block.data || {};
+    const blockAccent = data.accentColor || activeBrandColor;
+    const blockBtnColor = data.buttonColor || activeBtnColor;
 
     switch (block.type) {
       case 'scrollytelling':
@@ -2268,30 +2309,61 @@ export const FunnelBuilder = ({
 
       case 'urgency':
         return (
-          <div className="py-4 px-4 bg-gradient-to-r from-rose-950/80 via-slate-950 to-rose-950/80 border-y border-rose-500/30 text-center space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 text-xs font-black uppercase tracking-wider animate-pulse">
-              <Flame className="w-3.5 h-3.5 fill-current" />
+          <div
+            className="py-4 px-4 border-y text-center space-y-3"
+            style={{
+              background: data.bgColor || `linear-gradient(to right, ${blockAccent}18, rgba(2, 6, 23, 0.95), ${blockAccent}18)`,
+              borderColor: `${blockAccent}40`
+            }}
+          >
+            <div
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider animate-pulse border shadow-md"
+              style={{
+                backgroundColor: `${blockAccent}20`,
+                borderColor: `${blockAccent}50`,
+                color: blockAccent
+              }}
+            >
+              <Flame className="w-3.5 h-3.5 fill-current" style={{ color: blockAccent }} />
               <span>{data.headline || 'VENTE FLASH SPÉCIALE • OFFRE LIMITÉE'}</span>
             </div>
 
             {/* Compteur à rebours interactif en temps réel */}
             <div className="flex items-center justify-center gap-3 text-white">
-              <div className="bg-slate-900 border border-rose-500/40 rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]">
-                <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono leading-none">
+              <div
+                className="bg-slate-900 border rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]"
+                style={{ borderColor: `${blockAccent}40` }}
+              >
+                <div
+                  className="text-xl sm:text-2xl font-black font-mono leading-none"
+                  style={{ color: blockAccent }}
+                >
                   {String(data.countdownHours ?? 11).padStart(2, '0')}
                 </div>
                 <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold mt-1">Heures</div>
               </div>
-              <span className="text-xl font-black text-rose-400 animate-pulse">:</span>
-              <div className="bg-slate-900 border border-rose-500/40 rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]">
-                <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono leading-none">
+              <span className="text-xl font-black animate-pulse" style={{ color: blockAccent }}>:</span>
+              <div
+                className="bg-slate-900 border rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]"
+                style={{ borderColor: `${blockAccent}40` }}
+              >
+                <div
+                  className="text-xl sm:text-2xl font-black font-mono leading-none"
+                  style={{ color: blockAccent }}
+                >
                   {String(data.countdownMinutes ?? 42).padStart(2, '0')}
                 </div>
                 <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold mt-1">Minutes</div>
               </div>
-              <span className="text-xl font-black text-rose-400 animate-pulse">:</span>
-              <div className="bg-slate-900 border border-rose-500/40 rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]">
-                <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono leading-none">
+              <span className="text-xl font-black animate-pulse" style={{ color: blockAccent }}>:</span>
+              <div
+                className="bg-slate-900 border rounded-xl px-3 py-1.5 shadow-lg min-w-[55px]"
+                style={{ borderColor: `${blockAccent}40` }}
+              >
+                <div
+                  className="text-xl sm:text-2xl font-black font-mono leading-none"
+                  style={{ color: blockAccent }}
+                >
                   {String(liveSeconds).padStart(2, '0')}
                 </div>
                 <div className="text-[9px] uppercase tracking-wider text-slate-400 font-bold mt-1">Secondes</div>
@@ -2301,7 +2373,7 @@ export const FunnelBuilder = ({
             {/* Jauge de stocks restants */}
             <div className="max-w-md mx-auto space-y-1.5 pt-1">
               <div className="flex items-center justify-between text-xs text-slate-300 font-bold">
-                <span className="text-rose-400 flex items-center gap-1">
+                <span className="flex items-center gap-1" style={{ color: blockAccent }}>
                   <AlertTriangle className="w-3.5 h-3.5" />
                   Plus que {data.stockRemaining || 7} unités en stock !
                 </span>
@@ -2309,15 +2381,18 @@ export const FunnelBuilder = ({
               </div>
               <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
                 <div
-                  className="h-full bg-gradient-to-r from-rose-500 to-amber-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(10, ((data.stockRemaining || 7) / (data.stockTotal || 50)) * 100))}%` }}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.min(100, Math.max(10, ((data.stockRemaining || 7) / (data.stockTotal || 50)) * 100))}%`,
+                    background: `linear-gradient(to right, ${blockAccent}, #f59e0b)`
+                  }}
                 />
               </div>
             </div>
 
             {data.liveBuyerName && (
-              <p className="text-[11px] text-amber-300 font-medium flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+              <p className="text-[11px] font-medium flex items-center justify-center gap-1.5" style={{ color: blockAccent }}>
+                <span className="w-2 h-2 rounded-full animate-ping inline-block" style={{ backgroundColor: blockAccent }} />
                 <span>{data.liveBuyerName}</span>
               </p>
             )}
@@ -2331,7 +2406,13 @@ export const FunnelBuilder = ({
             {(data.showAvatar || data.instructorAvatar) && (
               <div className="flex items-center justify-center gap-3 mx-auto pb-2 animate-in fade-in zoom-in-95 duration-200">
                 <div className="relative group">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-rose-500 to-indigo-500 shadow-xl shadow-amber-500/20">
+                  <div
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full p-0.5 shadow-xl"
+                    style={{
+                      background: `linear-gradient(to top right, #f59e0b, ${blockAccent}, #6366f1)`,
+                      boxShadow: `0 10px 25px ${blockAccent}35`
+                    }}
+                  >
                     <img
                       src={data.instructorAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
                       alt={data.authorName || "Visage Formateur"}
@@ -2339,14 +2420,24 @@ export const FunnelBuilder = ({
                       loading="lazy"
                     />
                   </div>
-                  <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-400 border-2 border-slate-900 flex items-center justify-center text-[8px] text-slate-950 font-black">
+                  <span
+                    className="absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-900 flex items-center justify-center text-[8px] text-slate-950 font-black"
+                    style={{ backgroundColor: blockAccent }}
+                  >
                     ✓
                   </span>
                 </div>
                 <div className="text-left">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-black text-white">{data.authorName || 'Expert Formateur'}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
+                    <span
+                      className="px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                      style={{
+                        backgroundColor: `${blockAccent}20`,
+                        borderColor: `${blockAccent}40`,
+                        color: blockAccent
+                      }}
+                    >
                       Certifié
                     </span>
                   </div>
@@ -2357,10 +2448,10 @@ export const FunnelBuilder = ({
 
             {data.promoBadge && (
               <div
-                style={{ backgroundColor: `${activeBrandColor}20`, borderColor: `${activeBrandColor}50`, color: activeBrandColor }}
+                style={{ backgroundColor: `${blockAccent}20`, borderColor: `${blockAccent}50`, color: blockAccent }}
                 className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black shadow-lg animate-pulse border"
               >
-                <Flame className="w-3.5 h-3.5" style={{ color: activeBrandColor }} />
+                <Flame className="w-3.5 h-3.5" style={{ color: blockAccent }} />
                 <span>{data.promoBadge}</span>
               </div>
             )}
@@ -2384,9 +2475,9 @@ export const FunnelBuilder = ({
                   triggerToast('⚡ Défilement fluide vers le bon de commande !');
                 }}
                 style={{
-                  backgroundColor: activeBtnColor,
+                  backgroundColor: blockBtnColor,
                   color: funnelSettings.buttonTextColor || '#000000',
-                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                  boxShadow: `0 10px 25px ${blockAccent}50`
                 }}
                 className="w-full py-4 px-6 rounded-2xl text-sm sm:text-base font-black transition flex items-center justify-center gap-2 shadow-2xl cursor-pointer active:scale-95 hover:brightness-110"
               >
@@ -2403,12 +2494,12 @@ export const FunnelBuilder = ({
 
             <div className="pt-4 flex items-center justify-center gap-4 text-[11.5px] text-slate-400 flex-wrap">
               <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="w-4 h-4" style={{ color: blockAccent }} />
                 {data.badgeLocation || 'Zone UEMOA & Afrique de l\'Ouest'}
               </span>
               <span>•</span>
               <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                <CheckCircle2 className="w-4 h-4" style={{ color: blockAccent }} />
                 Paiement Mobile Money Direct
               </span>
             </div>
@@ -2425,7 +2516,10 @@ export const FunnelBuilder = ({
             </div>
 
             {videoYtId ? (
-              <div className="relative aspect-video w-full rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl bg-slate-950">
+              <div
+                style={{ borderColor: `${blockAccent}40` }}
+                className="relative aspect-video w-full rounded-3xl overflow-hidden border-2 shadow-2xl bg-slate-950"
+              >
                 <StealthYouTubePlayer
                   videoUrl={`https://www.youtube.com/watch?v=${videoYtId}`}
                   title={data.headline || 'Vidéo de Vente'}
@@ -2433,7 +2527,10 @@ export const FunnelBuilder = ({
                 />
               </div>
             ) : (
-              <div className="relative aspect-video w-full rounded-3xl overflow-hidden border-2 border-indigo-500/40 shadow-2xl bg-slate-950 group">
+              <div
+                style={{ borderColor: `${blockAccent}40` }}
+                className="relative aspect-video w-full rounded-3xl overflow-hidden border-2 shadow-2xl bg-slate-950 group"
+              >
                 <img
                   src={data.posterUrl || 'https://images.unsplash.com/photo-1579389083078-4e7018379f7e?w=1200&auto=format&fit=crop&q=80'}
                   alt="Poster VSL"
@@ -2442,17 +2539,20 @@ export const FunnelBuilder = ({
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent flex flex-col justify-between p-4">
                   <div className="flex items-center justify-between">
                     <span className="px-3 py-1 rounded-xl bg-slate-950/80 backdrop-blur-md border border-slate-700 text-[11px] font-bold text-slate-200 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: blockAccent }} />
                       {data.liveBadgeText || 'Extrait en Direct'}
                     </span>
-                    <span className="px-2.5 py-1 rounded-xl bg-slate-950/80 backdrop-blur-md border border-slate-700 text-[10.5px] font-mono text-amber-300">
+                    <span className="px-2.5 py-1 rounded-xl bg-slate-950/80 backdrop-blur-md border border-slate-700 text-[10.5px] font-mono" style={{ color: blockAccent }}>
                       👥 {data.viewersCount || 247} spectateurs
                     </span>
                   </div>
 
                   <div className="flex items-center justify-center">
-                    <div className="w-16 h-16 rounded-full bg-indigo-600/90 border-2 border-white text-white flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform cursor-pointer">
-                      <Play className="w-7 h-7 fill-white ml-1" />
+                    <div
+                      style={{ backgroundColor: blockBtnColor, boxShadow: `0 0 35px ${blockAccent}80` }}
+                      className="w-16 h-16 rounded-full text-slate-950 flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform cursor-pointer"
+                    >
+                      <Play className="w-7 h-7 fill-current ml-1" />
                     </div>
                   </div>
 
@@ -2465,7 +2565,7 @@ export const FunnelBuilder = ({
                       onClick={(e) => { e.stopPropagation(); setIsVideoMuted(!isVideoMuted); }}
                       className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                     >
-                      {isVideoMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                      {isVideoMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5" style={{ color: blockAccent }} />}
                       <span>{isVideoMuted ? 'Activer le Son' : 'Son Actif'}</span>
                     </button>
                   </div>
@@ -2480,7 +2580,7 @@ export const FunnelBuilder = ({
         return (
           <div className="space-y-6 py-6 px-4">
             <div className="text-center space-y-2 max-w-xl mx-auto">
-              <span className="text-[10.5px] font-black text-emerald-400 uppercase tracking-wider block">
+              <span className="text-[10.5px] font-black uppercase tracking-wider block" style={{ color: blockAccent }}>
                 {data.sectionTag || 'RÉSULTATS TANGIBLES'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">
@@ -2495,19 +2595,27 @@ export const FunnelBuilder = ({
               {(data.items || []).map((item, idx) => (
                 <div
                   key={item.id || idx}
-                  className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/40 transition-colors flex flex-col justify-between space-y-3"
+                  style={{ borderColor: `${blockAccent}25` }}
+                  className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border hover:border-opacity-80 transition-colors flex flex-col justify-between space-y-3"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 font-black text-xs flex items-center justify-center border border-emerald-500/30">
+                    <span
+                      className="w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center border"
+                      style={{
+                        backgroundColor: `${blockAccent}20`,
+                        borderColor: `${blockAccent}40`,
+                        color: blockAccent
+                      }}
+                    >
                       {item.number || `0${idx + 1}`}
                     </span>
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <CheckCircle className="w-5 h-5" style={{ color: blockAccent }} />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">{item.title}</h4>
                     <p className="text-xs text-slate-300 mt-1 leading-relaxed">{item.desc}</p>
                   </div>
-                  <span className="text-[10px] text-emerald-400 font-black uppercase tracking-wider">
+                  <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: blockAccent }}>
                     Opérationnel Immédiat ✓
                   </span>
                 </div>
@@ -2520,7 +2628,7 @@ export const FunnelBuilder = ({
         return (
           <div className="py-6 px-4 space-y-4">
             <div className="text-center space-y-1 max-w-xl mx-auto">
-              <span className="text-[10px] font-black uppercase tracking-wider text-sky-400">
+              <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: blockAccent }}>
                 {data.sectionTag || 'IMPACT & PERFORMANCE EN AFRIQUE'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">{data.sectionTitle}</h3>
@@ -2530,9 +2638,10 @@ export const FunnelBuilder = ({
               {(data.metrics || []).map((m, idx) => (
                 <div
                   key={m.id || idx}
-                  className="p-4 rounded-2xl bg-slate-900/95 border border-sky-500/20 text-center space-y-1 shadow-lg"
+                  style={{ borderColor: `${blockAccent}30` }}
+                  className="p-4 rounded-2xl bg-slate-900/95 border text-center space-y-1 shadow-lg"
                 >
-                  <div className="text-xl sm:text-2xl font-black text-sky-400 font-mono">
+                  <div className="text-xl sm:text-2xl font-black font-mono" style={{ color: blockAccent }}>
                     {m.value}
                   </div>
                   <div className="text-xs font-bold text-white leading-tight">{m.label}</div>
@@ -2547,7 +2656,7 @@ export const FunnelBuilder = ({
         return (
           <div className="py-6 px-4 space-y-6">
             <div className="text-center space-y-1.5 max-w-xl mx-auto">
-              <span className="text-[10px] font-black uppercase tracking-wider text-pink-400">
+              <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: blockAccent }}>
                 {data.sectionTag || 'POURQUOI FAIRE CE CHOIX'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">{data.sectionTitle}</h3>
@@ -2574,15 +2683,24 @@ export const FunnelBuilder = ({
               </div>
 
               {/* Colonne Avec NaNa */}
-              <div className="p-5 rounded-3xl bg-emerald-950/30 border-2 border-emerald-500/50 space-y-3 shadow-xl">
-                <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-wider pb-2 border-b border-emerald-900/40">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <div
+                style={{
+                  backgroundColor: `${blockAccent}12`,
+                  borderColor: `${blockAccent}60`
+                }}
+                className="p-5 rounded-3xl border-2 space-y-3 shadow-xl"
+              >
+                <div
+                  className="flex items-center gap-2 font-black text-xs uppercase tracking-wider pb-2 border-b"
+                  style={{ color: blockAccent, borderColor: `${blockAccent}35` }}
+                >
+                  <CheckCircle2 className="w-4 h-4" style={{ color: blockAccent }} />
                   <span>{data.withTitle || 'Avec la Solution NaNa Pro'}</span>
                 </div>
                 <div className="space-y-2.5">
                   {(data.points || []).map((pt, idx) => (
                     <div key={idx} className="flex items-start gap-2 text-xs text-slate-200 font-medium">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: blockAccent }} />
                       <span>{pt.with}</span>
                     </div>
                   ))}
@@ -2595,23 +2713,37 @@ export const FunnelBuilder = ({
       case 'founder':
         return (
           <div className="py-6 px-4">
-            <div className="max-w-2xl mx-auto rounded-3xl bg-gradient-to-b from-slate-900/90 to-slate-950 border border-purple-500/30 p-6 sm:p-8 space-y-4 shadow-2xl">
+            <div
+              style={{ borderColor: `${blockAccent}40` }}
+              className="max-w-2xl mx-auto rounded-3xl bg-gradient-to-b from-slate-900/90 to-slate-950 border p-6 sm:p-8 space-y-4 shadow-2xl"
+            >
               <div className="flex items-center gap-4">
                 <img
                   src={data.authorImage}
                   alt={data.authorName}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-purple-500/50 shadow-lg"
+                  style={{ borderColor: `${blockAccent}60` }}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 shadow-lg"
                 />
                 <div>
                   <h4 className="text-base sm:text-lg font-black text-white">{data.authorName}</h4>
-                  <p className="text-xs text-purple-400 font-semibold">{data.authorRole}</p>
-                  <span className="inline-block mt-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                  <p className="text-xs font-semibold" style={{ color: blockAccent }}>{data.authorRole}</p>
+                  <span
+                    style={{
+                      color: blockAccent,
+                      backgroundColor: `${blockAccent}15`,
+                      borderColor: `${blockAccent}35`
+                    }}
+                    className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full border font-bold"
+                  >
                     ✓ Fondateur Vérifié NaNa
                   </span>
                 </div>
               </div>
 
-              <h5 className="text-sm sm:text-base font-bold text-slate-200 italic border-l-2 border-purple-500 pl-3">
+              <h5
+                style={{ borderLeftColor: blockAccent }}
+                className="text-sm sm:text-base font-bold text-slate-200 italic border-l-2 pl-3"
+              >
                 {data.title}
               </h5>
 
@@ -2619,7 +2751,7 @@ export const FunnelBuilder = ({
               <p className="text-xs text-slate-300 leading-relaxed">{data.paragraph2}</p>
 
               <div className="pt-2 text-right">
-                <span className="text-xs font-mono font-bold text-purple-300 italic">
+                <span className="text-xs font-mono font-bold italic" style={{ color: blockAccent }}>
                   {data.signatureText}
                 </span>
               </div>
@@ -2632,13 +2764,20 @@ export const FunnelBuilder = ({
           <div className="space-y-6 py-6 px-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <span className="text-[10.5px] font-black text-amber-400 uppercase tracking-wider block">
+                <span className="text-[10.5px] font-black uppercase tracking-wider block" style={{ color: blockAccent }}>
                   {data.sectionTag || 'PREUVE SOCIALE'}
                 </span>
                 <h3 className="text-xl font-black text-white">{data.sectionTitle}</h3>
               </div>
-              <div className="flex items-center gap-1 text-xs text-amber-400 font-bold bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-                <Star className="w-3.5 h-3.5 fill-current" />
+              <div
+                style={{
+                  color: blockAccent,
+                  backgroundColor: `${blockAccent}15`,
+                  borderColor: `${blockAccent}35`
+                }}
+                className="flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full border"
+              >
+                <Star className="w-3.5 h-3.5 fill-current" style={{ color: blockAccent }} />
                 <span>{data.ratingText || '4.95 / 5 (840+ avis)'}</span>
               </div>
             </div>
@@ -2647,12 +2786,13 @@ export const FunnelBuilder = ({
               {(data.testimonials || []).map((t, idx) => (
                 <div
                   key={t.id || idx}
-                  className="p-4 rounded-2xl bg-slate-900/95 border border-slate-800 flex flex-col justify-between space-y-3 shadow-lg"
+                  style={{ borderColor: `${blockAccent}25` }}
+                  className="p-4 rounded-2xl bg-slate-900/95 border flex flex-col justify-between space-y-3 shadow-lg"
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center gap-1 text-amber-400">
+                    <div className="flex items-center gap-1" style={{ color: blockAccent }}>
                       {[...Array(t.rating || 5)].map((_, i) => (
-                        <Star key={i} className="w-3.5 h-3.5 fill-current" />
+                        <Star key={i} className="w-3.5 h-3.5 fill-current" style={{ color: blockAccent }} />
                       ))}
                     </div>
                     <p className="text-xs text-slate-300 italic leading-relaxed">
@@ -2664,7 +2804,8 @@ export const FunnelBuilder = ({
                     <img
                       src={t.avatarUrl}
                       alt={t.name}
-                      className="w-9 h-9 rounded-full object-cover border border-amber-500/40"
+                      style={{ borderColor: `${blockAccent}40` }}
+                      className="w-9 h-9 rounded-full object-cover border"
                     />
                     <div className="truncate">
                       <h5 className="text-xs font-bold text-white truncate">{t.name}</h5>
@@ -2682,7 +2823,7 @@ export const FunnelBuilder = ({
           <div className="space-y-6 py-6 px-4">
             <div className="text-center space-y-2 max-w-xl mx-auto">
               <span
-                style={{ backgroundColor: `${activeBrandColor}20`, borderColor: `${activeBrandColor}50`, color: activeBrandColor }}
+                style={{ backgroundColor: `${blockAccent}20`, borderColor: `${blockAccent}50`, color: blockAccent }}
                 className="px-3 py-1 rounded-full text-xs font-black border inline-block"
               >
                 {data.discountBadge || 'TARIF PRIVILÉGIÉ'}
@@ -2692,7 +2833,7 @@ export const FunnelBuilder = ({
 
             {/* Carte Offre Choc */}
             <div
-              style={{ borderColor: `${activeBrandColor}50` }}
+              style={{ borderColor: `${blockAccent}50` }}
               className="max-w-xl mx-auto rounded-3xl bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border-2 p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden"
             >
               <div className="text-center space-y-2">
@@ -2700,7 +2841,7 @@ export const FunnelBuilder = ({
                 <span className="text-lg line-through text-slate-500 font-bold">
                   {formatCFA(data.originalPrice || 49000)}
                 </span>
-                <div className="text-3xl sm:text-5xl font-black flex items-baseline justify-center gap-2" style={{ color: activeBrandColor }}>
+                <div className="text-3xl sm:text-5xl font-black flex items-baseline justify-center gap-2" style={{ color: blockAccent }}>
                   <span>{formatCFA(data.discountPrice || 24500)}</span>
                 </div>
               </div>
@@ -2717,7 +2858,7 @@ export const FunnelBuilder = ({
                         <Gift className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         <span className="text-slate-200 truncate">{b.title}</span>
                       </div>
-                      <span className="font-bold whitespace-nowrap" style={{ color: activeBrandColor }}>
+                      <span className="font-bold whitespace-nowrap" style={{ color: blockAccent }}>
                         Offert ({formatCFA(b.value)})
                       </span>
                     </div>
@@ -2737,9 +2878,9 @@ export const FunnelBuilder = ({
                   });
                 }}
                 style={{
-                  backgroundColor: activeBtnColor,
+                  backgroundColor: blockBtnColor,
                   color: funnelSettings.buttonTextColor || '#000000',
-                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                  boxShadow: `0 10px 25px ${blockAccent}50`
                 }}
                 className="w-full py-4 rounded-2xl hover:brightness-110 text-slate-950 text-base font-black transition flex items-center justify-center gap-2 shadow-2xl cursor-pointer"
               >
@@ -2758,7 +2899,7 @@ export const FunnelBuilder = ({
         return (
           <div id="checkout" data-block-type="checkout" className="py-6 px-4 space-y-6">
             <div className="text-center space-y-1.5 max-w-xl mx-auto">
-              <span className="text-[10.5px] font-black uppercase tracking-wider" style={{ color: activeBrandColor }}>
+              <span className="text-[10.5px] font-black uppercase tracking-wider" style={{ color: blockAccent }}>
                 {data.sectionTag || 'COMMANDE SÉCURISÉE EN 1 MINUTE'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">{data.sectionTitle}</h3>
@@ -2768,7 +2909,7 @@ export const FunnelBuilder = ({
             </div>
 
             <div
-              style={{ borderColor: `${activeBrandColor}50` }}
+              style={{ borderColor: `${blockAccent}50` }}
               className="max-w-xl mx-auto bg-slate-900 border-2 rounded-3xl p-5 sm:p-7 space-y-5 shadow-2xl"
             >
               {/* Récapitulatif Produit */}
@@ -2781,10 +2922,10 @@ export const FunnelBuilder = ({
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs font-bold text-white truncate">{data.productName}</h4>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-black font-mono" style={{ color: activeBrandColor }}>
+                    <span className="text-xs font-black font-mono" style={{ color: blockAccent }}>
                       {formatCFA(data.productPrice || 24500)}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ color: activeBrandColor, backgroundColor: `${activeBrandColor}18` }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ color: blockAccent, backgroundColor: `${blockAccent}18` }}>
                       Livraison {data.deliveryFee || 'GRATUITE'}
                     </span>
                   </div>
@@ -2898,9 +3039,9 @@ export const FunnelBuilder = ({
                   });
                 }}
                 style={{
-                  backgroundColor: activeBtnColor,
+                  backgroundColor: blockBtnColor,
                   color: funnelSettings.buttonTextColor || '#000000',
-                  boxShadow: `0 10px 25px ${activeBrandColor}50`
+                  boxShadow: `0 10px 25px ${blockAccent}50`
                 }}
                 className="w-full py-4 rounded-2xl text-slate-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-2xl cursor-pointer hover:brightness-110 active:scale-95 transition"
               >
@@ -2918,7 +3059,7 @@ export const FunnelBuilder = ({
               </button>
 
               <p className="text-[10.5px] text-center text-slate-400 flex items-center justify-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <ShieldCheck className="w-3.5 h-3.5" style={{ color: blockAccent }} />
                 <span>{data.guaranteeNotice || 'Paiement sécurisé par protocole bancaire agréé BCEAO'}</span>
               </p>
             </div>
@@ -2928,9 +3069,19 @@ export const FunnelBuilder = ({
       case 'guarantee':
         return (
           <div className="py-6 px-4">
-            <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border border-slate-800 text-center space-y-3 max-w-xl mx-auto shadow-xl">
-              <ShieldCheck className="w-12 h-12 text-cyan-400 mx-auto" />
-              <span className="px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 inline-block">
+            <div
+              style={{ borderColor: `${blockAccent}35` }}
+              className="p-6 sm:p-8 rounded-3xl bg-slate-900/90 border text-center space-y-3 max-w-xl mx-auto shadow-xl"
+            >
+              <ShieldCheck className="w-12 h-12 mx-auto" style={{ color: blockAccent }} />
+              <span
+                style={{
+                  backgroundColor: `${blockAccent}18`,
+                  color: blockAccent,
+                  borderColor: `${blockAccent}40`
+                }}
+                className="px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border inline-block"
+              >
                 {data.badgeText || 'GARANTIE 30 JOURS'}
               </span>
               <h4 className="text-base sm:text-lg font-black text-white">{data.title}</h4>
@@ -2943,7 +3094,7 @@ export const FunnelBuilder = ({
         return (
           <div className="space-y-6 py-6 px-4 max-w-2xl mx-auto">
             <div className="text-center space-y-2">
-              <span className="text-[10.5px] font-black text-indigo-400 uppercase tracking-wider block">
+              <span className="text-[10.5px] font-black uppercase tracking-wider block" style={{ color: blockAccent }}>
                 {data.sectionTag || 'FAQ'}
               </span>
               <h3 className="text-xl sm:text-2xl font-black text-white">{data.sectionTitle}</h3>
@@ -2956,6 +3107,7 @@ export const FunnelBuilder = ({
                 return (
                   <div
                     key={item.id || idx}
+                    style={{ borderColor: isOpenAccordion ? `${blockAccent}60` : undefined }}
                     className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden transition-all"
                   >
                     <button
@@ -2964,10 +3116,13 @@ export const FunnelBuilder = ({
                         e.stopPropagation();
                         setExpandedFaqId(isOpenAccordion ? null : (item.id || `q-${idx}`));
                       }}
-                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-white hover:text-amber-400 transition cursor-pointer"
+                      className="w-full p-4 text-left flex items-center justify-between gap-3 text-xs font-bold text-white transition cursor-pointer"
                     >
-                      <span>{item.q}</span>
-                      <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isOpenAccordion ? 'rotate-180 text-amber-400' : 'text-slate-400'}`} />
+                      <span style={{ color: isOpenAccordion ? blockAccent : undefined }}>{item.q}</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform ${isOpenAccordion ? 'rotate-180' : 'text-slate-400'}`}
+                        style={{ color: isOpenAccordion ? blockAccent : undefined }}
+                      />
                     </button>
                     {isOpenAccordion && (
                       <div className="px-4 pb-4 text-xs text-slate-300 leading-relaxed border-t border-slate-800/60 pt-3">
@@ -2980,8 +3135,14 @@ export const FunnelBuilder = ({
             </div>
 
             {data.whatsappPhone && (
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-1.5">
-                <p className="text-xs text-emerald-300 font-bold">{data.whatsappSupportText}</p>
+              <div
+                style={{
+                  backgroundColor: `${blockAccent}12`,
+                  borderColor: `${blockAccent}40`
+                }}
+                className="p-4 rounded-2xl border text-center space-y-1.5"
+              >
+                <p className="text-xs font-bold" style={{ color: blockAccent }}>{data.whatsappSupportText}</p>
                 <span className="text-[11px] text-slate-400 font-mono">Assistance WhatsApp 7j/7</span>
               </div>
             )}
@@ -3000,7 +3161,7 @@ export const FunnelBuilder = ({
                 </span>
               ))}
             </div>
-            <p className="text-[10px] text-emerald-400/90 font-medium">{data.securitySeals}</p>
+            <p className="text-[10px] font-medium" style={{ color: blockAccent }}>{data.securitySeals}</p>
             <p className="text-[10px] text-slate-600">{data.copyright}</p>
           </div>
         );
@@ -3014,8 +3175,11 @@ export const FunnelBuilder = ({
         return (
           <div className="py-8 px-4 sm:px-8 max-w-4xl mx-auto space-y-6">
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-black uppercase tracking-wider">
-                <ShoppingBag className="w-3.5 h-3.5 text-purple-400" />
+              <div
+                style={{ backgroundColor: `${blockAccent}20`, borderColor: `${blockAccent}40`, color: blockAccent }}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" style={{ color: blockAccent }} />
                 <span>WooCommerce Fast Checkout Direct</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-white">{data.headline}</h2>
@@ -3026,25 +3190,25 @@ export const FunnelBuilder = ({
               {/* Colonne Gauche : Formulaire de Commande */}
               <div className="lg:col-span-7 space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-purple-500 text-white text-[10px] flex items-center justify-center font-bold">1</span>
+                  <span className="w-5 h-5 rounded-full text-slate-950 text-[10px] flex items-center justify-center font-bold" style={{ backgroundColor: blockAccent }}>1</span>
                   <span>Informations de Facturation & Livraison</span>
                 </h3>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 mb-1">Prénom & Nom *</label>
-                    <input type="text" placeholder="Ex: Jean Kouassi" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500" />
+                    <input type="text" placeholder="Ex: Jean Kouassi" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 mb-1">Numéro WhatsApp *</label>
-                    <input type="tel" placeholder="+225 07..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500" />
+                    <input type="tel" placeholder="+225 07..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 mb-1">Ville de Livraison *</label>
-                    <select className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+                    <select className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500">
                       <option>Abidjan (Toutes communes)</option>
                       <option>Bouaké</option>
                       <option>Yamoussoukro</option>
@@ -3054,7 +3218,7 @@ export const FunnelBuilder = ({
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 mb-1">Quartier & Précision</label>
-                    <input type="text" placeholder="Ex: Cocody Angré 8e tranche" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500" />
+                    <input type="text" placeholder="Ex: Cocody Angré 8e tranche" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500" />
                   </div>
                 </div>
 
@@ -3062,8 +3226,8 @@ export const FunnelBuilder = ({
                   <label className="block text-[11px] font-bold text-slate-400 mb-1">Mode de Règlement Préféré</label>
                   <div className="grid grid-cols-2 gap-2">
                     {['Wave (0% Frais)', 'Orange Money', 'Paiement à la Livraison', 'Carte Bancaire'].map((m, idx) => (
-                      <label key={m} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950 flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:border-purple-500/50">
-                        <input type="radio" name={`woo-pay-${block.id}`} defaultChecked={idx === 0} className="accent-purple-500" />
+                      <label key={m} className="p-2.5 rounded-xl border border-slate-800 bg-slate-950 flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:border-amber-500/50">
+                        <input type="radio" name={`woo-pay-${block.id}`} defaultChecked={idx === 0} className="accent-amber-500" />
                         <span className="font-medium text-[11px] truncate">{m}</span>
                       </label>
                     ))}
@@ -3072,9 +3236,12 @@ export const FunnelBuilder = ({
               </div>
 
               {/* Colonne Droite : Récapitulatif Panier & Validation */}
-              <div className="lg:col-span-5 flex flex-col justify-between space-y-4 p-4 rounded-2xl bg-slate-950/90 border border-purple-500/20">
+              <div
+                style={{ borderColor: `${blockAccent}35` }}
+                className="lg:col-span-5 flex flex-col justify-between space-y-4 p-4 rounded-2xl bg-slate-950/90 border"
+              >
                 <div className="space-y-3">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-purple-400">
+                  <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: blockAccent }}>
                     {data.orderSummaryTitle || 'Votre Commande'}
                   </h3>
 
@@ -3083,7 +3250,7 @@ export const FunnelBuilder = ({
                     <div className="min-w-0 flex-1">
                       <h4 className="text-xs font-bold text-white truncate">{data.productName}</h4>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs font-black text-emerald-400 font-mono">{formatCFA(data.productPrice)}</span>
+                        <span className="text-xs font-black font-mono" style={{ color: blockAccent }}>{formatCFA(data.productPrice)}</span>
                         <span className="text-[10px] text-slate-500 line-through font-mono">{formatCFA(data.productOriginalPrice)}</span>
                       </div>
                     </div>
@@ -3104,7 +3271,8 @@ export const FunnelBuilder = ({
                           try { playTapBeep(); } catch(e) {}
                           triggerToast('🎟️ Code promo NANA10 appliqué (-10%) !');
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs cursor-pointer"
+                        style={{ backgroundColor: blockBtnColor }}
+                        className="px-3 py-1.5 rounded-xl text-slate-950 font-bold text-xs cursor-pointer hover:brightness-110"
                       >
                         Appliquer
                       </button>
@@ -3118,15 +3286,15 @@ export const FunnelBuilder = ({
                     </div>
                     <div className="flex justify-between text-slate-400">
                       <span>Livraison :</span>
-                      <span className="text-emerald-400 font-bold">Gratuite (0 FCFA)</span>
+                      <span className="font-bold" style={{ color: blockAccent }}>Gratuite (0 FCFA)</span>
                     </div>
                     <div className="flex justify-between text-slate-400">
                       <span>Remise Promo :</span>
-                      <span className="text-purple-400 font-mono">-10%</span>
+                      <span className="font-mono" style={{ color: blockAccent }}>-10%</span>
                     </div>
                     <div className="flex justify-between text-sm font-black text-white pt-2 border-t border-slate-800">
                       <span>Total à Régler :</span>
-                      <span className="text-emerald-400 font-mono text-base">{formatCFA(Math.round(data.productPrice * 0.9))}</span>
+                      <span className="font-mono text-base" style={{ color: blockAccent }}>{formatCFA(Math.round(data.productPrice * 0.9))}</span>
                     </div>
                   </div>
                 </div>
@@ -3137,7 +3305,12 @@ export const FunnelBuilder = ({
                     try { playCashChime(); } catch(e) {}
                     triggerToast('🛍️ Commande WooCommerce validée avec succès !');
                   }}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-purple-600/30 transition cursor-pointer flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: blockBtnColor,
+                    color: funnelSettings.buttonTextColor || '#000000',
+                    boxShadow: `0 8px 25px ${blockAccent}40`
+                  }}
+                  className="w-full py-3 rounded-xl hover:brightness-110 text-xs font-black shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <span>{data.ctaText}</span>
                 </button>
@@ -3152,8 +3325,11 @@ export const FunnelBuilder = ({
         return (
           <div className="py-8 px-4 sm:px-8 max-w-3xl mx-auto space-y-5">
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-black uppercase tracking-wider">
-                <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
+              <div
+                style={{ backgroundColor: `${blockAccent}20`, borderColor: `${blockAccent}40`, color: blockAccent }}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border"
+              >
+                <Smartphone className="w-3.5 h-3.5" style={{ color: blockAccent }} />
                 <span>Passerelle Mobile Money Côte d'Ivoire & UEMOA</span>
               </div>
               <h2 className="text-xl sm:text-3xl font-black text-white">{data.title}</h2>
@@ -3178,9 +3354,12 @@ export const FunnelBuilder = ({
                     }}
                     className={`p-3 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between h-20 ${
                       (data.selectedOperator || 'wave') === op.id
-                        ? 'bg-slate-800/90 border-cyan-400 shadow-lg ring-2 ring-cyan-500/20'
+                        ? 'bg-slate-800/90 shadow-lg ring-2'
                         : 'bg-slate-950 border-slate-800 hover:border-slate-700'
                     }`}
+                    style={{
+                      borderColor: (data.selectedOperator || 'wave') === op.id ? blockAccent : undefined
+                    }}
                   >
                     <div className="flex items-center justify-between">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: op.color }} />
@@ -3199,7 +3378,7 @@ export const FunnelBuilder = ({
                 <div className="space-y-1">
                   <div className="text-xs font-bold text-white flex items-center gap-1.5">
                     <span>Opérateur sélectionné :</span>
-                    <span className="text-cyan-400 uppercase font-black">{data.selectedOperator || 'wave'}</span>
+                    <span className="uppercase font-black" style={{ color: blockAccent }}>{data.selectedOperator || 'wave'}</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
                     {(data.selectedOperator || 'wave') === 'wave' && 'Vous recevrez une notification directe ou un code QR à scanner.'}
@@ -3210,7 +3389,7 @@ export const FunnelBuilder = ({
                 </div>
                 <div className="text-right shrink-0 font-mono">
                   <div className="text-[10px] text-slate-500">Montant Net :</div>
-                  <div className="text-base font-black text-emerald-400">{formatCFA(data.amountCFA || 24500)}</div>
+                  <div className="text-base font-black" style={{ color: blockAccent }}>{formatCFA(data.amountCFA || 24500)}</div>
                 </div>
               </div>
 
@@ -3221,7 +3400,7 @@ export const FunnelBuilder = ({
                   <input
                     type="tel"
                     placeholder="Ex: 07 00 11 22 33"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
@@ -3231,9 +3410,14 @@ export const FunnelBuilder = ({
                     try { playCashChime(); } catch(e) {}
                     triggerToast(`⚡ Demande de paiement ${data.selectedOperator || 'Wave'} envoyée sur votre téléphone !`);
                   }}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/25 transition cursor-pointer flex items-center justify-center gap-2"
+                  style={{
+                    backgroundColor: blockBtnColor,
+                    color: funnelSettings.buttonTextColor || '#000000',
+                    boxShadow: `0 8px 25px ${blockAccent}40`
+                  }}
+                  className="w-full py-3.5 px-4 rounded-xl hover:brightness-110 font-black text-xs shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <Zap className="w-4 h-4 fill-slate-950" />
+                  <Zap className="w-4 h-4 fill-current" />
                   <span>Payer {formatCFA(data.amountCFA || 24500)} via {(data.selectedOperator || 'wave').toUpperCase()} ⚡</span>
                 </button>
               </div>
@@ -3248,12 +3432,24 @@ export const FunnelBuilder = ({
       case 'cash_on_delivery': {
         return (
           <div className="py-8 px-4 sm:px-8 max-w-2xl mx-auto space-y-5">
-            <div className="p-6 rounded-3xl bg-gradient-to-b from-emerald-950/40 via-slate-900 to-slate-950 border-2 border-emerald-500/50 shadow-2xl text-center space-y-4">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shadow-lg">
+            <div
+              style={{
+                borderColor: `${blockAccent}50`,
+                background: data.bgColor || `linear-gradient(to bottom, ${blockAccent}18, rgba(2, 6, 23, 0.95))`
+              }}
+              className="p-6 rounded-3xl border-2 shadow-2xl text-center space-y-4"
+            >
+              <div
+                style={{ backgroundColor: `${blockAccent}20`, borderColor: `${blockAccent}40`, color: blockAccent }}
+                className="w-12 h-12 mx-auto rounded-2xl border flex items-center justify-center shadow-lg"
+              >
                 <Truck className="w-6 h-6" />
               </div>
 
-              <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-black uppercase">
+              <span
+                style={{ backgroundColor: `${blockAccent}15`, borderColor: `${blockAccent}35`, color: blockAccent }}
+                className="inline-block px-3 py-1 rounded-full border text-[11px] font-black uppercase"
+              >
                 {data.badge}
               </span>
 
@@ -3263,15 +3459,15 @@ export const FunnelBuilder = ({
               {/* 3 Piliers de Réassurance */}
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800 text-left">
                 <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-emerald-400 text-xs font-bold">✓ Inspection</span>
+                  <span className="text-xs font-bold" style={{ color: blockAccent }}>✓ Inspection</span>
                   <div className="text-[10px] text-slate-400 mt-0.5">Avant de payer</div>
                 </div>
                 <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-emerald-400 text-xs font-bold">✓ Livraison</span>
+                  <span className="text-xs font-bold" style={{ color: blockAccent }}>✓ Livraison</span>
                   <div className="text-[10px] text-slate-400 mt-0.5">{data.deliveryTime}</div>
                 </div>
                 <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-emerald-400 text-xs font-bold">✓ Zéro Frais</span>
+                  <span className="text-xs font-bold" style={{ color: blockAccent }}>✓ Zéro Frais</span>
                   <div className="text-[10px] text-slate-400 mt-0.5">0 FCFA d'avance</div>
                 </div>
               </div>
@@ -3294,7 +3490,12 @@ export const FunnelBuilder = ({
                   try { playValidationBeep(); } catch(e) {}
                   triggerToast('🚚 Commande Cash on Delivery enregistrée ! Pop-up de confirmation ouvert.');
                 }}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-xl shadow-emerald-500/25 transition cursor-pointer flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: blockBtnColor,
+                  color: funnelSettings.buttonTextColor || '#000000',
+                  boxShadow: `0 8px 25px ${blockAccent}40`
+                }}
+                className="w-full py-3.5 px-4 rounded-xl hover:brightness-110 font-black text-xs shadow-xl transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <Truck className="w-4 h-4" />
                 <span>{data.ctaText}</span>
@@ -4769,7 +4970,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'banner_stock_ticker_marquee': {
         const bg = data.bgColor || '#1c1002';
-        const accent = data.accentColor || '#f59e0b';
+        const accent = data.accentColor || activeBrandColor;
         const textCol = data.textColor || '#fef3c7';
 
         return (
@@ -4812,7 +5013,7 @@ export const FunnelBuilder = ({
       // ======================================================================
       case 'banner_flash_stock_split': {
         const bg = data.bgColor || '#1f0412';
-        const accent = data.accentColor || '#ec4899';
+        const accent = data.accentColor || activeBrandColor;
         const claimed = Number(data.claimedPercent) || 86;
         const remaining = Number(data.stockRemaining) || 5;
         const total = Number(data.stockTotal) || 40;
@@ -5652,45 +5853,138 @@ export const FunnelBuilder = ({
 
     // 2. ONGLET STYLE DU BLOC SÉLECTIONNÉ
     if (inspectorTab === 'style') {
+      const blockAccent = data.accentColor || activeBrandColor;
+      const blockBtn = data.buttonColor || activeBtnColor;
+
       return (
         <div className="space-y-4">
           <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800">
-            <span className="text-[10px] font-black uppercase text-indigo-400 block">Style du Module</span>
+            <span className="text-[10px] font-black uppercase text-indigo-400 block">Personnalisation Style & Couleurs</span>
             <h4 className="text-xs font-bold text-white">{activeBlock.name}</h4>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Couleur d'Arrière-Plan</label>
+          {/* 1. Couleur d'Accentuation du Module */}
+          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200">Couleur d'Accent / Badge / Titre</label>
+              {data.accentColor && (
+                <button
+                  type="button"
+                  onClick={() => updateBlockField(activeBlock.id, 'accentColor', undefined)}
+                  className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                >
+                  Hériter du thème
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={blockAccent}
+                onChange={(e) => updateBlockField(activeBlock.id, 'accentColor', e.target.value)}
+                className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer shrink-0"
+              />
+              <input
+                type="text"
+                value={data.accentColor || activeBrandColor}
+                placeholder={activeBrandColor}
+                onChange={(e) => updateBlockField(activeBlock.id, 'accentColor', e.target.value)}
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+              />
+            </div>
+            {/* Presets rapides d'accents */}
+            <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+              {[activeBrandColor, '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#ec4899', '#ef4444', '#8b5cf6'].map((col, idx) => (
+                <button
+                  key={`${col}-${idx}`}
+                  type="button"
+                  onClick={() => updateBlockField(activeBlock.id, 'accentColor', col)}
+                  className="w-5 h-5 rounded-full border border-slate-700 hover:scale-110 transition cursor-pointer flex items-center justify-center"
+                  style={{ backgroundColor: col }}
+                  title={col}
+                >
+                  {blockAccent === col && <Check className="w-3 h-3 text-white drop-shadow" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Couleur du Bouton CTA (si le module en contient un) */}
+          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200">Couleur Bouton Action (CTA)</label>
+              {data.buttonColor && (
+                <button
+                  type="button"
+                  onClick={() => updateBlockField(activeBlock.id, 'buttonColor', undefined)}
+                  className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                >
+                  Hériter du thème
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={blockBtn}
+                onChange={(e) => updateBlockField(activeBlock.id, 'buttonColor', e.target.value)}
+                className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer shrink-0"
+              />
+              <input
+                type="text"
+                value={data.buttonColor || activeBtnColor}
+                placeholder={activeBtnColor}
+                onChange={(e) => updateBlockField(activeBlock.id, 'buttonColor', e.target.value)}
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+              />
+            </div>
+          </div>
+
+          {/* 3. Couleur d'Arrière-Plan du Module */}
+          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200">Arrière-Plan du Module</label>
+              {data.bgColor && (
+                <button
+                  type="button"
+                  onClick={() => updateBlockField(activeBlock.id, 'bgColor', undefined)}
+                  className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                >
+                  Transparent / Thème
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="color"
                 value={data.bgColor || '#070b14'}
                 onChange={(e) => updateBlockField(activeBlock.id, 'bgColor', e.target.value)}
-                className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer shrink-0"
               />
               <input
                 type="text"
-                value={data.bgColor || '#070b14'}
+                value={data.bgColor || ''}
+                placeholder="Par défaut (hérite de la page)"
                 onChange={(e) => updateBlockField(activeBlock.id, 'bgColor', e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
               />
             </div>
-          </div>
 
-          <div>
-            <span className="block text-xs font-bold text-slate-300 mb-2">Fonds Prédéfinis Haute Fidélité</span>
-            <div className="grid grid-cols-3 gap-2">
-              {['#070b14', '#041014', '#0b0f19', '#14060b', '#080d1a', '#02040a'].map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => updateBlockField(activeBlock.id, 'bgColor', color)}
-                  className="h-8 rounded-lg border border-slate-700 hover:scale-105 transition cursor-pointer flex items-center justify-center"
-                  style={{ backgroundColor: color }}
-                >
-                  {data.bgColor === color && <Check className="w-3.5 h-3.5 text-white" />}
-                </button>
-              ))}
+            <div className="pt-1">
+              <span className="block text-[10.5px] font-bold text-slate-400 mb-1.5">Fonds Prédéfinis</span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {['#070b14', '#041014', '#0b0f19', '#14060b', '#080d1a', '#02040a', '#180728', '#021815'].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => updateBlockField(activeBlock.id, 'bgColor', color)}
+                    className="h-7 rounded-lg border border-slate-700 hover:scale-105 transition cursor-pointer flex items-center justify-center"
+                    style={{ backgroundColor: color }}
+                  >
+                    {data.bgColor === color && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

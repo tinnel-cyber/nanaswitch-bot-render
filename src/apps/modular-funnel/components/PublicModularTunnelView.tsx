@@ -51,13 +51,28 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
       .then((data) => {
         if (isCancelled) return;
         if (data && (data.blocks?.length || data.pages?.length || data.title)) {
+          const resolvedBrand = data.brandColor || data.primaryColor || data.settings?.brandColor || data.settings?.primaryColor || '#f59e0b';
+          const resolvedBtn = data.buttonColor || data.settings?.buttonColor || resolvedBrand;
+          const resolvedBg = data.bgColor || data.settings?.bgColor || '#070b14';
+
           setFunnelData({
             ...(baseProductFields || {}),
             ...data,
             name: data.product?.name || data.title || baseProductFields?.name || `Offre Spéciale • ${slug}`,
             price: Number(data.salePrice || data.price || baseProductFields?.price) || 25000,
             originalPrice: Number(data.originalPrice || baseProductFields?.originalPrice) || 45000,
-            image: data.ogImageUrl || data.image || data.product?.image || baseProductFields?.image || ''
+            image: data.ogImageUrl || data.image || data.product?.image || baseProductFields?.image || '',
+            brandColor: resolvedBrand,
+            primaryColor: resolvedBrand,
+            buttonColor: resolvedBtn,
+            bgColor: resolvedBg,
+            settings: {
+              ...(data.settings || {}),
+              brandColor: resolvedBrand,
+              primaryColor: resolvedBrand,
+              buttonColor: resolvedBtn,
+              bgColor: resolvedBg
+            }
           });
         } else if (baseProductFields) {
           setFunnelData({
@@ -178,6 +193,7 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
       className={`min-h-screen w-full ${className}`}
     >
       <FunnelBuilder
+        key={funnelData?.id || `${slug}-${funnelData?.brandColor || ''}`}
         product={funnelData}
         isOpen={true}
         isPublicView={true}
