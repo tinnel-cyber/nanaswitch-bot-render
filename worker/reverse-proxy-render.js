@@ -1,7 +1,9 @@
 /**
  * ==============================================================================
- * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Render
+ * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Northflank
  * ==============================================================================
+ */
+
 // Cible Northflank : https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run
 const RENDER_BACKEND_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
 
