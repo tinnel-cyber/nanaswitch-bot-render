@@ -35,6 +35,17 @@
             }
           });
 
+          // Désinscription automatique de tout ancien worker Firebase enregistré
+          if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(reg) {
+                if (reg && reg.active && reg.active.scriptURL && reg.active.scriptURL.indexOf('firebase') !== -1) {
+                  reg.unregister();
+                }
+              });
+            }).catch(function() {});
+          }
+
           // Protection anti-crash de chargement de chunk (module Vite stale après déploiement)
           window.addEventListener('error', function(errEvt) {
             if (errEvt && errEvt.target && errEvt.target.tagName === 'SCRIPT') {

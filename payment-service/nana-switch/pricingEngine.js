@@ -47,7 +47,7 @@ class NanaSwitchPricingEngine {
     if (!db || !tenantId) return null;
 
     try {
-      const admin = require('firebase-admin');
+      const admin = require('../firebase-admin-fallback');
       const nowServer = admin.firestore.FieldValue.serverTimestamp();
       const walletRef = db.collection('wallets').doc(tenantId);
 

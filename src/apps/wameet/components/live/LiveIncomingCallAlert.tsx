@@ -172,9 +172,6 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
 
     const mountHostDaily = async () => {
       try {
-        const DailyIframeModule = await import('@daily-co/daily-js');
-        const DailyIframe: any = DailyIframeModule.default || DailyIframeModule;
-
         if (!isMounted || !hostVideoContainerRef.current) return;
 
         if (hostDailyFrameRef.current) {
@@ -184,42 +181,20 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
           hostDailyFrameRef.current = null;
         }
 
-        const callFrame = DailyIframe.createFrame(hostVideoContainerRef.current, {
-          iframeStyle: {
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            borderRadius: '1.25rem',
-            backgroundColor: '#020617'
-          },
-          showLeaveButton: false,
-          showFullscreenButton: false,
-          theme: {
-            colors: {
-              accent: '#10b981',
-              accentText: '#ffffff',
-              background: '#020617',
-              backgroundAccent: '#0f172a',
-              baseText: '#f8fafc',
-              border: '#1e293b',
-              mainAreaBg: '#020617',
-              mainAreaBgAccent: '#090d16'
-            }
-          }
-        });
+        const iframe = document.createElement('iframe');
+        iframe.src = activeCallRoomUrl;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '1.25rem';
+        iframe.style.backgroundColor = '#020617';
+        iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
 
-        hostDailyFrameRef.current = callFrame;
-
-        callFrame.on('left-meeting', () => {
-          if (isMounted) handleEndCall();
-        });
-
-        await callFrame.join({
-          url: activeCallRoomUrl,
-          userName: 'Vendeur (Ordinateur)'
-        });
+        hostVideoContainerRef.current.innerHTML = '';
+        hostVideoContainerRef.current.appendChild(iframe);
+        hostDailyFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
       } catch (err) {
-        console.error('[HOST DAILY MOUNT ERROR]', err);
+        console.error('[HOST LIVE MOUNT ERROR]', err);
       }
     };
 

@@ -66,7 +66,7 @@ export const CentralLockButton: React.FC<CentralLockButtonProps> = ({
     if (openModalTrigger && openModalTrigger > 0) {
       if (isUnlocked) {
         playValidationBeep();
-        const roomUrl = `https://nanasore.daily.co/vip-${reelId}-${currentUserId || 'guest'}`;
+        const roomUrl = `/wameet?room=vip-${reelId}-${currentUserId || 'guest'}`;
         onLaunchVipSession(roomUrl);
       } else {
         playTapBeep();
@@ -109,7 +109,7 @@ export const CentralLockButton: React.FC<CentralLockButtonProps> = ({
     e.stopPropagation();
     if (isUnlocked) {
       playValidationBeep();
-      const roomUrl = `https://nanasore.daily.co/vip-${reelId}-${currentUserId || 'guest'}`;
+      const roomUrl = `/wameet?room=vip-${reelId}-${currentUserId || 'guest'}`;
       onLaunchVipSession(roomUrl);
     } else {
       playTapBeep();
@@ -181,8 +181,8 @@ export const CentralLockButton: React.FC<CentralLockButtonProps> = ({
       setIsOpenModal(false);
       playValidationBeep();
 
-      // 4. Générer et lancer la session VIP immédiate (Daily.co / Jitsi)
-      const roomUrl = `https://nanasore.daily.co/vip-${reelId}-${currentUserId || 'guest'}`;
+      // 4. Générer et lancer la session VIP immédiate (Wameet / Jitsi)
+      const roomUrl = `/wameet?room=vip-${reelId}-${currentUserId || 'guest'}`;
       onLaunchVipSession(roomUrl);
     } catch (err) {
       console.error('Erreur lors du déverrouillage VIP :', err);

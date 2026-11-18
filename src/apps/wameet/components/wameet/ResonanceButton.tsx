@@ -3,7 +3,13 @@ import { doc, updateDoc, increment, setDoc, getDoc, serverTimestamp } from 'fire
 import { Radio } from 'lucide-react';
 import { db } from '../../../../firebase';
 import { playValidationBeep } from '../../../../utils/audio';
-import { createSynergyMatchRoom } from '../../../../services/dailyVideoService';
+function createSynergyMatchRoom(reelId: string, userId: string, _creatorName?: string): { url: string; name: string } {
+  const roomName = `synergy-${reelId.slice(0, 12)}-${userId.slice(0, 8)}`;
+  return {
+    url: `/wameet?room=${roomName}`,
+    name: roomName
+  };
+}
 
 export interface ResonanceButtonProps {
   reelId: string;

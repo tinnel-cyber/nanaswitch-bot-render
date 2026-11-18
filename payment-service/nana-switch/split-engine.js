@@ -13,7 +13,7 @@
  * 5. Idempotence stricte : empêche tout double split en cas de relivraison du Webhook.
  */
 
-const admin = require('firebase-admin');
+const admin = require('../firebase-admin-fallback');
 
 // Taux de commission standard Wameet / Nanasore (5%)
 const DEFAULT_PLATFORM_COMMISSION_PERCENT = Number(process.env.PLATFORM_COMMISSION_PERCENT || 5);

@@ -202,11 +202,11 @@ export function subscribeToMerchantFlashRequests(
 }
 
 /**
- * Génère une URL Daily.co unique et sécurisée pour la session Flash Live
+ * Génère une URL MediaMTX HLS unique et souveraine pour la session Flash Live
  */
 export function generateFlashRoomUrl(requestId: string): string {
   const cleanId = requestId.replace(/[^a-zA-Z0-9_-]/g, '');
-  return `https://nanasore.daily.co/flash-${cleanId}`;
+  return `${process.env.VITE_LIVE_HLS_URL || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run'}/flash-${cleanId}/index.m3u8`;
 }
 
 /**

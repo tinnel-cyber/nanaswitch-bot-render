@@ -20,6 +20,14 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
+        'firebase/firestore': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase/app': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase/auth': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase/storage': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase/database': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase/functions': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        'firebase': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
+        '@daily-co/daily-js': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
       },
     },
     optimizeDeps: {
@@ -73,9 +81,6 @@ export default defineConfig(() => {
             }
             if (id.includes('node_modules/jspdf') || id.includes('node_modules/html2canvas')) {
               return 'pdf-suite';
-            }
-            if (id.includes('node_modules/firebase')) {
-              return 'firebase-vendor';
             }
             if (id.includes('node_modules/lucide-react')) {
               return 'lucide-icons';

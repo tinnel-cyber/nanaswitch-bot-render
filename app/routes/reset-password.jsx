@@ -2,8 +2,7 @@ import React from "react";
 import { json, redirect } from "@remix-run/node";
 import { Form, useActionData, useNavigation, useSearchParams } from "@remix-run/react";
 import { sendPasswordResetEmail } from "../utils/email.server";
-import { adminAuth, adminDb, getUserByEmail, updateUserPassword } from "../utils/firebase.server";
-import crypto from "crypto";
+import { supabase } from "../utils/supabase.server";
 
 /**
  * Action: Demande de réinitialisation de mot de passe (forgot-password)
@@ -27,7 +26,7 @@ export async function action({ request }) {
 /**
  * Gère la demande de réinitialisation de mot de passe
  */
-async function handlePasswordResetRequest(email: string) {
+async function handlePasswordResetRequest(email) {
   if (!email || !email.includes("@")) {
     return json(
       { success: false, error: "Veuillez fournir une adresse e-mail valide." },
@@ -36,46 +35,18 @@ async function handlePasswordResetRequest(email: string) {
   }
 
   try {
-    // 1. Vérifier si l'utilisateur existe dans Firebase
-    const userRecord = await getUserByEmail(email);
+    const appUrl = process.env.APP_URL || "https://nanasore.com";
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${appUrl}/reset-password`,
+    });
 
-    // Pour des raisons de sécurité, on continue même si l'utilisateur n'existe pas
-    // Mais on n'envoie l'email que si l'utilisateur existe
-    if (userRecord) {
-      // 2. Générer un token sécurisé unique
-      const resetToken = crypto.randomBytes(32).toString("hex");
-      const expiresAt = Date.now() + 3600000; // Valide 1 heure
-
-      // 3. Stocker le token dans Firestore (collection passwordResets)
-      await adminDb.collection("passwordResets").doc(resetToken).set({
-        uid: userRecord.uid,
-        email: email,
-        expiresAt: expiresAt,
-        createdAt: new Date().toISOString(),
-      });
-
-      // 4. Générer l'URL dynamique de réinitialisation
-      const appUrl = process.env.APP_URL || "https://nanasore.com";
-      const resetUrl = `${appUrl}/reset-password?token=${resetToken}`;
-
-      // 5. Envoyer l'e-mail via Brevo (Template #2)
-      await sendPasswordResetEmail({
-        email,
-        name: userRecord.displayName || email.split("@")[0],
-        resetUrl,
-      });
-
-      console.log(`[PASSWORD RESET] Email de réinitialisation envoyé à ${email}`);
-    }
-
-    // 6. Réponse serveur (même message pour éviter l'énumération d'emails)
+    console.log(`[PASSWORD RESET] Email de réinitialisation Supabase demandé pour ${email}`);
     return json({
       success: true,
       message: "Si cette adresse e-mail correspond à un compte, un lien de réinitialisation a été envoyé.",
     });
   } catch (error) {
     console.error("❌ Erreur lors de la demande de réinitialisation:", error);
-    // Pour des raisons de sécurité, on retourne toujours un succès
     return json({
       success: true,
       message: "Si cette adresse e-mail correspond à un compte, un lien de réinitialisation a été envoyé.",
@@ -86,8 +57,8 @@ async function handlePasswordResetRequest(email: string) {
 /**
  * Gère la confirmation de réinitialisation de mot de passe
  */
-async function handlePasswordResetConfirmation(token: string, newPassword: string, confirmPassword: string) {
-  if (!token || !newPassword) {
+async function handlePasswordResetConfirmation(token, newPassword, confirmPassword) {
+  if (!newPassword) {
     return json({ error: "Données manquantes." }, { status: 400 });
   }
 
@@ -99,26 +70,11 @@ async function handlePasswordResetConfirmation(token: string, newPassword: strin
     return json({ error: "Les mots de passe ne correspondent pas." }, { status: 400 });
   }
 
-  const tokenRef = adminDb.collection("passwordResets").doc(token);
-  const tokenDoc = await tokenRef.get();
-
-  if (!tokenDoc.exists) {
-    return json({ error: "Lien invalide ou expiré." }, { status: 400 });
-  }
-
-  const tokenData = tokenDoc.data();
-
-  if (Date.now() > tokenData.expiresAt) {
-    await tokenRef.delete();
-    return json({ error: "Ce lien de réinitialisation a expiré." }, { status: 400 });
-  }
-
   try {
-    // Mettre à jour le mot de passe dans Firebase Auth
-    await updateUserPassword(tokenData.uid, newPassword);
-
-    // Supprimer le token utilisé
-    await tokenRef.delete();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      return json({ error: error.message }, { status: 400 });
+    }
 
     return json({
       success: true,

@@ -1,11 +1,9 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import type { DailyCall } from '@daily-co/daily-js';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, Maximize2, Minimize2, 
-  RefreshCw, Settings, ShieldCheck, Radio, Users, Sparkles, Volume2, 
-  VolumeX, Camera, AlertCircle
+  Radio, Users, Camera
 } from 'lucide-react';
-import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
+import { playTapBeep } from '../../../../utils/audio';
 
 export interface DailyNativePlayerProps {
   roomUrl?: string;
@@ -38,103 +36,29 @@ export const DailyNativePlayer: React.FC<DailyNativePlayerProps> = React.memo(({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
-  // 1. Initialisation Daily.co dynamique ou WebRTC Local
+  // 1. Initialisation Vidéo intégrée souveraine ou WebRTC Local
   useEffect(() => {
     let isMounted = true;
 
-    // Si une URL Daily.co valide est configurée, charger dynamiquement le SDK pour alléger le bundle initial
-    if (roomUrl && roomUrl.includes('daily.co') && containerRef.current) {
-      const initDaily = async () => {
-        try {
-          const DailyIframeModule = await import('@daily-co/daily-js');
-          const DailyIframe: any = DailyIframeModule.default || DailyIframeModule;
-          if (!isMounted || !containerRef.current) return;
+    if (roomUrl && containerRef.current && (roomUrl.startsWith('http://') || roomUrl.startsWith('https://'))) {
+      try {
+        const iframe = document.createElement('iframe');
+        iframe.src = roomUrl;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.style.backgroundColor = '#070b14';
+        iframe.style.borderRadius = '1rem';
+        iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
 
-          const callFrame = DailyIframe.createFrame(containerRef.current, {
-            iframeStyle: {
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              backgroundColor: '#070b14',
-              borderRadius: '1rem',
-            },
-            showLeaveButton: false,
-            showFullscreenButton: false,
-            showUserNameChangeUI: false,
-            theme: {
-              colors: {
-                accent: '#2563eb',
-                accentText: '#ffffff',
-                background: '#070b14',
-                backgroundAccent: '#0f172a',
-                baseText: '#f8fafc',
-                border: '#1e293b',
-                mainAreaBg: '#070b14',
-                mainAreaBgAccent: '#0d1527',
-              },
-            },
-          });
-
-          callFrameRef.current = callFrame;
-
-          if (callFrame && typeof (callFrame as any).on === 'function') {
-            callFrame
-              .on('joined-meeting', () => {
-                if (!isMounted) return;
-                setConnectionState('connected');
-              })
-              .on('participant-joined', () => {
-                if (!isMounted) return;
-                setParticipantsCount((c) => c + 1);
-              })
-              .on('participant-left', () => {
-                if (!isMounted) return;
-                setParticipantsCount((c) => Math.max(1, c - 1));
-              })
-              .on('error', (e: any) => {
-                console.warn('[DAILY] Call error, falling back to WebRTC local media:', e);
-                if (isMounted) setUseLocalWebcamFallback(true);
-              });
-          }
-
-          // Récupération dynamique d'un Meeting Token éphémère auprès du backend
-          let meetingToken: string | undefined = undefined;
-          try {
-            const rawRoomName = roomUrl.split('daily.co/')[1]?.split('?')[0] || '';
-            if (rawRoomName) {
-              const tokenRes = await fetch('/api/daily/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  roomName: rawRoomName,
-                  isOwner,
-                  userName,
-                  durationSeconds: 7200
-                })
-              });
-              if (tokenRes.ok) {
-                const tokenData = await tokenRes.json();
-                meetingToken = tokenData.token;
-              }
-            }
-          } catch (tErr) {
-            console.warn('[DAILY] Token éphémère non obtenu, connexion publique directe:', tErr);
-          }
-
-          if (callFrame && typeof (callFrame as any).join === 'function') {
-            const joinOptions: any = { url: roomUrl, userName };
-            if (meetingToken) {
-              joinOptions.token = meetingToken;
-            }
-            callFrame.join(joinOptions);
-          }
-        } catch (err) {
-          console.warn('[DAILY] createFrame error:', err);
-          if (isMounted) setUseLocalWebcamFallback(true);
-        }
-      };
-
-      initDaily();
+        containerRef.current.innerHTML = '';
+        containerRef.current.appendChild(iframe);
+        callFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
+        setConnectionState('connected');
+      } catch (err) {
+        console.warn('[LIVE] Iframe embed fallback to WebRTC local media:', err);
+        if (isMounted) setUseLocalWebcamFallback(true);
+      }
 
       return () => {
         isMounted = false;
@@ -146,7 +70,7 @@ export const DailyNativePlayer: React.FC<DailyNativePlayerProps> = React.memo(({
         }
       };
     } else {
-      // Pas d'URL Daily ou mode démo autonome -> initialiser le flux WebRTC média local
+      // Pas d'URL distante ou mode caméra direct -> initialiser le flux WebRTC média local
       setUseLocalWebcamFallback(true);
     }
 

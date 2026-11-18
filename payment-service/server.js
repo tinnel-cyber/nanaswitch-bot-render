@@ -20,7 +20,7 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
+const admin = require('./firebase-admin-fallback');
 const { WebSocketServer } = require('ws');
 const { FIXIE_URL, fetchViaFixie, getOutboundIp } = require('./fixie-proxy');
 const {

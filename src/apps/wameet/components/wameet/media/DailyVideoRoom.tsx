@@ -29,11 +29,19 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { playTapBeep, playCancelSound } from '../../../../../utils/audio';
-import { 
-  DAILY_BASE_URL, 
-  fetchDailyMeetingToken, 
-  sanitizeDailyRoomName 
-} from '../../../../../services/dailyVideoService';
+const DAILY_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/wameet?room=` : '/wameet?room=';
+function sanitizeDailyRoomName(rawName: string): string {
+  return (rawName || '').toLowerCase().replace(/[^a-z0-9-_]/g, '-').substring(0, 50) || `wameet-${Date.now().toString(36)}`;
+}
+async function fetchDailyMeetingToken(options: any): Promise<any> {
+  const cleanName = sanitizeDailyRoomName(options.roomName || 'wameet-room');
+  return {
+    url: `${DAILY_BASE_URL}${cleanName}`,
+    name: cleanName,
+    durationSeconds: options.durationSeconds || 900,
+    isOwner: Boolean(options.isOwner)
+  };
+}
 
 export interface DailyVideoRoomProps {
   roomUrl?: string;
@@ -91,9 +99,9 @@ export const DailyVideoRoom: React.FC<DailyVideoRoomProps> = ({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
   const isExpiringSoon = timeLeft <= 120 && timeLeft > 0; // Alerte douce à 2 minutes (<= 120s)
 
-  // Construction de l'URL de chambre Daily.co officielle (nanasore.daily.co)
-  const rawUrl = roomUrl || (roomId.startsWith('http') ? roomId : `${DAILY_BASE_URL}/${roomId}`);
-  const effectiveRoomUrl = rawUrl.replace(/https:\/\/(wameet|nanasore|nana-telecom)\.daily\.co/g, `${DAILY_BASE_URL}`);
+  // Construction de l'URL de chambre souveraine (/wameet?room=)
+  const rawUrl = roomUrl || (roomId.startsWith('http') ? roomId : `${DAILY_BASE_URL}${roomId}`);
+  const effectiveRoomUrl = rawUrl.replace(/https:\/\/(wameet|nanasore|nana-telecom)\.daily\.co\/([^\s"']+)/g, `${DAILY_BASE_URL}$2`);
 
   // Formatage mm:ss
   const formatTime = (secs: number) => {
@@ -161,11 +169,8 @@ export const DailyVideoRoom: React.FC<DailyVideoRoomProps> = ({
       // Si le conteneur est prêt
       if (effectiveRoomUrl && containerRef.current) {
         try {
-          const DailyIframeModule = await import('@daily-co/daily-js');
-          const DailyIframe: any = DailyIframeModule.default || DailyIframeModule;
           if (!isMounted || !containerRef.current) return;
 
-          // Nettoyage préalable d'un ancien callFrame
           if (callFrameRef.current) {
             try {
               callFrameRef.current.destroy();
@@ -173,75 +178,21 @@ export const DailyVideoRoom: React.FC<DailyVideoRoomProps> = ({
             callFrameRef.current = null;
           }
 
-          // Création du callFrame en marque blanche totale
-          const callFrame = DailyIframe.createFrame(containerRef.current, {
-            iframeStyle: {
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              backgroundColor: '#070b14',
-              borderRadius: '1.25rem',
-            },
-            showLeaveButton: false,
-            showFullscreenButton: false,
-            showUserNameChangeUI: false,
-            theme: {
-              colors: {
-                accent: '#4169E1',
-                accentText: '#ffffff',
-                background: '#070b14',
-                backgroundAccent: '#0f172a',
-                baseText: '#f8fafc',
-                border: '#1e293b',
-                mainAreaBg: '#070b14',
-                mainAreaBgAccent: '#0d1527',
-              },
-            },
-          });
+          const iframe = document.createElement('iframe');
+          iframe.src = effectiveRoomUrl;
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          iframe.style.backgroundColor = '#070b14';
+          iframe.style.borderRadius = '1.25rem';
+          iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
 
-          callFrameRef.current = callFrame;
-
-          callFrame
-            .on('joined-meeting', () => {
-              if (!isMounted) return;
-              setConnectionStatus('connected');
-              console.log('[DailyVideoRoom] Connecté au salon Daily.co avec token éphémère sécurisé');
-            })
-            .on('participant-joined', () => {
-              if (!isMounted) return;
-              setParticipantsCount((c) => c + 1);
-            })
-            .on('participant-left', () => {
-              if (!isMounted) return;
-              setParticipantsCount((c) => Math.max(1, c - 1));
-            })
-            .on('left-meeting', () => {
-              if (!isMounted) return;
-              if (!isSessionEnded) {
-                closeSessionCleanly();
-              }
-            })
-            .on('error', (err: any) => {
-              console.warn('[DailyVideoRoom] Erreur de connexion Daily.co, bascule fallback :', err);
-              if (onErrorFallback) {
-                onErrorFallback();
-              } else if (isMounted) {
-                setUseLocalFallback(true);
-              }
-            });
-
-          // Connexion au salon avec le token éphémère (is_owner respecté automatiquement)
-          const joinConfig: any = {
-            url: effectiveRoomUrl,
-            userName,
-          };
-          if (effectiveToken) {
-            joinConfig.token = effectiveToken;
-          }
-
-          await callFrame.join(joinConfig);
+          containerRef.current.innerHTML = '';
+          containerRef.current.appendChild(iframe);
+          callFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
+          setConnectionStatus('connected');
         } catch (e) {
-          console.warn('[DailyVideoRoom] Impossible de charger Daily.co SDK, activation du repli local :', e);
+          console.warn('[DailyVideoRoom] Impossible de monter la frame, activation du repli local :', e);
           if (onErrorFallback) {
             onErrorFallback();
           } else if (isMounted) {

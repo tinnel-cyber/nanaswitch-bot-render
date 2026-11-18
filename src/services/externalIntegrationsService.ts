@@ -290,28 +290,8 @@ export async function generateLiveMeeting(
 
     case 'DAILY':
     default: {
-      const roomName = `lms-${cleanTitle}-${Date.now().toString(36)}`;
-      let finalRoomUrl = `https://nanasore.daily.co/${roomName}`;
-
-      try {
-        const resp = await fetch('/api/daily/room', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roomName,
-            durationSeconds: duration * 60
-          })
-        });
-
-        if (resp.ok) {
-          const roomData = await resp.json();
-          if (roomData.url) {
-            finalRoomUrl = roomData.url;
-          }
-        }
-      } catch (callErr) {
-        console.warn('[LMS DAILY] Échec appel direct /api/daily/room, utilisation URL conventionnelle:', callErr);
-      }
+      const liveHlsBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LIVE_HLS_URL) || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run';
+      const finalRoomUrl = `${liveHlsBase}/${roomName}/index.m3u8`;
 
       return {
         provider: 'DAILY',

@@ -9,7 +9,6 @@ import { Lock, CheckCircle2, AlertOctagon, ArrowRight, ShieldCheck, Eye, EyeOff,
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const oobCode = searchParams.get("oobCode");
   const code = searchParams.get("code");
 
   const [password, setPassword] = useState("");
@@ -21,7 +20,7 @@ function ResetPasswordForm() {
   const [isVerifying, setIsVerifying] = useState(true);
   const [hasValidToken, setHasValidToken] = useState(false);
 
-  // Vérification initiale du jeton (Supabase PKCE code, hash tokens, ou oobCode Firebase)
+  // Vérification initiale du jeton (Supabase PKCE code ou hash tokens)
   useEffect(() => {
     let isMounted = true;
 
@@ -63,13 +62,6 @@ function ResetPasswordForm() {
           return;
         }
 
-        // 4. Firebase oobCode (Repli historique)
-        if (oobCode && isMounted) {
-          setHasValidToken(true);
-          setIsVerifying(false);
-          return;
-        }
-
         if (isMounted) {
           setHasValidToken(false);
           setIsVerifying(false);
@@ -87,7 +79,7 @@ function ResetPasswordForm() {
     return () => {
       isMounted = false;
     };
-  }, [code, oobCode]);
+  }, [code]);
 
   if (isVerifying) {
     return (
@@ -135,7 +127,7 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      // 1. Mise à jour prioritaire via Supabase Auth
+      // 1. Mise à jour via Supabase Auth
       const { error: supaErr } = await supabase.auth.updateUser({ password });
       if (!supaErr) {
         setSuccess(true);
@@ -143,22 +135,6 @@ function ResetPasswordForm() {
           router.push("/dashboard");
         }, 2000);
         return;
-      }
-
-      // 2. Repli éventuel sur Firebase si oobCode présent
-      if (oobCode) {
-        try {
-          const { confirmPasswordReset } = await import("firebase/auth");
-          const { auth } = await import("@/lib/firebase-client");
-          await confirmPasswordReset(auth, oobCode, password);
-          setSuccess(true);
-          setTimeout(() => {
-            router.push("/dashboard");
-          }, 2000);
-          return;
-        } catch (fbErr: any) {
-          throw supaErr || fbErr;
-        }
       }
 
       throw supaErr;

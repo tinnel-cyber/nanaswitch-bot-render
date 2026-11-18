@@ -119,7 +119,7 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
       // Si l'utilisateur a déjà collé son propre lien (ex: Google Meet, Zoom, etc.), on le conserve !
       const hasCustomPastedUrl =
         trimmedExisting.length > 0 &&
-        !trimmedExisting.includes('konkobo-telecom.daily.co');
+        !trimmedExisting.includes('/wameet?room=');
 
       setMeetingUrl(hasCustomPastedUrl ? trimmedExisting : (generated.meetingUrl || ''));
       setMeetingId(meetingId.trim() || generated.meetingId || '');
@@ -145,7 +145,7 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
       provider: detectedProvider,
       scheduledAt,
       durationMinutes,
-      meetingUrl: trimmedUrl || `https://konkobo-telecom.daily.co/live-${Date.now().toString().slice(-4)}`,
+      meetingUrl: trimmedUrl || `/wameet?room=live-${Date.now().toString().slice(-4)}`,
       meetingId: meetingId.trim() || `meet-${Date.now().toString().slice(-4)}`,
       passcode: passcode || 'nana2026',
       jitsiServerDomain: detectedProvider === 'JITSI' ? jitsiServerDomain : undefined,

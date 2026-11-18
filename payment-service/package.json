@@ -15,7 +15,6 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "firebase-admin": "^12.7.0",
     "https-proxy-agent": "^7.0.6",
     "node-fetch": "^2.7.0",
     "undici": "^6.21.1",

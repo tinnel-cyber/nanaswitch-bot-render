@@ -1448,7 +1448,7 @@ export const ReelsScreen: React.FC<ReelsScreenProps> = ({
                       playValidationBeep();
                       setIsClassroomModalOpen(false);
                       setVisioSessionTitle(`Salle de Classe • ${cls.title}`);
-                      setActiveVisioRoomUrl('https://nanasore.daily.co/classroom-masterclass');
+                      setActiveVisioRoomUrl('/wameet?room=classroom-masterclass');
                     }}
                     className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 active:scale-95 transition cursor-pointer shrink-0"
                   >
@@ -1540,7 +1540,7 @@ export const ReelsScreen: React.FC<ReelsScreenProps> = ({
                       playValidationBeep();
                       setIsVipLoungeModalOpen(false);
                       setVisioSessionTitle('Salon VIP • Expert Coach');
-                      setActiveVisioRoomUrl('https://nanasore.daily.co/vip-coach-lounge');
+                      setActiveVisioRoomUrl('/wameet?room=vip-coach-lounge');
                     }}
                     className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md active:scale-95 transition cursor-pointer"
                   >
@@ -1571,7 +1571,7 @@ export const ReelsScreen: React.FC<ReelsScreenProps> = ({
                       playValidationBeep();
                       setIsVipLoungeModalOpen(false);
                       setVisioSessionTitle("Salon VIP • Partenaire d'Affaires");
-                      setActiveVisioRoomUrl('https://nanasore.daily.co/vip-business-partners');
+                      setActiveVisioRoomUrl('/wameet?room=vip-business-partners');
                     }}
                     className="px-3 py-1.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-black text-xs shadow-md active:scale-95 transition cursor-pointer"
                   >
@@ -1602,7 +1602,7 @@ export const ReelsScreen: React.FC<ReelsScreenProps> = ({
                       playValidationBeep();
                       setIsVipLoungeModalOpen(false);
                       setVisioSessionTitle('Salon VIP • Rencontre VIP');
-                      setActiveVisioRoomUrl('https://nanasore.daily.co/vip-elite-networking');
+                      setActiveVisioRoomUrl('/wameet?room=vip-elite-networking');
                     }}
                     className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-white font-black text-xs shadow-md active:scale-95 transition cursor-pointer"
                   >

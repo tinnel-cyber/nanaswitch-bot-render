@@ -60,7 +60,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. Activation du Service Worker et purge des anciens caches
+// 2. Activation du Service Worker et purge des anciens caches & anciens workers Firebase
 self.addEventListener('activate', (event) => {
   const allowedCaches = [CACHE_NAME, WASM_CACHE_NAME, IMAGE_CACHE_NAME, REELS_VIDEO_CACHE_NAME];
   event.waitUntil(
@@ -73,7 +73,18 @@ self.addEventListener('activate', (event) => {
             return caches.delete(name);
           })
       );
-    }).then(() => self.clients.claim())
+    }).then(async () => {
+      // Désinscription automatique de tout ancien worker Firebase résiduel
+      try {
+        if (typeof self !== 'undefined' && self.registration && self.registration.scope) {
+          const clients = await self.clients.matchAll({ type: 'window' });
+          clients.forEach((client) => {
+            client.postMessage({ type: 'UNREGISTER_FIREBASE_SW' });
+          });
+        }
+      } catch (_) {}
+      return self.clients.claim();
+    })
   );
 });
 

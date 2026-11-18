@@ -1,1 +1,6 @@
-export { db, auth, storage, rtdb, rtdb as database, firebaseConfig, app } from './firebase';
+/**
+ * @file firebaseConfig.ts
+ * @deprecated Remplacé définitivement par la passerelle 100% Souveraine Supabase (src/lib/supabaseBridge.ts)
+ */
+
+export * from './lib/supabaseBridge';

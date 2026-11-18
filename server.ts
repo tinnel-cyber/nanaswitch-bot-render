@@ -59,7 +59,6 @@ import {
 import { attachPulseNotificationRoutes } from './src/server/pulseNotificationController';
 import { attachResonanceRoutes } from './src/server/resonanceController';
 import { attachWameetPremiumRoutes } from './src/server/wameetPremiumController';
-import { attachDailyRoutes } from './src/server/dailyController';
 import {
   attachVideoProcessingRoutes,
   compressVideoTo480p
@@ -1484,9 +1483,6 @@ async function startServer() {
 
   // Moteur de Résonance et Match Synergique (Prompt 4)
   attachResonanceRoutes(app);
-
-  // Moteur Salons Vidéo & Tokens Éphémères Daily.co Sécurisés (15 min Résonance)
-  attachDailyRoutes(app);
 
   // Wameet Premium & Coaching Payant avec Verrouillage Jitsi (Prompt 7)
   attachWameetPremiumRoutes(app);

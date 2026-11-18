@@ -1,7 +1,7 @@
 /**
- * @file src/lib/firebase.ts
- * Alias / Passerelle officielle vers la configuration centrale Firebase (src/firebase.ts)
+ * @file lib/firebase.ts
+ * @deprecated Remplacé définitivement par la passerelle 100% Souveraine Supabase (src/lib/supabaseBridge.ts)
  */
 
-export * from '../firebase';
-export { auth as default } from '../firebase';
+export * from './supabaseBridge';
+export { auth as default } from './supabaseBridge';

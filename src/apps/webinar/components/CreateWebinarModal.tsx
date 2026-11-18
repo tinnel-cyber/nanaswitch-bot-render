@@ -302,28 +302,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setStreamUrl(url);
     } else if (targetPlatform === 'daily') {
       const roomName = `webinar-${roomId}`;
-      let finalDailyUrl = `https://nanasore.daily.co/${roomName}`;
-
-      try {
-        const resp = await fetch('/api/daily/room', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            roomName,
-            durationSeconds: 7200 // 2h pour webinaire
-          })
-        });
-
-        if (resp.ok) {
-          const roomData = await resp.json();
-          if (roomData.url) {
-            finalDailyUrl = roomData.url;
-          }
-        }
-      } catch (callErr) {
-        console.warn("[DAILY] Provisioning via API en repli:", callErr);
-      }
-
+      const finalDailyUrl = `${process.env.VITE_LIVE_HLS_URL || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run'}/${roomName}/index.m3u8`;
       setMeetingUrl(finalDailyUrl);
       setStreamUrl(finalDailyUrl);
     }
@@ -492,7 +471,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         setMeetingUrl(url);
         setStreamUrl(url);
       } else if (template.platform === 'daily') {
-        const url = `https://nanasore.daily.co/${generateUniqueRoomId()}`;
+        const url = `${VITE_LIVE_HLS_URL}/${generateUniqueRoomId()}/index.m3u8`;
         setMeetingUrl(url);
         setStreamUrl(url);
       } else {
@@ -531,7 +510,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         effectivePlatform === 'jitsi'
           ? `https://meet.jit.si/${generateUniqueRoomId()}`
           : effectivePlatform === 'daily'
-            ? `https://nanasore.daily.co/${generateUniqueRoomId()}`
+            ? `${VITE_LIVE_HLS_URL}/${generateUniqueRoomId()}/index.m3u8`
             : ''
       );
       const finalStreamUrl = rawPastedUrl || finalMeetingUrl;

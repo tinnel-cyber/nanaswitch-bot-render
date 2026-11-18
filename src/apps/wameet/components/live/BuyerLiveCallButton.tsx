@@ -11,7 +11,6 @@ import {
   isLimitReached, 
   triggerLimitReachedUpsell 
 } from '../../../../utils/planFeatures';
-import { createLiveProductRoom } from '../../../../services/dailyVideoService';
 
 export interface BuyerLiveCallButtonProps {
   /**
@@ -131,24 +130,13 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
     try {
       const effectiveBuyerId = getEffectiveBuyerId();
 
-      // 1. Création dynamique de la salle Daily.co via Daily API backend
-      let roomUrl: string | undefined;
-      let roomName: string | undefined;
-      let acquiredToken: string | undefined;
-
-      const liveResult = await createLiveProductRoom(
-        productId || 'general',
-        productName,
-        sellerId,
-        false // Acheteur = Spectateur (is_owner: false)
-      );
-      roomUrl = liveResult.url;
-      roomName = liveResult.name;
-      acquiredToken = liveResult.token;
-
-      if (!roomUrl) {
-        throw new Error("L'URL de la salle vidéo n'a pas pu être générée par le serveur.");
-      }
+      // 1. Création dynamique de la salle souveraine MediaMTX / Wameet
+      const cleanProdId = (productId || 'general').replace(/[^a-zA-Z0-9-_]/g, '-');
+      const generatedRoomName = `live-${cleanProdId}-${Date.now().toString(36)}`;
+      const liveHlsBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LIVE_HLS_URL) || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run';
+      const roomUrl: string = `${liveHlsBase}/${generatedRoomName}/index.m3u8`;
+      const roomName: string = generatedRoomName;
+      const acquiredToken: string | undefined = undefined;
 
       if (acquiredToken) {
         setMeetingToken(acquiredToken);
@@ -240,9 +228,6 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
 
     const mountDailyCall = async () => {
       try {
-        const DailyIframeModule = await import('@daily-co/daily-js');
-        const DailyIframe: any = DailyIframeModule.default || DailyIframeModule;
-
         if (!isMounted || !videoContainerRef.current) return;
 
         // Nettoyage préalable d'une éventuelle iframe précédente
@@ -253,60 +238,22 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
           dailyCallFrameRef.current = null;
         }
 
-        // Création de la frame Daily intégrée
-        const callFrame = DailyIframe.createFrame(videoContainerRef.current, {
-          iframeStyle: {
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            borderRadius: '1rem',
-            backgroundColor: '#020617'
-          },
-          showLeaveButton: false, // On utilise notre propre bouton de contrôle Tailwind
-          showFullscreenButton: false,
-          theme: {
-            colors: {
-              accent: '#10b981', // Émeraude NaNa
-              accentText: '#ffffff',
-              background: '#020617',
-              backgroundAccent: '#0f172a',
-              baseText: '#f8fafc',
-              border: '#1e293b',
-              mainAreaBg: '#020617',
-              mainAreaBgAccent: '#090d16'
-            }
-          }
-        });
+        // Création de l'iframe vidéo intégrée sécurisée
+        const iframe = document.createElement('iframe');
+        iframe.src = dailyRoomUrl;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '1rem';
+        iframe.style.backgroundColor = '#020617';
+        iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
 
-        dailyCallFrameRef.current = callFrame;
-
-        // Gestionnaires d'événements Daily
-        callFrame
-          .on('joined-meeting', () => {
-            if (isMounted) {
-              setCallStatus('connected');
-            }
-          })
-          .on('left-meeting', () => {
-            if (isMounted) {
-              handleHangUp();
-            }
-          })
-          .on('error', (dailyErr: any) => {
-            console.error('[DAILY EMBED ERROR]', dailyErr);
-          });
-
-        // Connexion effective à la salle dynamique avec token éphémère si disponible
-        const joinOptions: any = {
-          url: dailyRoomUrl,
-          userName: 'Acheteur'
-        };
-        if (meetingToken) {
-          joinOptions.token = meetingToken;
-        }
-        await callFrame.join(joinOptions);
+        videoContainerRef.current.innerHTML = '';
+        videoContainerRef.current.appendChild(iframe);
+        dailyCallFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
+        setCallStatus('connected');
       } catch (embedError) {
-        console.error('[DAILY MOUNT FAILED]', embedError);
+        console.error('[LIVE MOUNT FAILED]', embedError);
       }
     };
 
