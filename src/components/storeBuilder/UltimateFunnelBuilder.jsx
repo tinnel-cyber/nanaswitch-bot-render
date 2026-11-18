@@ -74,6 +74,7 @@ import {
 import { formatCFA, playTapBeep, playValidationBeep, playCancelSound, playCashChime } from '../../utils/audio';
 import { incrementStoredFunnelsCount } from '../../utils/planFeatures';
 import { saveFunnelConfig, registerSubdomainInFirebase } from '../../services/omniFunnelService';
+import { FUNNEL_PALETTES, DEFAULT_PALETTE, resolveFunnelTheme, resolveBlockButton, alpha } from '../../lib/funnelColorLibrary';
 import { saveTenantCustomDomain, cleanDomain } from '../../services/tenantDomainService';
 import { AutoplayVideoBlock, DEFAULT_AUTOPLAY_VIDEO_DATA } from '../cro/AutoplayVideoBlock';
 import { ImageUploadInput } from '../common/ImageUploadInput';
@@ -159,8 +160,7 @@ export const READY_TO_USE_BLOCKS = [
       price: 35000,
       originalPrice: 75000,
       buttonText: 'Réserver Ma Place au Live Maintenant 🎟️',
-      bgColor: 'transparent',
-      btnBgColor: '#f59e0b'
+      bgColor: 'transparent'
     }
   },
   {
@@ -264,10 +264,7 @@ export const READY_TO_USE_BLOCKS = [
     icon: MousePointer,
     defaultData: {
       buttonText: 'JE RÉSERVE MON ACCÈS VIP AVANT CLÔTURE 🚀',
-      subtext: '⚡ Offre limitée aux 100 premières inscriptions',
-      btnBgColor: '#f59e0b',
-      btnTextColor: '#000000',
-      glowColor: 'rgba(245, 158, 11, 0.45)'
+      subtext: '⚡ Offre limitée aux 100 premières inscriptions'
     }
   },
   {
@@ -295,9 +292,7 @@ export const READY_TO_USE_BLOCKS = [
       title: '🚨 CLÔTURE DES INSCRIPTIONS DANS :',
       initialHours: 23,
       initialMinutes: 42,
-      initialSeconds: 18,
-      bgColor: '#0f172a',
-      accentColor: '#f59e0b'
+      initialSeconds: 18
     }
   },
   {
@@ -349,59 +344,8 @@ export const FUNNEL_JOURNEY_STEPS = [
   { id: 'downsell', name: 'Downsell (Replay Éco)', conversion: '26.7%', icon: Tag, shortName: 'Downsell' }
 ];
 
-// Palettes & Thèmes Visuels Prédéfinis
-export const THEME_PRESETS = [
-  {
-    id: 'gold_luxury',
-    name: 'Or Impérial & Sombre',
-    desc: 'Prestige, luxe & formation d\'élite',
-    primary: '#f59e0b',
-    accent: '#fbbf24',
-    bg: '#090d16',
-    border: 'border-amber-500/40',
-    badge: 'bg-amber-500/20 text-amber-300'
-  },
-  {
-    id: 'indigo_cyber',
-    name: 'Indigo Cyber IA',
-    desc: 'High-Tech, SaaS & Automatisation',
-    primary: '#6366f1',
-    accent: '#818cf8',
-    bg: '#080b18',
-    border: 'border-indigo-500/40',
-    badge: 'bg-indigo-500/20 text-indigo-300'
-  },
-  {
-    id: 'emerald_fintech',
-    name: 'Émeraude Fintech',
-    desc: 'Finance, Investissement & Croissance',
-    primary: '#10b981',
-    accent: '#34d399',
-    bg: '#061412',
-    border: 'border-emerald-500/40',
-    badge: 'bg-emerald-500/20 text-emerald-300'
-  },
-  {
-    id: 'afro_solar',
-    name: 'Orange Solaire & Feu',
-    desc: 'Vibrant, Chaleureux & Haute Conversion',
-    primary: '#f97316',
-    accent: '#fb923c',
-    bg: '#140c06',
-    border: 'border-orange-500/40',
-    badge: 'bg-orange-500/20 text-orange-300'
-  },
-  {
-    id: 'electric_blue',
-    name: 'Bleu Électrique & Tech',
-    desc: 'Moderne, Confiance & Professionnel',
-    primary: '#0ea5e9',
-    accent: '#38bdf8',
-    bg: '#06111f',
-    border: 'border-sky-500/40',
-    badge: 'bg-sky-500/20 text-sky-300'
-  }
-];
+// Palettes & Thèmes Visuels Prédéfinis — importés depuis la bibliothèque centrale (contraste vérifié)
+export const THEME_PRESETS = FUNNEL_PALETTES;
 
 export const UltimateFunnelBuilder = ({
   initialData = null,
@@ -441,11 +385,13 @@ export const UltimateFunnelBuilder = ({
   const [customizationSettings, setCustomizationSettings] = useState(() => {
     const passed = initialData?.settings || initialData?.funnelData?.settings || {};
     const passedBrand = initialData?.brandColor || initialData?.primaryColor || passed.primaryColor || passed.brandColor;
+    // Thème normalisé par la bibliothèque centrale (corrige les couleurs héritées / invalides)
+    const resolvedTheme = resolveFunnelTheme({ ...(initialData || {}), settings: passed });
     const defaults = {
-      themePreset: passed.themePreset || (passedBrand ? (THEME_PRESETS.find(p => p.primary === passedBrand)?.id || 'custom') : 'gold_luxury'),
-      primaryColor: passedBrand || passed.primaryColor || '#f59e0b',
-      accentColor: initialData?.accentColor || passed.accentColor || '#fbbf24',
-      bgColor: initialData?.bgColor || passed.bgColor || '#090d16',
+      themePreset: passed.themePreset || (passedBrand ? (THEME_PRESETS.find(p => p.primary.toLowerCase() === String(passedBrand).toLowerCase())?.id || 'custom') : DEFAULT_PALETTE.id),
+      primaryColor: resolvedTheme.primary,
+      accentColor: resolvedTheme.accent,
+      bgColor: resolvedTheme.bg,
       fontFamily: passed.fontFamily || 'Inter',
       borderRadius: passed.borderRadius || 'rounded-2xl',
       ctaGlow: passed.ctaGlow !== undefined ? passed.ctaGlow : true,
@@ -479,9 +425,14 @@ export const UltimateFunnelBuilder = ({
       redirectAfterPayment: passed.redirectAfterPayment || 'auto'
     };
     try {
+      // Le brouillon local ne s'applique QUE pour un nouveau tunnel (sans données passées),
+      // afin d'éviter que les couleurs d'un tunnel ne contaminent un autre.
       const saved = localStorage.getItem('nana_funnel_custom_settings');
-      if (saved && !passedBrand) {
-        return { ...defaults, ...JSON.parse(saved) };
+      const hasPassedData = Boolean(passedBrand || Object.keys(passed).length > 0);
+      if (saved && !hasPassedData) {
+        const merged = { ...defaults, ...JSON.parse(saved) };
+        const t = resolveFunnelTheme({ settings: merged });
+        return { ...merged, primaryColor: t.primary, accentColor: t.accent, bgColor: t.bg };
       }
     } catch (e) {}
     return defaults;
@@ -608,9 +559,7 @@ export const UltimateFunnelBuilder = ({
             title: '🚨 CETTE OFFRE SPECIALE PREND FIN DANS :',
             initialHours: 18,
             initialMinutes: 30,
-            initialSeconds: 45,
-            bgColor: '#0f172a',
-            accentColor: '#f59e0b'
+            initialSeconds: 45
           }
         },
         {
@@ -654,10 +603,7 @@ export const UltimateFunnelBuilder = ({
           name: 'Bouton Géant Pulse Néon 3D',
           data: {
             buttonText: 'VALIDER MON ACCÈS INTÉGRAL EN 1-CLIC 🚀',
-            subtext: '🔒 Garantie satisfait ou remboursé 30 jours • Paiement Mobile Money & Carte',
-            btnBgColor: '#f59e0b',
-            btnTextColor: '#000000',
-            glowColor: 'rgba(245, 158, 11, 0.45)'
+            subtext: '🔒 Garantie satisfait ou remboursé 30 jours • Paiement Mobile Money & Carte'
           }
         },
         {
@@ -742,11 +688,17 @@ export const UltimateFunnelBuilder = ({
       
       if (updated.sales) {
         updated.sales = updated.sales.map(block => {
+          const cleanBlockData = { ...(block.data || {}) };
+          if (!cleanBlockData.customBtnColor) {
+            delete cleanBlockData.btnBgColor;
+            delete cleanBlockData.btnTextColor;
+            delete cleanBlockData.glowColor;
+          }
           if (block.type === 'hero_live_masterclass') {
             return {
               ...block,
               data: {
-                ...block.data,
+                ...cleanBlockData,
                 headline: updatedSettings.funnelTitle,
                 subheadline: updatedSettings.funnelSubtitle,
                 instructorName: updatedSettings.instructorName,
@@ -762,13 +714,13 @@ export const UltimateFunnelBuilder = ({
             return {
               ...block,
               data: {
-                ...block.data,
+                ...cleanBlockData,
                 price: Number(updatedSettings.salePrice) || block.data.price,
                 originalPrice: Number(updatedSettings.originalPrice) || block.data.originalPrice
               }
             };
           }
-          return block;
+          return { ...block, data: cleanBlockData };
         });
       }
 
@@ -814,14 +766,19 @@ export const UltimateFunnelBuilder = ({
             instructorRole: updatedSettings.instructorRole || b.data?.instructorRole,
             price: Number(updatedSettings.salePrice) || b.data?.price,
             originalPrice: Number(updatedSettings.originalPrice) || b.data?.originalPrice,
-            promoBadge: updatedSettings.discountBadge || b.data?.promoBadge,
-            btnBgColor: updatedSettings.primaryColor || b.data?.btnBgColor || '#f59e0b',
-            accentColor: updatedSettings.accentColor || b.data?.accentColor || '#fbbf24'
+            promoBadge: updatedSettings.discountBadge || b.data?.promoBadge
+            // Couleurs NON copiées dans les blocs : elles héritent du thème global
+            // (sinon l'ancienne couleur restait figée dans la vue en ligne).
           }
         };
       }
       return b;
     });
+
+    const savedTheme = resolveFunnelTheme({ settings: updatedSettings });
+    const salesBlocks = (funnelCanvasData?.sales && funnelCanvasData.sales.length > 0)
+      ? funnelCanvasData.sales.map(b => updatedBlocks.find(u => u.id === b.id) || b)
+      : updatedBlocks;
 
     const funnelPayload = {
       id: targetSubdomain,
@@ -843,17 +800,18 @@ export const UltimateFunnelBuilder = ({
       products: activeSource ? [activeSource] : [],
       source: activeSource,
       steps: funnelCanvasData,
-      blocks: updatedBlocks,
-      brandColor: updatedSettings.primaryColor || '#f59e0b',
-      primaryColor: updatedSettings.primaryColor || '#f59e0b',
-      accentColor: updatedSettings.accentColor || '#fbbf24',
-      bgColor: updatedSettings.bgColor || '#090d16',
+      // La vue en ligne affiche toujours la page de vente (et non l'étape ouverte dans l'éditeur)
+      blocks: salesBlocks,
+      brandColor: savedTheme.primary,
+      primaryColor: savedTheme.primary,
+      accentColor: savedTheme.accent,
+      bgColor: savedTheme.bg,
       settings: {
         ...updatedSettings,
-        brandColor: updatedSettings.primaryColor || '#f59e0b',
-        primaryColor: updatedSettings.primaryColor || '#f59e0b',
-        accentColor: updatedSettings.accentColor || '#fbbf24',
-        bgColor: updatedSettings.bgColor || '#090d16'
+        brandColor: savedTheme.primary,
+        primaryColor: savedTheme.primary,
+        accentColor: savedTheme.accent,
+        bgColor: savedTheme.bg
       },
       funnelType: 'ultimate',
       funnelStudio: 'ultimate_studio',
@@ -862,10 +820,10 @@ export const UltimateFunnelBuilder = ({
       updatedAt: new Date().toISOString()
     };
 
+    // N'écrase plus les tunnels des autres alias : 'ia' n'est synchronisé qu'avec 'ia-masterclass'
     const targetAliases = Array.from(new Set([
       targetSubdomain,
-      'ia-masterclass',
-      'ia'
+      ...(['ia-masterclass', 'ia'].includes(targetSubdomain) ? ['ia-masterclass', 'ia'] : [])
     ]));
 
     try {
@@ -899,10 +857,10 @@ export const UltimateFunnelBuilder = ({
   // Réinitialisation des paramètres
   const handleResetCustomization = () => {
     const defaults = {
-      themePreset: 'gold_luxury',
-      primaryColor: '#f59e0b',
-      accentColor: '#fbbf24',
-      bgColor: '#090d16',
+      themePreset: DEFAULT_PALETTE.id,
+      primaryColor: DEFAULT_PALETTE.primary,
+      accentColor: DEFAULT_PALETTE.accent,
+      bgColor: DEFAULT_PALETTE.bg,
       fontFamily: 'Inter',
       borderRadius: 'rounded-2xl',
       ctaGlow: true,
@@ -1156,6 +1114,7 @@ export const UltimateFunnelBuilder = ({
   ).toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'ia-masterclass';
 
   const handleSave = async () => {
+    const liveTheme = resolveFunnelTheme({ settings: customizationSettings });
     try { playCashChime(); } catch (e) {}
     setSaveStatus('saving');
     incrementStoredFunnelsCount();
@@ -1185,17 +1144,18 @@ export const UltimateFunnelBuilder = ({
       products: activeSource ? [activeSource] : [],
       source: activeSource,
       steps: funnelCanvasData,
-      blocks: currentStepBlocks,
-      brandColor: customizationSettings.primaryColor || '#f59e0b',
-      primaryColor: customizationSettings.primaryColor || '#f59e0b',
-      accentColor: customizationSettings.accentColor || '#fbbf24',
-      bgColor: customizationSettings.bgColor || '#090d16',
+      // La vue en ligne affiche toujours la page de vente (et non l'étape ouverte dans l'éditeur)
+      blocks: (funnelCanvasData?.sales && funnelCanvasData.sales.length > 0) ? funnelCanvasData.sales : currentStepBlocks,
+      brandColor: liveTheme.primary,
+      primaryColor: liveTheme.primary,
+      accentColor: liveTheme.accent,
+      bgColor: liveTheme.bg,
       settings: {
         ...customizationSettings,
-        brandColor: customizationSettings.primaryColor || '#f59e0b',
-        primaryColor: customizationSettings.primaryColor || '#f59e0b',
-        accentColor: customizationSettings.accentColor || '#fbbf24',
-        bgColor: customizationSettings.bgColor || '#090d16'
+        brandColor: liveTheme.primary,
+        primaryColor: liveTheme.primary,
+        accentColor: liveTheme.accent,
+        bgColor: liveTheme.bg
       },
       funnelType: 'ultimate',
       funnelStudio: 'ultimate_studio',
@@ -1207,9 +1167,7 @@ export const UltimateFunnelBuilder = ({
     const allAliases = Array.from(new Set([
       effectiveSubdomain,
       customizationSettings?.subdomain,
-      tempSettings?.subdomain,
-      'ia-masterclass',
-      'ia'
+      ...(['ia-masterclass', 'ia'].includes(effectiveSubdomain) ? ['ia-masterclass', 'ia'] : [])
     ].filter(Boolean).map(s => String(s).toLowerCase().trim().replace(/[^a-z0-9-]/g, ''))));
 
     try {
@@ -2230,12 +2188,30 @@ export const UltimateFunnelBuilder = ({
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">Couleur Bouton</span>
-                      <input
-                        type="color"
-                        value={currentSelectedBlock.data.btnBgColor || '#f59e0b'}
-                        onChange={(e) => updateSelectedBlock('btnBgColor', e.target.value)}
-                        className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {currentSelectedBlock.data?.customBtnColor && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateSelectedBlock('customBtnColor', false);
+                              updateSelectedBlock('btnBgColor', undefined);
+                            }}
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            title="Réinitialiser à la couleur du thème"
+                          >
+                            Thème
+                          </button>
+                        )}
+                        <input
+                          type="color"
+                          value={(currentSelectedBlock.data?.customBtnColor && currentSelectedBlock.data?.btnBgColor) || customizationSettings?.primaryColor || DEFAULT_PALETTE.primary}
+                          onChange={(e) => {
+                            updateSelectedBlock('customBtnColor', true);
+                            updateSelectedBlock('btnBgColor', e.target.value);
+                          }}
+                          className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
+                        />
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -2638,6 +2614,24 @@ export const UltimateFunnelBuilder = ({
                               };
                               setTempSettings(prev => ({ ...prev, ...newColors }));
                               setCustomizationSettings(prev => ({ ...prev, ...newColors }));
+                              setFunnelCanvasData(prev => {
+                                const cleaned = {};
+                                Object.keys(prev).forEach(stepKey => {
+                                  cleaned[stepKey] = (prev[stepKey] || []).map(b => ({
+                                    ...b,
+                                    data: {
+                                      ...(b.data || {}),
+                                      customBtnColor: false,
+                                      btnBgColor: undefined,
+                                      btnTextColor: undefined,
+                                      glowColor: undefined,
+                                      accentColor: undefined,
+                                      bgColor: undefined
+                                    }
+                                  }));
+                                });
+                                return cleaned;
+                              });
                             }}
                             className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
                               isSelected
@@ -2814,21 +2808,30 @@ export const UltimateFunnelBuilder = ({
                   {/* Aperçu en direct du Thème */}
                   <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950 space-y-3">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Aperçu en direct du style</span>
-                    <div className="p-5 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center gap-3 text-center transition-all" style={{ backgroundColor: tempSettings.bgColor || '#090d16', fontFamily: tempSettings.fontFamily || 'Inter, sans-serif' }}>
-                      <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider" style={{ backgroundColor: `${tempSettings.primaryColor}20`, color: tempSettings.accentColor || tempSettings.primaryColor, border: `1px solid ${tempSettings.primaryColor}40` }}>
-                        ⚡ Badge Offre Spéciale
-                      </span>
-                      <h4 className="text-sm font-black text-white max-w-md">
-                        {tempSettings.funnelTitle || 'Titre de votre Tunnel de Vente'}
-                      </h4>
-                      <button
-                        type="button"
-                        className={`px-5 py-2.5 font-black text-xs text-slate-950 shadow-lg cursor-pointer ${tempSettings.borderRadius || 'rounded-2xl'} ${tempSettings.ctaGlow !== false ? 'ring-4 ring-amber-400/20' : ''}`}
-                        style={{ backgroundColor: tempSettings.primaryColor || '#f59e0b' }}
-                      >
-                        Commander Maintenant • {formatCFA(tempSettings.salePrice || 35000)} 🚀
-                      </button>
-                    </div>
+                    {(() => {
+                      const previewTheme = resolveFunnelTheme({ settings: tempSettings });
+                      return (
+                        <div className="p-5 rounded-2xl border flex flex-col items-center justify-center gap-3 text-center transition-all" style={{ backgroundColor: previewTheme.bg, borderColor: previewTheme.surfaceBorder, color: previewTheme.text, fontFamily: tempSettings.fontFamily || 'Inter, sans-serif' }}>
+                          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider" style={{ backgroundColor: alpha(previewTheme.primary, 0.15), color: previewTheme.primary, border: `1px solid ${alpha(previewTheme.primary, 0.35)}` }}>
+                            ⚡ Badge Offre Spéciale
+                          </span>
+                          <h4 className="text-sm font-black max-w-md" style={{ color: previewTheme.text }}>
+                            {tempSettings.funnelTitle || 'Titre de votre Tunnel de Vente'}
+                          </h4>
+                          <button
+                            type="button"
+                            className={`px-5 py-2.5 font-black text-xs shadow-lg cursor-pointer ${tempSettings.borderRadius || 'rounded-2xl'}`}
+                            style={{
+                              backgroundColor: previewTheme.primary,
+                              color: previewTheme.onPrimary,
+                              boxShadow: tempSettings.ctaGlow !== false ? `0 8px 24px ${alpha(previewTheme.primary, 0.45)}` : undefined
+                            }}
+                          >
+                            Commander Maintenant • {formatCFA(tempSettings.salePrice || 35000)} 🚀
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -3517,9 +3520,12 @@ export const UltimateFunnelBuilder = ({
 // ============================================================================
 function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
   const d = block.data || {};
-  const themePrimary = customizationSettings?.primaryColor || customizationSettings?.brandColor || d.primaryColor || '#f59e0b';
-  const themeAccent = customizationSettings?.accentColor || d.accentColor || '#fbbf24';
-  const btnBg = d.customBtnColor ? d.btnBgColor : themePrimary;
+  const resolvedTheme = resolveFunnelTheme({ settings: customizationSettings });
+  const themePrimary = resolvedTheme.primary;
+  const themeAccent = d.accentColor || resolvedTheme.accent;
+  const resolvedBtn = resolveBlockButton(d, resolvedTheme);
+  const btnBg = resolvedBtn.bg;
+  const btnText = resolvedBtn.text;
 
   switch (block.type) {
     case 'autoplay_video':
@@ -3607,8 +3613,8 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
                 className="w-full py-3.5 px-6 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
                 style={{
                   backgroundColor: btnBg,
-                  color: d.btnTextColor || '#000000',
-                  boxShadow: `0 10px 25px ${themePrimary}50`
+                  color: btnText,
+                  boxShadow: `0 10px 25px ${alpha(btnBg, 0.4)}`
                 }}
               >
                 <span>{d.buttonText}</span>
@@ -3661,7 +3667,7 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
             placeholder="Numéro WhatsApp (+226 70 00 00 00)"
             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
           />
-          <button className="w-full py-3 rounded-xl font-black text-xs hover:brightness-110 transition cursor-pointer" style={{ backgroundColor: themePrimary, color: '#000000', boxShadow: `0 10px 25px ${themePrimary}50` }}>
+          <button className="w-full py-3 rounded-xl font-black text-xs hover:brightness-110 transition cursor-pointer" style={{ backgroundColor: btnBg, color: btnText, boxShadow: `0 10px 25px ${alpha(btnBg, 0.4)}` }}>
             {d.buttonText}
           </button>
           <p className="text-[10px] text-slate-400">{d.reassurance}</p>
@@ -3714,8 +3720,8 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
             className="w-full py-4 px-6 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
             style={{
               backgroundColor: btnBg,
-              color: d.btnTextColor || '#000000',
-              boxShadow: d.glowColor ? `0 0 35px ${d.glowColor}` : `0 0 30px ${themePrimary}60`
+              color: btnText,
+              boxShadow: (d.customBtnColor && d.glowColor) ? `0 0 35px ${d.glowColor}` : `0 0 30px ${alpha(btnBg, 0.45)}`
             }}
           >
             <span>{d.buttonText}</span>

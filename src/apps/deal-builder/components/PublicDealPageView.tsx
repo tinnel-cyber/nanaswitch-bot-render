@@ -19,6 +19,7 @@ import { ArrowRight, ShieldCheck, Check, HelpCircle, Award, BookOpen, Clock, Fla
 import { FunnelStep, OmniFunnelOrder } from '../../../types/omniFunnel';
 import { getFunnelBySlug } from '../../../services/omniFunnelService';
 import { injectFunnelSeoMeta } from '../../../utils/seoMetaService';
+import { resolveFunnelTheme, resolveBlockButton, alpha } from '../../../lib/funnelColorLibrary';
 import { PublicPhysicalFunnelView } from '../../ultimate-funnel/components/PublicPhysicalFunnelView';
 
 const PublicModularTunnelView = React.lazy(() =>
@@ -245,9 +246,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           visible: true,
           data: {
             buttonText: `COMMANDER EN 1-CLIC (${formatCFA(price)}) 🚀`,
-            subtext: '🔒 Garantie satisfait ou échangé • Règlement Wave & Orange Money',
-            btnBgColor: '#f59e0b',
-            btnTextColor: '#000000'
+            subtext: '🔒 Garantie satisfait ou échangé • Règlement Wave & Orange Money'
           }
         },
         {
@@ -295,9 +294,11 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
     };
   }, [funnel, slug]);
 
-  const brandColor = (funnel as any)?.brandColor || (funnel as any)?.primaryColor || (funnel as any)?.settings?.brandColor || (funnel as any)?.settings?.primaryColor || '#f59e0b';
-  const accentColor = (funnel as any)?.accentColor || (funnel as any)?.settings?.accentColor || '#fbbf24';
-  const pageBgColor = (funnel as any)?.settings?.bgColor || (funnel as any)?.bgColor || '#070b14';
+  const resolvedTheme = useMemo(() => resolveFunnelTheme(funnel || {}), [funnel]);
+  const brandColor = resolvedTheme.primary;
+  const accentColor = resolvedTheme.accent;
+  const pageBgColor = resolvedTheme.bg;
+  const fontFamily = (funnel as any)?.settings?.fontFamily || (funnel as any)?.fontFamily || 'Inter, sans-serif';
 
   useEffect(() => {
     if (pageBgColor && typeof document !== 'undefined') {
@@ -372,7 +373,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
   return (
     <div
-      style={{ backgroundColor: pageBgColor }}
+      style={{ backgroundColor: pageBgColor, fontFamily }}
       className={`min-h-screen w-full text-slate-100 flex flex-col font-sans overflow-x-hidden ${className}`}
     >
       {/* Barre d'Annonce Flash Supérieure (Affichée uniquement si configurée) */}
@@ -409,7 +410,9 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             const price = Number(blockProps.price) || Number((normalizedFunnel as any).salePrice) || 35000;
             const origPrice = Number(blockProps.originalPrice) || Number((normalizedFunnel as any).originalPrice);
             const buttonText = blockProps.buttonText || blockProps.ctaText || `Rejoindre le Programme • ${formatCFA(price)} 🚀`;
-            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : brandColor;
+            const heroBtn = resolveBlockButton(blockProps, resolvedTheme);
+            const btnBg = heroBtn.bg;
+            const btnText = heroBtn.text;
 
             return (
               <section
@@ -418,7 +421,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
               >
                 {badge && (
                   <div
-                    style={{ backgroundColor: `${brandColor}20`, borderColor: `${brandColor}40`, color: brandColor }}
+                    style={{ backgroundColor: alpha(brandColor, 0.14), borderColor: alpha(brandColor, 0.35), color: brandColor }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black tracking-wider uppercase border"
                   >
                     <Award className="w-3.5 h-3.5" style={{ color: brandColor }} />
@@ -462,7 +465,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                         ease: 'easeInOut'
                       }}
                       className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center pointer-events-none"
-                      style={{ borderColor: `${brandColor}40` }}
+                      style={{ borderColor: alpha(brandColor, 0.35) }}
                     >
                       <img
                         src={img}
@@ -495,12 +498,12 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                     className="w-full py-4 px-6 hover:brightness-110 active:scale-98 text-slate-950 font-black text-sm rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer transition"
                     style={{
                       backgroundColor: btnBg,
-                      color: blockProps.btnTextColor || '#000000',
-                      boxShadow: `0 10px 30px -5px ${brandColor}60`
+                      color: btnText,
+                      boxShadow: `0 10px 30px -5px ${alpha(btnBg, 0.45)}`
                     }}
                   >
                     <span>{buttonText}</span>
-                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                    <ArrowRight className="w-4 h-4" style={{ color: btnText }} />
                   </a>
                 </div>
               </section>
@@ -559,7 +562,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   {(blockProps.modules || []).map((m: any, i: number) => (
                     <div key={i} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between shadow-lg">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0" style={{ backgroundColor: `${brandColor}20`, color: brandColor }}>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0" style={{ backgroundColor: alpha(brandColor, 0.15), color: brandColor }}>
                           0{i + 1}
                         </div>
                         <div>
@@ -568,7 +571,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                         </div>
                       </div>
                       {m.duration && (
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: accentColor, backgroundColor: `${accentColor}18` }}>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: accentColor, backgroundColor: alpha(accentColor, 0.14) }}>
                           {m.duration}
                         </span>
                       )}
@@ -583,7 +586,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             return (
               <div key={block.id} className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full shadow-lg">
                 {blockProps.avatar && (
-                  <img src={blockProps.avatar} alt={blockProps.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: `${brandColor}50` }} />
+                  <img src={blockProps.avatar} alt={blockProps.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: alpha(brandColor, 0.4) }} />
                 )}
                 <div className="space-y-1">
                   <h4 className="text-sm font-black text-white">{blockProps.name || 'Instructeur'}</h4>
@@ -618,7 +621,9 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           }
 
           if (isCtaButton) {
-            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : brandColor;
+            const ctaBtn = resolveBlockButton(blockProps, resolvedTheme);
+            const btnBg = ctaBtn.bg;
+            const btnText = ctaBtn.text;
             return (
               <div key={block.id} className="text-center py-4 space-y-2 max-w-md mx-auto w-full">
                 <a
@@ -626,12 +631,12 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   className="w-full py-4 px-6 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
                   style={{
                     backgroundColor: btnBg,
-                    color: blockProps.btnTextColor || '#000000',
-                    boxShadow: blockProps.glowColor ? `0 0 35px ${blockProps.glowColor}` : `0 0 30px ${brandColor}60`
+                    color: btnText,
+                    boxShadow: (blockProps.customBtnColor && blockProps.glowColor) ? `0 0 35px ${blockProps.glowColor}` : `0 0 30px ${alpha(btnBg, 0.45)}`
                   }}
                 >
                   <span>{blockProps.buttonText || blockProps.primaryText || 'VALIDER MON ACCÈS EN 1-CLIC 🚀'}</span>
-                  <Zap className="w-4 h-4 text-slate-950" />
+                  <Zap className="w-4 h-4" style={{ color: btnText }} />
                 </a>
                 {blockProps.subtext && <p className="text-[10.5px] font-medium text-slate-400">{blockProps.subtext}</p>}
               </div>

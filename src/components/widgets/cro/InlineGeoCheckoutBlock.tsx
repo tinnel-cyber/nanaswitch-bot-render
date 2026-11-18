@@ -3,6 +3,7 @@ import { Smartphone, ShieldCheck, CheckCircle2, Zap, ArrowRight, Lock, MapPin, T
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
 import { DEFAULT_DELIVERY_OPTIONS, DEFAULT_ORDER_BUMP, DeliveryOption, OrderBumpConfig } from '../../../types/omniFunnel';
 import { notifyMerchantNewOrder } from '../../../services/PushNotificationService';
+import { readableTextOn, alpha } from '../../../lib/funnelColorLibrary';
 
 interface InlineGeoCheckoutBlockProps {
   productName: string;
@@ -341,24 +342,25 @@ export const InlineGeoCheckoutBlock: React.FC<InlineGeoCheckoutBlockProps> = ({
           </div>
         )}
 
-        {/* 5. Bouton de Paiement / Confirmation avec brandColor */}
+        {/* 5. Bouton de Paiement / Confirmation avec brandColor et contraste garanti */}
         <button
           type="submit"
           disabled={isProcessing}
           style={{
             backgroundColor: brandColor,
-            boxShadow: `0 12px 30px -6px ${brandColor}60`
+            color: readableTextOn(brandColor),
+            boxShadow: `0 12px 30px -6px ${alpha(brandColor, 0.45)}`
           }}
-          className="w-full py-4 px-6 active:scale-98 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+          className="w-full py-4 px-6 active:scale-98 font-black text-sm rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
         >
           {isProcessing ? (
             <span className="flex items-center gap-2">
-              <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent" />
               <span>Confirmation en cours...</span>
             </span>
           ) : (
             <>
-              <ShieldCheck className="w-5 h-5 text-white/90" />
+              <ShieldCheck className="w-5 h-5" />
               <span>{ctaText || `Confirmer la Commande (${formatCFA(totalAmount)})`}</span>
               <ArrowRight className="w-4 h-4" />
             </>
