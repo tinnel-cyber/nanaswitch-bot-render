@@ -71,10 +71,23 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
     onOpenTickerModal,
     onOpenMarketingAiModal,
     onOpenWebinarModal,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   const [copiedFunnelProdId, setCopiedFunnelProdId] = useState<string | null>(null);
   const [copiedStoreToast, setCopiedStoreToast] = useState(false);
+  const [localCartCount, setLocalCartCount] = useState(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : localCartCount;
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
 
   const handleShareStore = async () => {
     playTapBeep();
@@ -132,7 +145,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
       {/* -----------------------------------------------------------------------
           EN-TÊTE DU THÈME STANDARD ÉLITE (Complet, Isolé ou Adaptatif)
          ----------------------------------------------------------------------- */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Logo ⚡"
@@ -147,7 +160,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
             products={allProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel || onOpenTunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : onOpenTunnel ? ((p: StoreProductItem) => onOpenTunnel(p)) : undefined}
             onSelectProduct={onSelectProduct}
             onResetToHome={() => {
               if (onSelectCategory) onSelectCategory('Tous');
@@ -218,17 +231,17 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
           <button
             id="btn-store-cart"
             type="button"
-            onClick={() => {
-              playTapBeep();
-              // Déclenche l'ouverture du tiroir de caisse/panier dans le composant parent
-              const globalCartBtn = document.querySelector('button[title*="panier"], button[title*="Panier"]') as HTMLButtonElement;
-              if (globalCartBtn) globalCartBtn.click();
-            }}
+            onClick={handleOpenCart}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl font-bold text-xs transition border border-emerald-500 cursor-pointer shadow-sm active:scale-95"
             title="Consulter le panier"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Panier</span>
+            {activeCartCount > 0 && (
+              <span className="bg-white text-emerald-800 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {activeCartCount > 99 ? '99+' : activeCartCount}
+              </span>
+            )}
           </button>
         </div>
       </header>
@@ -705,7 +718,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
                     onPreviewFunnel={onPreviewFunnel}
                   />
                   <Interactive3dLoupeImage
-                    src={prod.image}
+                    src={prod.image || ''}
                     alt={prod.name}
                     containerClassName="w-full h-24 sm:h-28 rounded-xl mb-1.5 bg-secondary"
                     className="w-full h-full object-cover"
@@ -1001,7 +1014,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
                   onPreviewFunnel={onPreviewFunnel}
                 />
                 <Interactive3dLoupeImage
-                  src={prod.image}
+                  src={prod.image || ''}
                   alt={prod.name}
                   containerClassName="w-full h-32 sm:h-36 rounded-xl mb-2 bg-secondary"
                   className="w-full h-full object-cover"
@@ -1292,7 +1305,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
       </section>
 
       {/* Pied de page Adaptatif ou Marque Blanche (White Label) */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="mt-10 mb-20 relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Coordonnées ⚡"
@@ -1307,7 +1320,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
             products={allProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel || onOpenTunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : onOpenTunnel ? ((p: StoreProductItem) => onOpenTunnel(p)) : undefined}
             onSelectProduct={onSelectProduct}
             onResetToHome={() => {
               if (onSelectCategory) onSelectCategory('Tous');

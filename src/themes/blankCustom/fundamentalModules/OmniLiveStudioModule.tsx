@@ -55,28 +55,30 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
   }, [products, pinnedProductId]);
 
   const liveSessionObj: LiveSession = useMemo(() => {
+    const slug = cfg.sessionSlug || 'masterclass-direct';
     return {
       id: section.id || 'studio-live',
-      slug: cfg.sessionSlug || 'masterclass-direct',
+      storeId: cfg.storeId || storeSlug || 'boutique',
+      storeName: cfg.storeName || 'Studio Live',
+      sessionSlug: slug,
       title: cfg.title || 'Masterclass & Live Shopping Nanasore',
       subtitle: cfg.subtitle || 'Découvrez nos offres exclusives en direct et interagissez sans interruption.',
       description: cfg.description || '',
-      mode: effectiveSessionMode,
+      sessionMode: effectiveSessionMode,
       sourceType: effectiveSourceType,
       aspectRatio: effectiveAspectRatio,
       status: cfg.isLive !== false ? 'live' : 'scheduled',
       streamUrl: cfg.streamUrl || 'https://www.youtube.com/watch?v=live_stream',
       posterUrl: cfg.posterUrl || 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1080&h=1080&q=80',
       viewerCount: cfg.viewerCount || 142,
-      scheduledStartTime: cfg.countdownTargetDate,
+      scheduledAt: cfg.countdownTargetDate,
       pinnedProductId: pinnedProduct?.id,
       pinnedProduct: pinnedProduct,
       products: products,
-      chatEnabled: true,
-      quizEnabled: false,
-      handRaiseEnabled: true
+      allowChat: true,
+      handRaisedUsers: []
     };
-  }, [section.id, cfg, effectiveSessionMode, effectiveSourceType, effectiveAspectRatio, pinnedProduct, products]);
+  }, [section.id, cfg, effectiveSessionMode, effectiveSourceType, effectiveAspectRatio, pinnedProduct, products, storeSlug]);
 
   const handleOpenFunnel = useCallback((product: StoreProductItem) => {
     playValidationBeep();
@@ -84,7 +86,7 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
     if (onOpenTunnel) {
       onOpenTunnel(product);
     } else {
-      triggerOpenFunnel(product);
+      triggerOpenFunnel(product.linkedFunnelId || product.id, product.name, product);
     }
   }, [onOpenTunnel]);
 
@@ -128,7 +130,7 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
               Partager l'événement
             </button>
             <a
-              href={`/live/${liveSessionObj.slug}`}
+              href={`/live/${liveSessionObj.sessionSlug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-500/20 transition-all hover:scale-105"
@@ -148,10 +150,9 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
             <div className="shadow-2xl rounded-2xl overflow-hidden border border-slate-200/80 bg-black">
               <NanasoreOmniPlayer
                 session={liveSessionObj}
-                aspectRatio={effectiveAspectRatio}
                 isHost={!isPublicView}
                 onOpenFunnel={handleOpenFunnel}
-                onShare={() => setIsShareModalOpen(true)}
+                onShareClick={() => setIsShareModalOpen(true)}
               />
             </div>
 
@@ -185,7 +186,9 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
       <LiveShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        session={liveSessionObj}
+        sessionSlug={liveSessionObj.sessionSlug}
+        title={liveSessionObj.title}
+        storeName={liveSessionObj.storeName}
       />
 
       {/* Tiroir Tunnel d'Achat Overlay sans couper le son ni l'image du direct */}
@@ -194,7 +197,7 @@ export const OmniLiveStudioModule: React.FC<OmniLiveStudioModuleProps> = ({
           isOpen={Boolean(selectedFunnelProduct)}
           onClose={() => setSelectedFunnelProduct(null)}
           product={selectedFunnelProduct}
-          storeSlug={storeSlug}
+          funnelId={selectedFunnelProduct.linkedFunnelId || null}
         />
       )}
     </section>

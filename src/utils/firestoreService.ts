@@ -589,7 +589,7 @@ export async function saveStoreDocument<T extends { id: string }>(
           image_url: (securedPayload as any).image || (securedPayload as any).imageUrl || '',
           is_active: (securedPayload as any).status !== 'archived' && (securedPayload as any).isActive !== false,
           created_at: new Date().toISOString()
-        }, { onConflict: 'id' }).catch(() => {});
+        }, { onConflict: 'id' }).then(null, () => {});
       }
     } else if (collectionName === 'sales') {
       supabase.from('sales').insert({
@@ -597,7 +597,7 @@ export async function saveStoreDocument<T extends { id: string }>(
         payment_method: (securedPayload as any).paymentMethod || 'CASH_ON_DELIVERY',
         status: (securedPayload as any).status || 'completed',
         is_paid: true
-      }).catch(() => {});
+      }).then(null, () => {});
     }
 
     // Sauvegarde unifiée dans app_registry avec contrainte not-null 'name'
@@ -607,7 +607,7 @@ export async function saveStoreDocument<T extends { id: string }>(
       tenant_id: tenantId,
       module_key: subcollection,
       config_json: securedPayload
-    }, { onConflict: 'key' }).catch(() => {});
+    }, { onConflict: 'key' }).then(null, () => {});
   } catch (sbErr) {
     console.warn('[SUPABASE SYNC] Erreur sync saveStoreDocument :', sbErr);
   }
@@ -931,13 +931,13 @@ export async function persistInventoryProduct(
       supabase.from('products').upsert({
         id: prodUuidToUse,
         name: safeProduct.name,
-        price: Number(safeProduct.sellingPrice || safeProduct.price || 0),
+        price: Number(safeProduct.sellingPrice || (safeProduct as any).price || 0),
         stock: Number(safeProduct.stock ?? 10),
         image_url: safeProduct.photoUrl || (safeProduct as any).image || '',
         vendor_id: tenantId,
         slug: finalSlug,
         ...(isStoreUUID ? { tenant_id: tenantId } : {})
-      }, { onConflict: 'id' }).catch(() => {});
+      }, { onConflict: 'id' }).then(null, () => {});
     }
 
     // Synchronisation Cloud Supabase app_registry
@@ -962,7 +962,7 @@ export async function persistInventoryProduct(
             updated_at: new Date().toISOString()
           },
           updated_at: new Date().toISOString()
-        }, { onConflict: 'key' }).catch(() => {});
+        }, { onConflict: 'key' }).then(null, () => {});
     } catch {}
   } catch {}
 
@@ -2351,7 +2351,7 @@ export function sanitizePlatformSubscriptions(config?: Partial<PlatformSubscript
   });
 
   return {
-    plans: canonicalPlans,
+    plans: canonicalPlans as any,
     paymentSettings: config.paymentSettings || fallback.paymentSettings,
     updatedAt: config.updatedAt,
     updatedBy: config.updatedBy
@@ -3403,14 +3403,14 @@ export async function recordUnifiedOrder(payload: UnifiedOrderPayload): Promise<
         items: cleanItems,
         notes: payload.notes || '',
         created_at: new Date().toISOString()
-      }, { onConflict: 'id' }).catch(() => {});
+      }, { onConflict: 'id' }).then(null, () => {});
 
       supabase.from('app_registry').upsert({
         key: `order_${orderDocId}`,
         tenant_id: cleanStoreId,
         module_key: 'orders',
         config_json: recordData
-      }, { onConflict: 'key' }).catch(() => {});
+      }, { onConflict: 'key' }).then(null, () => {});
     }
   } catch (sbErr) {
     console.warn('[SUPABASE] Orders upsert notice:', sbErr);

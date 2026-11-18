@@ -550,6 +550,22 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
     return () => window.removeEventListener('nana:open_checkout', handleGlobalOpenCheckout);
   }, [handleBuyNow]);
 
+  const handleOpenCart = useCallback(() => {
+    playTapBeep();
+    if (cart.length > 0) {
+      setCheckoutDirectItem(null);
+      setShowCheckoutDrawer(true);
+    } else if (effectiveAllProducts.length > 0) {
+      setSelectedProduct(effectiveAllProducts[0]);
+    }
+  }, [cart, effectiveAllProducts]);
+
+  useEffect(() => {
+    const handleCartEv = () => handleOpenCart();
+    window.addEventListener('nana:open_cart', handleCartEv);
+    return () => window.removeEventListener('nana:open_cart', handleCartEv);
+  }, [handleOpenCart]);
+
   const handleOpenTunnel = useCallback((product: StoreProductItem) => {
     playTapBeep();
     const funnelTarget = product.linkedFunnelId || product.slug || product.id;
@@ -660,6 +676,8 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         onBuyNow={handleBuyNow}
         onOpenTunnel={handleOpenTunnel}
         getProductWhatsAppUrl={getProductWhatsAppUrl}
+        cartCount={cartCount}
+        onOpenCart={handleOpenCart}
         isPublicView={!isSandboxMode}
         isAdminPreview={isSandboxMode}
         isStoreAdmin={isSandboxMode}

@@ -169,6 +169,17 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
     return () => window.removeEventListener('nana:open_funnel', handleCustomOpen);
   }, [props.allProducts]);
 
+  // Écouteur global pour ouverture du panier / caisse depuis les thèmes
+  useEffect(() => {
+    const handleCartOpenEvent = () => {
+      if (props.onOpenCart) {
+        props.onOpenCart();
+      }
+    };
+    window.addEventListener('nana:open_cart', handleCartOpenEvent);
+    return () => window.removeEventListener('nana:open_cart', handleCartOpenEvent);
+  }, [props.onOpenCart]);
+
   // Détection du paramètre URL ?t=xyz, ?funnel=xyz ou ?f=xyz pour deep-linking de pub Facebook/TikTok
   useEffect(() => {
     if (typeof window === 'undefined') return;

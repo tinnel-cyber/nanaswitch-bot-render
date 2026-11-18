@@ -1073,6 +1073,8 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
               selectedProduct={selectedProduct}
               onAddToCart={() => showToast('🛒 Article ajouté au panier !')}
               onBuyNow={() => showToast('⚡ Commande directe déclenchée')}
+              onOpenCart={() => showToast('🛒 Aperçu du panier (Mode Commerçant)')}
+              cartCount={0}
               getProductWhatsAppUrl={() => `https://wa.me/?text=Bonjour`}
               isPublicView={false}
               isStoreAdmin={true}

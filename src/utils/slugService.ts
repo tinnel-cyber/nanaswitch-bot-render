@@ -400,7 +400,7 @@ export async function ensureAndPersistTenantSlug(
           name: storeName || resolvedSlug,
           slug: resolvedSlug,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'id' }).catch(() => {});
+        }, { onConflict: 'id' });
     }
   } catch (supaErr) {
     console.warn('[THEMES SUPABASE ERROR] Notice sauvegarde Supabase :', supaErr);

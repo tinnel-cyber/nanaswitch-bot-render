@@ -83,7 +83,7 @@ export async function exportResumeToHdPdf(
     clonedCv.style.boxShadow = 'none';
     clonedCv.style.filter = 'none';
     clonedCv.style.opacity = '1';
-    clonedCv.style.colorAdjust = 'exact';
+    (clonedCv.style as any).colorAdjust = 'exact';
     (clonedCv.style as any).webkitPrintColorAdjust = 'exact';
 
     sandboxContainer.appendChild(clonedCv);

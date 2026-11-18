@@ -117,7 +117,7 @@ export async function submitKycRequest(data: KycSubmission): Promise<void> {
 
   // 3. Sauvegarde Firestore si en ligne
   try {
-    const kycDocRef = doc(db, 'kyc_requests', data.storeId);
+    const kycDocRef = doc(db as any, 'kyc_requests', String(data.storeId));
     await setDoc(kycDocRef, {
       ...data,
       status: 'pending_approval',
@@ -125,7 +125,7 @@ export async function submitKycRequest(data: KycSubmission): Promise<void> {
     }, { merge: true });
 
     // Mettre à jour le statut du magasin
-    const storeDocRef = doc(db, 'stores', data.storeId);
+    const storeDocRef = doc(db as any, 'stores', String(data.storeId));
     await setDoc(storeDocRef, {
       kycStatus: 'pending_approval',
       updatedAt: new Date().toISOString()
@@ -149,7 +149,7 @@ export async function getStoreKycRequest(storeId: string): Promise<KycSubmission
       createdAt: Date.now(),
       managerFullName: 'Super Administrateur',
       whatsappPhone: ''
-    } as KycSubmission;
+    } as unknown as KycSubmission;
   }
 
   // 1. Check local
@@ -478,8 +478,33 @@ export async function getIdentificationChain(storeId: string): Promise<Identific
   return {
     storeId,
     currentStep: 1,
-    overallStatus: 'NOT_SUBMITTED',
-    updatedAt: new Date().toISOString()
+    overallStatus: 'UNVERIFIED',
+    updatedAt: new Date().toISOString(),
+    part1Individual: {
+      fullName: '',
+      birthDate: '',
+      nationality: '',
+      phone: '',
+      email: '',
+      idType: 'CNIB',
+      idNumber: '',
+      idCardPhotoUrl: '',
+      selfiePhotoUrl: '',
+      status: 'PENDING'
+    },
+    part2Business: {
+      companyName: '',
+      storeName: '',
+      legalForm: 'ENTREPRISE_INDIVIDUELLE',
+      ifuNumber: '',
+      rccmNumber: '',
+      address: '',
+      city: '',
+      country: 'BF',
+      rccmDocPhotoUrl: '',
+      ifuDocPhotoUrl: '',
+      status: 'PENDING'
+    }
   };
 }
 

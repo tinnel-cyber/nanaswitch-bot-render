@@ -26,8 +26,8 @@ export const LiveBroadcastHeader: React.FC<LiveBroadcastHeaderProps> = ({
 }) => {
   // Compteur de spectateurs vivant avec micro-fluctuations naturelles
   const [viewerCount, setViewerCount] = useState(1420);
-  const displayStoreName = customConfig?.storeName || storeConfig.name || storeConfig.storeName;
-  const displayLogo = customConfig?.logoUrl || storeConfig.logo_url;
+  const displayStoreName = customConfig?.storeName || storeConfig.name || storeConfig.storeName || '';
+  const displayLogo = customConfig?.logoUrl || storeConfig.logo_url || storeConfig.logoUrl;
 
   useEffect(() => {
     const interval = setInterval(() => {

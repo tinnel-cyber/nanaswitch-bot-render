@@ -45,6 +45,7 @@ export interface GlowingWideProductViewProps {
   onSelectProduct?: (product: StoreProductItem) => void;
   onAddToCart?: (product: StoreProductItem, quantity?: number) => void;
   onBuyNow?: (product: StoreProductItem, quantity?: number) => void;
+  onOpenTunnel?: (product: StoreProductItem) => void;
   isPublicView?: boolean;
   isAdminPreview?: boolean;
 }

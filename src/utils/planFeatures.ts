@@ -919,7 +919,7 @@ export function computeDynamicTenantQuotas(options: DynamicTenantQuotasOptions):
  */
 export interface CvProAccessResult {
   allowed: boolean;
-  reason: 'SUBSCRIPTION_INCLUDED' | 'WALLET_CREDITS' | 'BLOCKED_PLAN_ZERO' | 'INSUFFICIENT_CREDITS';
+  reason: 'SUBSCRIPTION_INCLUDED' | 'WALLET_CREDITS' | 'BLOCKED_PLAN_ZERO' | 'INSUFFICIENT_CREDITS' | 'FREE_TRIAL_FIRST_DOC';
   message: string;
 }
 

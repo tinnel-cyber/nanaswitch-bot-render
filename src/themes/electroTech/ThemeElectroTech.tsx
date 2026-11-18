@@ -188,14 +188,39 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
     onOpenAddProduct,
     onOpenThemeSelector,
     onSelectCustomizerSection,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   // Gestion de la vue PDP / Tunnel produit
   const [activeProduct, setActiveProduct] = useState<StoreProductItem | null>(selectedProduct || null);
   const [pdpQuantity, setPdpQuantity] = useState<number>(1);
   const [selectedThumbIndex, setSelectedThumbIndex] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
+  const [localCartCount, setLocalCartCount] = useState<number>(0);
+  const [addedToCartFeedback, setAddedToCartFeedback] = useState<boolean>(false);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : localCartCount;
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
+
+  const handleAddToCart = (product: StoreProductItem, qty: number = 1, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    playTapBeep();
+    setLocalCartCount(prev => prev + (qty || 1));
+    setAddedToCartFeedback(true);
+    setTimeout(() => setAddedToCartFeedback(false), 2000);
+    if (onAddToCart) {
+      onAddToCart(product, qty || 1);
+    }
+  };
 
   // Synchronisation avec selectedProduct transmis par les props parentes
   React.useEffect(() => {
@@ -222,6 +247,13 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
     if (isDemoTechMode) {
       return DEMO_TECH_PRODUCTS;
     }
+    // Si recherche active ou catégorie filtrée, respecter strictement les résultats
+    if (searchQuery && searchQuery.trim().length > 0) {
+      return filteredProducts || [];
+    }
+    if (selectedCategory && selectedCategory !== 'Tous les produits' && selectedCategory !== 'Tous') {
+      return filteredProducts || [];
+    }
     if (filteredProducts && filteredProducts.length > 0) {
       return filteredProducts;
     }
@@ -230,7 +262,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
     }
     // Si aucun produit en base, affichage fidèle des 4 produits phares des maquettes Image 1 & 2
     return DEMO_TECH_PRODUCTS;
-  }, [filteredProducts, allProducts, isDemoTechMode]);
+  }, [filteredProducts, allProducts, isDemoTechMode, searchQuery, selectedCategory]);
 
   // Données enrichies pour la fiche produit active (PDP)
   const currentPdpProduct = useMemo(() => {
@@ -337,7 +369,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
       {/* =========================================================================
           1. NAVIGATION HEADER ÉPURÉE & PREMIUM (AVEC SUPPORT DES 6 EN-TÊTES)
          ========================================================================= */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Liens de Menu ⚡"
@@ -352,7 +384,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenPdp}
             onResetToHome={() => setActiveProduct(null)}
             onSelectCategory={onSelectCategory}
@@ -493,9 +525,9 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                       Track Your Order
                     </button>
 
-                    {storeConfig?.whatsappPhone && (
+                    {(storeConfig as any)?.whatsappPhone && (
                       <a
-                        href={`https://wa.me/${storeConfig.whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite des renseignements sur vos équipements tech ${storeConfig?.storeName || ''}.`)}`}
+                        href={`https://wa.me/${String((storeConfig as any).whatsappPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite des renseignements sur vos équipements tech ${storeConfig?.storeName || ''}.`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-3.5 py-2 rounded-full text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all cursor-pointer"
@@ -534,15 +566,14 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
 
             <button
               type="button"
-              onClick={() => {
-                playTapBeep();
-                if (displayProducts[0]) handleOpenPdp(displayProducts[0]);
-              }}
-              className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-full transition cursor-pointer"
+              onClick={handleOpenCart}
+              className="flex items-center gap-1.5 py-1.5 px-2.5 sm:px-3 text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-full transition cursor-pointer active:scale-95"
               title="Mon Panier"
             >
               <ShoppingCart className="w-4 h-4 text-slate-700" />
-              <span className="text-xs font-black text-[#0056D2] bg-blue-100/70 px-1.5 py-0.2 rounded-full">0</span>
+              <span className="text-xs font-black text-[#0056D2] bg-blue-100/70 px-1.5 py-0.2 rounded-full">
+                {activeCartCount > 99 ? '99+' : activeCartCount}
+              </span>
             </button>
 
             {!isPublicView && isStoreAdmin && (
@@ -560,9 +591,9 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
               </button>
             )}
 
-            {storeConfig?.whatsappPhone ? (
+            {(storeConfig as any)?.whatsappPhone ? (
               <a
-                href={`https://wa.me/${storeConfig.whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite accéder à mon espace client sur ${storeConfig?.storeName || ''}.`)}`}
+                href={`https://wa.me/${String((storeConfig as any).whatsappPhone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite accéder à mon espace client sur ${storeConfig?.storeName || ''}.`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs px-3.5 sm:px-4 py-2 rounded-xl transition shadow-sm hover:shadow active:scale-95 flex items-center gap-1.5"
@@ -791,29 +822,46 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                     </button>
                   </div>
 
-                  {/* Bouton Voir tunnel (Outline / Plein Bleu selon maquette) */}
+                  {/* Bouton Ajouter au panier (Bordure bleue) */}
                   <button
                     type="button"
-                    onClick={(e) => {
-                      if (onOpenFunnel) {
-                        onOpenFunnel(currentPdpProduct, e);
-                      } else {
-                        handleTriggerBuy(currentPdpProduct, pdpQuantity, e);
-                      }
-                    }}
-                    className="flex-1 py-3 px-5 rounded-xl bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs sm:text-sm transition shadow-sm hover:shadow active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={(e) => handleAddToCart(currentPdpProduct, pdpQuantity, e)}
+                    className="flex-1 py-3 px-4 rounded-xl border-2 border-[#0056D2] text-[#0056D2] hover:bg-blue-50 font-bold text-xs sm:text-sm transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                    title="Ajouter cet article au panier"
                   >
-                    <span>Voir tunnel</span>
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>{addedToCartFeedback ? '✓ Ajouté !' : 'Ajouter au panier'}</span>
                   </button>
 
-                  {/* Bouton Acheter maintenant */}
+                  {/* Bouton Acheter maintenant (Plein Bleu) */}
                   <button
                     type="button"
                     onClick={(e) => handleTriggerBuy(currentPdpProduct, pdpQuantity, e)}
                     className="flex-1 py-3 px-5 rounded-xl bg-[#0056D2] hover:bg-[#0046AB] text-white font-bold text-xs sm:text-sm transition shadow-md shadow-blue-900/10 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                    title="Commander directement"
                   >
+                    <Zap className="w-4 h-4 fill-white" />
                     <span>Acheter maintenant</span>
                   </button>
+
+                  {/* Bouton Voir tunnel (si disponible) */}
+                  {currentPdpProduct.linkedFunnelId && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        if (onOpenFunnel) {
+                          onOpenFunnel(currentPdpProduct, e);
+                        } else {
+                          triggerOpenFunnel(currentPdpProduct.linkedFunnelId || currentPdpProduct.id, currentPdpProduct.name, currentPdpProduct);
+                        }
+                      }}
+                      className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs sm:text-sm transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Voir le tunnel de vente connecté"
+                    >
+                      <span>Tunnel</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1002,13 +1050,13 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                     <LiveEditable
                       label="Description Hero"
                       field="heroDescription"
-                      value={customConfig?.heroDescription || storeConfig?.description || "Découvrez notre collection exclusive d'équipements de pointe, d'accessoires de divertissement et de gaming garantis d'origine, disponibles avec livraison express."}
+                      value={customConfig?.heroDescription || (storeConfig as any)?.description || "Découvrez notre collection exclusive d'équipements de pointe, d'accessoires de divertissement et de gaming garantis d'origine, disponibles avec livraison express."}
                       type="textarea"
                       targetAccordion={2}
                       isAdminPreview={isAdminPreview}
                     >
                       <p className="text-sm sm:text-base text-slate-600 max-w-xl leading-relaxed">
-                        {customConfig?.heroDescription || storeConfig?.description || "Découvrez notre collection exclusive d'équipements de pointe, d'accessoires de divertissement et de gaming garantis d'origine, disponibles avec livraison express."}
+                        {customConfig?.heroDescription || (storeConfig as any)?.description || "Découvrez notre collection exclusive d'équipements de pointe, d'accessoires de divertissement et de gaming garantis d'origine, disponibles avec livraison express."}
                       </p>
                     </LiveEditable>
                   </div>
@@ -1417,7 +1465,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                       isAdminPreview={isAdminPreview}
                       storeSlug={storeConfig?.slug || 'sandbox'}
                       onEditProduct={props.onEditProduct || onOpenEditProduct}
-                      onPreviewFunnel={onOpenFunnel}
+                      onPreviewFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
                     />
 
                     {/* Conteneur d'image Strict 4:3 avec Fond Légèrement Gris #F9F9FB */}
@@ -1550,7 +1598,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
       )}
 
       {/* Moteur de Pied de Page Adaptatif (Footer Engine) ou Footer natif */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Contact ⚡"
@@ -1565,7 +1613,7 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenPdp}
             onResetToHome={() => setActiveProduct(null)}
             onSelectCategory={onSelectCategory}

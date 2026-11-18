@@ -49,10 +49,12 @@ export interface ShopifyWideProductViewProps {
   storeName?: string;
   wPhone?: string;
   wNumber?: string;
+  whatsappPhone?: string;
   onBack: () => void;
   onSelectProduct?: (product: StoreProductItem) => void;
   onAddToCart?: (product: StoreProductItem, quantity?: number) => void;
   onBuyNow?: (product: StoreProductItem, quantity?: number) => void;
+  onOpenTunnel?: (product: StoreProductItem) => void;
   isPublicView?: boolean;
   isAdminPreview?: boolean;
 }

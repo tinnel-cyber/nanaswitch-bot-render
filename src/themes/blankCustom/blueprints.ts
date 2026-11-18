@@ -10,6 +10,7 @@ export interface ArchitectBlueprint {
   moodPreset: CustomThemeMoodPreset;
   headerStyle?: HeaderStyleType;
   footerStyle?: FooterStyleType;
+  description?: string;
   sections: CustomSectionInstance[];
 }
 
@@ -385,7 +386,7 @@ export const ARCHITECT_BLUEPRINTS: ArchitectBlueprint[] = [
     subtitle: 'Affiches 1080x1080, grande vue vidéo, compte à rebours et accès immédiat',
     badge: 'DIGITAL & FORMATIONS',
     icon: '🎓',
-    moodPreset: 'french-blue',
+    moodPreset: 'nanasore-royal',
     headerStyle: 'live_radar_vocal',
     description: 'Le blueprint suprême pour formateurs, créateurs de cours vidéo, webinaires, e-books et logiciels en Afrique.',
     sections: [

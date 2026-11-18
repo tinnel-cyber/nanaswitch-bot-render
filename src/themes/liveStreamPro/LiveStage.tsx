@@ -246,9 +246,9 @@ export const LiveStage: React.FC<LiveStageProps> = ({
                 title: p.name,
                 shortTitle: p.name,
                 price: p.price,
-                originalPrice: p.compareAtPrice,
-                imageUrl: p.imageUrl,
-                stockCount: p.stockLeft || p.inventoryQuantity,
+                originalPrice: p.originalPrice,
+                imageUrl: p.image || '',
+                stockCount: p.stockLeft || p.stock || 10,
                 operatorBadge: 'Wave & Orange Money'
               }))}
             />

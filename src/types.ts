@@ -2175,6 +2175,7 @@ export type CustomSectionType =
   | 'before_after_slider'
   | 'social_wall_wameet'
   | 'social_wall_w'
+  | 'social_wall_whatsapp'
   | 'vip_mystery_scratch'
   // Rétrocompatibilité préliminaire
   | 'hero_split_banner'

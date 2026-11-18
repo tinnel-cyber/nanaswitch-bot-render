@@ -120,11 +120,24 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
     onShareProduct,
     onOpenAddProduct,
     onOpenThemeSelector,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   // Navigation entre les vues : 'home' (Accueil), 'shop' (Catalogue & Filtres), 'pdp' (Fiche Produit Détaillée)
   const [currentView, setCurrentView] = useState<'home' | 'shop' | 'pdp'>('home');
   const [activeProduct, setActiveProduct] = useState<StoreProductItem | null>(selectedProduct || null);
+  const [cartCount, setCartCount] = useState<number>(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : cartCount;
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
 
   // Synchronisation avec selectedProduct transmis par les props parentes
   useEffect(() => {
@@ -138,7 +151,6 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
   // États de navigation et d'interface
   const [activeSlide, setActiveSlide] = useState<number>(0);
   const [hoveredCategory, setHoveredCategory] = useState<ElectroDepartmentCategory | null>(null);
-  const [cartCount, setCartCount] = useState<number>(0);
   const [wishlistCount, setWishlistCount] = useState<number>(0);
   const [compareCount, setCompareCount] = useState<number>(0);
   const [isDepartmentsOpen, setIsDepartmentsOpen] = useState<boolean>(true);
@@ -361,7 +373,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
           - Blanc sur l'Accueil
           - FOND PLEIN ORANGE (#FF6A00) SUR LES PAGES INTERNES (PDP & CATALOGUE) !
          ========================================================================= */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Navigation ⚡"
@@ -376,7 +388,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenPDP}
             onResetToHome={() => {
               setCurrentView('home');
@@ -410,7 +422,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
               onSelectCategory(cat);
               setCurrentView('shop');
             }}
-            cartCount={cartCount}
+            cartCount={activeCartCount}
             wishlistCount={wishlistCount}
             compareCount={compareCount}
             currentView={currentView}
@@ -422,9 +434,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
             onOpenThemeSelector={onOpenThemeSelector}
             isDepartmentsOpen={isDepartmentsOpen}
             setIsDepartmentsOpen={setIsDepartmentsOpen}
-            onCartClick={() => {
-              if (displayProducts[0]) handleOpenPDP(displayProducts[0]);
-            }}
+            onCartClick={handleOpenCart}
             customConfig={customConfig}
           />
         </div>
@@ -448,15 +458,15 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onAddToCart={(p, qty) => {
-            setCartCount(prev => prev + qty);
-            onAddToCart(p, qty);
+            setCartCount(prev => prev + (qty || 1));
+            onAddToCart(p, qty || 1);
             triggerToast(`"${p.name}" ajouté au panier !`);
           }}
           onBuyNow={(p, qty) => {
-            setCartCount(prev => prev + qty);
-            onBuyNow(p, qty);
+            setCartCount(prev => prev + (qty || 1));
+            onBuyNow(p, qty || 1);
           }}
-          onOpenFunnel={onOpenFunnel}
+          onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
           onAddToWishlist={handleAddToWishlist}
           onAddToCompare={handleAddToCompare}
           onSelectProduct={handleOpenPDP}
@@ -630,12 +640,12 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                         <LiveEditable
                           label="Accroche Légère Hero"
                           field="heroLightTitle"
-                          value={customConfig?.heroLightTitle || currentHero.lightTitle}
+                          value={(customConfig as any)?.heroLightTitle || currentHero.lightTitle}
                           targetAccordion={2}
                           isAdminPreview={isAdminPreview}
                         >
                           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-light text-slate-800 tracking-tight leading-none">
-                            {customConfig?.heroLightTitle || currentHero.lightTitle}
+                            {(customConfig as any)?.heroLightTitle || currentHero.lightTitle}
                           </h2>
                         </LiveEditable>
                         <LiveEditable
@@ -1190,7 +1200,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                       onSelectProduct={handleOpenPDP}
                       onAddToCart={(p, qty) => {
                         setCartCount(prev => prev + (qty || 1));
-                        onAddToCart(p, qty);
+                        onAddToCart(p, qty || 1);
                         triggerToast(`"${p.name}" ajouté au panier !`);
                       }}
                       onAddToWishlist={handleAddToWishlist}
@@ -1244,7 +1254,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                     onSelectProduct={handleOpenPDP}
                     onAddToCart={(p, qty) => {
                       setCartCount(prev => prev + (qty || 1));
-                      onAddToCart(p, qty);
+                      onAddToCart(p, qty || 1);
                       triggerToast(`"${p.name}" ajouté au panier !`);
                     }}
                     onAddToWishlist={handleAddToWishlist}
@@ -1361,7 +1371,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
                     onSelectProduct={handleOpenPDP}
                     onAddToCart={(p, qty) => {
                       setCartCount(prev => prev + (qty || 1));
-                      onAddToCart(p, qty);
+                      onAddToCart(p, qty || 1);
                       triggerToast(`"${p.name}" ajouté au panier !`);
                     }}
                     onAddToWishlist={handleAddToWishlist}
@@ -1502,7 +1512,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
           - Footer 4 colonnes #F8F8F8 avec hotline, catégories et service client
           - Sous-footer avec Copyright et badges de paiement
          ========================================================================= */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Contact Hotline ⚡"
@@ -1517,7 +1527,7 @@ export const ThemeElectroOrange: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenPDP}
             onResetToHome={() => {
               setCurrentView('home');

@@ -263,11 +263,24 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
     onShareProduct,
     onOpenAddProduct,
     onOpenThemeSelector,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   // État local pour le tunnel produit (60/40)
   const [tunnelProductState, setTunnelProductState] = useState<StoreProductItem | null>(null);
   const [tunnelQuantity, setTunnelQuantity] = useState<number>(1);
+  const [cartCount, setCartCount] = useState<number>(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : cartCount;
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
   const [activeThumbnailIndex, setActiveThumbnailIndex] = useState<number>(0);
   const [copyFunnelToast, setCopyFunnelToast] = useState(false);
   const [isStudentAuthOpen, setIsStudentAuthOpen] = useState(false);
@@ -329,7 +342,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
   const handleOpenTunnel = (prod: StoreProductItem) => {
     playTapBeep();
     if (prod.linkedFunnelId && onOpenFunnel) {
-      onOpenFunnel(prod);
+      onOpenFunnel(prod, {} as any);
       return;
     }
     setTunnelQuantity(1);
@@ -442,7 +455,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
       {/* =========================================================================
           1. NAVIGATION HEADER ADAPTATIF OU ÉPURÉE
          ========================================================================= */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Navigation ⚡"
@@ -457,7 +470,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenTunnel}
             onResetToHome={() => {
               if (activeTunnel) handleCloseTunnel();
@@ -621,15 +634,14 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
 
             <button
               type="button"
-              onClick={() => {
-                playTapBeep();
-                if (displayProducts[0]) handleOpenTunnel(displayProducts[0]);
-              }}
-              className="flex items-center gap-1.5 p-2 text-slate-700 hover:bg-slate-100 rounded-full transition cursor-pointer"
+              onClick={handleOpenCart}
+              className="flex items-center gap-1.5 p-2 text-slate-700 hover:bg-slate-100 rounded-full transition cursor-pointer active:scale-95"
               title="Panier"
             >
               <ShoppingCart className="w-4 h-4" />
-              <span className="text-xs font-bold text-slate-900">0</span>
+              <span className="text-xs font-bold text-slate-900">
+                {activeCartCount > 99 ? '99+' : activeCartCount}
+              </span>
             </button>
 
             {!isPublicView && isStoreAdmin && (
@@ -688,7 +700,8 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
           }}
           onAddToCart={(prod, qty) => {
             playValidationBeep();
-            onAddToCart(prod, qty);
+            setCartCount(prev => prev + (qty || 1));
+            onAddToCart(prod, qty || 1);
           }}
           onBuyNow={(prod, qty) => {
             handleExecuteBuyNow(prod, qty);
@@ -1364,7 +1377,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
       {/* =========================================================================
           FOOTER ADAPTATIF OU DISCRET & SÉCURITÉ DE MARQUE
          ========================================================================= */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Coordonnées ⚡"
@@ -1379,7 +1392,7 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={handleOpenTunnel}
             onResetToHome={() => {
               if (activeTunnel) handleCloseTunnel();

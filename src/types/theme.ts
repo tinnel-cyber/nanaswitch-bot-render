@@ -41,6 +41,8 @@ export interface StoreThemeProps {
   onAddToCart: (product: StoreProductItem, quantity: number) => void;
   onBuyNow: (product: StoreProductItem, quantity: number) => void;
   getProductWhatsAppUrl: (product: StoreProductItem) => string;
+  cartCount?: number;
+  onOpenCart?: () => void;
 
   // Permissions & Rôles
   isPublicView: boolean;

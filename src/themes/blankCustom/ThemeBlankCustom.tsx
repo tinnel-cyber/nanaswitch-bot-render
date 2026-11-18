@@ -358,19 +358,18 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
       {!activeDoorProduct && (
         <div className="relative group/header-section">
           <AdminSectionEditTrigger
-            title="En-tête & Barre de Navigation"
-            subtitle="Changer de Header (6 styles), logo, liens, devises"
+            label="✏️ En-tête & Barre de Navigation"
             targetAccordion={1}
             onSelectSection={onSelectCustomizerSection}
             isPublicView={isPublicView}
             isAdminPreview={isAdminPreview}
           />
           <AdaptiveHeaderEngine
-            config={customConfig}
+            config={customConfig || {}}
             products={allProducts}
             categories={categories}
             storeSlug={storeSlug}
-            onOpenFunnel={onOpenTunnel || onProductClick}
+            onOpenFunnel={onOpenTunnel ? ((p: StoreProductItem) => onOpenTunnel(p)) : ((p: StoreProductItem) => onProductClick(p))}
             onSelectProduct={(p) => onProductClick(p, 'shopify')}
             onResetToHome={() => {
               playTapBeep();
@@ -404,6 +403,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
               onAddToCart={(p, qty) => {
                 playValidationBeep();
                 addToSmartCart(p, qty || 1);
+                props.onAddToCart?.(p, qty || 1);
               }}
               onBuyNow={(p, qty) => {
                 if (onBuyNow) {
@@ -443,6 +443,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
               onAddToCart={(p, qty) => {
                 playValidationBeep();
                 addToSmartCart(p, qty || 1);
+                props.onAddToCart?.(p, qty || 1);
               }}
               onBuyNow={(p, qty) => {
                 if (onBuyNow) {
@@ -482,6 +483,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
               onAddToCart={(p, qty) => {
                 playValidationBeep();
                 addToSmartCart(p, qty || 1);
+                props.onAddToCart?.(p, qty || 1);
               }}
               onBuyNow={(p, qty) => {
                 if (onBuyNow) {
@@ -735,19 +737,18 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
       {/* 4. Moteur de Pied de Page Adaptatif (Footer Engine - 3 Modèles Premium Nanasore) */}
       <div className="relative group/footer-section">
         <AdminSectionEditTrigger
-          title="Pied de page & Contact"
-          subtitle="Personnaliser textes, liens sociaux, WhatsApp et copyright"
+          label="✏️ Pied de page & Contact"
           targetAccordion={5}
           onSelectSection={onSelectCustomizerSection}
           isPublicView={isPublicView}
           isAdminPreview={isAdminPreview}
         />
         <AdaptiveFooterEngine
-          config={customConfig}
+          config={customConfig || {}}
           products={allProducts}
           storeSlug={storeSlug}
           categories={categories}
-          onOpenFunnel={onOpenTunnel || onProductClick}
+          onOpenFunnel={onOpenTunnel ? ((p: StoreProductItem) => onOpenTunnel(p)) : ((p: StoreProductItem) => onProductClick(p))}
           onSelectCategory={(cat) => {
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('nana_filter_category', { detail: { category: cat } }));
@@ -777,7 +778,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
           selectedCategory={selectedCategory}
           onSelectCategory={onSelectCategory}
           onResetToHome={handleCloseDoor}
-          onOpenCart={openSmartCart}
+          onOpenCart={props.onOpenCart || openSmartCart}
           isSimulatedMobile={isSimulatedMobile}
         />
       )}
@@ -817,7 +818,7 @@ interface RenderArchitectSectionProps {
   whatsappPhone?: string;
   onBuyNow?: (p: any, qty?: number) => void;
   onOpenTunnel?: (p: any) => void;
-  onProductClick: (p: any, viewType?: 'shopify_standard' | 'glowing_cosmetics') => void;
+  onProductClick: (p: any, viewType?: 'shopify_standard' | 'glowing_cosmetics' | 'digital_square') => void;
   onEditProduct?: (p: any, opt?: any) => void;
   onPreviewFunnel?: (p: any) => void;
   onSelectProduct?: (p: any) => void;
@@ -877,7 +878,6 @@ const RenderArchitectSection: React.FC<RenderArchitectSectionProps> = ({
           products={products}
           categories={categories}
           storeSlug={storeSlug}
-          onBuyNow={onBuyNow}
           onOpenTunnel={onOpenTunnel || onProductClick}
           onPreviewFunnel={onPreviewFunnel}
           onSelectProduct={onSelectProduct || onProductClick}

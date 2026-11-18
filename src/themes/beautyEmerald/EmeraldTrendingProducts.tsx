@@ -196,8 +196,16 @@ export const EmeraldTrendingProducts: React.FC<EmeraldTrendingProductsProps> = (
     if (realProducts && realProducts.length > 0) {
       return realProducts.map((p, index) => {
         const hasDiscount = Boolean(p.originalPrice && p.originalPrice > p.price);
+        const mappedSwatches: BeautyColorSwatch[] | undefined = p.colorSwatches
+          ? p.colorSwatches.map((s, sIdx) => ({
+              id: (s as any).id || `swatch-${p.id}-${sIdx}`,
+              name: s.name,
+              hex: s.hex
+            }))
+          : undefined;
         return {
           ...p,
+          colorSwatches: mappedSwatches,
           tabTypes: hasDiscount 
             ? ['sale', 'new'] 
             : index % 2 === 0 

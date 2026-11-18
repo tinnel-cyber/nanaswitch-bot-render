@@ -119,17 +119,37 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
     onOpenThemeSelector,
     onOpenFunnel,
     onOpenTunnel,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   // Panier local interactif
   const [localCartCount, setLocalCartCount] = useState(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : localCartCount;
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
   const [internalSelectedProduct, setInternalSelectedProduct] = useState<StoreProductItem | null>(null);
 
   const currentPDPProduct = selectedProduct || internalSelectedProduct;
 
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
+
   // Utilise les produits réels de la boutique si disponibles, sinon les produits cosmétiques de démo
   const effectiveProducts = useMemo(() => {
+    // Si une recherche textuelle est en cours, respecter strictement les résultats (même vides)
+    if (searchQuery && searchQuery.trim().length > 0) {
+      return filteredProducts || [];
+    }
+    // Si une catégorie spécifique autre que "Tous les produits" est sélectionnée
+    if (selectedCategory && selectedCategory !== 'Tous les produits' && selectedCategory !== 'Tous') {
+      return filteredProducts || [];
+    }
     if (filteredProducts && filteredProducts.length > 0) {
       return filteredProducts;
     }
@@ -137,7 +157,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
       return allProducts;
     }
     return DEMO_BEAUTY_PRODUCTS;
-  }, [filteredProducts, allProducts]);
+  }, [filteredProducts, allProducts, searchQuery, selectedCategory]);
 
   // Produit Vedette / Offre d'Exception (customConfig.specialOfferProductId)
   const specialOfferProduct = useMemo(() => {
@@ -148,15 +168,15 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
     return effectiveProducts.find(p => p.originalPrice && p.originalPrice > p.price) || null;
   }, [effectiveProducts, customConfig?.specialOfferProductId]);
 
-  const handleAddToCart = (product: StoreProductItem, e?: React.MouseEvent) => {
+  const handleAddToCart = (product: StoreProductItem, qty: number = 1, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     playValidationBeep();
-    setLocalCartCount(prev => prev + 1);
+    setLocalCartCount(prev => prev + (qty || 1));
     setQuickAddedId(product.id);
     setTimeout(() => setQuickAddedId(null), 1800);
 
     if (onAddToCart) {
-      onAddToCart(product, 1);
+      onAddToCart(product, qty || 1);
     }
   };
 
@@ -194,7 +214,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
     <div className="beauty-emerald-root min-h-screen flex flex-col w-full selection:bg-[#0F4C3A]/20 selection:text-[#0F4C3A]">
       
       {/* 1. Header Adaptatif ou Minimaliste à Micro-Badges (85px, fond #FFFFFF) */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Navigation ⚡"
@@ -209,7 +229,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
             products={effectiveProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? (prod) => onOpenFunnel(prod, {} as any) : undefined}
             onSelectProduct={(prod) => {
               setInternalSelectedProduct(prod);
               if (onSelectProduct) onSelectProduct(prod);
@@ -241,8 +261,8 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
           <BeautyEmeraldHeader
             storeConfig={storeConfig}
             customConfig={customConfig}
-            cartCount={localCartCount}
-            onOpenCart={() => playTapBeep()}
+            cartCount={activeCartCount}
+            onOpenCart={handleOpenCart}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             onSelectCategory={(cat) => {
@@ -268,11 +288,11 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onAddToCart={(p, qty) => {
-              handleAddToCart(p);
+              handleAddToCart(p, qty || 1);
             }}
             onBuyNow={(p, qty) => {
               if (onBuyNow) {
-                onBuyNow(p, qty);
+                onBuyNow(p, qty || 1);
               } else {
                 handleAddToCart(p);
               }
@@ -522,7 +542,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
                   <button
                     type="button"
                     onClick={(e) => {
-                      handleAddToCart(specialOfferProduct, e);
+                      handleAddToCart(specialOfferProduct, 1, e);
                       if (onBuyNow) onBuyNow(specialOfferProduct, 1);
                     }}
                     className="flex-1 md:flex-initial px-6 py-3 rounded-full bg-[#0F4C3A] text-white font-bold text-xs hover:bg-[#0D3B2D] transition cursor-pointer shadow-md"
@@ -685,7 +705,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
       )}
 
       {/* ================= ÉTAPE 4 : FOOTER ADAPTATIF OU MARBRE NOIR & OR ================= */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Contact ⚡"
@@ -700,7 +720,7 @@ export const ThemeBeautyEmerald: React.FC<StoreThemeProps> = (props) => {
             products={effectiveProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? (prod) => onOpenFunnel(prod, {} as any) : undefined}
             onSelectProduct={(prod) => {
               setInternalSelectedProduct(prod);
               if (onSelectProduct) onSelectProduct(prod);

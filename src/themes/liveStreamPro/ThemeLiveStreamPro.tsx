@@ -57,11 +57,23 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
     onSelectCustomizerSection,
     onOpenTunnel,
     onOpenFunnel,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   const [localCartCount, setLocalCartCount] = useState(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : localCartCount;
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [highTicketProduct, setHighTicketProduct] = useState<LiveProductItem | null>(null);
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
 
   // Synchronisation avec selectedProduct transmis depuis l'extérieur (ex: URL ou modal parente)
   useEffect(() => {
@@ -156,8 +168,8 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
         />
         <LiveBroadcastHeader
           storeConfig={storeConfig}
-          cartCount={localCartCount}
-          onOpenCart={() => playTapBeep()}
+          cartCount={activeCartCount}
+          onOpenCart={handleOpenCart}
           onOpenAlertModal={() => {
             playTapBeep();
             setIsAlertModalOpen(true);
@@ -266,7 +278,7 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
         <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#FF2A54] live-pulse-dot" />
-            <span className="font-bold text-white">{customConfig?.storeName || storeConfig.name || 'Studio Broadcast Live'}</span>
+            <span className="font-bold text-white">{customConfig?.storeName || storeConfig.name || storeConfig.storeName || 'Studio Broadcast Live'}</span>
             <span className="text-slate-500">• {customConfig?.copyrightText || customConfig?.footerAboutText || 'Propulsé par Nanasore Live Commerce'}</span>
           </div>
 
@@ -282,7 +294,7 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
       <LiveAlertModal
         isOpen={isAlertModalOpen}
         onClose={() => setIsAlertModalOpen(false)}
-        storeName={storeConfig.name}
+        storeName={storeConfig.storeName || storeConfig.name || ''}
       />
 
       {/* ================= MODAL FICHE PRODUIT HIGH-TICKET & STACK DE VALEUR ================= */}
@@ -297,14 +309,14 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
         }}
         onOpenFunnel={handleOpenOfferInSlideOut}
         onAddToCart={handleAddToCart}
-        whatsappPhone={storeConfig.whatsappPhone}
+        whatsappPhone={storeConfig.whatsappPhone || storeConfig.wPhone}
       />
 
       {/* ================= BOUTON FLOTTANT WHATSAPP EN DIRECT DU LIVE ================= */}
       <aside aria-label="Support WhatsApp en direct" className="fixed bottom-6 right-6 z-40">
         <a
-          href={`https://wa.me/${(storeConfig.whatsappPhone || '2250700000000').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-            `Bonjour ! Je suis actuellement connecté sur votre Live ${storeConfig.name || ''} et j'ai une question sur vos offres en direct.`
+          href={`https://wa.me/${(storeConfig.whatsappPhone || storeConfig.wPhone || '2250700000000').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+            `Bonjour ! Je suis actuellement connecté sur votre Live ${storeConfig.storeName || storeConfig.name || ''} et j'ai une question sur vos offres en direct.`
           )}`}
           target="_blank"
           rel="noopener noreferrer"

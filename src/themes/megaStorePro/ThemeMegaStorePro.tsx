@@ -169,16 +169,30 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
     onShareProduct,
     onOpenAddProduct,
     onOpenThemeSelector,
-    customConfig
+    customConfig,
+    cartCount: parentCartCount,
+    onOpenCart: parentOpenCart
   } = props;
   // État du Méga-Menu au survol
   const [hoveredCategory, setHoveredCategory] = useState<MegaMenuCategory | null>(null);
   const [searchCategory, setSearchCategory] = useState<string>('Toutes les catégories');
   const [cartCount, setCartCount] = useState<number>(0);
+  const activeCartCount = parentCartCount !== undefined ? parentCartCount : cartCount;
   const [activeSlot, setActiveSlot] = useState<number>(1);
   const [showSocialProof, setShowSocialProof] = useState<boolean>(true);
   const [socialProofIndex, setSocialProofIndex] = useState<number>(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const safeWhatsApp = customConfig?.whatsappNumber || (storeConfig as any)?.whatsappPhone || (storeConfig as any)?.whatsappNumber || storeConfig?.wPhone || '';
+
+  const handleOpenCart = () => {
+    playTapBeep();
+    if (parentOpenCart) {
+      parentOpenCart();
+    } else {
+      window.dispatchEvent(new CustomEvent('nana:open_cart'));
+    }
+  };
 
   // État de la vue Fiche Produit (PDP Shopify-Style)
   const [activeProduct, setActiveProduct] = useState<StoreProductItem | null>(selectedProduct || null);
@@ -360,7 +374,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
       {/* =========================================================================
           1. LE HEADER ADAPTATIF OU NATIVE À 3 NIVEAUX
          ========================================================================= */}
-      {customConfig?.headerStyle && customConfig.headerStyle !== 'none' ? (
+      {customConfig?.headerStyle && (customConfig.headerStyle as string) !== 'none' ? (
         <div className="relative group">
           <AdminSectionEditTrigger
             label="✏️ Modifier l'En-Tête & Navigation ⚡"
@@ -375,7 +389,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             categories={categories}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={(p) => {
               setActiveProduct(p);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -589,30 +603,29 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
               <div className="text-left leading-tight text-xs">
                 <span className="text-[10px] text-slate-500 font-medium block">Service Client</span>
                 <strong className="text-slate-900 font-black block">
-                  {customConfig?.whatsappNumber || customConfig?.supportPhone || storeConfig.whatsappPhone || '+221 77 000 00 00'}
+                  {customConfig?.whatsappNumber || customConfig?.supportPhone || safeWhatsApp || '+221 77 000 00 00'}
                 </strong>
               </div>
             </div>
 
             {/* Panier d'achat avec montant */}
-            <div 
-              onClick={() => {
-                playTapBeep();
-                if (displayProducts[0]) onSelectProduct(displayProducts[0]);
-              }}
-              className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 rounded border border-[#EBEBEB] transition cursor-pointer"
+            <button 
+              type="button"
+              onClick={handleOpenCart}
+              className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 rounded border border-[#EBEBEB] transition cursor-pointer active:scale-95 text-left"
+              title="Consulter mon panier"
             >
               <div className="relative text-slate-900">
                 <ShoppingCart className="w-5 h-5" />
                 <span className="absolute -top-1.5 -right-2 bg-[#0056D2] text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                  {cartCount}
+                  {activeCartCount > 99 ? '99+' : activeCartCount}
                 </span>
               </div>
               <div className="text-left leading-tight text-xs">
-                <span className="text-[10px] text-slate-500 font-bold uppercase block">PANIER ({cartCount})</span>
-                <strong className="text-slate-900 font-black block">0 FCFA</strong>
+                <span className="text-[10px] text-slate-500 font-bold uppercase block">PANIER ({activeCartCount})</span>
+                <strong className="text-[#0056D2] font-black block">Consulter</strong>
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -690,8 +703,8 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
               type="button"
               onClick={() => {
                 playTapBeep();
-                if (storeConfig.whatsappPhone) {
-                  window.open(`https://wa.me/${storeConfig.whatsappPhone.replace(/[^0-9]/g, '')}`, '_blank');
+                if (safeWhatsApp) {
+                  window.open(`https://wa.me/${safeWhatsApp.replace(/[^0-9]/g, '')}`, '_blank');
                 } else {
                   alert("Contactez le service client via le bouton WhatsApp.");
                 }
@@ -737,7 +750,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
           onAddToCart={(prod, qty) => {
             playValidationBeep();
             setCartCount(prev => prev + (qty || 1));
-            if (onAddToCart) onAddToCart(prod);
+            if (onAddToCart) onAddToCart(prod, qty || 1);
           }}
           onBuyNow={(prod, qty) => {
             playValidationBeep();
@@ -749,7 +762,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
             setActiveProduct(prod);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          whatsappPhone={storeConfig.whatsappNumber || storeConfig.phone}
+          whatsappPhone={safeWhatsApp}
         />
       ) : (
         <>
@@ -1746,7 +1759,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
                                 e.stopPropagation();
                                 playValidationBeep();
                                 setCartCount(prev => prev + 1);
-                                if (onAddToCart) onAddToCart(product);
+                                if (onAddToCart) onAddToCart(product, 1);
                               }}
                               className="flex-1 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-[#0056D2] font-bold text-xs rounded border border-blue-200 transition text-center cursor-pointer"
                             >
@@ -1867,7 +1880,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
       {/* =========================================================================
           8. GRAND FOOTER RETAIL HAUTE CONVERSION OU ADAPTATIF
          ========================================================================= */}
-      {customConfig?.footerStyle && customConfig.footerStyle !== 'none' ? (
+      {customConfig?.footerStyle && (customConfig.footerStyle as string) !== 'none' ? (
         <div className="relative group/footer-section">
           <AdminSectionEditTrigger
             label="✏️ Modifier le Footer & Coordonnées ⚡"
@@ -1882,7 +1895,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
             products={displayProducts}
             storeSlug={storeConfig?.slug || storeConfig?.storeName || 'boutique'}
             categories={categories}
-            onOpenFunnel={onOpenFunnel}
+            onOpenFunnel={onOpenFunnel ? ((p: StoreProductItem) => onOpenFunnel(p, {} as any)) : undefined}
             onSelectProduct={(p) => {
               setActiveProduct(p);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1908,7 +1921,7 @@ export const ThemeMegaStorePro: React.FC<StoreThemeProps> = (props) => {
           />
           <MegaStoreFooter 
             storeName={customConfig?.storeName || storeConfig.storeName || 'You&Me Shop'}
-            whatsappPhone={customConfig?.whatsappNumber || storeConfig.whatsappNumber || storeConfig.phone}
+            whatsappPhone={safeWhatsApp}
             customConfig={customConfig}
           />
         </div>

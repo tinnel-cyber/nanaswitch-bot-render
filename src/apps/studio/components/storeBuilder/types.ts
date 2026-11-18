@@ -65,19 +65,27 @@ export interface StoreProductItem {
   bundleProductIds?: string[];
   bundleDiscountPercent?: number;
   liveLotBadge?: string;
+  currency?: string;
+  isFeatured?: boolean;
 }
 
 export interface StoreConfig {
   storeName: string;
+  name?: string;
   slug: string;
   customDomain: string;
   primaryColor: string;
   welcomeText: string;
   wPhone: string;
+  whatsappPhone?: string;
+  description?: string;
+  webinar_url?: string;
   fbPixelId: string;
   tPixelId: string;
+  tiktokPixelId?: string;
   bannerImage: string;
   logoUrl?: string;
+  logo_url?: string;
   paymentTickerText?: string;
   tickerBgGradient?: string;
   showPaymentTicker?: boolean;
@@ -86,6 +94,7 @@ export interface StoreConfig {
   theme?: 'light' | 'dark';
   // Architecture Multi-Thèmes (Layouts structurels e-commerce)
   active_theme_id?: string;
+  activeThemeId?: string;
   // Annuaire Public (NaNa Market)
   isListedInDirectory?: boolean;
   merchantType?: 'physical_store' | 'digital_creator' | 'event_host';
