@@ -280,7 +280,7 @@ export function recordCourseEnrollment(params: {
 
   // Synchronisation asynchrone dans la table SQL Supabase enrollments
   if (params.courseId) {
-    import('../supabaseClient').then(({ supabase }) => {
+    import('../lib/supabase').then(({ supabase }) => {
       supabase.from('enrollments').upsert({
         course_id: params.courseId,
         student_id: student.id,

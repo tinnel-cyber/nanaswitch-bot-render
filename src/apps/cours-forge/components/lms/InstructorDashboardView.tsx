@@ -1297,7 +1297,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
     let isMounted = true;
     setIsLoadingCourses(true);
 
-    import('../../../../supabaseClient').then(({ supabase }) => {
+    import('../../../../lib/supabase').then(({ supabase }) => {
       supabase
         .from('courses')
         .select('*')

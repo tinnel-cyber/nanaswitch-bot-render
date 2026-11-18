@@ -177,7 +177,7 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
       console.warn('[VIDEO ENGINE] Erreur upload S3, tentative de stockage Supabase :', err);
       // Tentative de fallback via Supabase Storage
       try {
-        const { supabase } = await import('../../../../../supabaseClient');
+        const { supabase } = await import('../../../../../lib/supabase');
         const fileExt = file.name.split('.').pop() || 'mp4';
         const filePath = `courses/${courseId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const { data: uploadData, error: sbError } = await supabase.storage
