@@ -3288,18 +3288,17 @@ Rédige une page de vente complète qui convertit à +15% sur mobile. Format JSO
   // =========================================================================
   app.post('/api/ai/document-to-course', async (req, res) => {
     try {
-      const { documentText, fileName } = req.body;
+      const { documentText, fileName, pdfBase64, mimeType } = req.body;
       const textToAnalyze = (documentText || '').trim();
 
-      if (!textToAnalyze && !fileName) {
+      if (!textToAnalyze && !fileName && !pdfBase64) {
         return res.status(400).json({ error: 'Texte ou document requis pour l\'analyse pédagogique.' });
       }
 
       const genAI = getGenAI();
-      if (genAI && textToAnalyze.length > 20) {
+      if (genAI && (textToAnalyze.length > 20 || pdfBase64)) {
         const prompt = `Tu es le Directeur Pédagogique Principal de NaNa Academy. Analyse le document ou corpus suivant pour structurer un cours complet de haute qualité.
-DOCUMENT / PROGRAMME FOURNI :
-${textToAnalyze.slice(0, 10000)}
+${textToAnalyze ? `DOCUMENT / PROGRAMME FOURNI :\n${textToAnalyze.slice(0, 10000)}` : `FICHIER JOINT : ${fileName || 'Document de formation'}. Analyse son contenu intégral pour en extraire la structure pédagogique.`}
 
 Génère une structure de formation complète au format JSON STRICT respectant scrupuleusement ce schéma :
 {
@@ -3357,8 +3356,21 @@ Génère une structure de formation complète au format JSON STRICT respectant s
   ]
 }`;
 
+        const cleanedBase64 = pdfBase64 ? pdfBase64.replace(/^data:[^;]+;base64,/, '') : null;
+        const geminiContents = cleanedBase64 ? {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType || 'application/pdf',
+                data: cleanedBase64,
+              },
+            },
+            { text: prompt },
+          ],
+        } : prompt;
+
         const aiResponse = await callGeminiWithRetry(genAI, {
-          contents: prompt,
+          contents: geminiContents,
           config: {
             temperature: 0.4,
             responseMimeType: 'application/json'

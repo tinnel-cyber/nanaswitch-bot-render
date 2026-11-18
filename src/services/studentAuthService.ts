@@ -69,12 +69,14 @@ export function getCurrentStudent(): StudentAccount | null {
   return null;
 }
 
+export const getCurrentStudentProfile = getCurrentStudent;
+
 // Récupère les IDs des cours souscrits
 export function getEnrolledCourseIds(): string[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ENROLLED);
-    return raw ? JSON.parse(raw) : ['telecom-fintech-masterclass', 'course-pos-resilience-offline'];
+    return raw ? JSON.parse(raw) : [];
   } catch (e) {
     return [];
   }
@@ -275,6 +277,25 @@ export function recordCourseEnrollment(params: {
   localStorage.setItem(STORAGE_KEY_NAME, student.fullName);
   localStorage.setItem(STORAGE_KEY_PHONE, student.phoneNumber);
   if (student.email) localStorage.setItem(STORAGE_KEY_EMAIL, student.email);
+
+  // Synchronisation asynchrone dans la table SQL Supabase enrollments
+  if (params.courseId) {
+    import('../supabaseClient').then(({ supabase }) => {
+      supabase.from('enrollments').upsert({
+        course_id: params.courseId,
+        student_id: student.id,
+        student_name: student.fullName,
+        student_phone: student.phoneNumber,
+        student_email: student.email || null,
+        status: 'active',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'course_id,student_id' }).then(({ error }) => {
+        if (error) {
+          console.warn('[STUDENT AUTH] Note de synchronisation Supabase enrollments:', error.message);
+        }
+      });
+    }).catch(() => {});
+  }
 
   return student;
 }

@@ -173,13 +173,40 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
       } else {
         throw new Error('Échec du transfert direct S3');
       }
-    } catch (err) {
-      console.warn('[VIDEO ENGINE] Erreur upload S3, bascule prévisualisation :', err);
-      // Fallback preview local
-      setManualVideoUrl(URL.createObjectURL(file));
-      setUploadProgress(100);
+    } catch (err: any) {
+      console.warn('[VIDEO ENGINE] Erreur upload S3, tentative de stockage Supabase :', err);
+      // Tentative de fallback via Supabase Storage
+      try {
+        const { supabase } = await import('../../../../../supabaseClient');
+        const fileExt = file.name.split('.').pop() || 'mp4';
+        const filePath = `courses/${courseId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const { data: uploadData, error: sbError } = await supabase.storage
+          .from('course-videos')
+          .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+        if (!sbError && uploadData) {
+          const { data: publicUrlData } = supabase.storage.from('course-videos').getPublicUrl(filePath);
+          if (publicUrlData?.publicUrl) {
+            setManualVideoUrl(publicUrlData.publicUrl);
+            setUploadProgress(100);
+            setIsUploading(false);
+            setIsUploaded(true);
+            playValidationBeep();
+            return;
+          }
+        }
+      } catch (sbErr) {
+        console.warn('[VIDEO ENGINE] Supabase Storage fallback non disponible :', sbErr);
+      }
+
+      // Si le stockage direct cloud n'est pas configuré, ne pas enregistrer d'URL blob locale éphémère
       setIsUploading(false);
-      setIsUploaded(true);
+      setIsUploaded(false);
+      setManualVideoUrl('');
+      alert(
+        "Notice Stockage Cloud : Le téléversement direct nécessite la configuration d'un bucket S3 ou Supabase 'course-videos'.\n\n" +
+        "💡 Recommandation de production : Cliquez sur l'onglet 'Intégration YouTube Privée' et collez le lien non-répertorié de votre vidéo. C'est 100% opérationnel, illimité et sécurisé avec notre lecteur Stealth !"
+      );
     }
   };
 
@@ -228,6 +255,11 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
   };
 
   const handleSave = () => {
+    if (activeTab === 'MANUAL_UPLOAD' && manualVideoUrl.startsWith('blob:')) {
+      alert("Attention : Cette vidéo utilise une prévisualisation locale temporaire et ne sera pas visible par vos étudiants en ligne. Veuillez utiliser le mode YouTube Privé ou configurer un stockage permanent.");
+      return;
+    }
+
     const finalVideoUrl = activeTab === 'YOUTUBE_EMBED' 
       ? youtubeUrl 
       : activeTab === 'AI_AVATAR' 

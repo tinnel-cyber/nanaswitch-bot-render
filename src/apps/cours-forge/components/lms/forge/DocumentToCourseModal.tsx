@@ -46,6 +46,8 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
   );
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [pdfFileContent, setPdfFileContent] = useState<string>('');
+  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [fileMimeType, setFileMimeType] = useState<string>('application/pdf');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -62,16 +64,31 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
     if (!file) return;
     playTapBeep();
     setPdfFileName(file.name);
+    setFileMimeType(file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'text/plain'));
 
-    // Extraction du contenu textuel si fichier texte/markdown/pdf
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result;
-      if (typeof text === 'string') {
-        setPdfFileContent(text);
-      }
-    };
-    reader.readAsText(file);
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      // Pour les PDF : lecture en DataURL Base64 pour Gemini multimodal natif
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result;
+        if (typeof result === 'string') {
+          setPdfBase64(result);
+          setPdfFileContent(`Fichier PDF téléversé : ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Pour les fichiers texte / markdown
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result;
+        if (typeof text === 'string') {
+          setPdfFileContent(text);
+          setPdfBase64(null);
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleStartAutoBuild = async () => {
@@ -100,7 +117,9 @@ Il détaille les procédures de sécurité contre la fraude, la mise en place de
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           documentText: payloadText,
-          fileName: pdfFileName || undefined
+          fileName: pdfFileName || undefined,
+          pdfBase64: inputMode === 'PDF' ? (pdfBase64 || undefined) : undefined,
+          mimeType: inputMode === 'PDF' ? (fileMimeType || 'application/pdf') : undefined
         })
       });
 

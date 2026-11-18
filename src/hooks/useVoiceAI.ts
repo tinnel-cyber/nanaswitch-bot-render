@@ -19,6 +19,7 @@ export interface UseVoiceAIReturn {
   endSession: () => Promise<VoiceSimulationReport | null>;
   startSpeaking: () => void;
   stopSpeakingAndSubmit: () => void;
+  submitTextResponse: (text: string) => Promise<void>;
   cancelSession: () => void;
 }
 
@@ -318,6 +319,84 @@ export function useVoiceAI(
     }
   };
 
+  // Soumission textuelle manuelle (mode clavier / fallback sans microphone)
+  const submitTextResponse = async (text: string) => {
+    if (!isSessionActive || isAiSpeaking || isProcessing) return;
+    const cleanText = text.trim();
+    if (!cleanText) return;
+
+    playTapBeep();
+
+    const userTurn: VoiceSimulationTurn = {
+      id: `turn-user-${Date.now()}`,
+      role: 'user',
+      text: cleanText,
+      timestamp: Date.now()
+    };
+
+    const updatedHistory = [...conversationHistory, userTurn];
+    setConversationHistory(updatedHistory);
+    setCurrentTranscript('');
+    setIsProcessing(true);
+
+    try {
+      const response = await fetch('/api/ai/voice-simulation/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userTranscript: cleanText,
+          scenario,
+          scenarioContext: scenario,
+          conversationHistory: updatedHistory,
+          conversationTranscript: updatedHistory
+        })
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      if (response.ok && contentType.includes("application/json")) {
+        const data = await response.json();
+        const aiText = data.text || data.aiResponseText || 'D\'accord, voyons ce que vous me proposez concrètement pour régler ça.';
+        
+        const aiTurn: VoiceSimulationTurn = {
+          id: `turn-ai-${Date.now()}`,
+          role: 'ai',
+          text: aiText,
+          timestamp: Date.now()
+        };
+
+        setConversationHistory(prev => [...prev, aiTurn]);
+        setAiResponseText(aiText);
+        speakAiText(aiText);
+
+        if (data.isObjectiveMet && onObjectiveMet) {
+          onObjectiveMet();
+        }
+      } else {
+        throw new Error('Backend unreach');
+      }
+    } catch {
+      const fallbackReplies = [
+        'D\'accord, je vous lis attentivement. Quelle est votre démarche suivante ?',
+        'C\'est bien noté, mais assurez-vous que cette solution respecte nos délais.',
+        'Très bien, continuons la simulation. Que répondez-vous à présent ?'
+      ];
+      const randomReply = fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
+
+      const aiTurn: VoiceSimulationTurn = {
+        id: `turn-ai-${Date.now()}`,
+        role: 'ai',
+        text: randomReply,
+        timestamp: Date.now()
+      };
+
+      setConversationHistory(prev => [...prev, aiTurn]);
+      setAiResponseText(randomReply);
+      speakAiText(randomReply);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Terminer la session et demander le rapport d'évaluation
   const endSession = async (): Promise<VoiceSimulationReport | null> => {
     setIsSessionActive(false);
@@ -412,6 +491,7 @@ export function useVoiceAI(
     endSession,
     startSpeaking,
     stopSpeakingAndSubmit,
+    submitTextResponse,
     cancelSession
   };
 }

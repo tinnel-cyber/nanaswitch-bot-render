@@ -1023,6 +1023,24 @@ export default function App() {
     return null;
   });
 
+  // Détection URL Landing Page Longue Cursus LMS (/course-landing/:id ou /landing/course/:id)
+  const [courseLandingId, setCourseLandingId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith('/course-landing/')) {
+        const parts = pathname.split('/course-landing/');
+        if (parts[1]) return parts[1].split('/')[0].split('?')[0];
+      }
+      if (pathname.startsWith('/landing/course/')) {
+        const parts = pathname.split('/landing/course/');
+        if (parts[1]) return parts[1].split('/')[0].split('?')[0];
+      }
+      const params = new URLSearchParams(window.location.search);
+      return params.get('landing_course') || params.get('landing');
+    }
+    return null;
+  });
+
   // Détection URL Tableau de Bord Étudiant (/campus-etudiant, /student-dashboard, /etudiant, /student, /campus ou ?student=true)
   const [isStudentDashboardView, setIsStudentDashboardView] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -1956,6 +1974,17 @@ export default function App() {
         setPublicCourseId(p ? p.split('/')[0].split('?')[0] : null);
       } else {
         setPublicCourseId(params.get('course'));
+      }
+
+      // Course Landing Page
+      if (pathname.startsWith('/course-landing/')) {
+        const p = pathname.split('/course-landing/')[1];
+        setCourseLandingId(p ? p.split('/')[0].split('?')[0] : null);
+      } else if (pathname.startsWith('/landing/course/')) {
+        const p = pathname.split('/landing/course/')[1];
+        setCourseLandingId(p ? p.split('/')[0].split('?')[0] : null);
+      } else {
+        setCourseLandingId(params.get('landing_course') || params.get('landing'));
       }
 
       // Classroom & Espace Étudiant
@@ -5684,6 +5713,41 @@ export default function App() {
           }}
         />
       </React.Suspense>
+    );
+  }
+
+  // 0.0018 Vue Publique Cursus Longue Présentation (/course-landing/:id ou /landing/course/:id)
+  if (courseLandingId) {
+    return (
+      <ModuleErrorBoundary moduleName="LMS - Présentation de Formation">
+        <React.Suspense fallback={<LazyModuleFallback label="Chargement du programme de la formation..." />}>
+          <CourseLandingPageView
+            courseId={courseLandingId}
+            currentUser={currentUser}
+            onEnroll={(id) => {
+              setPublicCourseId(id);
+              setCourseLandingId(null);
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', `/course/${id}`);
+              }
+            }}
+            onNavigateToClassroom={(id) => {
+              setPublicClassroomId(id);
+              setCourseLandingId(null);
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', `/classroom/${id}`);
+              }
+            }}
+            onBackToStore={() => {
+              setCourseLandingId(null);
+              setIsCatalogView(true);
+              if (typeof window !== 'undefined') {
+                window.history.pushState({}, '', '/catalog');
+              }
+            }}
+          />
+        </React.Suspense>
+      </ModuleErrorBoundary>
     );
   }
 

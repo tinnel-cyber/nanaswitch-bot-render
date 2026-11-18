@@ -50,6 +50,7 @@ import {
 import { Course } from '../../../../../types';
 import { DEFAULT_MASTERCLASS_COURSE } from '../mockCourses';
 import { SEED_MARKETPLACE_COURSES } from '../../../../../services/marketplaceService';
+import { supabase } from '../../../../../lib/supabase';
 import { playTapBeep } from '../../../../../utils/audio';
 
 export type StudentDashboardTab = 
@@ -549,8 +550,79 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     }
   ];
 
-  // Répertoire des Campus & Cours Souscrits (Prompt 2/4)
+  // 1. Récupération réactive des inscriptions réelles depuis Supabase
+  const [realEnrollments, setRealEnrollments] = useState<any[]>([]);
+  const [realCoursesMap, setRealCoursesMap] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStudentCourses = async () => {
+      try {
+        const studentId = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || 'student-demo';
+        const studentEmail = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') : null) || '';
+        const studentPhone = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_phone') : null) || '';
+
+        // Requête enrollments sur Supabase
+        let query = supabase.from('enrollments').select('*');
+        if (studentEmail || studentPhone) {
+          query = query.or(`user_email.eq.${studentEmail},phone_number.eq.${studentPhone},user_id.eq.${studentId}`);
+        }
+
+        const { data: enrolls } = await query;
+        if (isMounted && Array.isArray(enrolls) && enrolls.length > 0) {
+          setRealEnrollments(enrolls);
+          const courseIds = enrolls.map(e => e.course_id).filter(Boolean);
+          if (courseIds.length > 0) {
+            const { data: coursesData } = await supabase.from('courses').select('*').in('id', courseIds);
+            if (isMounted && Array.isArray(coursesData)) {
+              const cMap: Record<string, any> = {};
+              coursesData.forEach(c => { cMap[c.id] = c; });
+              setRealCoursesMap(cMap);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[STUDENT DASHBOARD] Erreur fetch real courses:', err);
+      }
+    };
+
+    fetchStudentCourses();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Répertoire des Campus & Cours Souscrits Réels (avec fallback démo)
   const enrolledCourses = useMemo(() => {
+    if (realEnrollments.length > 0) {
+      return realEnrollments.map((enr) => {
+        const cData = realCoursesMap[enr.course_id] || {};
+        const s = cData.settings || {};
+        const modules = cData.modules || s.modules || [];
+        const totalLessons = modules.reduce((acc: number, m: any) => acc + (m.lessons?.length || 0), 0) || 10;
+        const completedCount = (enr.completed_lessons || []).length;
+        const progress = Math.min(100, Math.round((completedCount / Math.max(1, totalLessons)) * 100)) || Number(enr.progress_percent) || 0;
+
+        return {
+          id: enr.course_id,
+          campusName: s.campusName || `Campus : ${cData.title || 'Formation Professionnelle'}`,
+          instructorName: s.instructor?.name || s.instructorName || 'Formateur Agréé NaNa',
+          instructorAvatar: s.instructor?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+          title: cData.title || s.title || `Formation ${enr.course_id}`,
+          tagline: cData.description || s.description || 'Formation certifiante NaNa Academy.',
+          progress: progress,
+          completedLessons: completedCount,
+          totalLessons: totalLessons,
+          lastLessonTitle: modules[0]?.lessons?.[0]?.title || 'Introduction & Fondamentaux',
+          lastAccessed: enr.last_accessed_at ? new Date(enr.last_accessed_at).toLocaleDateString('fr-FR') : 'Récemment',
+          category: s.category || 'Fintech & Digital',
+          durationLabel: `${modules.length || 1} Modules`,
+          coverImage: cData.thumbnail_url || s.thumbnailUrl || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
+          trailerVideoUrl: s.trailerVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+          status: progress >= 100 ? ('completed' as const) : ('in_progress' as const),
+          certificateId: progress >= 100 ? `CERT-${enr.id?.slice(0, 8)?.toUpperCase()}` : undefined
+        };
+      });
+    }
+
     return [
       {
         ...DEFAULT_MASTERCLASS_COURSE,
@@ -589,45 +661,9 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
         coverImage: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?auto=format&fit=crop&w=1200&q=80',
         trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
         status: 'completed' as const
-      },
-      {
-        id: 'course-live-shopping-mastery',
-        campusName: 'Campus : Live Shopping & Social Selling',
-        instructorName: 'Kadiatou Diallo',
-        instructorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
-        title: 'Live Shopping & Vente Vidéo Interactive sur WhatsApp & Réseaux',
-        tagline: 'Transformez vos diffusions directes en machine à encaisser avec panier 1-clic.',
-        progress: 45,
-        completedLessons: 6,
-        totalLessons: 14,
-        lastLessonTitle: 'Module 2 - Partie 3 : Scripting psychologique de l\'offre flash 1-clic',
-        lastAccessed: 'Il y a 3 jours',
-        category: 'Live Shopping & Vente',
-        durationLabel: '1h 50m • 3 Modules',
-        coverImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80',
-        trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-        status: 'in_progress' as const
-      },
-      {
-        id: 'course-fintech-security-kyc',
-        campusName: 'Campus : Sécurité & Conformité Réglementaire',
-        instructorName: 'Cabinet Conformité & Risques',
-        instructorAvatar: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=300&q=80',
-        title: 'Sécurité des Transactions, Prévention Fraude & Conformité KYC',
-        tagline: 'Protéger son entreprise contre les arnaques aux faux SMS, le vol de SIM et respecter les normes bancaires.',
-        progress: 25,
-        completedLessons: 3,
-        totalLessons: 12,
-        lastLessonTitle: 'Module 1 - Partie 2 : Détection des faux SMS de confirmation',
-        lastAccessed: 'Il y a 5 jours',
-        category: 'Cybersécurité & Audit',
-        durationLabel: '2h 15m • 4 Modules',
-        coverImage: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80',
-        trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-        status: 'in_progress' as const
       }
     ];
-  }, []);
+  }, [realEnrollments, realCoursesMap]);
 
   // Filtrage des cours par statut et recherche
   const filteredCourses = useMemo(() => {

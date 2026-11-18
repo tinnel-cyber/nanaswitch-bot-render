@@ -95,20 +95,21 @@ async function generateQrDataUrl(text: string): Promise<string> {
 
 export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({
   course,
-  studentName = 'Ibrahim Pousbila Konkobo',
+  studentName,
   completionDate,
   certificateId,
   scorePercentage = 95,
   className = ''
 }) => {
   // Valeurs sécurisées défensives
-  const courseTitle = course?.title || 'Masterclass Télécom, Monétique Mobile & E-Commerce UEMOA';
-  const courseId = course?.id || 'telecom-fintech-masterclass';
+  const courseTitle = course?.title || 'Masterclass Spécialisée Professionnelle';
+  const courseId = course?.id || 'lms-course';
   const instructorName = typeof course?.instructor === 'string'
     ? course.instructor
-    : (course?.instructor?.name || (course as any)?.instructorName || 'Ibrahim Pousbila Konkobo');
+    : (course?.instructor?.name || (course as any)?.instructorName || 'Direction Pédagogique NaNa Academy');
 
-  const [editableName, setEditableName] = useState(studentName || 'Ibrahim Pousbila Konkobo');
+  const resolvedInitialStudentName = studentName || (typeof window !== 'undefined' ? (localStorage.getItem('nana_student_name') || '') : '') || 'Apprenant Certifié';
+  const [editableName, setEditableName] = useState(resolvedInitialStudentName);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);

@@ -129,9 +129,49 @@ export const SEED_MARKETPLACE_COURSES: MarketplaceCourse[] = [
   }
 ];
 
+export function mapSupabaseCourseToMarketplace(row: any): MarketplaceCourse {
+  const s = row.settings || {};
+  const modules = row.modules || s.modules || [];
+  const totalDuration = modules.reduce((acc: number, m: any) => {
+    return acc + (m.lessons || []).reduce((lacc: number, l: any) => lacc + (Number(l.durationMinutes) || 15), 0);
+  }, 0);
+
+  return {
+    ...DEFAULT_MASTERCLASS_COURSE,
+    id: row.id,
+    title: row.title || s.title || `Formation ${row.id}`,
+    tagline: row.description || s.description || (row.title ? `Maîtrisez ${row.title} de bout en bout.` : 'Formation complète et certifiante.'),
+    description: row.description || s.description || '',
+    coverImage: row.thumbnail_url || s.thumbnailUrl || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
+    trailerVideoUrl: s.trailerVideoUrl || (modules[0]?.lessons?.[0]?.videoUrl) || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    price: Number(row.price != null ? row.price : (s.price != null ? s.price : 25000)),
+    discountPrice: Number(row.price != null ? row.price : (s.price != null ? s.price : 25000)),
+    originalPrice: Number(row.price ? Math.round(row.price * 1.5) : 40000),
+    currency: 'FCFA',
+    level: s.level || 'TOUS_NIVEAUX',
+    category: s.category || 'Fintech & Mobile Money',
+    rating: 5.0,
+    reviewsCount: 1,
+    enrolledCount: 1,
+    totalDurationMinutes: totalDuration || 60,
+    durationLabel: totalDuration ? `${Math.floor(totalDuration / 60)}h ${totalDuration % 60}m • ${modules.length} Modules` : `${modules.length} Modules`,
+    certificateEnabled: true,
+    status: row.status || 'published',
+    modules: modules,
+    instructor: s.instructor || {
+      name: s.instructorName || 'Instructeur NaNa Academy',
+      title: 'Formateur Certifié',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+      bio: 'Expert professionnel agréé NaNa Academy.'
+    },
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
+  };
+}
+
 /**
- * Écouteur en temps réel Firestore pour tous les cours avec status == 'published'
- * (The 'One-Click Publish' Firebase Listener)
+ * Écouteur en temps réel pour tous les cours publiés (Supabase SQL & Firestore)
+ * Garantit la disponibilité immédiate des cours créés par les formateurs
  */
 export function subscribeToPublishedCourses(
   callback: (courses: MarketplaceCourse[]) => void
@@ -159,23 +199,45 @@ export function subscribeToPublishedCourses(
 
   const fetchCourses = async () => {
     try {
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreCourses: MarketplaceCourse[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as MarketplaceCourse;
-          firestoreCourses.push({
-            ...data,
-            id: docSnap.id
-          });
-        });
+      const allFoundCourses: MarketplaceCourse[] = [];
 
-        const merged = mergeCourseLists(SEED_MARKETPLACE_COURSES, firestoreCourses);
-        localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
-        callback(merged);
-      } else {
-        callback(localCache);
+      // 1. Supabase Courses (Source Principale des Formateurs)
+      try {
+        const { data: supaData, error: supaErr } = await supabase
+          .from('courses')
+          .select('*')
+          .neq('status', 'draft');
+
+        if (!supaErr && Array.isArray(supaData)) {
+          supaData.forEach(row => {
+            allFoundCourses.push(mapSupabaseCourseToMarketplace(row));
+          });
+        }
+      } catch (err) {
+        console.warn('[MARKETPLACE] Supabase fetch courses notice:', err);
       }
+
+      // 2. Firestore Courses (Compatibilité)
+      try {
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as MarketplaceCourse;
+            if (!allFoundCourses.some(c => c.id === docSnap.id)) {
+              allFoundCourses.push({
+                ...data,
+                id: docSnap.id
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[MARKETPLACE] Firestore fetch courses notice:', err);
+      }
+
+      const merged = mergeCourseLists(SEED_MARKETPLACE_COURSES, allFoundCourses);
+      localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
+      callback(merged);
     } catch (error) {
       console.warn('Mode autonome cours :', error);
       callback(localCache);
@@ -184,7 +246,8 @@ export function subscribeToPublishedCourses(
 
   fetchCourses();
 
-  const channelName = `courses_${Math.random().toString(36).substring(7)}`;
+  // Écoute temps réel des changements sur la table 'courses' Supabase
+  const channelName = `courses_live_${Math.random().toString(36).substring(7)}`;
   const channel = supabase
     .channel(channelName)
     .on(
@@ -192,7 +255,7 @@ export function subscribeToPublishedCourses(
       {
         event: '*',
         schema: 'public',
-        table: 'enrollments',
+        table: 'courses',
       },
       () => {
         fetchCourses();
@@ -261,11 +324,32 @@ export async function publishCourseToFirestore(
     updatedAt: Date.now()
   } as MarketplaceCourse;
 
+  // 1. Sauvegarde Firestore
   try {
     const docRef = doc(db, 'courses', courseId);
     await setDoc(docRef, fullCourse, { merge: true });
   } catch (err) {
     console.warn('Sauvegarde storage distante impossible, persistance locale prioritaire:', err);
+  }
+
+  // 2. Synchronisation Supabase SQL (pour accès direct classroom & SSR)
+  try {
+    await supabase.from('courses').upsert({
+      id: courseId,
+      title: fullCourse.title,
+      description: fullCourse.description || fullCourse.tagline,
+      price: fullCourse.price,
+      status: 'published',
+      modules: fullCourse.modules || [],
+      thumbnail_url: fullCourse.coverImage || '',
+      settings: {
+        ...fullCourse,
+        updatedAt: Date.now()
+      },
+      updated_at: new Date().toISOString()
+    });
+  } catch (supaErr) {
+    console.warn('[MARKETPLACE] Erreur synchronisation Supabase courses:', supaErr);
   }
 
   // Mise à jour du cache local réactif
@@ -290,13 +374,18 @@ export async function recordMobileMoneyEnrollment(params: {
   courseId: string;
   studentName: string;
   phoneNumber: string;
-  provider: 'WAVE' | 'ORANGE_MONEY' | 'MOOV_MONEY' | 'MTN_MOMO';
+  provider: 'WAVE' | 'ORANGE_MONEY' | 'MOOV_MONEY' | 'MTN_MOMO' | string;
   amount: number;
+  studentId?: string;
+  studentEmail?: string;
 }): Promise<boolean> {
-  const { courseId, studentName, phoneNumber, provider, amount } = params;
+  const { courseId, studentName, phoneNumber, provider, amount, studentId, studentEmail } = params;
   const transactionId = `tx_${provider.toLowerCase()}_${Date.now()}`;
   const now = Date.now();
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  const emailEffective = studentEmail || (cleanPhone ? `student_${cleanPhone}@nanasore.internal` : `student_${transactionId}@nanasore.internal`);
 
+  // 1. Sauvegarde Firestore
   try {
     const enrollRef = doc(db, 'enrollments', transactionId);
     await setDoc(enrollRef, {
@@ -304,6 +393,7 @@ export async function recordMobileMoneyEnrollment(params: {
       courseId,
       studentName,
       phoneNumber,
+      studentEmail: emailEffective,
       provider,
       amount,
       currency: 'FCFA',
@@ -314,10 +404,32 @@ export async function recordMobileMoneyEnrollment(params: {
     console.warn('Persistance storage enrollment:', e);
   }
 
+  // 2. Sauvegarde Supabase SQL enrollments (accès immédiat campus & instructeur)
+  try {
+    await supabase.from('enrollments').upsert({
+      id: transactionId,
+      course_id: courseId,
+      user_id: studentId || (cleanPhone ? `phone_${cleanPhone}` : undefined),
+      user_email: emailEffective,
+      phone_number: phoneNumber,
+      student_name: studentName,
+      provider: provider,
+      amount: amount,
+      status: 'active',
+      completed_lessons: [],
+      progress_percent: 0,
+      enrolled_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString()
+    });
+  } catch (supaErr) {
+    console.warn('[MARKETPLACE] Erreur synchronisation Supabase enrollments:', supaErr);
+  }
+
   // Active immédiatement l'accès étudiant en local
   localStorage.setItem(`nana_course_enrolled_${courseId}`, 'true');
   localStorage.setItem(`nana_student_name`, studentName);
   localStorage.setItem(`nana_student_phone`, phoneNumber);
+  localStorage.setItem(`nana_student_email`, emailEffective);
 
   return true;
 }
@@ -345,7 +457,7 @@ function mergeCourseLists(base: MarketplaceCourse[], incoming: MarketplaceCourse
 }
 
 /**
- * Récupère un cours du marketplace par son ID avec fallback robuste
+ * Récupère un cours du marketplace par son ID (synchrone avec fallback)
  */
 export function getMarketplaceCourseById(courseId: string): MarketplaceCourse {
   // 1. Recherche dans le cache local
@@ -371,5 +483,45 @@ export function getMarketplaceCourseById(courseId: string): MarketplaceCourse {
     title: `Masterclass Spécialisée : ${courseId.replace(/-/g, ' ').toUpperCase()}`,
     status: 'published'
   } as MarketplaceCourse;
+}
+
+/**
+ * Récupère un cours de manière asynchrone depuis Supabase SQL avec cache
+ */
+export async function fetchMarketplaceCourseById(courseId: string): Promise<MarketplaceCourse> {
+  // 1. Vérification dans le cache
+  try {
+    const saved = localStorage.getItem('nana_published_courses_cache');
+    if (saved) {
+      const list: MarketplaceCourse[] = JSON.parse(saved);
+      const found = list.find(c => c.id === courseId);
+      if (found && found.modules && found.modules.length > 0) return found;
+    }
+  } catch (e) {}
+
+  // 2. Requête Supabase SQL
+  try {
+    const { data, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const mapped = mapSupabaseCourseToMarketplace(data);
+      try {
+        const saved = localStorage.getItem('nana_published_courses_cache');
+        const list: MarketplaceCourse[] = saved ? JSON.parse(saved) : [...SEED_MARKETPLACE_COURSES];
+        const nextList = [mapped, ...list.filter(c => c.id !== mapped.id)];
+        localStorage.setItem('nana_published_courses_cache', JSON.stringify(nextList));
+      } catch (e) {}
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('[MARKETPLACE] Erreur fetch Supabase course by id:', err);
+  }
+
+  // 3. Fallback synchrone
+  return getMarketplaceCourseById(courseId);
 }
 

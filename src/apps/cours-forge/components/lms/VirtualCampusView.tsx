@@ -41,6 +41,9 @@ const ConfettiCelebration = React.lazy(() =>
 const CertificateGenerator = React.lazy(() => 
   import('./CertificateGenerator').then(m => ({ default: m.CertificateGenerator || m.default }))
 );
+const FrictionlessAfricanCheckoutBottomSheet = React.lazy(() => 
+  import('./marketplace/FrictionlessAfricanCheckoutBottomSheet').then(m => ({ default: m.FrictionlessAfricanCheckoutBottomSheet }))
+);
 import { StealthYouTubePlayer } from './video/StealthYouTubePlayer';
 import { JitsiClassroomPlayer } from './video/JitsiClassroomPlayer';
 import { ClassroomErrorBoundary } from './ClassroomErrorBoundary';
@@ -73,6 +76,13 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
 }) => {
   const isFree = isFreePlan(subscription || currentUser?.subscription);
   const [course, setCourse] = useState<Course>(() => getMockCourseById(courseId));
+  const [isEnrolled, setIsEnrolled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`nana_course_enrolled_${courseId}`) === 'true';
+    }
+    return false;
+  });
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<StudentEnrollment>(() => 
     getInitialStudentEnrollment(courseId, currentUser?.name || currentUser?.email?.split('@')[0] || 'Étudiant NaNa')
   );
@@ -270,10 +280,16 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
     });
 
     // 2. Chargement de l'inscription réelle de l'étudiant
-    const studentUid = currentUser?.id || (currentUser as any)?.uid || 'student-demo';
+    const studentUid = currentUser?.id || (currentUser as any)?.uid || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || 'student-guest';
     loadStudentEnrollment(courseId, studentUid).then(loadedEnrollment => {
       if (!isMounted || !loadedEnrollment) return;
       setEnrollment(loadedEnrollment);
+      if (loadedEnrollment.isCompleted || (loadedEnrollment.completedLessonIds && loadedEnrollment.completedLessonIds.length > 0)) {
+        setIsEnrolled(true);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`nana_course_enrolled_${courseId}`, 'true');
+        }
+      }
     }).catch(err => {
       console.warn("Échec chargement inscription étudiante :", err);
     });
@@ -376,10 +392,26 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
   }, [course?.modules, enrollmentTimestamp, enrollment?.completedLessonIds]);
 
   const getLessonLockStatus = useCallback((lesson: CourseLesson, moduleIndex: number) => {
+    // Les formateurs et administrateurs ont accès complet
+    const isStaff = currentUser?.role === 'instructor' || currentUser?.role === 'admin' || (currentUser as any)?.isSuperAdmin;
+    if (isStaff) return { unlocked: true };
+
+    // Les leçons en aperçu gratuit sont toujours ouvertes à tous
+    if (lesson?.isFreePreview) return { unlocked: true };
+
+    // Si l'étudiant n'est pas encore inscrit à cette formation payante
+    if (!isEnrolled) {
+      return {
+        unlocked: false,
+        isEnrollmentRequired: true,
+        reason: "Cette leçon est réservée aux apprenants inscrits à la formation. Inscrivez-vous pour débloquer l'accès complet et le diplôme."
+      };
+    }
+
     const mod = course?.modules?.[moduleIndex];
     if (!mod || !lesson) return { unlocked: true };
     return isLessonUnlocked(lesson, mod, enrollmentTimestamp, enrollment?.completedLessonIds || [], course?.modules || []);
-  }, [course?.modules, enrollmentTimestamp, enrollment?.completedLessonIds]);
+  }, [course?.modules, enrollmentTimestamp, enrollment?.completedLessonIds, isEnrolled, currentUser]);
 
   const activeLessonLock = useMemo(() => {
     if (!activeLesson?.id || !course?.modules) return { unlocked: true };
@@ -785,13 +817,33 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
                 <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
                   <Lock className="w-7 h-7" />
                 </div>
-                <h3 className="text-base sm:text-lg font-black text-white">Leçon Protégée</h3>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  {(activeLessonLock as any).isEnrollmentRequired ? "Contenu Réservé aux Membres Inscrits" : "Leçon Protégée"}
+                </h3>
                 <p className="text-xs text-amber-300 font-semibold max-w-md bg-amber-500/10 px-4 py-2 rounded-xl border border-amber-500/20">
-                  {activeLessonLock.reason || 'Cette leçon est verrouillée selon les règles de progression du formateur.'}
+                  {activeLessonLock.reason || 'Cette leçon est verrouillée.'}
                 </p>
-                <p className="text-[11px] text-slate-400 max-w-sm">
-                  Progression séquentielle ou déblocage échelonné (Drip Content). Validez les leçons antérieures pour débloquer cet accès.
-                </p>
+                {(activeLessonLock as any).isEnrollmentRequired ? (
+                  <div className="pt-2 flex flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCheckoutOpen(true)}
+                      className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-500/20 hover:scale-105 active:scale-95 transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <span>S'inscrire et Débloquer la Masterclass 🚀</span>
+                    </button>
+                    {course?.price && (
+                      <span className="text-[11px] font-mono text-slate-400">
+                        Tarif officiel : {formatCFA(course.price)} • Accès immédiat
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 max-w-sm">
+                    Progression séquentielle ou déblocage échelonné (Drip Content). Validez les leçons antérieures pour débloquer cet accès.
+                  </p>
+                )}
               </div>
             ) : activeLesson.liveSessionConfig?.provider === 'JITSI' ? (
               <JitsiClassroomPlayer
@@ -1820,11 +1872,34 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
           }
         }}
         className="fixed bottom-4 right-4 z-50 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-2xl shadow-blue-500/40 border border-blue-400/40 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
-        title="Ouvrir cette page dans le Funnel Builder"
       >
         <span>✏️</span>
         <span>Modifier cette page</span>
       </button>
+
+      {/* Modale d'inscription & paiement immédiat (Paywall Sécurisé) */}
+      <React.Suspense fallback={null}>
+        {isCheckoutOpen && (
+          <FrictionlessAfricanCheckoutBottomSheet
+            course={{
+              ...course,
+              discountPrice: course.price || 25000,
+              originalPrice: course.price ? Math.round(course.price * 1.5) : 40000,
+              currency: 'FCFA',
+              status: 'published'
+            } as any}
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            onEnrollSuccess={() => {
+              setIsEnrolled(true);
+              setIsCheckoutOpen(false);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`nana_course_enrolled_${course.id}`, 'true');
+              }
+            }}
+          />
+        )}
+      </React.Suspense>
     </div>
     </ClassroomErrorBoundary>
   );

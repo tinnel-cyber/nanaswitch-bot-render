@@ -36,6 +36,8 @@ import { AccessController } from './AccessController';
 const CourseDiagnosisQuizModal = React.lazy(() => import('./CourseDiagnosisQuizModal'));
 const TinnelaAiTutorModal = React.lazy(() => import('./TinnelaAiTutorModal'));
 
+import { fetchMarketplaceCourseById } from '../../../../../services/marketplaceService';
+
 interface CourseDetailPageProps {
   course: MarketplaceCourse;
   onBackToDiscovery: () => void;
@@ -43,12 +45,26 @@ interface CourseDetailPageProps {
 }
 
 export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
-  course,
+  course: initialCourse,
   onBackToDiscovery,
   onNavigateToClassroom
 }) => {
+  const [course, setCourse] = useState<MarketplaceCourse>(initialCourse);
+
+  useEffect(() => {
+    setCourse(initialCourse);
+    let isMounted = true;
+    fetchMarketplaceCourseById(initialCourse.id).then(c => {
+      if (isMounted && c && c.title) {
+        setCourse(c);
+        if (c.trailerVideoUrl) setActiveVideoUrl(c.trailerVideoUrl);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [initialCourse.id]);
+
   const [activeVideoUrl, setActiveVideoUrl] = useState(
-    course.trailerVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+    initialCourse.trailerVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
   );
   const [activeVideoTitle, setActiveVideoTitle] = useState('Bande-Annonce Officielle');
   const [isPlaying, setIsPlaying] = useState(false);

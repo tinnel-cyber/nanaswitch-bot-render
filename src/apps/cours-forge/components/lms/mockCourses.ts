@@ -343,15 +343,13 @@ export function getMockCourseById(courseId: string): Course {
 export function getInitialStudentEnrollment(courseId: string, studentName: string = 'Étudiant NaNa'): StudentEnrollment {
   return {
     id: `enroll-${Date.now()}`,
-    studentId: 'student-demo',
+    studentId: 'student-guest',
     studentName,
-    studentEmail: 'etudiant@nanasore.com',
+    studentEmail: 'etudiant@nanasore.internal',
     courseId,
-    enrolledAt: Date.now() - 1000 * 60 * 60 * 24 * 3, // Inscrit il y a 3 jours
-    completedLessonIds: ['les-1-1'], // 1 leçon déjà validée par défaut
-    quizScores: {
-      'quiz-mod-1': 100
-    },
+    enrolledAt: Date.now(),
+    completedLessonIds: [],
+    quizScores: {},
     assignmentSubmissions: {},
     certificateIssued: false
   };

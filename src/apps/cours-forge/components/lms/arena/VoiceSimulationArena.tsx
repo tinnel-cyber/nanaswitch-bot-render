@@ -14,7 +14,8 @@ import {
   Play, 
   Square,
   ChevronDown,
-  RotateCcw
+  RotateCcw,
+  Send
 } from 'lucide-react';
 import { VoiceSimulationScenarioConfig, VoiceSimulationReport } from '../../../../../types';
 import { useVoiceAI } from '../../../../../hooks/useVoiceAI';
@@ -53,10 +54,12 @@ export const VoiceSimulationArena: React.FC<VoiceSimulationArenaProps> = ({
     endSession,
     startSpeaking,
     stopSpeakingAndSubmit,
+    submitTextResponse,
     cancelSession
   } = useVoiceAI(scenario, studentId, courseId, lessonId);
 
   const [isFinishing, setIsFinishing] = useState(false);
+  const [keyboardText, setKeyboardText] = useState('');
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,6 +78,14 @@ export const VoiceSimulationArena: React.FC<VoiceSimulationArenaProps> = ({
     } finally {
       setIsFinishing(false);
     }
+  };
+
+  const handleSendKeyboard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!keyboardText.trim() || isAiSpeaking || isProcessing) return;
+    const msg = keyboardText.trim();
+    setKeyboardText('');
+    await submitTextResponse(msg);
   };
 
   const handleStart = async () => {
@@ -362,6 +373,26 @@ export const VoiceSimulationArena: React.FC<VoiceSimulationArenaProps> = ({
                   <Award className="w-4 h-4 text-emerald-400" />
                   {isFinishing ? 'Évaluation IA en cours...' : 'Terminer & Évaluer'}
                 </button>
+
+                {/* Mode Clavier / Saisie Alternative pour compatibilité totale */}
+                <form onSubmit={handleSendKeyboard} className="w-full flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                  <input
+                    type="text"
+                    value={keyboardText}
+                    onChange={(e) => setKeyboardText(e.target.value)}
+                    disabled={isAiSpeaking || isProcessing || isListening}
+                    placeholder="Ou tapez votre réplique au clavier (Safari, Mobile ou sans micro)..."
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!keyboardText.trim() || isAiSpeaking || isProcessing || isListening}
+                    className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-1.5 transition disabled:opacity-40 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Envoyer</span>
+                  </button>
+                </form>
               </div>
             </div>
           )}

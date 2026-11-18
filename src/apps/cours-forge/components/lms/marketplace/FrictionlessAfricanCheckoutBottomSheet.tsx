@@ -19,7 +19,7 @@ import {
 import { MarketplaceCourse, MobileMoneyProvider } from './types';
 import { formatCFA, playCashChime, playValidationBeep, playTapBeep } from '../../../../../utils/audio';
 import { recordMobileMoneyEnrollment } from '../../../../../services/marketplaceService';
-import { recordCourseEnrollment, navigateToStudentDashboard } from '../../../../../services/studentAuthService';
+import { recordCourseEnrollment, navigateToStudentDashboard, getCurrentStudentProfile } from '../../../../../services/studentAuthService';
 import { useCheckout } from '../../../../../hooks/useCheckout';
 import { NanasorePaymentGateway } from '../../../../../components/payment/NanasorePaymentGateway';
 
@@ -75,10 +75,11 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
   discountPercentage,
   discountLabel
 }) => {
+  const currentProfile = getCurrentStudentProfile();
   const [activeTab, setActiveTab] = useState<'MOMO' | 'WHATSAPP'>('MOMO');
   const [selectedProvider, setSelectedProvider] = useState<MobileMoneyProvider>(MOBILE_MONEY_PROVIDERS[0]);
-  const [studentName, setStudentName] = useState('Ibrahim Pousbila Konkobo');
-  const [phoneNumber, setPhoneNumber] = useState('+226 70 00 00 00');
+  const [studentName, setStudentName] = useState(currentProfile?.fullName || '');
+  const [phoneNumber, setPhoneNumber] = useState(currentProfile?.phoneNumber || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [countdown, setCountdown] = useState(5);
@@ -94,45 +95,64 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
   // Lancement du paiement Mobile Money sécurisé via Nanasore Payment Gateway (Règle 3)
   const handleTriggerMobileMoneyPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentName.trim()) {
+      alert("Veuillez renseigner votre nom complet.");
+      return;
+    }
+    if (!phoneNumber.trim()) {
+      alert("Veuillez renseigner votre numéro de téléphone Mobile Money.");
+      return;
+    }
     playTapBeep();
     setIsNanasoreGatewayOpen(true);
   };
 
   const handleNanasoreLmsSuccess = async (details: any) => {
+    // Si la passerelle indique un échec, on ne débloque pas le cours
+    if (details && details.success === false) {
+      setIsNanasoreGatewayOpen(false);
+      alert("Le paiement a été interrompu ou n'a pas pu être validé. Aucun débit effectué.");
+      return;
+    }
+
     setIsProcessing(true);
+    const activePhone = details?.phoneNumber || phoneNumber;
+    const activeName = studentName || 'Étudiant NaNa Academy';
+
     try {
       await initializeCheckout({
         courseId: course.id,
         amount: effectivePrice,
-        studentName,
-        phoneNumber: details.phoneNumber || phoneNumber,
-        provider: details.operator?.name || selectedProvider.id
+        studentName: activeName,
+        phoneNumber: activePhone,
+        provider: details?.operator?.name || selectedProvider.id
       });
 
       await recordMobileMoneyEnrollment({
         courseId: course.id,
-        studentName,
-        phoneNumber: details.phoneNumber || phoneNumber,
-        provider: details.operator?.name || selectedProvider.id,
+        studentName: activeName,
+        phoneNumber: activePhone,
+        provider: details?.operator?.name || selectedProvider.id,
         amount: effectivePrice
       });
 
       // Enregistrement du profil élève pour connexion ultérieure automatique
       recordCourseEnrollment({
         courseId: course.id,
-        fullName: studentName,
-        phoneNumber: details.phoneNumber || phoneNumber
+        fullName: activeName,
+        phoneNumber: activePhone
       });
 
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);
       playCashChime();
     } catch (err) {
-      console.warn('Erreur enrollment LMS :', err);
+      console.warn('Note enregistrement enrollment LMS :', err);
+      // Le paiement a réussi sur la passerelle : inscription locale préservée
       recordCourseEnrollment({
         courseId: course.id,
-        fullName: studentName,
-        phoneNumber: details?.phoneNumber || phoneNumber
+        fullName: activeName,
+        phoneNumber: activePhone
       });
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);

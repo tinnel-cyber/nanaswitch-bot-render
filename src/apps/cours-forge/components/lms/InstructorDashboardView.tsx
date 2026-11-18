@@ -1289,6 +1289,44 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
 
   // Onglet actif : vue d'ensemble du tableau de bord, atelier Course Forge, corrections, supervision realtime, tunnels viraux ou intégrations
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'PROFILE_KYC' | 'COURSE_CREATE' | 'CORRECTIONS' | 'COHORT_REALTIME' | 'VIRAL_FUNNELS' | 'INTEGRATIONS'>(initialTab || 'DASHBOARD');
+  const [instructorCourses, setInstructorCourses] = useState<any[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState<boolean>(false);
+  const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingCourses(true);
+
+    import('../../../../supabaseClient').then(({ supabase }) => {
+      supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .then(({ data, error }) => {
+          if (!isMounted) return;
+          setIsLoadingCourses(false);
+          if (!error && Array.isArray(data) && data.length > 0) {
+            setInstructorCourses(data);
+            setCoursesCount(data.length);
+          } else {
+            const cached = localStorage.getItem('nana_published_courses_cache');
+            if (cached) {
+              try {
+                const list = JSON.parse(cached);
+                if (Array.isArray(list)) {
+                  setInstructorCourses(list);
+                  setCoursesCount(list.length);
+                }
+              } catch {}
+            }
+          }
+        });
+    }).catch(() => {
+      if (isMounted) setIsLoadingCourses(false);
+    });
+
+    return () => { isMounted = false; };
+  }, []);
 
   useEffect(() => {
     if (initialTab) {
@@ -1942,7 +1980,168 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
             </div>
           )}
 
-          {/* Section D : Hub de Navigation (10 modules de l'écosystème) */}
+          {/* Section D : Mes Formations & Masterclasses en Ligne (Supabase Live) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-white">
+                      Mes Formations &amp; Masterclasses Publiées
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-black">
+                      {instructorCourses.length} {instructorCourses.length > 1 ? 'cours' : 'cours'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Gérez vos programmes, visualisez les inscriptions et partagez vos liens en ligne
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setActiveTab('COURSE_CREATE');
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:opacity-95 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Créer une Masterclass</span>
+              </button>
+            </div>
+
+            {isLoadingCourses ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400 text-xs">
+                <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+                <span>Synchronisation de vos formations depuis la base de données...</span>
+              </div>
+            ) : instructorCourses.length === 0 ? (
+              <div className="py-10 text-center space-y-3 bg-slate-950/40 rounded-2xl border border-dashed border-slate-800 p-6">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800/60 text-slate-400 mx-auto flex items-center justify-center">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-white">Aucune formation encore publiée</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Utilisez notre atelier visuel Course Forge pour concevoir votre syllabus avec quiz adaptatifs et avatars vidéo IA.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setActiveTab('COURSE_CREATE');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Démarrer ma première masterclass</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {instructorCourses.map((c) => {
+                  const courseId = c.id || c.course_id;
+                  const title = c.title || c.name || 'Masterclass Sans Titre';
+                  const price = c.price || c.pricing?.amount || 0;
+                  const enrolledCount = enrollments.filter(e => e.courseId === courseId).length;
+                  const isCopied = copiedCourseId === courseId;
+                  const coverImg = c.cover_image || c.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&auto=format&fit=crop&q=80';
+
+                  return (
+                    <div
+                      key={courseId}
+                      className="bg-slate-950/60 border border-slate-800 hover:border-slate-700 rounded-2xl overflow-hidden flex flex-col justify-between transition group shadow-md"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
+                        <img
+                          src={coverImg}
+                          alt={title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        />
+                        <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-slate-700/80 text-[10px] font-black text-emerald-400">
+                          {price > 0 ? `${price.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}
+                        </div>
+                        <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                          En Ligne
+                        </div>
+                      </div>
+
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-white line-clamp-2 leading-snug">
+                            {title}
+                          </h4>
+                          <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3.5 h-3.5 text-cyan-400" />
+                              <strong className="text-white">{enrolledCount}</strong> apprenants
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playTapBeep();
+                              window.open(`/course/${courseId}`, '_blank');
+                            }}
+                            className="flex-1 py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-[11px] font-bold border border-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Voir</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playTapBeep();
+                              const link = `${window.location.origin}/course/${courseId}`;
+                              navigator.clipboard.writeText(link);
+                              setCopiedCourseId(courseId);
+                              setTimeout(() => setCopiedCourseId(null), 2500);
+                            }}
+                            className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-[11px] font-bold border border-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="Copier le lien direct de la formation"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-emerald-400">Copié</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Lien</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playTapBeep();
+                              setActiveTab('COURSE_CREATE');
+                            }}
+                            className="py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Éditer</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section E : Hub de Navigation (10 modules de l'écosystème) */}
           {!hiddenWidgets['NAVIGATION_HUB'] && (
             <div className="relative group">
               {isSuperAdminEditMode && (
