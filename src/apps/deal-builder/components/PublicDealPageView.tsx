@@ -74,7 +74,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
     // 1. Nettoyage immédiat des caches locaux obsolètes ou corrompus
     const cacheKey = funnelType ? `nana_funnel_${funnelType}_${slug}` : `nana_funnel_${slug}`;
-    const saved = localStorage.getItem(cacheKey) || localStorage.getItem(`nana_funnel_${slug}`);
+    const saved = localStorage.getItem(cacheKey) || localStorage.getItem(`nana_funnel_f_${slug}`) || localStorage.getItem(`nana_funnel_${slug}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -89,6 +89,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           parsed.blocks.length <= 2
         ) {
           localStorage.removeItem(cacheKey);
+          localStorage.removeItem(`nana_funnel_f_${slug}`);
           localStorage.removeItem(`nana_funnel_${slug}`);
           localStorage.removeItem(`nana_funnel_pous`);
           localStorage.removeItem(`nana_funnel_pous.nanasore.com`);
@@ -107,6 +108,8 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           setFunnel(remoteFunnel);
           try {
             localStorage.setItem(cacheKey, JSON.stringify(remoteFunnel));
+            localStorage.setItem(`nana_funnel_f_${slug}`, JSON.stringify(remoteFunnel));
+            localStorage.setItem(`nana_funnel_${slug}`, JSON.stringify(remoteFunnel));
           } catch {}
         }
       }
@@ -283,40 +286,19 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
     };
   }, [funnel, slug]);
 
-  const normalizedBrandColor = (funnel as any)?.brandColor || (funnel as any)?.primaryColor || (funnel as any)?.settings?.brandColor || (funnel as any)?.settings?.primaryColor || '#f59e0b';
-  const normalizedAccentColor = (funnel as any)?.accentColor || (funnel as any)?.settings?.accentColor || '#fbbf24';
-  const normalizedBgColor = (funnel as any)?.settings?.bgColor || (funnel as any)?.bgColor || '#020617';
+  const brandColor = (funnel as any)?.brandColor || (funnel as any)?.primaryColor || (funnel as any)?.settings?.brandColor || (funnel as any)?.settings?.primaryColor || '#f59e0b';
+  const accentColor = (funnel as any)?.accentColor || (funnel as any)?.settings?.accentColor || '#fbbf24';
+  const pageBgColor = (funnel as any)?.settings?.bgColor || (funnel as any)?.bgColor || '#070b14';
 
-  const isLight = useMemo(() => {
-    if (!normalizedBgColor) return false;
-    let hex = String(normalizedBgColor).replace('#', '').trim();
-    if (hex.length === 3) hex = hex.split('').map((c: string) => c + c).join('');
-    if (hex.length === 6) {
-      const r = parseInt(hex.substring(0, 2), 16);
-      const g = parseInt(hex.substring(2, 4), 16);
-      const b = parseInt(hex.substring(4, 6), 16);
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance > 0.55;
+  useEffect(() => {
+    if (pageBgColor && typeof document !== 'undefined') {
+      const prev = document.body.style.backgroundColor;
+      document.body.style.backgroundColor = pageBgColor;
+      return () => {
+        document.body.style.backgroundColor = prev;
+      };
     }
-    return false;
-  }, [normalizedBgColor]);
-
-  // Styles adaptatifs haut de gamme : s'adaptent naturellement à n'importe quelle couleur de fond
-  const cardStyle = useMemo<React.CSSProperties>(() => ({
-    backgroundColor: isLight ? 'rgba(255, 255, 255, 0.88)' : 'rgba(15, 23, 42, 0.55)',
-    borderColor: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.12)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)'
-  }), [isLight]);
-
-  const innerBoxStyle = useMemo<React.CSSProperties>(() => ({
-    backgroundColor: isLight ? 'rgba(241, 245, 249, 0.9)' : 'rgba(2, 6, 23, 0.55)',
-    borderColor: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)'
-  }), [isLight]);
-
-  const textHeadingClass = isLight ? 'text-slate-900' : 'text-white';
-  const textBodyClass = isLight ? 'text-slate-600' : 'text-slate-300';
-  const textMutedClass = isLight ? 'text-slate-500' : 'text-slate-400';
+  }, [pageBgColor]);
 
   if (!normalizedFunnel) {
     return (
@@ -381,8 +363,8 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
   return (
     <div
-      style={{ backgroundColor: normalizedBgColor }}
-      className={`min-h-screen w-full flex flex-col font-sans overflow-x-hidden ${isLight ? 'text-slate-900' : 'text-slate-100'} ${className}`}
+      style={{ backgroundColor: pageBgColor }}
+      className={`min-h-screen w-full text-slate-100 flex flex-col font-sans overflow-x-hidden ${className}`}
     >
       {/* Barre d'Annonce Flash Supérieure (Affichée uniquement si configurée) */}
       {Boolean(normalizedFunnel.announcementBar || (normalizedFunnel as any).topBannerText) && (
@@ -418,90 +400,64 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             const price = Number(blockProps.price) || Number((normalizedFunnel as any).salePrice) || 35000;
             const origPrice = Number(blockProps.originalPrice) || Number((normalizedFunnel as any).originalPrice);
             const buttonText = blockProps.buttonText || blockProps.ctaText || `Rejoindre le Programme • ${formatCFA(price)} 🚀`;
-            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : normalizedBrandColor;
+            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : brandColor;
 
             return (
               <section
                 key={block.id}
-                style={cardStyle}
-                className="p-5 sm:p-7 rounded-3xl border space-y-4 shadow-xl flex flex-col items-center text-center transition-all"
+                className="p-5 sm:p-7 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4 shadow-xl flex flex-col items-center text-center transition-all"
               >
                 {badge && (
                   <div
-                    style={{ backgroundColor: `${normalizedBrandColor}18`, borderColor: `${normalizedBrandColor}45`, color: normalizedBrandColor }}
+                    style={{ backgroundColor: `${brandColor}20`, borderColor: `${brandColor}40`, color: brandColor }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-black tracking-wider uppercase border"
                   >
-                    <Award className="w-3.5 h-3.5" style={{ color: normalizedBrandColor }} />
+                    <Award className="w-3.5 h-3.5" style={{ color: brandColor }} />
                     <span>{badge}</span>
                   </div>
                 )}
 
-                <h1 className={`text-xl sm:text-3xl font-black leading-tight tracking-tight max-w-2xl ${textHeadingClass}`}>
+                <h1 className="text-xl sm:text-3xl font-black text-white leading-tight tracking-tight max-w-2xl">
                   {headline}
                 </h1>
 
                 {subheadline && (
-                  <p className={`text-xs sm:text-sm font-medium max-w-xl leading-relaxed ${textBodyClass}`}>
+                  <p className="text-xs sm:text-sm text-slate-300 font-medium max-w-xl leading-relaxed">
                     {subheadline}
                   </p>
                 )}
 
                 {instructorTag && (
                   <div
-                    style={innerBoxStyle}
-                    className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold ${textHeadingClass}`}
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-xs font-bold text-white"
                   >
-                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: normalizedBrandColor }} />
+                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: brandColor }} />
                     <span>{instructorTag}</span>
                     {blockProps.instructorRole && (
-                      <span className={`text-[10px] ${textMutedClass}`}>• {blockProps.instructorRole}</span>
+                      <span className="text-[10px] text-slate-400">• {blockProps.instructorRole}</span>
                     )}
                   </div>
                 )}
 
+                {/* Image Showcase Standard CRO (Aspect Video, Haute Vitesse, Sans Bloquer le Touch Mobile) */}
                 {img && (
-                  <div className="my-4 relative w-64 sm:w-80 flex flex-col items-center">
-                    <div
-                      className="absolute -inset-4 rounded-full blur-2xl opacity-25 pointer-events-none"
-                      style={{ backgroundColor: normalizedBrandColor }}
-                    />
-                    <motion.div
-                      animate={{
-                        y: [0, -10, 0],
-                        rotate: [0, 0.8, -0.8, 0]
-                      }}
-                      transition={{
-                        duration: 4,
-                        repeat: Infinity,
-                        ease: 'easeInOut'
-                      }}
-                      style={{
-                        backgroundColor: isLight ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 255, 255, 0.05)',
-                        borderColor: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.15)',
-                        backdropFilter: 'blur(12px)',
-                        WebkitBackdropFilter: 'blur(12px)'
-                      }}
-                      className="relative z-10 w-full rounded-2xl overflow-hidden shadow-2xl border flex items-center justify-center p-3 aspect-square sm:aspect-video"
-                    >
+                  <div className="my-3 relative w-full max-w-md mx-auto">
+                    <div className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center">
                       <img
                         src={img}
                         alt={headline}
-                        className="max-h-full max-w-full object-contain drop-shadow-2xl"
+                        className="w-full h-full object-cover"
                       />
-                    </motion.div>
-                    <div
-                      className="w-3/4 h-3.5 blur-md rounded-full mt-3"
-                      style={{ backgroundColor: isLight ? 'rgba(0, 0, 0, 0.12)' : `${normalizedBrandColor}40` }}
-                    />
+                    </div>
                   </div>
                 )}
 
                 <div className="flex items-baseline justify-center gap-3 pt-2">
-                  <span className="text-3xl sm:text-4xl font-black font-mono" style={{ color: normalizedBrandColor }}>
+                  <span className="text-3xl sm:text-4xl font-black font-mono" style={{ color: brandColor }}>
                     {formatCFA(price)}
                   </span>
                   {origPrice && origPrice > 0 && (
-                    <span className={`text-sm sm:text-base line-through font-mono ${textMutedClass}`}>
+                    <span className="text-sm sm:text-base line-through font-mono text-slate-400">
                       {formatCFA(origPrice)}
                     </span>
                   )}
@@ -519,7 +475,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                     style={{
                       backgroundColor: btnBg,
                       color: blockProps.btnTextColor || '#000000',
-                      boxShadow: `0 10px 25px ${normalizedBrandColor}50`
+                      boxShadow: `0 10px 30px -5px ${brandColor}60`
                     }}
                   >
                     <span>{buttonText}</span>
@@ -532,22 +488,22 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isCountdownTimer) {
             return (
-              <div key={block.id} style={cardStyle} className="p-4 rounded-2xl border text-center max-w-md mx-auto w-full space-y-2">
-                <div className="text-[11px] font-black tracking-wider flex items-center justify-center gap-1.5" style={{ color: normalizedBrandColor }}>
+              <div key={block.id} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-center max-w-md mx-auto w-full space-y-2 shadow-lg">
+                <div className="text-[11px] font-black tracking-wider flex items-center justify-center gap-1.5" style={{ color: brandColor }}>
                   <Clock className="w-3.5 h-3.5" />
                   <span>{blockProps.title || '🚨 CETTE OFFRE SPÉCIALE PREND FIN DANS :'}</span>
                 </div>
                 <div className="flex items-center justify-center gap-3 font-mono font-black text-lg">
-                  <div style={innerBoxStyle} className={`px-3 py-1.5 rounded-xl border ${textHeadingClass}`}>
-                    {String(blockProps.initialHours || 18).padStart(2, '0')}<span className={`text-[10px] block font-sans ${textMutedClass}`}>HEURES</span>
+                  <div className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-white">
+                    {String(blockProps.initialHours || 18).padStart(2, '0')}<span className="text-[10px] block font-sans text-slate-400">HEURES</span>
                   </div>
-                  <span className={textHeadingClass}>:</span>
-                  <div style={{ ...innerBoxStyle, color: normalizedBrandColor }} className="px-3 py-1.5 rounded-xl border">
-                    {String(blockProps.initialMinutes || 30).padStart(2, '0')}<span className={`text-[10px] block font-sans ${textMutedClass}`}>MINUTES</span>
+                  <span className="text-white">:</span>
+                  <div style={{ color: brandColor }} className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl">
+                    {String(blockProps.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block font-sans text-slate-400">MINUTES</span>
                   </div>
-                  <span className={textHeadingClass}>:</span>
-                  <div style={innerBoxStyle} className="px-3 py-1.5 rounded-xl border text-rose-400">
-                    {String(blockProps.initialSeconds || 45).padStart(2, '0')}<span className={`text-[10px] block font-sans ${textMutedClass}`}>SECONDES</span>
+                  <span className="text-white">:</span>
+                  <div className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-rose-400">
+                    {String(blockProps.initialSeconds || 45).padStart(2, '0')}<span className="text-[10px] block font-sans text-slate-400">SECONDES</span>
                   </div>
                 </div>
               </div>
@@ -556,16 +512,16 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isSeatsBar) {
             return (
-              <div key={block.id} style={cardStyle} className="p-3.5 rounded-2xl border max-w-md mx-auto w-full space-y-2">
+              <div key={block.id} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 max-w-md mx-auto w-full space-y-2 shadow-lg">
                 <div className="flex items-center justify-between text-xs font-bold">
                   <span className="flex items-center gap-1.5 text-rose-400">
                     <Flame className="w-3.5 h-3.5" />
                     <span>{blockProps.text || 'Dernières places disponibles avant clôture définitive !'}</span>
                   </span>
-                  <span className={`font-mono ${textMutedClass}`}>{blockProps.percentage || 84}% Réservé</span>
+                  <span className="font-mono text-slate-400">{blockProps.percentage || 84}% Réservé</span>
                 </div>
-                <div style={innerBoxStyle} className="h-2.5 w-full rounded-full overflow-hidden p-0.5 border">
-                  <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${normalizedBrandColor}, ${normalizedAccentColor})`, width: `${blockProps.percentage || 84}%` }} />
+                <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                  <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${brandColor}, ${accentColor})`, width: `${blockProps.percentage || 84}%` }} />
                 </div>
               </div>
             );
@@ -575,23 +531,23 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             return (
               <div key={block.id} className="space-y-4 py-2 text-left max-w-2xl mx-auto w-full">
                 <div className="text-center">
-                  <h3 className={`text-base font-black ${textHeadingClass}`}>{blockProps.headline || 'Le Programme Structuré pour Réussir'}</h3>
-                  {blockProps.subheadline && <p className={`text-xs mt-1 ${textMutedClass}`}>{blockProps.subheadline}</p>}
+                  <h3 className="text-base font-black text-white">{blockProps.headline || 'Le Programme Structuré pour Réussir'}</h3>
+                  {blockProps.subheadline && <p className="text-xs mt-1 text-slate-400">{blockProps.subheadline}</p>}
                 </div>
                 <div className="space-y-2.5 max-w-2xl mx-auto">
                   {(blockProps.modules || []).map((m: any, i: number) => (
-                    <div key={i} style={cardStyle} className="p-3.5 rounded-2xl border flex items-center justify-between">
+                    <div key={i} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between shadow-lg">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0" style={{ backgroundColor: `${normalizedBrandColor}20`, color: normalizedBrandColor }}>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0" style={{ backgroundColor: `${brandColor}20`, color: brandColor }}>
                           0{i + 1}
                         </div>
                         <div>
-                          <h5 className={`text-xs font-bold ${textHeadingClass}`}>{m.title}</h5>
-                          <span className={`text-[10px] ${textMutedClass}`}>{m.lessons}</span>
+                          <h5 className="text-xs font-bold text-white">{m.title}</h5>
+                          <span className="text-[10px] text-slate-400">{m.lessons}</span>
                         </div>
                       </div>
                       {m.duration && (
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: normalizedAccentColor, backgroundColor: `${normalizedAccentColor}18` }}>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md shrink-0" style={{ color: accentColor, backgroundColor: `${accentColor}18` }}>
                           {m.duration}
                         </span>
                       )}
@@ -604,17 +560,17 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isInstructor) {
             return (
-              <div key={block.id} style={cardStyle} className="p-5 rounded-3xl border max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full">
+              <div key={block.id} className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full shadow-lg">
                 {blockProps.avatar && (
-                  <img src={blockProps.avatar} alt={blockProps.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: `${normalizedBrandColor}50` }} />
+                  <img src={blockProps.avatar} alt={blockProps.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: `${brandColor}50` }} />
                 )}
                 <div className="space-y-1">
-                  <h4 className={`text-sm font-black ${textHeadingClass}`}>{blockProps.name || 'Instructeur'}</h4>
-                  <p className="text-xs font-medium" style={{ color: normalizedBrandColor }}>{blockProps.title || 'Expert Agréé • NaNa Pro'}</p>
-                  <p className={`text-xs leading-relaxed ${textBodyClass}`}>{blockProps.bio}</p>
+                  <h4 className="text-sm font-black text-white">{blockProps.name || 'Instructeur'}</h4>
+                  <p className="text-xs font-medium" style={{ color: brandColor }}>{blockProps.title || 'Expert Agréé • NaNa Pro'}</p>
+                  <p className="text-xs leading-relaxed text-slate-300">{blockProps.bio}</p>
                   <div className="flex flex-wrap gap-1.5 pt-1 justify-center sm:justify-start">
                     {(blockProps.badges || ['Note 4.9/5', 'Certifié Pro', 'Support WhatsApp']).map((b: string, idx: number) => (
-                      <span key={idx} style={innerBoxStyle} className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${textBodyClass}`}>
+                      <span key={idx} className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-slate-950 border-slate-800 text-slate-300">
                         {b}
                       </span>
                     ))}
@@ -627,13 +583,13 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           if (isFaq) {
             return (
               <div key={block.id} className="space-y-3 py-2 max-w-2xl mx-auto text-left w-full">
-                <h4 className={`text-sm font-black text-center mb-3 ${textHeadingClass}`}>{blockProps.headline || 'Questions Fréquentes'}</h4>
+                <h4 className="text-sm font-black text-center mb-3 text-white">{blockProps.headline || 'Questions Fréquentes'}</h4>
                 {(blockProps.items || []).map((item: any, idx: number) => (
-                  <div key={idx} style={cardStyle} className="p-3.5 rounded-2xl border space-y-1">
-                    <h5 className={`text-xs font-bold flex items-center gap-2 ${textHeadingClass}`}>
-                      <span style={{ color: normalizedBrandColor }} className="font-black">Q :</span> {item.q || item.question}
+                  <div key={idx} className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1 shadow-lg">
+                    <h5 className="text-xs font-bold flex items-center gap-2 text-white">
+                      <span style={{ color: brandColor }} className="font-black">Q :</span> {item.q || item.question}
                     </h5>
-                    <p className={`text-xs pl-4 ${textMutedClass}`}>{item.a || item.answer}</p>
+                    <p className="text-xs pl-4 text-slate-400">{item.a || item.answer}</p>
                   </div>
                 ))}
               </div>
@@ -641,7 +597,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
           }
 
           if (isCtaButton) {
-            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : normalizedBrandColor;
+            const btnBg = (blockProps.btnBgColor && blockProps.btnBgColor !== '#f59e0b') ? blockProps.btnBgColor : brandColor;
             return (
               <div key={block.id} className="text-center py-4 space-y-2 max-w-md mx-auto w-full">
                 <a
@@ -650,13 +606,13 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   style={{
                     backgroundColor: btnBg,
                     color: blockProps.btnTextColor || '#000000',
-                    boxShadow: blockProps.glowColor ? `0 0 35px ${blockProps.glowColor}` : `0 0 30px ${normalizedBrandColor}60`
+                    boxShadow: blockProps.glowColor ? `0 0 35px ${blockProps.glowColor}` : `0 0 30px ${brandColor}60`
                   }}
                 >
                   <span>{blockProps.buttonText || blockProps.primaryText || 'VALIDER MON ACCÈS EN 1-CLIC 🚀'}</span>
                   <Zap className="w-4 h-4 text-slate-950" />
                 </a>
-                {blockProps.subtext && <p className={`text-[10.5px] font-medium ${textMutedClass}`}>{blockProps.subtext}</p>}
+                {blockProps.subtext && <p className="text-[10.5px] font-medium text-slate-400">{blockProps.subtext}</p>}
               </div>
             );
           }
@@ -675,7 +631,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
 
           if (isFlashLive) {
             return (
-              <div key={block.id} style={cardStyle} className="p-4 rounded-3xl border space-y-2.5 shadow-xl">
+              <div key={block.id} className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2.5 shadow-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
@@ -694,7 +650,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   }}
                   className="w-full"
                 />
-                <p className={`text-[10.5px] text-center ${textMutedClass}`}>
+                <p className="text-[10.5px] text-center text-slate-400">
                   Présentation vidéo privée instantanée sans engagement • Vérifiez l'article physique avant de payer
                 </p>
               </div>
@@ -709,15 +665,15 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
             ];
 
             return (
-              <div key={block.id} style={cardStyle} className="p-4 sm:p-5 rounded-3xl border space-y-3">
-                <h3 className={`text-sm font-black ${textHeadingClass}`}>{blockProps.headline || blockProps.sectionTitle || 'Avantages Clés :'}</h3>
+              <div key={block.id} className="p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-3 shadow-lg">
+                <h3 className="text-sm font-black text-white">{blockProps.headline || blockProps.sectionTitle || 'Avantages Clés :'}</h3>
                 <div className="space-y-2">
                   {bullets.map((b: any, idx: number) => (
-                    <div key={idx} style={innerBoxStyle} className="flex items-start gap-2.5 p-2.5 rounded-xl border">
+                    <div key={idx} className="flex items-start gap-2.5 p-2.5 rounded-xl border bg-slate-950 border-slate-800">
                       <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                       <div>
-                        <p className={`text-xs font-bold ${textHeadingClass}`}>{b.title || b.headline || b.name}</p>
-                        <p className={`text-[11px] ${textMutedClass}`}>{b.desc || b.description || b.subtitle}</p>
+                        <p className="text-xs font-bold text-white">{b.title || b.headline || b.name}</p>
+                        <p className="text-[11px] text-slate-400">{b.desc || b.description || b.subtitle}</p>
                       </div>
                     </div>
                   ))}
@@ -732,13 +688,13 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                 <div key={block.id} className="py-2 text-center space-y-2 max-w-2xl mx-auto w-full">
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     {(blockProps.badges || ['Cryptage SSL 256-Bit', 'Paiement Wave Direct', 'Orange Money Agréé', 'Garantie Totale']).map((badge: string, i: number) => (
-                      <span key={i} style={innerBoxStyle} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-bold ${textBodyClass}`}>
+                      <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border bg-slate-950 border-slate-800 text-[10px] font-bold text-slate-300">
                         <ShieldCheck className="w-3 h-3 text-emerald-400" />
                         <span>{badge}</span>
                       </span>
                     ))}
                   </div>
-                  {blockProps.text && <p className={`text-[10px] ${textMutedClass}`}>{blockProps.text}</p>}
+                  {blockProps.text && <p className="text-[10px] text-slate-400">{blockProps.text}</p>}
                 </div>
               );
             }
@@ -752,7 +708,7 @@ export const PublicDealPageView: React.FC<PublicDealPageViewProps> = ({
                   productName={normalizedFunnel.title}
                   price={heroProps.price || (normalizedFunnel as any).salePrice || 35000}
                   originalPrice={heroProps.originalPrice || (normalizedFunnel as any).originalPrice}
-                  brandColor={normalizedBrandColor}
+                  brandColor={brandColor}
                   onPaymentCompleted={(txData) => {
                     playValidationBeep();
                     const fakeOrder: OmniFunnelOrder = {

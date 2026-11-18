@@ -1195,6 +1195,15 @@ export const UltimateFunnelBuilder = ({
     };
 
     try {
+      localStorage.setItem(`nana_funnel_f_${effectiveSubdomain}`, JSON.stringify(funnelPayload));
+      localStorage.setItem(`nana_funnel_${effectiveSubdomain}`, JSON.stringify(funnelPayload));
+      if (customSlug) {
+        localStorage.setItem(`nana_funnel_f_${customSlug}`, JSON.stringify(funnelPayload));
+        localStorage.setItem(`nana_funnel_${customSlug}`, JSON.stringify(funnelPayload));
+      }
+    } catch (e) {}
+
+    try {
       await registerSubdomainInFirebase(effectiveSubdomain, funnelPayload.title, funnelPayload);
       await saveFunnelConfig(funnelPayload);
 
@@ -2597,13 +2606,14 @@ export const UltimateFunnelBuilder = ({
                             key={p.id}
                             onClick={() => {
                               try { playTapBeep(); } catch (e) {}
-                              setTempSettings(prev => ({
-                                ...prev,
+                              const newColors = {
                                 themePreset: p.id,
                                 primaryColor: p.primary,
                                 accentColor: p.accent,
                                 bgColor: p.bg
-                              }));
+                              };
+                              setTempSettings(prev => ({ ...prev, ...newColors }));
+                              setCustomizationSettings(prev => ({ ...prev, ...newColors }));
                             }}
                             className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative ${
                               isSelected
@@ -2642,13 +2652,21 @@ export const UltimateFunnelBuilder = ({
                           <input
                             type="color"
                             value={tempSettings.primaryColor || '#f59e0b'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, primaryColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
+                            }}
                             className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
                           />
                           <input
                             type="text"
                             value={tempSettings.primaryColor || '#f59e0b'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, primaryColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
+                            }}
                             className="bg-transparent text-xs font-mono text-white focus:outline-none w-full"
                           />
                         </div>
@@ -2660,13 +2678,21 @@ export const UltimateFunnelBuilder = ({
                           <input
                             type="color"
                             value={tempSettings.accentColor || '#fbbf24'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, accentColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
+                            }}
                             className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
                           />
                           <input
                             type="text"
                             value={tempSettings.accentColor || '#fbbf24'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, accentColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
+                            }}
                             className="bg-transparent text-xs font-mono text-white focus:outline-none w-full"
                           />
                         </div>
@@ -2678,13 +2704,21 @@ export const UltimateFunnelBuilder = ({
                           <input
                             type="color"
                             value={tempSettings.bgColor || '#090d16'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, bgColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
+                            }}
                             className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
                           />
                           <input
                             type="text"
                             value={tempSettings.bgColor || '#090d16'}
-                            onChange={(e) => setTempSettings(prev => ({ ...prev, bgColor: e.target.value, themePreset: 'custom' }))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTempSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
+                              setCustomizationSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
+                            }}
                             className="bg-transparent text-xs font-mono text-white focus:outline-none w-full"
                           />
                         </div>
@@ -3459,9 +3493,9 @@ export const UltimateFunnelBuilder = ({
 // ============================================================================
 function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
   const d = block.data || {};
-  const themePrimary = d.accentColor || customizationSettings?.primaryColor || '#f59e0b';
-  const themeAccent = d.accentSecondary || customizationSettings?.accentColor || '#fbbf24';
-  const btnBg = (d.btnBgColor && d.btnBgColor !== '#f59e0b') ? d.btnBgColor : (d.buttonColor || themePrimary);
+  const themePrimary = customizationSettings?.primaryColor || customizationSettings?.brandColor || d.primaryColor || '#f59e0b';
+  const themeAccent = customizationSettings?.accentColor || d.accentColor || '#fbbf24';
+  const btnBg = d.customBtnColor ? d.btnBgColor : themePrimary;
 
   switch (block.type) {
     case 'autoplay_video':
@@ -3509,39 +3543,12 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
             </div>
           )}
 
-          {/* Image/Média Produit en Lévitation Continue Framer Motion */}
+          {/* Image/Média Produit Showcase */}
           {d.image && (
-            <div className="my-3 relative w-64 sm:w-80 flex flex-col items-center">
-              <div className="absolute -inset-4 rounded-full blur-2xl opacity-25 pointer-events-none" style={{ backgroundColor: themePrimary }} />
-              
-              <motion.div
-                animate={{
-                  y: [0, -12, 0],
-                  rotate: [0, 1.2, -1.2, 0]
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: 'easeInOut'
-                }}
-                className="relative z-10 w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
-              >
-                <img src={d.image} alt="Showcase" className="w-full h-48 sm:h-56 object-cover" />
-              </motion.div>
-
-              {/* Ombre portée dynamique qui respire */}
-              <motion.div
-                animate={{
-                  scale: [1, 0.85, 1],
-                  opacity: [0.35, 0.18, 0.35]
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: 'easeInOut'
-                }}
-                className="w-3/4 h-3.5 bg-black blur-md rounded-full mt-3"
-              />
+            <div className="my-3 relative w-full max-w-md mx-auto">
+              <div className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center">
+                <img src={d.image} alt="Showcase" className="w-full h-full object-cover" />
+              </div>
             </div>
           )}
 
