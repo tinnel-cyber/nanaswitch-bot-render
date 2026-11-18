@@ -1066,6 +1066,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
 }) => {
   const [pricingTab, setPricingTab] = useState<'SUBSCRIPTION' | 'CREATOR' | 'PAY_AS_YOU_GO'>('SUBSCRIPTION');
   const [isAnnual, setIsAnnual] = useState(false);
+  const [selectedModularTier, setSelectedModularTier] = useState<'starter' | 'business' | 'enterprise'>('starter');
   const title = config?.title || "Des tarifs simples, transparents et sans surprise.";
   const subtitle = config?.subtitle || "Choisissez le modèle adapté à votre activité : abonnement fixe 0% commission, formule créateur à la performance, ou services à l'acte sans engagement.";
   const zeroBanner = config?.zeroCommissionBanner || DEFAULT_LANDING_PAGE_CONFIG.pricingSection.zeroCommissionBanner;
@@ -1286,74 +1287,200 @@ const PricingSection: React.FC<PricingSectionProps> = ({
               </div>
             </div>
 
-            {/* BANNIÈRE COLORÉE EXPLICATIVE : TARIFICATION MODULAIRE À LA CARTE */}
-            <div className="mb-10 max-w-5xl mx-auto rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-600 text-white shadow-xl shadow-orange-500/15 border border-amber-300/40 relative overflow-hidden">
-              <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30">
-                      <SlidersHorizontal className="w-5 h-5 text-amber-200" />
-                    </div>
-                    <div>
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider mb-1">
-                        <SlidersHorizontal className="w-3 h-3 text-amber-200" />
-                        <span>Tarification Modulaire & Sur-Mesure</span>
+            {/* BANNIÈRE COLORÉE EXPLICATIVE : TARIFICATION MODULAIRE À LA CARTE MULTI-FORFAITS */}
+            {(() => {
+              const modularTiersData = {
+                starter: {
+                  id: 'starter',
+                  tierName: 'Plan Pro (15 000 F CFA)',
+                  caissePrice: 5000,
+                  vitrinePrice: 5000,
+                  formateurPrice: 10000,
+                  packPrice: 15000,
+                  savings: 5000,
+                  caisseDesc: 'Caisse tactile, impression tickets, clôture Z & dettes.',
+                  vitrineDesc: 'Site nsore.shop, panier WhatsApp & pixels.',
+                  formateurDesc: "Jusqu'à 50 cours hébergés, diplômes QR & Wameet.",
+                },
+                business: {
+                  id: 'pro',
+                  tierName: 'Plan Business (30 000 F CFA)',
+                  caissePrice: 10000,
+                  vitrinePrice: 10000,
+                  formateurPrice: 20000,
+                  packPrice: 30000,
+                  savings: 10000,
+                  caisseDesc: "Multi-points de vente (jusqu'à 20 caissiers PIN synchronisés).",
+                  vitrineDesc: 'Stocks multi-magasins synchronisés & CRM marketing.',
+                  formateurDesc: "Multi-formateurs, cohortes d'élèves & Lives Wameet.",
+                },
+                enterprise: {
+                  id: 'elite',
+                  tierName: 'Plan Enterprise (60 000 F CFA)',
+                  caissePrice: 20000,
+                  vitrinePrice: 20000,
+                  formateurPrice: 40000,
+                  packPrice: 60000,
+                  savings: 20000,
+                  caisseDesc: 'Nombre de caisses physiques et POS illimité.',
+                  vitrineDesc: 'Marque Blanche 100% & Nom de domaine personnalisé.',
+                  formateurDesc: 'Campus illimité, API souveraines & SLA garanti 99.9%.',
+                }
+              };
+
+              const active = modularTiersData[selectedModularTier];
+
+              return (
+                <div className="mb-10 max-w-5xl mx-auto rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-600 text-white shadow-xl shadow-orange-500/15 border border-amber-300/40 relative overflow-hidden">
+                  <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                  <div className="relative z-10">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30">
+                          <SlidersHorizontal className="w-5 h-5 text-amber-200" />
+                        </div>
+                        <div>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider mb-1">
+                            <SlidersHorizontal className="w-3 h-3 text-amber-200" />
+                            <span>Tarification Modulaire Sur-Mesure • Tous Forfaits</span>
+                          </div>
+                          <h4 className="text-base sm:text-lg font-black tracking-tight">
+                            Ne payez que ce que vous utilisez ! Choisissez vos modules à la carte dans votre formule.
+                          </h4>
+                        </div>
                       </div>
-                      <h4 className="text-base sm:text-lg font-black tracking-tight">
-                        Ne payez que ce que vous utilisez ! Personnalisez vos modules au choix lors de l'abonnement.
-                      </h4>
+
+                      {/* Sélecteur de Formule pour la simulation modulaire */}
+                      <div className="flex items-center p-1 bg-black/25 backdrop-blur-md rounded-2xl border border-white/20 text-xs shrink-0 self-stretch sm:self-auto justify-center">
+                        <button
+                          type="button"
+                          onClick={() => { playTapBeep(); setSelectedModularTier('starter'); }}
+                          className={`px-3 py-1.5 rounded-xl font-black transition cursor-pointer ${
+                            selectedModularTier === 'starter'
+                              ? 'bg-white text-slate-900 shadow-md scale-102'
+                              : 'text-white/80 hover:text-white'
+                          }`}
+                        >
+                          Pro (15k)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playTapBeep(); setSelectedModularTier('business'); }}
+                          className={`px-3 py-1.5 rounded-xl font-black transition cursor-pointer ${
+                            selectedModularTier === 'business'
+                              ? 'bg-white text-slate-900 shadow-md scale-102'
+                              : 'text-white/80 hover:text-white'
+                          }`}
+                        >
+                          Business (30k)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playTapBeep(); setSelectedModularTier('enterprise'); }}
+                          className={`px-3 py-1.5 rounded-xl font-black transition cursor-pointer ${
+                            selectedModularTier === 'enterprise'
+                              ? 'bg-white text-slate-900 shadow-md scale-102'
+                              : 'text-white/80 hover:text-white'
+                          }`}
+                        >
+                          Enterprise (60k)
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="shrink-0 px-3 py-1 rounded-xl bg-white text-slate-900 font-black text-xs uppercase tracking-wider shadow">
-                    Choix en 1 clic
+
+                    {/* Les 4 pastilles colorées modulaires dynamiques */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                      {/* 1. Caisse uniquement */}
+                      <div
+                        onClick={() => handleCheckout(active.id, active.caissePrice)}
+                        className="bg-white/10 hover:bg-white/15 transition cursor-pointer backdrop-blur-md p-3 rounded-2xl border border-white/15 group"
+                      >
+                        <div className="font-extrabold text-amber-200 flex items-center justify-between gap-1.5 mb-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <Store className="w-3.5 h-3.5" />
+                            <span>La Caisse uniquement</span>
+                          </span>
+                          <span className="text-[10px] opacity-75 group-hover:opacity-100">Choisir →</span>
+                        </div>
+                        <div className="text-base font-black text-white">
+                          {(isAnnual ? Math.round(active.caissePrice * 0.8) : active.caissePrice).toLocaleString('fr-FR')} F CFA{' '}
+                          <span className="text-[10px] font-normal text-orange-100">/ mois</span>
+                        </div>
+                        <div className="text-[10px] text-orange-100 mt-1">{active.caisseDesc}</div>
+                      </div>
+
+                      {/* 2. Vitrine uniquement */}
+                      <div
+                        onClick={() => handleCheckout(active.id, active.vitrinePrice)}
+                        className="bg-white/10 hover:bg-white/15 transition cursor-pointer backdrop-blur-md p-3 rounded-2xl border border-white/15 group"
+                      >
+                        <div className="font-extrabold text-indigo-200 flex items-center justify-between gap-1.5 mb-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>La Vitrine uniquement</span>
+                          </span>
+                          <span className="text-[10px] opacity-75 group-hover:opacity-100">Choisir →</span>
+                        </div>
+                        <div className="text-base font-black text-white">
+                          {(isAnnual ? Math.round(active.vitrinePrice * 0.8) : active.vitrinePrice).toLocaleString('fr-FR')} F CFA{' '}
+                          <span className="text-[10px] font-normal text-indigo-100">/ mois</span>
+                        </div>
+                        <div className="text-[10px] text-indigo-100 mt-1">{active.vitrineDesc}</div>
+                      </div>
+
+                      {/* 3. Formateur uniquement */}
+                      <div
+                        onClick={() => handleCheckout(active.id, active.formateurPrice)}
+                        className="bg-white/10 hover:bg-white/15 transition cursor-pointer backdrop-blur-md p-3 rounded-2xl border border-white/15 group"
+                      >
+                        <div className="font-extrabold text-purple-200 flex items-center justify-between gap-1.5 mb-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Formateur uniquement</span>
+                          </span>
+                          <span className="text-[10px] opacity-75 group-hover:opacity-100">Choisir →</span>
+                        </div>
+                        <div className="text-base font-black text-white">
+                          {(isAnnual ? Math.round(active.formateurPrice * 0.8) : active.formateurPrice).toLocaleString('fr-FR')} F CFA{' '}
+                          <span className="text-[10px] font-normal text-purple-100">/ mois</span>
+                        </div>
+                        <div className="text-[10px] text-purple-100 mt-1">{active.formateurDesc}</div>
+                      </div>
+
+                      {/* 4. Pack Tout-en-Un */}
+                      <div
+                        onClick={() => handleCheckout(active.id, active.packPrice)}
+                        className="bg-white/20 hover:bg-white/25 transition cursor-pointer backdrop-blur-md p-3 rounded-2xl border border-white/30 ring-1 ring-white/40 group"
+                      >
+                        <div className="font-extrabold text-emerald-300 flex items-center justify-between gap-1.5 mb-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Pack Tout-en-Un</span>
+                          </span>
+                          <span className="text-[10px] opacity-75 group-hover:opacity-100">Choisir →</span>
+                        </div>
+                        <div className="text-base font-black text-white">
+                          {(isAnnual ? Math.round(active.packPrice * 0.8) : active.packPrice).toLocaleString('fr-FR')} F CFA{' '}
+                          <span className="text-[10px] font-normal text-emerald-100">/ mois</span>
+                        </div>
+                        <div className="text-[10px] text-emerald-100 mt-1">
+                          Tout inclus (économie de {active.savings.toLocaleString('fr-FR')} F CFA).
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-orange-100/90 mt-3 text-center sm:text-left flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        👉 <em>Cliquez sur un module ou sur « Choisir ce plan » : vous pourrez ajuster vos piliers (Caisse, Vitrine, Formateur) ou prendre le pack complet avec remise.</em>
+                      </span>
+                      <span className="font-bold underline text-white cursor-pointer" onClick={() => onOpenModal()}>
+                        Comparer tous les modules dans le tableau complet →
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                {/* Les 4 pastilles colorées en résumé */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
-                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
-                    <div className="font-extrabold text-amber-200 flex items-center gap-1.5 mb-0.5">
-                      <Store className="w-3.5 h-3.5" />
-                      <span>La Caisse et ses modules uniquement</span>
-                    </div>
-                    <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-orange-100">/ mois</span></div>
-                    <div className="text-[10px] text-orange-100 mt-1">Caisse tactile, tickets, clôture Z & dettes.</div>
-                  </div>
-
-                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
-                    <div className="font-extrabold text-indigo-200 flex items-center gap-1.5 mb-0.5">
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>La Vitrine et ses modules uniquement</span>
-                    </div>
-                    <div className="text-base font-black text-white">5 000 F CFA <span className="text-[10px] font-normal text-indigo-100">/ mois</span></div>
-                    <div className="text-[10px] text-indigo-100 mt-1">Site nsore.shop, panier WhatsApp & pixels.</div>
-                  </div>
-
-                  <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/15">
-                    <div className="font-extrabold text-purple-200 flex items-center gap-1.5 mb-0.5">
-                      <GraduationCap className="w-3.5 h-3.5" />
-                      <span>Formateur et ses modules uniquement</span>
-                    </div>
-                    <div className="text-base font-black text-white">10 000 F CFA <span className="text-[10px] font-normal text-purple-100">/ mois</span></div>
-                    <div className="text-[10px] text-purple-100 mt-1">Vidéos illimitées, diplômes QR & Wameet.</div>
-                  </div>
-
-                  <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl border border-white/30 ring-1 ring-white/40">
-                    <div className="font-extrabold text-emerald-300 flex items-center gap-1.5 mb-0.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Pack Tout-en-Un</span>
-                    </div>
-                    <div className="text-base font-black text-white">15 000 F CFA <span className="text-[10px] font-normal text-emerald-100">/ mois</span></div>
-                    <div className="text-[10px] text-emerald-100 mt-1">Tout inclus (économie de 5 000 F CFA).</div>
-                  </div>
-                </div>
-
-                <div className="text-[11px] text-orange-100/90 mt-3 text-center sm:text-left">
-                  👉 <em>Cliquez sur « Choisir ce plan » : vous pourrez cocher librement La Caisse et ses modules uniquement, La Vitrine et ses modules uniquement, ou Formateur et ses modules uniquement.</em>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Indication visuelle mobile */}
             <div className="flex lg:hidden items-center justify-center gap-1.5 text-xs text-slate-500 mb-4 font-medium">
@@ -1416,7 +1543,7 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                         {plan.description}
                       </p>
 
-                      <div className="mb-6 flex items-baseline gap-1.5">
+                      <div className="mb-3 flex items-baseline gap-1.5">
                         <span className={`text-3xl sm:text-4xl font-black tracking-tight ${isElite ? 'text-white' : 'text-slate-900'}`}>
                           {formattedPrice}
                         </span>
@@ -1424,6 +1551,24 @@ const PricingSection: React.FC<PricingSectionProps> = ({
                           F CFA {isFree ? '' : '/ mois'}
                         </span>
                       </div>
+
+                      {/* Mention modulaire à la carte pour chaque forfait */}
+                      {!isFree && (
+                        <div className={`text-[10px] sm:text-[11px] font-bold rounded-xl px-2.5 py-1.5 mb-5 border leading-tight ${
+                          isElite 
+                            ? 'bg-amber-950/40 border-amber-500/40 text-amber-300' 
+                            : isPopular 
+                            ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                        }`}>
+                          {plan.id === 'elite' 
+                            ? '💡 À la carte : Caisse 20k • Vitrine 20k • Formateur 40k'
+                            : plan.id === 'pro'
+                            ? '💡 À la carte : Caisse 10k • Vitrine 10k • Formateur 20k'
+                            : '💡 À la carte : Caisse 5k • Vitrine 5k • Formateur 10k'
+                          }
+                        </div>
+                      )}
 
                       <div className={`h-px w-full mb-6 ${isElite ? 'bg-slate-800' : 'bg-slate-100'}`} />
 

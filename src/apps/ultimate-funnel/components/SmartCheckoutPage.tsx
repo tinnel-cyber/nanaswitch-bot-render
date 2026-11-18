@@ -39,7 +39,71 @@ export const SmartCheckoutPage: React.FC<SmartCheckoutPageProps> = ({
 
     const effectiveId = (productId || planParam || 'pro').toLowerCase();
 
-    // 1. Formule Pro (15 000 F CFA / mois ou 150 000 F CFA / an) - Le choix recommandé
+    // 1. Détection Formule Enterprise / Élite (60 000 F CFA / mois ou 600 000 F CFA / an)
+    // À la carte : Caisse 20k, Vitrine 20k, Formateur 40k, Pack 60k
+    if (
+      effectiveId === 'enterprise' || 
+      effectiveId === 'elite' || 
+      effectiveId === 'plan_enterprise' || 
+      effectiveId === 'plan-enterprise' ||
+      effectiveId === 'nanasore_elite_20_pays'
+    ) {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 600000 : 60000));
+      let planTitle = nameParam || (isAnnual ? 'Abonnement Enterprise Nanasore • Licence Annuelle Marque Blanche' : 'Abonnement Enterprise / Élite • Marque Blanche 100% Souveraine');
+      let planDescription = descParam || 'Licence Enterprise : Marque Blanche intégrale (nom de domaine dédié), caisses & campus illimités, API/Webhooks et SLA 99.9% garanti.';
+
+      if (price === 20000) {
+        planTitle = 'Abonnement Enterprise • La Caisse ou Vitrine uniquement (Caisses Illimitées)';
+        planDescription = 'Module Enterprise à la carte : Caisses POS physiques illimitées, tickets thermiques, clôture Z et autonomie souveraine.';
+      } else if (price === 40000) {
+        planTitle = 'Abonnement Enterprise • Formateur Académie ou Combiné Caisse + Vitrine';
+        planDescription = 'Module Enterprise à la carte : Campus en ligne illimité, masterclasses Wameet et clés API dédiées.';
+      }
+
+      return {
+        id: 'plan_enterprise',
+        name: planTitle,
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: planDescription
+      };
+    }
+
+    // 2. Détection Formule Business (30 000 F CFA / mois ou 300 000 F CFA / an, 'pro' dans les configs canoniques)
+    // À la carte : Caisse 10k, Vitrine 10k, Formateur 20k, Pack 30k
+    if (
+      effectiveId === 'business' || 
+      effectiveId === 'plan_business' || 
+      effectiveId === 'plan-business' ||
+      (effectiveId === 'pro' && (propAmount === 30000 || propAmount === 300000 || amountParam === '30000' || amountParam === '300000' || amountParam === '10000' || amountParam === '20000'))
+    ) {
+      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 300000 : 30000));
+      let planTitle = nameParam || (isAnnual ? 'Abonnement Business Nanasore • Licence Annuelle (-20%)' : 'Abonnement Business Nanasore • Multi-Boutiques & Campus');
+      let planDescription = descParam || 'Licence Business : Multi-points de vente (20 caissiers), stocks synchronisés, Pixels Meta/TikTok et CRM marketing automatisé.';
+
+      if (price === 10000) {
+        planTitle = 'Abonnement Business • La Caisse ou Vitrine uniquement (20 caissiers PIN)';
+        planDescription = 'Module Business à la carte : Caisse multi-vendeurs avec code PIN, stocks multi-magasins et reçus thermiques.';
+      } else if (price === 20000) {
+        planTitle = 'Abonnement Business • Formateur Académie ou Combiné Caisse + Vitrine';
+        planDescription = 'Module Business à la carte : Gestion multi-formateurs, cohortes d\'élèves et relances de paniers automatisées.';
+      }
+
+      return {
+        id: 'plan_business',
+        name: planTitle,
+        price,
+        originalPrice: Math.round(price * 1.3),
+        itemType: 'subscription',
+        imageUrl: '',
+        description: planDescription
+      };
+    }
+
+    // 3. Détection Formule Pro (15 000 F CFA / mois ou 150 000 F CFA / an, 'starter' dans les configs canoniques)
+    // À la carte : Caisse 5k, Vitrine 5k, Formateur 10k, Pack 15k
     if (
       effectiveId === 'starter' || 
       effectiveId === 'pro' || 
@@ -50,47 +114,25 @@ export const SmartCheckoutPage: React.FC<SmartCheckoutPageProps> = ({
       effectiveId === 'caisse'
     ) {
       const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 150000 : 15000));
+      let planTitle = nameParam || (isAnnual ? 'Abonnement Plan Pro Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Plan Pro Nanasore • Boutique & Formateur Pro');
+      let planDescription = descParam || 'Licence Pro : Caisse POS tactile, produits illimités, jusqu\'à 50 cours hébergés, multi-caissiers PIN, Live Shopping et 0% de commission.';
+
+      if (price === 5000) {
+        planTitle = 'Abonnement Plan Pro • La Caisse ou Vitrine uniquement';
+        planDescription = 'Module Pro à la carte : Caisse tactile de comptoir ou Vitrine nsore.shop avec panier WhatsApp à 0% commission.';
+      } else if (price === 10000) {
+        planTitle = 'Abonnement Plan Pro • Formateur ou Combiné Caisse + Vitrine';
+        planDescription = 'Module Pro à la carte : Cours vidéo hébergés, diplômes QR Code officiels ou Caisse + Vitrine réunies.';
+      }
+
       return {
         id: 'plan_pro',
-        name: nameParam || (isAnnual ? 'Abonnement Plan Pro Nanasore • Licence Annuelle (2 mois offerts)' : 'Abonnement Plan Pro Nanasore • Boutique & Formateur Pro'),
+        name: planTitle,
         price,
         originalPrice: Math.round(price * 1.3),
         itemType: 'subscription',
         imageUrl: '',
-        description: descParam || 'Licence Pro : Caisse POS tactile, produits illimités, jusqu\'à 50 cours hébergés, multi-caissiers PIN, Live Shopping et 0% de commission.'
-      };
-    }
-
-    // 3. Formule Business (30 000 F CFA / mois ou 300 000 F CFA / an)
-    if (effectiveId === 'business' || effectiveId === 'plan_business' || effectiveId === 'plan-business') {
-      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 300000 : 30000));
-      return {
-        id: 'plan_business',
-        name: nameParam || (isAnnual ? 'Abonnement Business Nanasore • Licence Annuelle (-20%)' : 'Abonnement Business Nanasore • Multi-Boutiques & Campus'),
-        price,
-        originalPrice: Math.round(price * 1.3),
-        itemType: 'subscription',
-        imageUrl: '',
-        description: descParam || 'Licence Business : Multi-points de vente (20 caissiers), stocks synchronisés, Pixels Meta/TikTok et CRM marketing automatisé.'
-      };
-    }
-
-    // 4. Formule Enterprise / Élite (60 000 F CFA / mois ou 600 000 F CFA / an)
-    if (
-      effectiveId === 'enterprise' || 
-      effectiveId === 'elite' || 
-      effectiveId === 'plan_enterprise' || 
-      effectiveId === 'nanasore_elite_20_pays'
-    ) {
-      const price = propAmount || (amountParam ? Number(amountParam) : (isAnnual ? 600000 : 60000));
-      return {
-        id: 'plan_enterprise',
-        name: nameParam || (isAnnual ? 'Abonnement Enterprise Nanasore • Licence Annuelle Marque Blanche' : 'Abonnement Enterprise / Élite • Marque Blanche 100% Souveraine'),
-        price,
-        originalPrice: Math.round(price * 1.3),
-        itemType: 'subscription',
-        imageUrl: '',
-        description: descParam || 'Licence Enterprise : Marque Blanche intégrale (nom de domaine dédié), caisses & campus illimités, API/Webhooks et SLA 99.9% garanti.'
+        description: planDescription
       };
     }
 
