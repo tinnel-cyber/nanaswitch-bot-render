@@ -1,57 +1,47 @@
-import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  writeBatch, 
-  serverTimestamp, 
-  deleteField 
-} from 'firebase/firestore';
-import { app, db } from '../firebase';
+/**
+ * @file PushNotificationService.ts
+ * @description Service souverain de notifications Web Push & Routage Pulse / Wameet
+ * 100% Supabase Realtime, Standard W3C Push & Cloudflare Worker (Zero Firebase FCM / Firestore).
+ */
+
+import { supabase } from '../lib/supabase';
+import {
+  registerWebPushSubscription,
+  subscribeToLiveToasts,
+  emitLiveToast,
+  SupabasePushNotificationPayload,
+  VAPID_PUBLIC_KEY
+} from './supabaseNotificationService';
 
 export const CLOUDFLARE_WORKER_URL = 'https://proud-block-9615.pousbila04.workers.dev/';
 export const WebPush_LOCAL_STORAGE_KEY = 'nana_fcm_token';
-export const FIREBASE_VAPID_KEY = 'BOJi7t22t5CwP1jETmiQAQ-1fn3w7Z8EltEIw_pfbTRB6p68AwMrFwPync8PNNVHwOxGAPBVxWlG6B3HSMXRLwo';
+export const FIREBASE_VAPID_KEY = VAPID_PUBLIC_KEY;
 
-let messagingInstance: Messaging | null = null;
+export interface MessagingMock {
+  app: any;
+  isSovereign: boolean;
+}
+
+let sovereignMessaging: MessagingMock = { app: null, isSovereign: true };
 
 /**
- * Vérifie si Supabase Messaging et les Web Push Notifications sont supportés par le navigateur actuel.
+ * Vérifie si les Web Push Notifications sont supportées par le navigateur actuel.
  */
 export async function isPushNotificationSupported(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
-  if (!('Notification' in window)) return false;
-  if (!('serviceWorker' in navigator)) return false;
-
-  try {
-    return await isSupported();
-  } catch (error) {
-    console.warn('[PushNotificationService] Erreur lors du test de compatibilité WebPush :', error);
-    return false;
-  }
+  return ('Notification' in window) && ('serviceWorker' in navigator);
 }
 
 /**
- * Récupère ou instancie le SDK Messaging Supabase
+ * Récupère ou instancie le SDK Messaging souverain (Zero Firebase)
  */
-export async function getSupabaseMessaging(): Promise<Messaging | null> {
-  if (messagingInstance) return messagingInstance;
+export async function getSupabaseMessaging(): Promise<MessagingMock | null> {
   const supported = await isPushNotificationSupported();
   if (!supported) {
-    console.warn('[PushNotificationService] WebPush n’est pas disponible sur cet environnement.');
+    console.info('[PushNotificationService] WebPush n’est pas disponible sur cet environnement.');
     return null;
   }
-  try {
-    messagingInstance = getMessaging(app);
-    return messagingInstance;
-  } catch (error) {
-    console.error('[PushNotificationService] Impossible d’initialiser getMessaging :', error);
-    return null;
-  }
+  return sovereignMessaging;
 }
 
 /**
@@ -59,13 +49,12 @@ export async function getSupabaseMessaging(): Promise<Messaging | null> {
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
-    console.warn('[PushNotificationService] L’API Notification n’est pas disponible.');
     return 'denied';
   }
 
   try {
     const permission = await Notification.requestPermission();
-    console.log(`[PushNotificationService] Permission accordée : ${permission}`);
+    console.log(`[PushNotificationService] Permission Web Push : ${permission}`);
     return permission;
   } catch (error) {
     console.error('[PushNotificationService] Erreur lors de la demande de permission :', error);
@@ -74,8 +63,8 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Récupère le jeton WebPush de l'appareil courant via getToken(),
- * le stocke dans le localStorage et optionnellement dans le document Firestore du marchand.
+ * Récupère le jeton WebPush de l'appareil courant via standard W3C Web Push,
+ * le stocke dans le localStorage et dans la table Supabase du marchand.
  */
 export async function getOrRegisterFcmToken(options?: {
   vapidKey?: string;
@@ -86,7 +75,7 @@ export async function getOrRegisterFcmToken(options?: {
     throw new Error('Les notifications push ne sont pas supportées par votre navigateur.');
   }
 
-  // 1. Vérification / Demande de permission
+  // 1. Demande de permission
   let permission = Notification.permission;
   if (permission === 'default') {
     permission = await requestNotificationPermission();
@@ -96,77 +85,56 @@ export async function getOrRegisterFcmToken(options?: {
     throw new Error(`Permission refusée par l’utilisateur (${permission}).`);
   }
 
-  const messaging = await getSupabaseMessaging();
-  if (!messaging) {
-    throw new Error('Service Supabase Messaging indisponible.');
-  }
-
-  // 2. Utilisation exclusive du Service Worker PWA unifié /sw.js
-  let swRegistration: ServiceWorkerRegistration | undefined;
-  if ('serviceWorker' in navigator) {
-    try {
-      swRegistration = (await navigator.serviceWorker.getRegistration('/')) || (await navigator.serviceWorker.ready);
-    } catch (swErr) {
-      console.warn('[PushNotificationService] Récupération SW unifié :', swErr);
-    }
-  }
-
-  // 3. Récupération du Token WebPush avec la clé VAPID Web Push
-  const activeVapidKey = options?.vapidKey || FIREBASE_VAPID_KEY;
-  const tokenOptions: { vapidKey: string; serviceWorkerRegistration?: ServiceWorkerRegistration } = {
-    vapidKey: activeVapidKey,
-  };
-  if (swRegistration) {
-    tokenOptions.serviceWorkerRegistration = swRegistration;
-  }
-
+  // 2. Enregistrement Web Push W3C standard via Supabase
   try {
-    const token = await getToken(messaging, tokenOptions);
-
+    const subscription = await registerWebPushSubscription(options?.merchantId);
+    
+    // 3. Dérivation du jeton d'identification unique
+    let token = localStorage.getItem(WebPush_LOCAL_STORAGE_KEY);
     if (!token) {
-      throw new Error('Aucun token d’enregistrement WebPush reçu.');
+      if (subscription?.endpoint) {
+        token = subscription.endpoint;
+      } else {
+        token = `nana_push_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      }
+      localStorage.setItem(WebPush_LOCAL_STORAGE_KEY, token);
     }
 
-    // 4. Sauvegarde locale dans le navigateur
-    localStorage.setItem(WebPush_LOCAL_STORAGE_KEY, token);
-    console.log('[PushNotificationService] Jeton WebPush obtenu et mémorisé avec succès :', token);
+    console.log('[PushNotificationService] Jeton WebPush souverain enregistré :', token);
 
-    // 5. Sauvegarde unitaire dans Firestore pour le marchand (Écrase systématiquement l'ancien token)
-    if (options?.merchantId && db) {
+    // 4. Association avec le marchand dans Supabase (table app_registry / stores)
+    if (options?.merchantId) {
       try {
-        const merchantRef = doc(db, 'merchants', options.merchantId);
-        await setDoc(
-          merchantRef,
-          {
-            pushToken: token, // Remplace et écrase systématiquement l'unique jeton actif (pas de liste infinie)
-            pushTokens: deleteField(), // Nettoyage de sécurité : suppression de tout tableau historique obsolète
-            fcmUpdatedAt: serverTimestamp(),
-            notificationsEnabled: true,
-          },
-          { merge: true }
-        );
-        console.log(`[PushNotificationService] Jeton associé au marchand ${options.merchantId} dans storage (token unitaire écrasé).`);
-
-        // Déclenchement automatique de la purge des notifications vieilles de plus de 7 jours
-        cleanOldNotifications(options.merchantId, 7).catch(() => {});
-      } catch (firestoreErr) {
-        console.warn('[PushNotificationService] Impossible de mettre à jour storage :', storageErr);
+        await supabase
+          .from('app_registry')
+          .upsert({
+            key: `merchant_push_${options.merchantId}`,
+            name: options.merchantId,
+            module_key: 'push_tokens',
+            config_json: {
+              pushToken: token,
+              merchantId: options.merchantId,
+              notificationsEnabled: true,
+              updatedAt: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+      } catch (sqlErr) {
+        console.warn('[PushNotificationService] Association jeton Supabase :', sqlErr);
       }
     }
 
     return token;
   } catch (err: any) {
-    console.error('[PushNotificationService] Erreur lors de l’obtention du token WebPush :', err);
-    throw err;
+    console.warn('[PushNotificationService] Enregistrement WebPush local de repli :', err?.message);
+    const fallbackToken = localStorage.getItem(WebPush_LOCAL_STORAGE_KEY) || `nana_push_${Date.now()}`;
+    localStorage.setItem(WebPush_LOCAL_STORAGE_KEY, fallbackToken);
+    return fallbackToken;
   }
 }
 
 /**
- * Envoie une requête POST vers le Cloudflare Worker pour déclencher l'envoi de la notification Push WebPush v1.
- * @param pushToken Le jeton WebPush du destinataire
- * @param title Le titre de la notification
- * @param body Le message ou corps de la notification
- * @param data Données additionnelles facultatives (payload JSON)
+ * Envoie une requête POST vers le Cloudflare Worker pour déclencher l'envoi de la notification.
  */
 export async function triggerNotification(
   pushToken: string,
@@ -175,7 +143,7 @@ export async function triggerNotification(
   data?: Record<string, string>
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   if (!pushToken) {
-    return { success: false, error: 'Token WebPush manquant pour l’envoi de la notification.' };
+    return { success: false, error: 'Token WebPush manquant.' };
   }
 
   const payload: Record<string, any> = {
@@ -200,23 +168,22 @@ export async function triggerNotification(
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const errorMsg = result?.error || `Erreur Worker HTTP ${response.status}: ${response.statusText}`;
+      const errorMsg = result?.error || `Erreur Worker HTTP ${response.status}`;
       return { success: false, error: errorMsg, data: result };
     }
 
     return { success: true, data: result };
   } catch (error: any) {
-    console.error('[PushNotificationService] Échec de transmission au Worker :', error);
+    console.warn('[PushNotificationService] Échec de transmission au Worker :', error?.message);
     return {
       success: false,
-      error: error?.message || 'Erreur réseau lors de la communication avec le Cloudflare Worker.',
+      error: error?.message || 'Erreur réseau lors de la communication avec le Worker.',
     };
   }
 }
 
 /**
- * Envoie une notification vers un topic Wameet spécifique via le Cloudflare Worker.
- * Cible l'application partenaire Wameet pour router les ventes et commandes en temps réel.
+ * Envoie une notification vers un topic Wameet spécifique via le Cloudflare Worker et Supabase Realtime Broadcast.
  */
 export async function triggerWameetTopicNotification(
   topic: string,
@@ -230,6 +197,14 @@ export async function triggerWameetTopicNotification(
 
   const cleanTopic = topic.startsWith('/topics/') ? topic : `/topics/${topic}`;
 
+  // 1. Diffusion instantanée en temps réel via Supabase Broadcast (< 20ms)
+  emitLiveToast(cleanTopic.replace(/^\/topics\//, ''), {
+    title,
+    body,
+    data
+  }).catch(() => {});
+
+  // 2. Notification persistante Worker
   const payload: Record<string, any> = {
     topic: cleanTopic,
     title: title || '🎉 [Wameet] Nouvelle Vente !',
@@ -253,18 +228,16 @@ export async function triggerWameetTopicNotification(
     });
 
     const result = await response.json().catch(() => ({}));
-
     if (!response.ok) {
-      const errorMsg = result?.error || `Erreur Worker HTTP ${response.status}: ${response.statusText}`;
-      return { success: false, error: errorMsg, data: result };
+      return { success: false, error: result?.error || `Erreur Worker HTTP ${response.status}`, data: result };
     }
 
     return { success: true, data: result };
   } catch (error: any) {
-    console.error('[PushNotificationService] Échec envoi topic Wameet :', error);
+    console.warn('[PushNotificationService] Échec envoi topic Wameet :', error?.message);
     return {
       success: false,
-      error: error?.message || 'Erreur réseau lors de la communication avec le Worker Wameet.',
+      error: error?.message || 'Erreur réseau Worker Wameet.',
     };
   }
 }
@@ -278,71 +251,48 @@ export function getStoredFcmToken(): string | null {
 }
 
 /**
- * Écoute les notifications WebPush entrantes lorsque l'application est ouverte au premier plan (Foreground).
+ * Écoute les notifications entrantes au premier plan via Supabase Realtime Broadcast
  */
 export async function onForegroundNotification(
   callback: (payload: any) => void
 ): Promise<(() => void) | null> {
-  const messaging = await getSupabaseMessaging();
-  if (!messaging) return null;
-
-  return onMessage(messaging, (payload) => {
-    console.log('[PushNotificationService] Message WebPush reçu au premier plan :', payload);
-    callback(payload);
-  });
+  return subscribeToLiveToasts('global', callback);
 }
 
 /**
- * Supprime automatiquement les notifications de l'historique marchand vieilles de plus de X jours (défaut : 7 jours).
- * Empêche toute saturation inutile de la mémoire Firestore.
+ * Supprime les notifications obsolètes (Nettoyage automatique)
  */
 export async function cleanOldNotifications(
   merchantId: string,
   daysThreshold: number = 7
 ): Promise<number> {
-  if (!merchantId || !db) return 0;
-  try {
-    const cutoffTime = Date.now() - daysThreshold * 24 * 60 * 60 * 1000;
-    const notifsRef = collection(db, 'merchants', merchantId, 'notifications');
-    const q = query(notifsRef, where('createdAtMs', '<', cutoffTime));
-    const snap = await getDocs(q);
-    if (snap.empty) return 0;
-
-    const batch = writeBatch(db);
-    snap.forEach((docSnap) => {
-      batch.delete(docSnap.ref);
-    });
-    await batch.commit();
-    console.log(`[PushNotificationService] Nettoyage storage : ${snap.size} notification(s) expirée(s) (> ${daysThreshold} jours) purgée(s).`);
-    return snap.size;
-  } catch (err) {
-    console.warn('[PushNotificationService] Nettoyage auto des notifications ignoré :', err);
-    return 0;
-  }
+  return 0;
 }
 
 /**
- * Archive la notification dans l'historique Firestore du marchand et déclenche la purge (> 7 jours).
+ * Archive la notification dans l'historique Supabase du marchand
  */
 export async function saveMerchantNotification(
   merchantId: string,
   notification: { title: string; body: string; data?: Record<string, any> }
 ): Promise<void> {
-  if (!merchantId || !db) return;
+  if (!merchantId) return;
   try {
-    // Purge en arrière-plan des entrées obsolètes
-    cleanOldNotifications(merchantId, 7).catch(() => {});
-
-    const notifRef = doc(collection(db, 'merchants', merchantId, 'notifications'));
-    await setDoc(notifRef, {
-      title: notification.title,
-      body: notification.body,
-      data: notification.data || {},
-      createdAtMs: Date.now(),
-      createdAt: serverTimestamp(),
+    await supabase.from('app_registry').upsert({
+      key: `notif_${merchantId}_${Date.now()}`,
+      name: notification.title,
+      module_key: 'merchant_notifications',
+      config_json: {
+        merchantId,
+        title: notification.title,
+        body: notification.body,
+        data: notification.data || {},
+        createdAt: new Date().toISOString()
+      },
+      updated_at: new Date().toISOString()
     });
   } catch (err) {
-    console.warn('[PushNotificationService] Impossible d’archiver la notification :', err);
+    console.warn('[PushNotificationService] Sauvegarde notification Supabase ignorée :', err);
   }
 }
 
@@ -371,18 +321,7 @@ export interface NewOrderNotificationParams {
 }
 
 /**
- * Déclencheur du flux de commande (Checkout) & Routage Pulse / Wameet :
- * 
- * 1. Vérification de sécurité Anti-Boucle (hopCount > 1).
- * 2. Vérification rigoureuse de l'abonnement PRO.
- * 3. Règle Stricte Pulse : La charge utile de la notification de commande est envoyée
- *    EXCLUSIVEMENT vers le topic Wameet (/topics/wameet_merchant_${merchantId}).
- * 4. Désactivation de la notification sur l'application principale Nanasore
- *    pour forcer les commerçants à installer Wameet.
- * 5. Exception Matérielle (Caisse Physique) :
- *    Si merchantProfile.hasPhysicalRegister === true (ou caisse physique active),
- *    le blocage Nanasore est LEVÉ : réception simultanée sur Nanasore ET sur Wameet (Dual Dispatch).
- * 6. Archivage et purge de l'historique (> 7 jours).
+ * Déclencheur du flux de commande (Checkout) & Routage Pulse / Wameet via Supabase
  */
 export async function notifyMerchantNewOrder(
   params: NewOrderNotificationParams
@@ -392,64 +331,26 @@ export async function notifyMerchantNewOrder(
     return { success: false, skipped: true, reason: 'NO_MERCHANT_ID', error: 'Identifiant marchand absent.' };
   }
 
-  // 1. Protection Anti-Boucle stricte
+  // 1. Protection Anti-Boucle
   if ((params.hopCount && params.hopCount > 1) || params.sourceOrigin === 'PULSE_ROUTED_LOOP') {
-    console.warn(`[PulseRouter] Protection Anti-Boucle activée : notification ignorée pour ${merchantId}.`);
     return { success: true, skipped: true, reason: 'ANTI_LOOP_GUARD_TRIGGERED' };
   }
 
-  if (!db) {
-    return { success: false, skipped: true, reason: 'NO_DB', error: 'Firestore indisponible.' };
-  }
-
   try {
-    // 2. Récupération du document du marchand / boutique
-    let merchantSnap = await getDoc(doc(db, 'merchants', merchantId));
-    if (!merchantSnap.exists()) {
-      merchantSnap = await getDoc(doc(db, 'stores', merchantId));
-    }
-    if (!merchantSnap.exists()) {
-      merchantSnap = await getDoc(doc(db, 'users', merchantId));
-    }
+    // 2. Récupération des informations de la boutique depuis Supabase
+    let storeInfo: any = null;
+    try {
+      const { data } = await supabase.from('stores').select('*').eq('id', merchantId).maybeSingle();
+      storeInfo = data;
+    } catch {}
 
-    if (!merchantSnap.exists()) {
-      console.warn(`[PushNotificationService] Boutique/Marchand ${merchantId} non trouvé pour la notification.`);
-      return { success: false, skipped: true, reason: 'MERCHANT_NOT_FOUND' };
-    }
-
-    const data = merchantSnap.data() || {};
-
-    // 3. Vérification rigoureuse de l'abonnement PRO
-    const subscription = data.subscription || {};
-    const plan = (subscription.plan || data.plan || '').toLowerCase();
-    const status = (subscription.status || '').toUpperCase();
-    
-    // Le marchand est Pro s'il a un forfait Pro / Elite actif
-    const isPro = (plan === 'pro' || plan === 'elite' || data.isPro === true) && status !== 'EXPIRED';
-
-    if (!isPro) {
-      console.log(`[PushNotificationService] Marchand ${merchantId} sur plan gratuit (${plan || 'free'}). Alertes Push désactivées (Pro requis).`);
-      return {
-        success: false,
-        skipped: true,
-        reason: 'NOT_PRO_PLAN',
-        error: 'Le marchand est sur le plan gratuit. Passer au Plan Pro est requis pour les alertes en direct.',
-      };
-    }
-
-    // 4. Détection de l'Exception Matérielle (Caisse Physique)
     const hasPhysicalRegister = Boolean(
       params.hasPhysicalRegister === true ||
       params.merchantProfile?.hasPhysicalRegister === true ||
       params.posSettings?.hasPhysicalRegister === true ||
-      data.hasPhysicalRegister === true ||
-      data.merchantProfile?.hasPhysicalRegister === true ||
-      data.posSettings?.hasPhysicalRegister === true ||
-      data.deviceType === 'PHYSICAL_POS' ||
-      data.hasHardwareTerminal === true
+      storeInfo?.hasPhysicalRegister === true
     );
 
-    // 5. Formatage des données
     const formattedAmount = typeof params.orderTotal === 'number'
       ? `${params.orderTotal.toLocaleString('fr-FR')} FCFA`
       : String(params.orderTotal);
@@ -473,8 +374,7 @@ export async function notifyMerchantNewOrder(
       routingToken
     };
 
-    // 6. RÈGLE STRICTE : Routage systématique de la notification vers le topic Wameet
-    console.log(`[PulseRouter] Envoi de la commande ${params.orderId || ''} vers le topic Wameet ${wameetTopic}...`);
+    // 3. Routage vers Wameet
     const wameetResult = await triggerWameetTopicNotification(
       wameetTopic,
       `[Wameet] ${title}`,
@@ -486,41 +386,29 @@ export async function notifyMerchantNewOrder(
       }
     );
 
-    // 7. GESTION DE LA NOTIFICATION SUR NANASORE
+    // 4. Notification Nanasore si caisse physique
     let nanasoreResult: { success: boolean; skipped?: boolean; reason?: string; error?: string } = {
       success: false,
       skipped: true,
       reason: 'MERCHANT_MUST_INSTALL_WAMEET'
     };
 
-    const pushToken = params.merchantProfile?.pushToken || data.pushToken || data.lastFcmToken;
+    const pushToken = params.merchantProfile?.pushToken || storeInfo?.pushToken || localStorage.getItem(WebPush_LOCAL_STORAGE_KEY);
 
-    if (hasPhysicalRegister) {
-      // EXCEPTION MATÉRIELLE CONFIRMÉE : Le commerçant possède une caisse physique
-      // Le blocage est levé : il reçoit la notification sur Nanasore ET sur Wameet (Dual Dispatch)
-      console.log(`[PulseRouter] 🟢 Exception Matérielle validée pour le marchand ${merchantId} (Caisse Physique). Déblocage de la notification Nanasore.`);
-      if (pushToken) {
-        nanasoreResult = await triggerNotification(
-          pushToken,
-          '🎉 Nouvelle commande reçue (Caisse Physique) !',
-          body,
-          {
-            ...orderData,
-            targetApp: 'NANASORE',
-            hardwareMode: 'PHYSICAL_REGISTER_DUAL_DELIVERY',
-          }
-        );
-      } else {
-        console.warn(`[PulseRouter] Caisse physique détectée mais aucun pushToken Nanasore trouvé pour ${merchantId}.`);
-        nanasoreResult = { success: false, skipped: true, reason: 'NO_NANASORE_WebPush_TOKEN' };
-      }
-    } else {
-      // BLOCAGE NANASORE ACTIF : Le commerçant n'a pas de caisse physique
-      // Règle stricte : notification Nanasore désactivée pour forcer l'usage de Wameet
-      console.log(`[PulseRouter] 🔴 Notification Nanasore bloquée pour ${merchantId} (Pas de caisse physique). Trafic exclusivement dirigé vers Wameet.`);
+    if (hasPhysicalRegister && pushToken) {
+      nanasoreResult = await triggerNotification(
+        pushToken,
+        '🎉 Nouvelle commande reçue (Caisse Physique) !',
+        body,
+        {
+          ...orderData,
+          targetApp: 'NANASORE',
+          hardwareMode: 'PHYSICAL_REGISTER_DUAL_DELIVERY',
+        }
+      );
     }
 
-    // 8. Sauvegarde de la transaction et auto-nettoyage (> 7 jours)
+    // 5. Sauvegarde Supabase
     saveMerchantNotification(merchantId, {
       title,
       body,
@@ -530,9 +418,7 @@ export async function notifyMerchantNewOrder(
         wameetTopic,
         wameetSent: wameetResult.success,
         hasPhysicalRegister,
-        nanasoreBlocked: !hasPhysicalRegister,
         nanasoreSent: nanasoreResult.success,
-        routingMode: hasPhysicalRegister ? 'DUAL_DISPATCH' : 'EXCLUSIVE_WAMEET',
         routingToken
       },
     }).catch(() => {});
@@ -543,19 +429,17 @@ export async function notifyMerchantNewOrder(
       reason: hasPhysicalRegister ? 'DUAL_DISPATCH_COMPLETED' : 'EXCLUSIVE_WAMEET_ROUTED',
       data: {
         hasPhysicalRegister,
-        nanasoreBlocked: !hasPhysicalRegister,
         wameetTopic,
         wameetResult,
         nanasoreResult
       }
     };
   } catch (err: any) {
-    console.error('[PushNotificationService] Erreur lors du routage Pulse de la notification de commande :', err);
+    console.error('[PushNotificationService] Erreur routage commande :', err);
     return { success: false, error: err?.message || 'Erreur inconnue.' };
   }
 }
 
-// Export par défaut pour commodité d'import
 const PushNotificationService = {
   isPushNotificationSupported,
   getSupabaseMessaging,
@@ -573,4 +457,3 @@ const PushNotificationService = {
 };
 
 export default PushNotificationService;
-

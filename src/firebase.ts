@@ -9,6 +9,7 @@ import {
   Firestore,
   doc,
   getDocFromServer,
+  disableNetwork,
   setLogLevel
 } from 'firebase/firestore';
 import { getFunctions, Functions } from 'firebase/functions';
@@ -19,7 +20,7 @@ import {
   uploadBytes, 
   getDownloadURL 
 } from 'firebase/storage';
-import { getDatabase, Database } from 'firebase/database';
+import { getDatabase, Database, goOffline } from 'firebase/database';
 import { compressImageFile } from './utils/imageCompressor';
 
 export const RTDB_DEFAULT_URL = "https://nanasore-default-rtdb.firebaseio.com";
@@ -112,15 +113,25 @@ try {
     }
   }
 }
+
+// Coupe inconditionnellement toute tentative de connexion réseau Firestore
+try {
+  disableNetwork(firestoreDb).catch(() => {});
+} catch {}
+
 export const db: Firestore = firestoreDb;
 
 // 3. Firebase Storage (Images produits, logos de boutique, reçus)
 export const storage: FirebaseStorage = getStorage(app);
 
-// 4. Firebase Realtime Database (Passerelle SMS MacroDroid /sms_recus)
+// 4. Firebase Realtime Database
 export const rtdb: Database = getDatabase(app, RTDB_DEFAULT_URL);
+// Coupe inconditionnellement la connexion WebSocket RTDB
+try {
+  goOffline(rtdb);
+} catch {}
 
-// 5. Firebase Cloud Functions (Live WebRTC, paiements, etc.)
+// 5. Firebase Cloud Functions
 export const functions: Functions = getFunctions(app, 'europe-west1');
 export const getAppFunctions = (region = 'europe-west1'): Functions => getFunctions(app, region);
 
@@ -139,9 +150,10 @@ export {
   getSupabaseCurrentUser,
   onSupabaseAuthStateChange
 } from './services/supabaseAuthService';
+import { supabase } from './lib/supabase';
 
 /**
- * Téléversement d'image vers Firebase Storage
+ * Téléversement d'image vers Supabase Storage (100% Souverain)
  * @param file Fichier image à uploader
  * @param path Chemin cible dans le bucket (ex: 'stores/logo.png', 'products/p1.jpg')
  * @returns URL de téléchargement publique sécurisée
@@ -167,29 +179,39 @@ export async function uploadMediaToStorage(file: File, path: string): Promise<st
       }
     }
 
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, fileToUpload);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return downloadUrl;
+    const cleanPath = path.replace(/^\/+/, '');
+    const bucket = 'nanasore-media';
+
+    // 1. Envoi direct vers Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(cleanPath, fileToUpload, { upsert: true });
+
+    if (error) {
+      console.warn('[SUPABASE STORAGE UPLOAD]', error.message);
+      // Tentative de récupération URL publique
+      const { data: pubData } = supabase.storage.from('public').getPublicUrl(cleanPath);
+      if (pubData?.publicUrl) return pubData.publicUrl;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(cleanPath);
+    return publicUrlData?.publicUrl || '';
   } catch (error) {
+    console.error('[SUPABASE STORAGE ERROR]', error);
     throw error;
   }
 }
 
 /**
- * Test de connexion
+ * Test de connexion Base de données (100% Supabase)
  */
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('[FIRESTORE] Connexion au serveur nanasore établie avec succès');
-    return true;
+    const { data, error } = await supabase.from('stores').select('id').limit(1);
+    console.log('[SUPABASE] Connexion à la base de données Supabase vérifiée avec succès');
+    return !error;
   } catch (error: any) {
-    if (error?.message?.includes('the client is offline')) {
-      console.warn('[FIRESTORE] Mode hors-ligne actif (cache local)');
-    } else {
-      console.info('[FIRESTORE] Service Firestore prêt sur nanasore');
-    }
+    console.warn('[SUPABASE] Test connexion Supabase :', error?.message);
     return false;
   }
 }

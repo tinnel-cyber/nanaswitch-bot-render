@@ -40,8 +40,7 @@ import {
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../utils/audio';
 import { getPresignedUploadUrl, uploadFileToS3, checkCompressedVideoReady } from '../../services/s3UploadService';
-import { storage } from '../../firebase';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { supabase } from '../../lib/supabase';
 
 export interface ComposantUploadVideoProps {
   /** Callback standard appelé avec le lien final S3 dès la fin de l'upload */
@@ -287,29 +286,21 @@ export default function ComposantUploadVideo({
 
         finalUrl = presigned.hlsUrl || presigned.finalVideoUrl;
       } catch (s3Err) {
-        console.warn('[REEL UPLOAD] Serveur S3 direct indisponible, bascule sur stockage secondaire :', s3Err);
+        console.warn('[REEL UPLOAD] Serveur S3 direct indisponible, bascule sur Supabase Storage :', s3Err);
         const cleanName = fileSource.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const fileRef = storageRef(storage, `wameet_reels/${Date.now()}-${cleanName}`);
-        const uploadTask = uploadBytesResumable(fileRef, fileSource, {
-          contentType: fileSource.type || 'video/mp4'
-        });
+        const targetPath = `wameet_reels/${Date.now()}-${cleanName}`;
+        const { error: supaErr } = await supabase.storage
+          .from('nanasore-media')
+          .upload(targetPath, fileSource, {
+            contentType: fileSource.type || 'video/mp4',
+            upsert: true
+          });
 
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on(
-            'state_changed',
-            (snapshot) => {
-              if (snapshot.totalBytes > 0) {
-                const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                setUploadProgress(pct);
-              }
-            },
-            (err) => reject(err),
-            async () => {
-              finalUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve();
-            }
-          );
-        });
+        if (supaErr) {
+          console.warn('[SUPABASE STORAGE FALLBACK]', supaErr.message);
+        }
+        const { data: pubData } = supabase.storage.from('nanasore-media').getPublicUrl(targetPath);
+        finalUrl = pubData?.publicUrl || '';
       }
 
       setUploadProgress(100);

@@ -28,6 +28,7 @@ import { Link } from '../../components/CentralHubOmnibar';
 import { SlideModuleBlock, SlideItem, SlideSettings } from '../../components/storeBuilder/SlideModuleBlock';
 import { ImageUploadInput } from '../../components/common/ImageUploadInput';
 import { publishHubBlock, updateLocalAppRegistry, HubBlockConfig } from '../../services/hubPublishService';
+import { supabase } from '../../lib/supabase';
 
 export type BlockType = 'header' | 'description' | 'image' | 'video' | 'cta' | 'image_slider';
 
@@ -305,18 +306,24 @@ export const HubBuilderPage = () => {
     let isMounted = true;
     (async () => {
       try {
-        const { rtdb } = await import('@/src/firebase');
-        const { ref, get } = await import('firebase/database');
-        if (rtdb) {
-          // Tenter les nœuds potentiels de publication
-          let data: any = null;
-          for (const nodeKey of ['central_hub_config', 'central_hub_blocks', 'published_cards']) {
-            const snapshot = await get(ref(rtdb, nodeKey));
-            if (snapshot.exists()) {
-              data = snapshot.val();
-              break;
-            }
+        let data: any = null;
+        try {
+          const { data: regRow } = await supabase
+            .from('app_registry')
+            .select('config_json')
+            .eq('key', 'central_hub_config')
+            .maybeSingle();
+          if (regRow?.config_json) {
+            data = regRow.config_json;
           }
+        } catch (_) {}
+
+        if (!data) {
+          try {
+            const local = localStorage.getItem('central_hub_config');
+            if (local) data = JSON.parse(local);
+          } catch (_) {}
+        }
 
           if (data && isMounted) {
             const dataList: any[] = Array.isArray(data) 
@@ -463,27 +470,8 @@ export const HubBuilderPage = () => {
               return;
             }
           }
-        }
-      } catch (err) {
-        console.warn('Initial RTDB fetch error:', err);
-      }
-
-      // Tentative de lecture Firestore si RTDB non disponible
-      try {
-        const { db } = await import('@/src/firebase');
-        const { doc, getDoc } = await import('firebase/firestore');
-        if (db) {
-          const snap = await getDoc(doc(db, 'system_config', 'central_hub'));
-          if (snap.exists() && snap.data()?.hubData && isMounted) {
-            const fsData = snap.data().hubData;
-            if (Array.isArray(fsData) && fsData.length > 0) {
-              setHubData(fsData);
-              return;
-            }
-          }
-        }
-      } catch (fsErr) {
-        console.warn('Initial storage fetch error:', fsErr);
+        } catch (err) {
+        console.warn('Initial Hub load error:', err);
       }
 
       try {
@@ -1221,55 +1209,34 @@ export const HubBuilderPage = () => {
         }).catch(e => console.warn('[HubBuilder] Active block atomic publish warning:', e));
       }
 
-      // 2. Firebase RTDB - Enregistrement global miroir sur tous les nœuds de publication
+      // 2. Supabase SQL & App Registry - Enregistrement global miroir souverain
+      let supabaseSuccess = false;
       try {
-        const { rtdb } = await import('@/src/firebase');
-        const { ref, set } = await import('firebase/database');
-        if (rtdb) {
-          const results = await Promise.allSettled([
-            set(ref(rtdb, 'central_hub_config'), dataToSave),
-            set(ref(rtdb, 'central_hub_blocks'), dataToSave),
-            set(ref(rtdb, 'published_cards'), dataToSave)
-          ]);
-          rtdbSuccess = results.some(r => r.status === 'fulfilled');
+        const { error: supaErr } = await supabase.from('app_registry').upsert({
+          key: 'central_hub_config',
+          name: 'Central Hub Configuration',
+          module_key: 'central_hub',
+          config_json: dataToSave,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+        if (!supaErr) {
+          supabaseSuccess = true;
         }
-      } catch (fbErr) {
-        console.warn('[HubBuilder] Erreur RTDB sync (non-bloquante) :', fbErr);
+      } catch (sbErr) {
+        console.warn('[HubBuilder] Note: Synchronisation Supabase app_registry :', sbErr);
       }
 
-      // 3. Firebase Firestore - Sauvegarde miroir persistante
-      try {
-        const { db, auth } = await import('@/src/firebase');
-        const { doc, setDoc } = await import('firebase/firestore');
-        if (db) {
-          await setDoc(doc(db, 'system_config', 'central_hub'), {
-            central_hub: dataToSave,
-            hubData: dataToSave,
-            authorId: auth?.currentUser?.uid || 'admin',
-            authorEmail: auth?.currentUser?.email || 'pousbila04@gmail.com',
-            updatedAt: new Date().toISOString()
-          }, { merge: true });
-          firestoreSuccess = true;
-        }
-      } catch (fsErr) {
-        console.warn('[HubBuilder] Erreur storage sync (non-bloquante) :', fsErr);
-      }
-
-      // 4. LocalStorage & Événements locaux (Garantie temps-réel avec Omnibar et App Registry)
+      // 3. LocalStorage & Événements locaux (Garantie temps-réel avec Omnibar et App Registry)
       try {
         localStorage.setItem('central_hub_config', JSON.stringify(dataToSave));
         window.dispatchEvent(new CustomEvent('hub_registry_updated', { detail: { count: exportableData.length } }));
         window.dispatchEvent(new Event('central_hub_config_updated'));
       } catch (_) {}
 
-      if (rtdbSuccess && firestoreSuccess) {
-        showToast('✅ Configuration enregistrée dans Firebase (RTDB & Firestore) !');
-      } else if (rtdbSuccess) {
-        showToast('✅ Configuration enregistrée dans Firebase RTDB (Temps réel actif) !');
-      } else if (firestoreSuccess) {
-        showToast('✅ Configuration enregistrée dans Firestore !');
+      if (supabaseSuccess) {
+        showToast('✅ Configuration enregistrée dans Supabase (Temps réel souverain) !');
       } else {
-        showToast('ℹ️ Configuration enregistrée en cache local (Appliquez les règles Firebase).');
+        showToast('✅ Configuration enregistrée en cache local !');
       }
     } catch (err) {
       console.error('Erreur sauvegarde globale:', err);

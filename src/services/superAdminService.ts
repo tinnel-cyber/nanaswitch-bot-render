@@ -1,7 +1,6 @@
 /**
  * Service Central Super Admin
- * Gère la persistance synchrone et asynchrone absolue dans Firebase Realtime Database
- * (https://nanasore-default-rtdb.firebaseio.com/super_admin_settings.json)
+ * Gère la persistance synchrone et asynchrone dans Supabase SQL (table app_registry / platform_settings)
  * ainsi que dans le localStorage et le bus d'événements de l'application (superAdminUpdated).
  */
 
@@ -17,8 +16,7 @@ import {
 import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/firestoreService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 import { supabase } from '../lib/supabase';
-import { db, RTDB_DEFAULT_URL } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+export const RTDB_DEFAULT_URL = "";
 
 export const RTDB_SUPER_ADMIN_URL = '';
 export const RTDB_MERCHANTS_BASE_URL = '';

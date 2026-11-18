@@ -1,11 +1,10 @@
 /**
  * @file hubPublishService.ts
- * @description Service de publication unifi pour le Hub Builder vers Firebase RTDB et l'App Registry
- * Assure la synchronisation atomique et instantane de chaque bloc configur avec l'Omnibar et le registre d'applications.
+ * @description Service de publication unifié pour le Hub Builder vers Supabase et l'App Registry
+ * Assure la synchronisation atomique et instantanée de chaque bloc configuré avec l'Omnibar et le registre d'applications.
  */
 
-import { ref, set, get } from "firebase/database";
-import { database } from "../firebaseConfig";
+import { supabase } from '../lib/supabase';
 
 export interface HubBlockConfig {
   id: string;
@@ -19,7 +18,7 @@ export interface HubBlockConfig {
 }
 
 /**
- * Rcupre l'ensemble des modules enregistrs dans le cache local (App Registry)
+ * Récupère l'ensemble des modules enregistrés dans le cache local (App Registry)
  */
 export function getLocalAppRegistry(): Record<string, HubBlockConfig> {
   if (typeof window === 'undefined') return {};
@@ -33,7 +32,7 @@ export function getLocalAppRegistry(): Record<string, HubBlockConfig> {
 }
 
 /**
- * Met  jour le cache local du registre d'applications (app_registry_cache)
+ * Met à jour le cache local du registre d'applications (app_registry_cache)
  */
 export function updateLocalAppRegistry(blockId: string, blockData: HubBlockConfig): void {
   try {
@@ -47,7 +46,7 @@ export function updateLocalAppRegistry(blockId: string, blockData: HubBlockConfi
     };
     localStorage.setItem("app_registry_cache", JSON.stringify(registry));
   } catch (e) {
-    console.warn("[Hub Registry] chec de la mise  jour du cache local :", e);
+    console.warn("[Hub Registry] Échec de la mise à jour du cache local :", e);
   }
 }
 
@@ -68,16 +67,16 @@ export function removeLocalAppRegistry(blockId: string): void {
 }
 
 /**
- * Nettoie un objet en remplaant tout `undefined` par une chane vide ou une valeur par dfaut
+ * Nettoie un objet en remplaçant tout `undefined` par une chaîne vide ou une valeur par défaut
  */
-function cleanPayloadForRtdb(data: any): any {
+function cleanPayload(data: any): any {
   if (data === undefined || data === null) return '';
-  if (Array.isArray(data)) return data.map(cleanPayloadForRtdb);
+  if (Array.isArray(data)) return data.map(cleanPayload);
   if (typeof data === 'object') {
     const clean: Record<string, any> = {};
     for (const [k, v] of Object.entries(data)) {
       if (v !== undefined) {
-        clean[k] = cleanPayloadForRtdb(v);
+        clean[k] = cleanPayload(v);
       }
     }
     return clean;
@@ -86,10 +85,10 @@ function cleanPayloadForRtdb(data: any): any {
 }
 
 /**
- * Publie ou met  jour un bloc du Hub Builder dans Firebase RTDB (/central_hub_config/{blockId})
- * et synchronise immdiatement l'App Registry ainsi que l'Omnibar.
+ * Publie ou met à jour un bloc du Hub Builder dans Supabase (table app_registry)
+ * et synchronise immédiatement l'App Registry ainsi que l'Omnibar.
  * 
- * Rgle stricte du Block Builder : crasement obligatoire de l'ancienne version sans duplication.
+ * Règle stricte du Block Builder : écrasement obligatoire de l'ancienne version sans duplication.
  */
 export async function publishHubBlock(blockId: string, blockData: HubBlockConfig): Promise<void> {
   if (!blockId) {
@@ -97,7 +96,7 @@ export async function publishHubBlock(blockId: string, blockData: HubBlockConfig
   }
 
   try {
-    const targetPayload = cleanPayloadForRtdb({
+    const targetPayload = cleanPayload({
       ...blockData,
       id: blockId,
       title: blockData.title || 'Nouveau Bloc Hub',
@@ -108,25 +107,30 @@ export async function publishHubBlock(blockId: string, blockData: HubBlockConfig
       updatedAt: new Date().toISOString(),
     });
 
-    // 1. Dfinition du chemin de destination dans Firebase RTDB
-    if (database) {
-      const rtdbRef = ref(database, `central_hub_config/${blockId}`);
-
-      // 2. criture atomique dans Firebase RTDB (crasement de l'ancienne version)
-      await set(rtdbRef, targetPayload);
-      console.log(`[Hub Builder] Succs : Bloc ${blockId} enregistr dans storage RTDB sous /central_hub_config/${blockId}.`);
+    // 1. Enregistrement direct dans Supabase SQL (table app_registry)
+    try {
+      await supabase.from('app_registry').upsert({
+        key: `central_hub_config_${blockId}`,
+        name: targetPayload.title || blockId,
+        module_key: 'central_hub_blocks',
+        config_json: targetPayload,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+      console.log(`[Hub Builder] Succès : Bloc ${blockId} synchronisé dans Supabase app_registry.`);
+    } catch (sqlErr) {
+      console.warn('[Hub Builder] Note: Synchronisation Supabase app_registry :', sqlErr);
     }
 
-    // 3. Mise  jour de l'App Registry (stockage local / mmoire de l'application)
+    // 2. Mise à jour de l'App Registry (stockage local / mémoire de l'application)
     updateLocalAppRegistry(blockId, targetPayload as HubBlockConfig);
 
-    // 4. Notification globale pour l'Omnibar (dclenche un rafrachissement instantan)
+    // 3. Notification globale pour l'Omnibar (déclenche un rafraîchissement instantané)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('hub_registry_updated', { detail: { blockId, data: targetPayload } }));
       window.dispatchEvent(new Event('central_hub_config_updated'));
     }
 
-    // 5. Synchronisation automatique vers Supabase (App Registry & Organization Blocks)
+    // 4. Synchronisation vers l'API interne modules si disponible
     if (typeof window !== 'undefined') {
       try {
         fetch('/api/modules', {
@@ -140,12 +144,8 @@ export async function publishHubBlock(blockId: string, blockData: HubBlockConfig
             category: targetPayload.category || targetPayload.type || 'General',
             settings: targetPayload,
           }),
-        }).catch((err) => {
-          console.warn('[Hub Builder] Synchronisation Supabase différée :', err);
-        });
-      } catch {
-        // Non-bloquant
-      }
+        }).catch(() => {});
+      } catch {}
     }
   } catch (error) {
     console.error(`[Hub Builder] Erreur lors de la publication du bloc ${blockId} :`, error);

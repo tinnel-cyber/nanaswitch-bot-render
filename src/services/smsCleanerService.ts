@@ -9,10 +9,10 @@ import { supabase } from '../lib/supabase';
 import { addUserCredits } from '../utils/firestoreService';
 import { verifyPaymentTransaction } from './paymentApiService';
 
-export const RTDB_BASE_URL = "https://nanasore-default-rtdb.firebaseio.com";
-export const RTDB_SMS_BASE = `${RTDB_BASE_URL}/sms_recus`;
-export const RTDB_ARCHIVE_BASE = `${RTDB_BASE_URL}/transactions_validees`;
-export const RTDB_COMMANDES_ATTENTE_BASE = `${RTDB_BASE_URL}/commandes_attente`;
+export const RTDB_BASE_URL = "";
+export const RTDB_SMS_BASE = "";
+export const RTDB_ARCHIVE_BASE = "";
+export const RTDB_COMMANDES_ATTENTE_BASE = "";
 
 export async function persistPendingOrderToRtdb(orderRef: string, orderData: any): Promise<boolean> {
   // Déprécié : No-op sécurisé

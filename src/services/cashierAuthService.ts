@@ -1,7 +1,6 @@
 import { SellerUser } from '../types';
 import { getOrCreateTabCasierSession } from './casierSessionService';
 
-const RTDB_BASE_URL = 'https://nanasore-default-rtdb.firebaseio.com';
 
 /**
  * Génère le lien unique de connexion caissier
@@ -203,33 +202,31 @@ export async function verifyCashierPin(
     }
   }
 
-  // B. Recherche globale dans RTDB si aucun tenant précis n'a matché
+  // B. Recherche globale dans Supabase si aucun tenant précis n'a matché
   try {
-    const globalUrl = `${RTDB_BASE_URL}/nodes/tenants.json`;
-    const res = await fetch(globalUrl);
-    if (res.ok) {
-      const allTenants = await res.json();
-      if (allTenants && typeof allTenants === 'object') {
-        for (const [tid, tData] of Object.entries<any>(allTenants)) {
-          if (tData && tData.cashiers) {
-            const cashiersList = Object.values(tData.cashiers) as SellerUser[];
-            const match = cashiersList.find(c => c.pinCode === cleanPin || (c as any).pin === cleanPin);
-            if (match) {
-              const resolvedCaisseId = caisseIdParam || match.caisseId || `caisse-${match.signatureCode || '01'}`;
-              persistCashierSession(tid, resolvedCaisseId, match);
-              return {
-                success: true,
-                cashier: match,
-                tenantId: tid,
-                caisseId: resolvedCaisseId
-              };
-            }
-          }
+    const { data: allCashiers } = await supabase
+      .from('app_registry')
+      .select('tenant_id, config_json')
+      .eq('module_key', 'cashiers');
+
+    if (allCashiers && allCashiers.length > 0) {
+      for (const row of allCashiers) {
+        const c = row.config_json as SellerUser;
+        if (c && (c.pinCode === cleanPin || (c as any).pin === cleanPin)) {
+          const tid = row.tenant_id || c.tenantId || 'default';
+          const resolvedCaisseId = caisseIdParam || c.caisseId || `caisse-${c.signatureCode || '01'}`;
+          persistCashierSession(tid, resolvedCaisseId, c);
+          return {
+            success: true,
+            cashier: c,
+            tenantId: tid,
+            caisseId: resolvedCaisseId
+          };
         }
       }
     }
   } catch (err) {
-    console.warn('[cashierAuthService] Erreur recherche globale RTDB:', err);
+    console.warn('[cashierAuthService] Erreur recherche globale Supabase:', err);
   }
 
   // C. Fallback vérification sellers globaux dans LocalStorage
