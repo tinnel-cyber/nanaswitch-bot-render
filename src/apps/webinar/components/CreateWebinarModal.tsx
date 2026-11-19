@@ -12,6 +12,8 @@ import { formatCFA, playTapBeep, playValidationBeep } from '../../../utils/audio
 import { LivePlatform, LiveRoomMode, LiveRoomStatus, LiveWebinar } from '../../../types';
 import { UltimateFunnelBuilder } from '../../../components/storeBuilder/UltimateFunnelBuilder';
 import { saveFunnelConfig } from '../../../services/omniFunnelService';
+import { buildStoreHlsUrl } from '../../../config/liveStreamConfig';
+import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
 
 export interface CreateWebinarModalProps {
   isOpen?: boolean;
@@ -159,8 +161,9 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     return null;
   }
 
-  // 3 Onglets principaux de l'Espace Live & Webinaire
-  const [activeTab, setActiveTab] = useState<'my_webinars' | 'catalog' | 'funnels'>('my_webinars');
+  // 4 Onglets principaux de l'Espace Live & Webinaire
+  const [activeTab, setActiveTab] = useState<'my_webinars' | 'multistream' | 'catalog' | 'funnels'>('my_webinars');
+  const [multistreamTargetLive, setMultistreamTargetLive] = useState<{ slug: string; title: string } | null>(null);
 
   // Mode formulaire de création
   const [isCreatingFormOpen, setIsCreatingFormOpen] = useState(false);
@@ -302,7 +305,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       setStreamUrl(url);
     } else if (targetPlatform === 'daily') {
       const roomName = `webinar-${roomId}`;
-      const finalDailyUrl = `${process.env.VITE_LIVE_HLS_URL || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run'}/${roomName}/index.m3u8`;
+      const finalDailyUrl = buildStoreHlsUrl(roomName);
       setMeetingUrl(finalDailyUrl);
       setStreamUrl(finalDailyUrl);
     }
@@ -471,7 +474,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         setMeetingUrl(url);
         setStreamUrl(url);
       } else if (template.platform === 'daily') {
-        const url = `${VITE_LIVE_HLS_URL}/${generateUniqueRoomId()}/index.m3u8`;
+        const url = buildStoreHlsUrl(generateUniqueRoomId());
         setMeetingUrl(url);
         setStreamUrl(url);
       } else {
@@ -510,7 +513,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         effectivePlatform === 'jitsi'
           ? `https://meet.jit.si/${generateUniqueRoomId()}`
           : effectivePlatform === 'daily'
-            ? `${VITE_LIVE_HLS_URL}/${generateUniqueRoomId()}/index.m3u8`
+            ? buildStoreHlsUrl(generateUniqueRoomId())
             : ''
       );
       const finalStreamUrl = rawPastedUrl || finalMeetingUrl;
@@ -824,6 +827,22 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
               <span>🔴 Mes Lives & Webinaires créés</span>
               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300 font-bold">
                 {myWebinars.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { playTapBeep(); setActiveTab('multistream'); }}
+              className={`py-3 px-3 text-xs sm:text-sm font-black border-b-2 transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                activeTab === 'multistream'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Share2 className="w-4 h-4 text-blue-400" />
+              <span>📡 Clés Réseaux & Multistream</span>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-300 font-bold">
+                10+
               </span>
             </button>
 
@@ -1200,6 +1219,18 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       />
                     </div>
                   )}
+
+                  {/* MULTIDIFFUSION SIMULTANÉE RÉELLE (CLÉS & URL RÉSEAUX SOCIAUX + RTMP PERSONNALISÉ) */}
+                  <div className="pt-1">
+                    <LiveMultistreamStudioModal
+                      isOpen={true}
+                      inline={true}
+                      storeSlug={merchantId || 'boutique'}
+                      storeName={storeName}
+                      liveTitle={title || 'Live Shopping Exclusif 🔥'}
+                      onClose={() => {}}
+                    />
+                  </div>
 
                   {/* Tarif d'accès et Monétisation via Nanasore Payment Gateway */}
                   <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -1624,6 +1655,19 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
                               <button
                                 type="button"
+                                onClick={() => {
+                                  playTapBeep();
+                                  setMultistreamTargetLive({ slug: webinar.id, title: webinar.title });
+                                }}
+                                className="px-2.5 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-[11px] font-black transition flex items-center gap-1 cursor-pointer min-h-[36px]"
+                                title="Configurer les clés YouTube, Facebook, TikTok, Instagram, RTMP..."
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Clés Réseaux</span>
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => handleLaunchFunnelForLive(webinar)}
                                 className="px-2.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-black transition flex items-center gap-1 cursor-pointer min-h-[36px]"
                                 title="Créer un Funnel de vente ⚡"
@@ -1646,6 +1690,20 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                       })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ONGLET MULTISTREAMING : TOUS LES CHAMPS CLÉS & URL RÉSEAUX SOCIAUX */}
+              {activeTab === 'multistream' && (
+                <div className="space-y-4">
+                  <LiveMultistreamStudioModal
+                    isOpen={true}
+                    inline={true}
+                    storeSlug={myWebinars[0]?.id || merchantId || 'boutique'}
+                    storeName={storeName}
+                    liveTitle={myWebinars[0]?.title || title || 'Live Shopping Exclusif 🔥'}
+                    onClose={() => setActiveTab('my_webinars')}
+                  />
                 </div>
               )}
 
@@ -1890,6 +1948,18 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
               console.error('Error saving funnel:', err);
             }
           }) as any}
+        />,
+        document.body
+      )}
+
+      {/* Modale Multistreaming dédiée pour un live spécifique */}
+      {multistreamTargetLive && typeof document !== 'undefined' && createPortal(
+        <LiveMultistreamStudioModal
+          isOpen={true}
+          storeSlug={multistreamTargetLive.slug}
+          storeName={storeName}
+          liveTitle={multistreamTargetLive.title}
+          onClose={() => setMultistreamTargetLive(null)}
         />,
         document.body
       )}
