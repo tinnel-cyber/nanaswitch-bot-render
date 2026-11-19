@@ -95,17 +95,17 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
   {
     id: 'studio',
     slug: 'studio',
-    name: 'Vitrine en Ligne (E-Shop)',
+    name: 'Vitrine en Ligne (E-Shop) & Thèmes',
     route: '/dashboard/vitrine',
     category: 'Commerce & Vente',
-    description: 'Boutique connectée, panier client & commande WhatsApp.',
+    description: 'Boutique connectée, choix/construction de thème, panier client & commande WhatsApp.',
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: true,
     view: 'STUDIO',
     icon: 'Store',
-    keywords: ['boutique', 'eshop', 'vitrine', 'ecommerce', 'web', 'online', 'store'],
-    aliases: ['app-studio', 'online_store', 'vitrine-eshop', 'mod-vitrine', 'eshop', 'vitrine', 'studio-vitrine', '/shop']
+    keywords: ['boutique', 'eshop', 'vitrine', 'ecommerce', 'web', 'online', 'store', 'theme', 'builder', 'design'],
+    aliases: ['app-studio', 'online_store', 'vitrine-eshop', 'mod-vitrine', 'eshop', 'vitrine', 'studio-vitrine', '/shop', 'theme-builder', 'srv-theme-builder', 'theme-builder-studio']
   },
   {
     id: 'wameet',
@@ -184,19 +184,34 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     aliases: ['app-deal-builder', 'public-deal-builder']
   },
   {
-    id: 'cours-forge',
-    slug: 'cours-forge',
-    name: 'Cours Forge',
-    route: '/dashboard/courses/create',
-    category: 'Éducation',
-    description: 'Atelier complet de conception et génération de cours, modules vidéo et quiz.',
+    id: 'salles-vip',
+    slug: 'salles-vip',
+    name: 'Salles VIP & Cercles Privés',
+    route: '/dashboard/salles-vip',
+    category: 'Réseau & Communauté',
+    description: 'Salons privés payants, cercles VIP et monétisation de communautés par abonnement.',
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: false,
-    view: 'COURSE_CREATE',
-    icon: 'BookOpen',
-    keywords: ['cours', 'forge', 'formation', 'quiz', 'lms'],
-    aliases: ['app-cours-forge', 'lms_learning', 'course-forge']
+    view: 'SALLES_VIP',
+    icon: 'Crown',
+    keywords: ['vip', 'salles', 'salles-vip', 'cercles', 'prives', 'communaute', 'abonnement'],
+    aliases: ['app-salles-vip', 'salle-vip', 'vip', '/salles-vip']
+  },
+  {
+    id: 'nanawallet',
+    slug: 'nanawallet',
+    name: 'NaNa Wallet (Portefeuille Marchand)',
+    route: '/dashboard/wallet',
+    category: 'Finances & Trésorerie',
+    description: 'Portefeuille électronique souverain, soldes encaissés, retraits Mobile Money et virements.',
+    type: 'APPLICATION',
+    taxonomy: 'APPLICATION',
+    defaultActive: true,
+    view: 'NANA_WALLET',
+    icon: 'Wallet',
+    keywords: ['wallet', 'nanawallet', 'portefeuille', 'solde', 'retrait', 'mobile money', 'tresorerie'],
+    aliases: ['mod-nanawallet', 'nana-wallet', 'portefeuille', '/wallet']
   },
   {
     id: 'nanamarket',
@@ -284,35 +299,18 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
   {
     id: 'crm-automation',
     slug: 'crm-automation',
-    name: 'CRM et Automation (Super Admin)',
+    name: 'CRM & Automation (WooCommerce, Twilio SMS, Brevo)',
     route: '/dashboard/connecteurs',
-    category: 'Super Admin & Intégrations',
-    description: 'Paramètres & Intégrations techniques (Module Super Admin) : WooCommerce, Passerelle SMS / OTP, Emailing Pro et connecteurs système.',
+    category: 'Intégrations & Connecteurs',
+    description: 'Connecteurs WooCommerce, Passerelle SMS / OTP Twilio, Emailing Brevo API v3, Push et routage paiements (En construction).',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
     defaultActive: false,
     isUnderConstruction: true,
-    requiredRoles: ['SUPER_ADMIN', 'super_admin'],
-    permissions: ['manage_system_extensions'],
     view: 'SETTINGS_EXTENSIONS',
     icon: 'Cpu',
-    keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'sms-otp', 'superadmin'],
+    keywords: ['crm', 'automation', 'connecteurs', 'woocommerce', 'brevo', 'twilio', 'sms-otp'],
     aliases: ['srv-crm-automation', 'settings_integrations', 'crm_automation', 'connecteurs', 'connectors-webhooks']
-  },
-  {
-    id: 'theme-builder',
-    slug: 'theme-builder',
-    name: 'Studio de Choix et Construction de Thème',
-    route: '/dashboard/vitrine',
-    category: 'Boutique & Design',
-    description: 'Sélectionnez, prévisualisez et construisez le thème pour votre vitrine e-commerce.',
-    type: 'SERVICE',
-    taxonomy: 'SERVICE',
-    defaultActive: true,
-    view: 'STUDIO',
-    icon: 'Palette',
-    keywords: ['theme', 'builder', 'design', 'vitrine', 'studio'],
-    aliases: ['srv-theme-builder', 'theme-builder-studio']
   },
   {
     id: 'partner',
@@ -332,17 +330,17 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
   {
     id: 'course-create',
     slug: 'course-create',
-    name: 'Centre de Création de Cours, et De Formation',
+    name: 'Centre de Création de Cours & Formation (Cours Forge)',
     route: '/dashboard/formateur',
     category: 'Formation',
-    description: 'Correction des devoirs, suivi des cohortes et gestion pédagogique.',
+    description: 'Création de cours, modules vidéo, quiz, correction des devoirs et suivi des cohortes.',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
     defaultActive: false,
     view: 'INSTRUCTOR',
     icon: 'GraduationCap',
-    keywords: ['formateur', 'creation-cours', 'cohortes', 'pedagogique'],
-    aliases: ['srv-course-create', 'instructor-hub']
+    keywords: ['formateur', 'creation-cours', 'cohortes', 'pedagogique', 'cours', 'forge', 'quiz', 'lms'],
+    aliases: ['srv-course-create', 'instructor-hub', 'cours-forge', 'app-cours-forge', 'lms_learning', 'course-forge']
   },
   {
     id: 'academy-support',
@@ -357,7 +355,52 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     view: 'CAMPUS',
     icon: 'Compass',
     keywords: ['academie', 'formation', 'accompagnement', 'cours-video', 'campus'],
-    aliases: ['srv-academy-support', 'lms-academy', 'nana-academy', '/academy']
+    aliases: ['srv-academy-support', 'lms-academy', '/academy']
+  },
+  {
+    id: 'lms-marketplace',
+    slug: 'lms-marketplace',
+    name: 'Marketplace de Formations (LMS)',
+    route: '/dashboard/marketplace',
+    category: 'Éducation',
+    description: 'Catalogue public et découverte des formations, cours vidéo et programmes certifiants.',
+    type: 'SERVICE',
+    taxonomy: 'SERVICE',
+    defaultActive: false,
+    view: 'CATALOG',
+    icon: 'BookOpen',
+    keywords: ['marketplace', 'lms', 'formations', 'catalogue', 'cours'],
+    aliases: ['srv-lms-marketplace', 'mod-lms-marketplace', 'catalog', '/marketplace']
+  },
+  {
+    id: 'nana-academy',
+    slug: 'nana-academy',
+    name: 'NaNa Académie (Centre de Tutoriels)',
+    route: '/dashboard/tutoriels',
+    category: 'Éducation',
+    description: 'Tutoriels vidéo pas-à-pas et guides interactifs pour maîtriser tous les modules Nanasore.',
+    type: 'SERVICE',
+    taxonomy: 'SERVICE',
+    defaultActive: true,
+    view: 'ACADEMY',
+    icon: 'PlayCircle',
+    keywords: ['tutoriels', 'academie', 'guides', 'aide', 'video', 'formation'],
+    aliases: ['srv-academy', 'mod-nana-academy', 'tutoriels', '/tutoriels']
+  },
+  {
+    id: 'certificate-hub',
+    slug: 'certificate-hub',
+    name: 'Certificats Officiels & QR Code',
+    route: '/dashboard/certificats',
+    category: 'Formation',
+    description: 'Génération et vérification officielle de diplômes et certificats de réussite avec QR Code.',
+    type: 'SERVICE',
+    taxonomy: 'SERVICE',
+    defaultActive: false,
+    view: 'CERTIFICATE',
+    icon: 'Award',
+    keywords: ['certificats', 'diplomes', 'qr-code', 'attestation', 'formation', 'verification'],
+    aliases: ['srv-certificates', 'official-cert', 'certificats', 'certificate', '/certificats']
   },
   {
     id: 'nana-switch',
@@ -393,7 +436,7 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
 ];
 
 // ============================================================================
-// BLOC 3 : LES 6 MODULES
+// BLOC 3 : LES MODULES MÉTIERS
 // ============================================================================
 export const MODULES_BLOCK: CanonicalModule[] = [
   {
@@ -409,7 +452,37 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     view: 'INVENTORY',
     icon: 'Boxes',
     keywords: ['stock', 'inventaire', 'produits', 'rupture', 'codes-barres'],
-    aliases: ['mod-inventory', 'catalog', 'inventory_suppliers', 'mod_stock', 'inventory-stock', '/inventory']
+    aliases: ['mod-inventory', 'catalog-inventory', 'inventory_suppliers', 'mod_stock', 'inventory-stock', '/inventory']
+  },
+  {
+    id: 'customer-orders',
+    slug: 'customer-orders',
+    name: 'Commandes Clients & Livraisons',
+    route: '/dashboard/commandes',
+    category: 'Commerce & Vente',
+    description: 'Suivi complet des commandes boutique, statuts de livraison et gestion des expéditions.',
+    type: 'MODULE',
+    taxonomy: 'MODULE',
+    defaultActive: true,
+    view: 'CUSTOMER_ORDERS',
+    icon: 'Package',
+    keywords: ['commandes', 'livraisons', 'expeditions', 'orders', 'clients', 'suivi'],
+    aliases: ['orders-quotes', 'delivery-heatmap', 'commandes', 'orders', '/commandes']
+  },
+  {
+    id: 'quotes-projects',
+    slug: 'quotes-projects',
+    name: 'Devis & Projets (Escrow)',
+    route: '/dashboard/commandes/devis',
+    category: 'Commerce & Vente',
+    description: 'Création de devis professionnels, suivi de projets clients et paiements sécurisés Escrow.',
+    type: 'MODULE',
+    taxonomy: 'MODULE',
+    defaultActive: false,
+    view: 'QUOTES_PROJECTS',
+    icon: 'FileText',
+    keywords: ['devis', 'projets', 'escrow', 'proforma', 'facturation', 'quotes'],
+    aliases: ['devis', 'devis-projets', 'quotes', '/devis']
   },
   {
     id: 'debts',
@@ -472,6 +545,38 @@ export const MODULES_BLOCK: CanonicalModule[] = [
     icon: 'Activity',
     keywords: ['pixels', 'tracking', 'meta', 'tiktok', 'analytics'],
     aliases: ['mod-pixels-crm', 'tracking-pixels', 'TRACKING_PIXELS_CRM', 'TRACKING_CRM']
+  },
+  {
+    id: 'custom-domain',
+    slug: 'custom-domain',
+    name: 'Domaine Personnalisé PRO',
+    route: '/dashboard/domaine',
+    category: 'Commerce & Vente',
+    description: 'Connectez votre propre nom de domaine (.com, .bf, .ci) avec SSL automatique sur votre vitrine.',
+    type: 'MODULE',
+    taxonomy: 'MODULE',
+    defaultActive: false,
+    view: 'CUSTOM_DOMAIN',
+    actionId: 'CUSTOM_DOMAIN',
+    icon: 'Globe',
+    keywords: ['domaine', 'custom-domain', 'dns', 'ssl', 'site', 'url', 'personnalise'],
+    aliases: ['mod-custom-domain', 'CUSTOM_DOMAIN', 'domaine-personnalise', '/domaine']
+  },
+  {
+    id: 'white-label',
+    slug: 'white-label',
+    name: 'Marque Blanche (Retrait Logo)',
+    route: '/dashboard/marque-blanche',
+    category: 'Conformité',
+    description: 'Retirez la marque Nanasore de votre boutique et de vos factures pour une identité 100 % propriétaire.',
+    type: 'MODULE',
+    taxonomy: 'MODULE',
+    defaultActive: false,
+    view: 'WHITE_LABEL',
+    actionId: 'WHITE_LABEL',
+    icon: 'Shield',
+    keywords: ['marque-blanche', 'white-label', 'logo', 'branding', 'identite'],
+    aliases: ['mod-white-label', 'WHITE_LABEL', 'marque-blanche', '/marque-blanche']
   }
 ];
 

@@ -43,24 +43,10 @@ function mergeModulesWithRemoteData(
   const safeData = remoteData || {};
 
   const visibleModules = OFFICIAL_MODULES.filter((official) => {
-    // 1. Retirer obligatoirement Wameet
-    if (official.id === 'wameet' || official.slug === 'wameet' || official.aliases?.includes('wameet')) {
-      return false;
-    }
-    // 2. Retirer obligatoirement NaNa Switch Cloud
-    if (official.id === 'nana-switch' || official.slug === 'nana-switch' || official.name.toLowerCase().includes('switch cloud')) {
-      return false;
-    }
-    // 3. Retirer les modules en construction
-    if (official.isUnderConstruction) {
-      return false;
-    }
-    // 4. Retirer tout module contenant un lien ou rôle Super Admin
+    // Retirer uniquement les modules strictement réservés Super Admin
     if (
       official.requiredRoles?.includes('SUPER_ADMIN') ||
       official.requiredRoles?.includes('super_admin') ||
-      official.category?.toLowerCase().includes('super admin') ||
-      official.name?.toLowerCase().includes('super admin') ||
       official.route?.toLowerCase().includes('super-admin')
     ) {
       return false;

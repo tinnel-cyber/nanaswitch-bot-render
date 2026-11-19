@@ -577,6 +577,14 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       setProFeatureModalTab('TRACKING_PIXELS_CRM');
       return;
     }
+    if (viewUpper === 'CUSTOM_DOMAIN' || official?.id === 'custom-domain' || keyLower === 'custom-domain' || keyLower === 'domaine') {
+      setProFeatureModalTab('CUSTOM_DOMAIN');
+      return;
+    }
+    if (viewUpper === 'WHITE_LABEL' || official?.id === 'white-label' || keyLower === 'white-label' || keyLower === 'marque-blanche') {
+      setProFeatureModalTab('WHITE_LABEL');
+      return;
+    }
     if (viewUpper === 'KYC_VERIFICATION' || official?.id === 'kyc' || keyLower === 'kyc') {
       setIsKycModalOpen(true);
       return;

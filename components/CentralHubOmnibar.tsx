@@ -1850,21 +1850,9 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       });
     }
 
-    const isCardExcluded = (idLower: string, titleLower: string) =>
-      Boolean(
-        idLower === 'nana-switch' ||
-          idLower === 'crm-automation' ||
-          idLower === 'wameet' ||
-          idLower === 'app-wameet' ||
-          idLower === 'srv-nana-switch' ||
-          idLower === 'srv-crm-automation' ||
-          idLower.includes('crm-automation') ||
-          titleLower.includes('wameet') ||
-          titleLower.includes('crm et automation') ||
-          titleLower.includes('crm & automation')
-      );
+    const isCardExcluded = (_idLower: string, _titleLower: string) => false;
 
-    // 1. Source de vérité primaire : Les 27 modules canoniques d'OFFICIAL_MODULES (src/config/appRegistry.ts)
+    // 1. Source de vérité primaire : Les modules canoniques d'OFFICIAL_MODULES (src/config/appRegistry.ts)
     const officialCatalogCards: any[] = [];
     OFFICIAL_MODULES.forEach((official) => {
       const idLower = String(official.id || '').toLowerCase();
@@ -1887,15 +1875,21 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
       officialCatalogCards.push({
         id: String(official.id),
-        title: String(customOverride?.title || official.name || 'Module Nanasore'),
+        title: String(official.name || 'Module Nanasore'),
         subtitle: matchingRegistryApp?.category || official.category || '',
         category: official.category || '',
         altCategory: matchingRegistryApp?.category || customOverride?.subtitle || '',
-        description: String(customOverride?.description || official.description || matchingRegistryApp?.shortDescription || ''),
-        palmares: active
+        description: String(official.description || customOverride?.description || matchingRegistryApp?.shortDescription || ''),
+        palmares: official.isUnderConstruction
+          ? '🚧 En construction'
+          : active
           ? '✅ Module Actif'
           : customOverride?.palmares || matchingRegistryApp?.badgePalmares || (official.defaultActive ? 'Inclus' : 'Disponible'),
-        trialBadge: active ? 'Actif' : customOverride?.trialBadge || matchingRegistryApp?.trialLabel || "Prêt à l'emploi",
+        trialBadge: official.isUnderConstruction
+          ? 'En construction'
+          : active
+          ? 'Actif'
+          : customOverride?.trialBadge || matchingRegistryApp?.trialLabel || "Prêt à l'emploi",
         mediaUrl: customOverride?.mediaUrl || getCardMediaUrl(official),
         mediaType: customOverride?.mediaType || ('image' as const),
         // Route et vue canoniques TOUJOURS garanties par appRegistry.ts
@@ -1910,7 +1904,8 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
             : official.taxonomy === 'MODULE'
             ? 'Module'
             : 'Outil',
-        badge: official.taxonomy,
+        badge: official.isUnderConstruction ? '🚧 En construction' : official.taxonomy,
+        isUnderConstruction: Boolean(official.isUnderConstruction),
         isRootApp: official.id === 'app-pos' || official.id === 'pos',
         linkedModuleIds:
           official.id === 'app-pos' || official.id === 'pos'
@@ -2068,7 +2063,11 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   //   * Condition 2 : Tous les autres modules de la catégorie ou 4 modules de succession suivent
   // =========================================================================
   const structuredOutput = useMemo(() => {
-    const q = (searchQuery || '').trim().toLowerCase();
+    const rawQ = (searchQuery || '').trim();
+    const q = normCategoryText(rawQ);
+    const qTokens = q
+      .split(/[\s&,\/\-()']+/)
+      .filter((w) => w.length >= 2 && !['de', 'du', 'la', 'le', 'les', 'des', 'et', 'en', 'un', 'une', 'au', 'aux', 'sur', 'par', 'pour'].includes(w));
     const activeCat = selectedCategory ? selectedCategory.trim() : null;
 
     if (!q && !activeCat) {
@@ -2079,12 +2078,14 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
 
     allAvailableCards.forEach((card) => {
       if (!card) return;
-      const t = String(card.title || '').toLowerCase();
-      const d = String(card.description || '').toLowerCase();
-      const p = String(card.palmares || '').toLowerCase();
+      const t = normCategoryText(String(card.title || ''));
+      const idNorm = normCategoryText(String(card.id || ''));
+      const d = normCategoryText(String(card.description || ''));
+      const p = normCategoryText(String(card.palmares || ''));
       const combinedCat = [card.subtitle, card.category, card.altCategory, card.rowTitle].filter(Boolean).join(' ');
-      const s = combinedCat.toLowerCase();
-      const kw = Array.isArray(card.keywords) ? card.keywords.map((k: string) => String(k || '').toLowerCase()) : [];
+      const s = normCategoryText(combinedCat);
+      const kw = Array.isArray(card.keywords) ? card.keywords.map((k: string) => normCategoryText(String(k || ''))) : [];
+      const searchableBlob = `${t} ${idNorm} ${kw.join(' ')} ${d} ${s}`;
 
       let catMatchResult = { matches: true, exact: false };
       if (activeCat) {
@@ -2102,22 +2103,38 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
         return;
       }
 
-      let score = 0;
-      if (t === q) score += 1200;
-      else if (t.startsWith(q)) score += 800;
-      else if (t.includes(q)) score += 400;
+      let matchScore = 0;
+      if (t === q || idNorm === q) matchScore += 1500;
+      else if (t.startsWith(q)) matchScore += 1000;
+      else if (t.includes(q)) matchScore += 700;
 
-      if (kw.some((k: string) => k === q)) score += 500;
-      else if (kw.some((k: string) => k.includes(q))) score += 250;
+      if (kw.some((k: string) => k === q)) matchScore += 600;
+      else if (kw.some((k: string) => k.includes(q))) matchScore += 300;
 
-      if (d.includes(q)) score += 100;
-      if (p.includes(q)) score += 80;
-      if (s.includes(q)) score += 60;
-      if (card.isRootApp) score += 100;
-      if (card.isOfficialCatalog) score += 250;
+      if (d.includes(q)) matchScore += 150;
+      if (p.includes(q)) matchScore += 80;
+      if (s.includes(q)) matchScore += 60;
 
-      if (score > 0) {
-        scoredMatches.push({ card, score });
+      // Recherche multi-mots tolérante aux accents (ex: "Centre de formation", "Studio de génération de l")
+      if (qTokens.length > 0) {
+        const titleTokenHits = qTokens.filter((tok) => t.includes(tok)).length;
+        const allTokenHits = qTokens.filter((tok) => searchableBlob.includes(tok)).length;
+        if (titleTokenHits === qTokens.length) {
+          matchScore += 900;
+        } else if (titleTokenHits > 0) {
+          matchScore += titleTokenHits * 250;
+        }
+        if (allTokenHits === qTokens.length) {
+          matchScore += 400;
+        } else if (allTokenHits > 0) {
+          matchScore += allTokenHits * 90;
+        }
+      }
+
+      // IMPORTANT : Ne jamais inclure un module qui n'a AUCUNE correspondance avec la requête !
+      if (matchScore > 0) {
+        const tieBreaker = (card.isOfficialCatalog ? 25 : 0) + (card.isRootApp ? 10 : 0);
+        scoredMatches.push({ card, score: matchScore + tieBreaker });
       }
     });
 
@@ -2480,7 +2497,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                       <div className="flex items-center gap-2">
                         <Boxes className="w-4 h-4 text-[#4169E1]" />
                         <h5 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                          Catalogue Officiel Nanasore (36 Solutions : Applications, Services, Modules & Outils)
+                          Catalogue Officiel Nanasore ({dynamicModules.length} Solutions : Applications, Services, Modules & Outils)
                         </h5>
                       </div>
                       <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30">
@@ -2498,24 +2515,31 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                           <div
                             key={m.id}
                             className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
-                              access.readOnly
-                                ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60'
-                                : active
-                                  ? 'bg-slate-900/70 border-emerald-500/40 hover:border-emerald-500/60'
-                                  : 'bg-slate-900/30 border-slate-800 hover:border-slate-700'
+                              m.isUnderConstruction
+                                ? 'bg-slate-900/40 border-orange-500/40 hover:border-orange-500/70'
+                                : access.readOnly
+                                  ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60'
+                                  : active
+                                    ? 'bg-slate-900/70 border-emerald-500/40 hover:border-emerald-500/60'
+                                    : 'bg-slate-900/30 border-slate-800 hover:border-slate-700'
                             }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-bold text-xs text-white truncate">{m.name}</span>
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${active ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-slate-600'}`} />
-                                {access.readOnly && (
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${m.isUnderConstruction ? 'bg-orange-400' : active ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-slate-600'}`} />
+                                {m.isUnderConstruction && (
+                                  <span className="text-[9px] font-bold text-orange-300 bg-orange-950/70 px-1.5 py-0.5 rounded border border-orange-500/40 flex items-center gap-1">
+                                    <span>🚧 En construction</span>
+                                  </span>
+                                )}
+                                {!m.isUnderConstruction && access.readOnly && (
                                   <span className="text-[9px] font-bold text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-500/30 flex items-center gap-1">
                                     <Eye className="w-2.5 h-2.5" />
                                     <span>Mode Lecture</span>
                                   </span>
                                 )}
-                                {access.isPayPerUse && (
+                                {!m.isUnderConstruction && access.isPayPerUse && (
                                   <span className="text-[9px] font-bold text-purple-400 bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-500/30 flex items-center gap-1">
                                     <CreditCard className="w-2.5 h-2.5" />
                                     <span>À l'usage (Sans KYC)</span>
@@ -2533,7 +2557,11 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                                 <span className="text-[9px] font-bold text-blue-400 bg-blue-950/40 px-1.5 py-0.2 rounded border border-blue-500/20">
                                   [{m.taxonomy}]
                                 </span>
-                                {active && (
+                                {m.isUnderConstruction ? (
+                                  <span className="text-[9px] font-bold text-orange-300 bg-orange-950/50 px-1.5 py-0.2 rounded border border-orange-500/30">
+                                    Bientôt disponible
+                                  </span>
+                                ) : active && (
                                   <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.2 rounded border border-emerald-500/20">
                                     En ligne
                                   </span>

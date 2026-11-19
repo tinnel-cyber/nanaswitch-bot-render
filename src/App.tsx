@@ -93,7 +93,6 @@ const VirtualCampusView = React.lazy(() => import('./components/lms/VirtualCampu
 const InstructorHubView = React.lazy(() => import('./components/lms/InstructorHubView').then(m => ({ default: m.InstructorHubView })));
 const InstructorDashboardView = React.lazy(() => import('./components/lms/InstructorDashboardView').then(m => ({ default: m.InstructorDashboardView })));
 const HighTechFunnelPage = React.lazy(() => import('./components/lms/promo/HighTechFunnelPage').then(m => ({ default: m.HighTechFunnelPage })));
-const CentralMasterHubView = React.lazy(() => import('./components/CentralMasterHubView').then(m => ({ default: m.CentralMasterHubView })));
 const HubBuilderPage = React.lazy(() => import('./pages/admin/HubBuilder').then(m => ({ default: m.HubBuilderPage || m.default })));
 const UltimateFunnelBuilder = React.lazy(() => import('./components/storeBuilder/UltimateFunnelBuilder').then(m => ({ default: m.UltimateFunnelBuilder || m.default })));
 const PhysicalFunnelBuilder = React.lazy(() => import('./components/storeBuilder/PhysicalFunnelBuilder').then(m => ({ default: m.PhysicalFunnelBuilder || m.default })));
@@ -3162,6 +3161,18 @@ export default function App() {
       }
       if (keyUpper === 'CUSTOMER_ORDERS' || keyUpper === 'DELIVERY' || modId === 'customer-orders' || modId === 'orders-quotes' || modId === 'delivery-heatmap' || rawPath === '/dashboard/commandes') {
         setCurrentView('CUSTOMER_ORDERS');
+        return;
+      }
+      if (keyUpper === 'QUOTES_PROJECTS' || keyUpper === 'DEVIS' || modId === 'quotes-projects' || modId === 'devis' || rawPath === '/dashboard/commandes/devis') {
+        setCurrentView('QUOTES_PROJECTS');
+        return;
+      }
+      if (keyUpper === 'SALLES_VIP' || keyUpper === 'VIP' || modId === 'salles-vip' || modId === 'salle-vip' || rawPath === '/dashboard/salles-vip') {
+        setCurrentView('SALLES_VIP');
+        return;
+      }
+      if (keyUpper === 'NANA_WALLET' || keyUpper === 'WALLET' || modId === 'nanawallet' || modId === 'nana-wallet' || rawPath === '/dashboard/wallet') {
+        setCurrentView('NANA_WALLET');
         return;
       }
       if (keyUpper === 'NANA_SWITCH_APP' || keyUpper === 'MASTER_HUB' || keyUpper === 'DASHBOARD' || rawPath === '/dashboard') {

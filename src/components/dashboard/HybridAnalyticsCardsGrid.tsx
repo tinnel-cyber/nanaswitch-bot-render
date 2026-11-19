@@ -19,7 +19,7 @@ import {
   Printer
 } from 'lucide-react';
 import { CompletedSale, InventoryProduct, DebtCustomer, CustomerOrder, SellerMode } from '../../types';
-import { GeneralSettingsData } from '../CentralMasterHubView';
+import { GeneralSettingsData } from '../../types/generalSettings';
 import { formatCFA, playTapBeep } from '../../utils/audio';
 
 export interface DashboardMetricsSummary {
