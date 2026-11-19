@@ -3491,7 +3491,7 @@ const tr = (x, h) => {
                       ],
                     }),
                     e.jsxs("a", {
-                      href: buildPublicShopUrl(we, { themeId: Ke }),
+                      href: buildPublicShopUrl(we, { themeId: Ke, relativeOrigin: true }),
                       target: "_blank",
                       rel: "noopener noreferrer",
                       className:

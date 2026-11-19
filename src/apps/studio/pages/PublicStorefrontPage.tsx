@@ -160,18 +160,50 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   const [actualStoreId, setActualStoreId] = useState<string>(targetStoreId);
 
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(() => {
+    let localCustomConfig: any = undefined;
+    let localThemeId: string | undefined = undefined;
+    let localStoreName: string | undefined = undefined;
+    if (!isSandboxMode && typeof window !== 'undefined') {
+      try {
+        localThemeId = localStorage.getItem('nana_active_theme_id') || localStorage.getItem('nana_boutique_theme_id') || undefined;
+        const draftRaw = localStorage.getItem('nanasore_studio_draft_latest') || localStorage.getItem('nanasore_studio_draft_sandbox');
+        if (draftRaw) {
+          const parsedDraft = JSON.parse(draftRaw);
+          localCustomConfig = parsedDraft?.config || parsedDraft;
+          localStoreName = localCustomConfig?.storeName;
+        }
+        if (!localCustomConfig) {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('nana_tenant_') && key.endsWith('_store_config')) {
+              const rawCfg = localStorage.getItem(key);
+              if (rawCfg) {
+                const parsedCfg = JSON.parse(rawCfg);
+                if (parsedCfg?.themeCustomization) {
+                  localCustomConfig = parsedCfg.themeCustomization;
+                  localStoreName = parsedCfg.storeName || localCustomConfig?.storeName;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const initialTheme = activeInitialTheme || localThemeId;
     const base: StoreConfig = {
-      storeName: isSandboxMode ? (sandboxDraftConfig?.storeName || 'Sandbox Tech & Commerce') : 'Boutique Officielle',
-      whatsappPhone: isSandboxMode ? (sandboxDraftConfig?.whatsappNumber || '') : '',
-      welcomeText: isSandboxMode ? (sandboxDraftConfig?.heroSubtitle || 'Mode Sandbox Super-Admin') : 'Bienvenue sur notre boutique en ligne',
-      logoUrl: isSandboxMode ? (sandboxDraftConfig?.logoUrl || '') : '',
-      bannerImage: isSandboxMode ? (sandboxDraftConfig?.heroBannerImageUrl || '') : '',
+      storeName: isSandboxMode ? (sandboxDraftConfig?.storeName || 'Sandbox Tech & Commerce') : (localStoreName || 'Boutique Officielle'),
+      whatsappPhone: isSandboxMode ? (sandboxDraftConfig?.whatsappNumber || '') : (localCustomConfig?.whatsappNumber || ''),
+      welcomeText: isSandboxMode ? (sandboxDraftConfig?.heroSubtitle || 'Mode Sandbox Super-Admin') : (localCustomConfig?.heroSubtitle || 'Bienvenue sur notre boutique en ligne'),
+      logoUrl: isSandboxMode ? (sandboxDraftConfig?.logoUrl || '') : (localCustomConfig?.logoUrl || ''),
+      bannerImage: isSandboxMode ? (sandboxDraftConfig?.heroBannerImageUrl || '') : (localCustomConfig?.heroBannerImageUrl || ''),
       currency: 'CFA',
       slug: resolvedStoreSlug,
-      active_theme_id: activeInitialTheme,
-      activeThemeId: activeInitialTheme,
+      active_theme_id: initialTheme,
+      activeThemeId: initialTheme,
       theme: 'dark',
-      themeCustomization: isSandboxMode ? (sandboxDraftConfig || undefined) : undefined
+      themeCustomization: isSandboxMode ? (sandboxDraftConfig || undefined) : localCustomConfig
     };
     if (isSandboxMode) return base;
     const cached = readFastStoreCache(resolvedStoreSlug);
@@ -180,7 +212,8 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         ...base,
         ...cached.storeConfig,
         active_theme_id: activeInitialTheme || cached.storeConfig.active_theme_id || cached.storeConfig.activeThemeId || base.active_theme_id,
-        activeThemeId: activeInitialTheme || cached.storeConfig.activeThemeId || cached.storeConfig.active_theme_id || base.activeThemeId
+        activeThemeId: activeInitialTheme || cached.storeConfig.activeThemeId || cached.storeConfig.active_theme_id || base.activeThemeId,
+        themeCustomization: (cached.storeConfig as any).themeCustomization || base.themeCustomization
       };
     }
     return base;
@@ -229,13 +262,13 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
           ...found,
           storeName: found.storeName || prev.storeName,
           slug: found.storeSlug || found.slug || prev.slug,
-          activeThemeId: urlPreviewTheme || found.activeThemeId || found.active_theme_id || prev.activeThemeId,
-          active_theme_id: urlPreviewTheme || found.activeThemeId || found.active_theme_id || prev.active_theme_id
+          activeThemeId: activeInitialTheme || found.activeThemeId || found.active_theme_id || prev.activeThemeId,
+          active_theme_id: activeInitialTheme || found.activeThemeId || found.active_theme_id || prev.active_theme_id
         }));
       }
     }).catch(console.warn);
     return () => { isMounted = false; };
-  }, [resolvedStoreSlug, urlPreviewTheme]);
+  }, [resolvedStoreSlug, activeInitialTheme]);
 
   // Initialisation des Pixels Publicitaires (Meta, TikTok, Google)
   useEffect(() => {
@@ -276,8 +309,8 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
               ...prev,
               storeName: cfg.customConfig?.storeName || prev.storeName,
               slug: cfg.storeSlug || prev.slug,
-              active_theme_id: urlPreviewTheme || cfg.activeThemeId || cfg.active_theme_id || prev.active_theme_id,
-              activeThemeId: urlPreviewTheme || cfg.activeThemeId || cfg.active_theme_id || prev.activeThemeId,
+              active_theme_id: activeInitialTheme || cfg.activeThemeId || cfg.active_theme_id || prev.active_theme_id,
+              activeThemeId: activeInitialTheme || cfg.activeThemeId || cfg.active_theme_id || prev.activeThemeId,
               themeCustomization: cfg.customConfig || (prev as any).themeCustomization
             };
             writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });

@@ -22,6 +22,7 @@ export interface BuildPublicShopUrlOptions {
   funnelSlugOrId?: string;
   funnelSlug?: string;
   previewTheme?: string;
+  relativeOrigin?: boolean;
 }
 
 /**
@@ -71,5 +72,8 @@ export function buildPublicShopUrl(
   }
   
   const query = params.toString();
-  return `${PUBLIC_SHOP_ORIGIN}${path}${query ? `?${query}` : ''}`;
+  const originToUse = options?.relativeOrigin && typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin
+    : PUBLIC_SHOP_ORIGIN;
+  return `${originToUse}${path}${query ? `?${query}` : ''}`;
 }

@@ -435,7 +435,13 @@ export default function App() {
         Boolean(storeIdFromPath);
 
       const pageParam = params.get('page');
-      const isBoutiqueQuery = pageParam === 'boutique' || pageParam === 'store' || pageParam === 'shop' || pageParam === 'vitrine';
+      const isBoutiqueQuery =
+        pageParam === 'boutique' ||
+        pageParam === 'store' ||
+        pageParam === 'shop' ||
+        pageParam === 'vitrine' ||
+        params.has('preview_theme') ||
+        params.has('previewTheme');
       const storeIdFromQuery =
         params.get('store') ||
         params.get('storeId') ||
@@ -502,6 +508,7 @@ export default function App() {
       ) {
         return 'EMAILING';
       }
+      const routeParamsForView = extractPublicStoreRouteParams(pathname);
       const isBoutiquePath =
         pathname === '/s' ||
         pathname.startsWith('/s/') ||
@@ -512,17 +519,25 @@ export default function App() {
         pathname === '/store' ||
         pathname.startsWith('/store/') ||
         pathname === '/vitrine' ||
-        pathname.startsWith('/vitrine/');
+        pathname.startsWith('/vitrine/') ||
+        Boolean(routeParamsForView.storeIdFromPath);
       const pageParam = params.get('page');
-      const isBoutiqueQuery = pageParam === 'boutique' || pageParam === 'store' || pageParam === 'shop';
+      const isBoutiqueQuery =
+        pageParam === 'boutique' ||
+        pageParam === 'store' ||
+        pageParam === 'shop' ||
+        pageParam === 'vitrine' ||
+        params.has('preview_theme') ||
+        params.has('previewTheme');
       const storeIdFromQuery =
         params.get('store') ||
         params.get('storeId') ||
         params.get('merchant') ||
         params.get('merchantId') ||
         params.get('boutique') ||
-        params.get('shop');
-      const productId = params.get('produit') || params.get('product') || params.get('id');
+        params.get('shop') ||
+        params.get('vitrine');
+      const productId = routeParamsForView.productIdFromPath || params.get('produit') || params.get('product') || params.get('id');
       if (
         pathname === '/studio' ||
         pathname.startsWith('/studio/') ||

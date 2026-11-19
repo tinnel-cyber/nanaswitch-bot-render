@@ -777,7 +777,10 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         if (isSubscribed && registryData?.config_json) {
           const cfg = registryData.config_json;
           const themeId = cfg.activeThemeId || cfg.active_theme_id;
-          if (themeId) {
+          const recentOptimistic = optimisticThemeRef.current && (Date.now() - optimisticThemeRef.current.timestamp < 15000)
+            ? optimisticThemeRef.current.themeId
+            : null;
+          if (themeId && !recentOptimistic) {
             setStoreConfig(prev => ({
               ...prev,
               active_theme_id: themeId,
@@ -853,7 +856,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
       isSubscribed = false;
       supabase.removeChannel(channel);
     };
-  }, [targetStoreId, currentUser, savedThemeConfig]);
+  }, [targetStoreId, currentUser]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-white font-sans select-none overflow-hidden">

@@ -82,6 +82,7 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
   const cleanStoreSlug = (storeSlug || 'boutique').trim().replace(/^store-/, '');
   const themePrefix = getThemeRoutePrefix(activeThemeId);
   const publicShopUrl = buildPublicShopUrl(cleanStoreSlug, { themeId: activeThemeId });
+  const livePreviewShopUrl = buildPublicShopUrl(cleanStoreSlug, { themeId: activeThemeId, relativeOrigin: true });
   const sandboxUrl = `/${themePrefix}/sandbox`;
   const activeThemeDef = getThemeDefinition(activeThemeId);
   const rawThemeName = activeThemeDef?.name || 'Standard Élite';
@@ -391,12 +392,12 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
           </a>
 
           <a
-            href={publicShopUrl}
+            href={livePreviewShopUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => playTapBeep()}
             className="bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-            title="Ouvrir la vitrine en direct sur nsore.shop"
+            title="Ouvrir la vitrine en direct"
           >
             <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden sm:inline">↗️ Voir en direct</span>

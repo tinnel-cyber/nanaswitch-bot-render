@@ -10,6 +10,7 @@ import { buildPublicShopUrl } from '../../config/domains';
 import { getThemeRoutePrefix } from '../../utils/themeRoutePrefix';
 import { ensureAndPersistTenantSlug } from '../../utils/slugService';
 import { supabase } from '@/lib/supabase';
+import { auth } from '../../firebase';
 
 interface ThemeSelectorModalProps {
   isOpen: boolean;
@@ -48,81 +49,94 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
     const cleanStoreSlug = (typeof window !== 'undefined' && (window as any).storeSlug)
       ? (window as any).storeSlug
       : (targetStoreId || 'boutique').replace(/^store-/, '');
-    const previewUrl = buildPublicShopUrl(cleanStoreSlug, { previewTheme: theme.id });
+    const previewUrl = buildPublicShopUrl(cleanStoreSlug, { previewTheme: theme.id, relativeOrigin: true });
 
     window.open(previewUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleActivateTheme = async (theme: ThemeDefinition) => {
     if (theme.id === selectedThemeId) return;
-    
+
     playTapBeep();
     setSavingThemeId(theme.id);
 
-    const authUid = auth?.currentUser?.uid;
-    const storeId = targetStoreId || authUid || 'store-konkobo-telecom';
-    const cleanStoreSlug = (typeof window !== 'undefined' && (window as any).storeSlug)
-      ? (window as any).storeSlug
-      : storeId.replace(/^store-/, '');
-    const themePrefix = getThemeRoutePrefix(theme.id);
-    const publicShopUrl = buildPublicShopUrl(cleanStoreSlug, { themeId: theme.id });
-
-    // 1. Mise à jour immédiate et optimiste du state applicatif et notification sonore/visuelle
-    setSelectedThemeId(theme.id);
-    onThemeActivated(theme.id);
-    setActivatedShopUrl(publicShopUrl);
-    playValidationBeep();
-    setSuccessToast(`Le thème « ${theme.name} » est activé ! Lien public : nsore.shop/${themePrefix}/${cleanStoreSlug}`);
-    setTimeout(() => setSuccessToast(null), 5000);
-
-    // 2. Persistance instantanée dans les caches locaux (pour le dashboard vendeur et le studio)
     try {
-      if (typeof window !== 'undefined') {
-        (window as any).activeThemeId = theme.id;
-        (window as any).activeThemePrefix = themePrefix;
-        (window as any).publicShopUrl = publicShopUrl;
-      }
-
-      localStorage.setItem('nana_active_theme_id', theme.id);
-      localStorage.setItem('nana_boutique_theme_id', theme.id);
-      localStorage.setItem(`nana_boutique_theme_id_${storeId}`, theme.id);
-      if (authUid) {
-        localStorage.setItem(`nana_boutique_theme_id_${authUid}`, theme.id);
-      }
-      localStorage.setItem('nana_active_theme_prefix', themePrefix);
-      localStorage.setItem('nana_public_shop_url', publicShopUrl);
-
-      const updateConfigObj = (key: string) => {
-        const item = localStorage.getItem(key);
-        if (item) {
-          try {
-            const parsed = JSON.parse(item);
-            parsed.active_theme_id = theme.id;
-            parsed.activeThemeId = theme.id;
-            parsed.themeId = theme.id;
-            parsed.activeThemePrefix = themePrefix;
-            parsed.publicShopUrl = publicShopUrl;
-            localStorage.setItem(key, JSON.stringify(parsed));
-          } catch {}
+      let authUid: string | undefined = undefined;
+      try {
+        authUid = auth?.currentUser?.uid;
+        if (!authUid && typeof window !== 'undefined') {
+          const savedAuth = localStorage.getItem('nana_store_auth_user');
+          if (savedAuth) {
+            const parsedAuth = JSON.parse(savedAuth);
+            authUid = parsedAuth?.id || parsedAuth?.uid || parsedAuth?.storeId;
+          }
         }
-      };
+      } catch {}
 
-      updateConfigObj(`nana_tenant_${storeId}_store_config`);
-      if (authUid) updateConfigObj(`nana_tenant_${authUid}_store_config`);
-      updateConfigObj('nana_store_hub_config');
-    } catch (cacheErr) {
-      console.warn('[THEMES] Cache local update error:', cacheErr);
-    }
+      const storeId = targetStoreId || authUid || 'store-konkobo-telecom';
+      const cleanStoreSlug = (typeof window !== 'undefined' && (window as any).storeSlug)
+        ? (window as any).storeSlug
+        : storeId.replace(/^store-/, '');
+      const themePrefix = getThemeRoutePrefix(theme.id);
+      const publicShopUrl = buildPublicShopUrl(cleanStoreSlug, { themeId: theme.id });
 
-    // 3. Persistance Cloud prioritaire dans Supabase SQL & mise à jour du tenant
-    try {
+      // 1. Mise à jour immédiate et optimiste du state applicatif et notification sonore/visuelle
+      setSelectedThemeId(theme.id);
+      onThemeActivated(theme.id);
+      setActivatedShopUrl(publicShopUrl);
+      playValidationBeep();
+      setSuccessToast(`Le thème « ${theme.name} » est activé ! Lien public : nsore.shop/${themePrefix}/${cleanStoreSlug}`);
+      setTimeout(() => setSuccessToast(null), 6000);
+
+      // 2. Persistance instantanée dans les caches locaux (pour le dashboard vendeur et le studio)
+      try {
+        if (typeof window !== 'undefined') {
+          (window as any).activeThemeId = theme.id;
+          (window as any).activeThemePrefix = themePrefix;
+          (window as any).publicShopUrl = publicShopUrl;
+        }
+
+        localStorage.setItem('nana_active_theme_id', theme.id);
+        localStorage.setItem('nana_boutique_theme_id', theme.id);
+        localStorage.setItem(`nana_boutique_theme_id_${storeId}`, theme.id);
+        if (authUid) {
+          localStorage.setItem(`nana_boutique_theme_id_${authUid}`, theme.id);
+        }
+        localStorage.setItem('nana_active_theme_prefix', themePrefix);
+        localStorage.setItem('nana_public_shop_url', publicShopUrl);
+
+        const updateConfigObj = (key: string) => {
+          const item = localStorage.getItem(key);
+          if (item) {
+            try {
+              const parsed = JSON.parse(item);
+              parsed.active_theme_id = theme.id;
+              parsed.activeThemeId = theme.id;
+              parsed.themeId = theme.id;
+              parsed.activeThemePrefix = themePrefix;
+              parsed.publicShopUrl = publicShopUrl;
+              localStorage.setItem(key, JSON.stringify(parsed));
+            } catch {}
+          }
+        };
+
+        updateConfigObj(`nana_tenant_${storeId}_store_config`);
+        if (authUid) updateConfigObj(`nana_tenant_${authUid}_store_config`);
+        updateConfigObj('nana_store_hub_config');
+      } catch (cacheErr) {
+        console.warn('[THEMES] Cache local update error:', cacheErr);
+      }
+
+      // 3. Persistance Cloud prioritaire dans Supabase SQL & mise à jour du tenant
       console.log(`[THEMES ACTIVATION] Début persistance pour ${theme.id} sur storeId=${storeId}`);
-      
+
       // A. Synchronisation immédiate Supabase SQL (table app_registry & tenants)
       try {
         await supabase
           .from('app_registry')
           .upsert({
+            key: `theme_config_${storeId}`,
+            name: 'theme_config',
             tenant_id: storeId,
             module_key: 'theme_config',
             theme_key: theme.id,
@@ -132,11 +146,12 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
               themeId: theme.id,
               themePrefix,
               publicShopUrl,
+              storeSlug: cleanStoreSlug,
               themeName: theme.name,
               updated_at: new Date().toISOString()
             },
             updated_at: new Date().toISOString()
-          }, { onConflict: 'tenant_id,module_key' });
+          }, { onConflict: 'key' });
       } catch (sbErr) {
         console.warn('[THEMES ACTIVATION] Synchronisation Supabase app_registry:', sbErr);
       }
@@ -234,7 +249,12 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
                   <span>📋 Copier le lien</span>
                 </button>
                 <a
-                  href={activatedShopUrl}
+                  href={(() => {
+                    const cleanStoreSlug = (typeof window !== 'undefined' && (window as any).storeSlug)
+                      ? (window as any).storeSlug
+                      : (targetStoreId || 'boutique').replace(/^store-/, '');
+                    return buildPublicShopUrl(cleanStoreSlug, { themeId: selectedThemeId, relativeOrigin: true });
+                  })()}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => playTapBeep()}

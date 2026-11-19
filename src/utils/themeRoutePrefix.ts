@@ -218,14 +218,6 @@ export function extractPublicStoreRouteParams(pathname: string): PublicStoreRout
       return result;
     }
 
-    if (cleanPath.startsWith('/dashboard/vitrine/')) {
-      result.storeIdFromPath = decodeURIComponent(cleanPath.split('/dashboard/vitrine/')[1]?.split('/')[0]?.split('?')[0] || '');
-      return result;
-    }
-    if (cleanPath.startsWith('/dashboard/boutique/')) {
-      result.storeIdFromPath = decodeURIComponent(cleanPath.split('/dashboard/boutique/')[1]?.split('/')[0]?.split('?')[0] || '');
-      return result;
-    }
     if (cleanPath.startsWith('/s/')) {
       result.storeIdFromPath = decodeURIComponent(cleanPath.split('/s/')[1]?.split('/')[0]?.split('?')[0] || '');
       return result;
