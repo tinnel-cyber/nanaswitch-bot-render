@@ -45,6 +45,7 @@ import {
 } from '../../../../types';
 import { StoreProductItem } from './types';
 import { THEME_MOOD_PRESETS, resolveCustomThemeMood } from '../../../../themes/blankCustom/moodStyles';
+import { GRADIENT_COMBINATIONS, adaptTextColorsForBg, readableTextOn } from '../../../../lib/funnelColorLibrary';
 import { ARCHITECT_BLUEPRINTS, ArchitectBlueprint } from '../../../../themes/blankCustom/blueprints';
 import { 
   ARCHITECT_RECOMMENDED_SECTIONS, 
@@ -710,26 +711,31 @@ export const CustomThemeArchitectSidebar: React.FC<CustomThemeArchitectSidebarPr
           </div>
         </div>
 
-        {/* 2. Sélecteur rapide de "Mood & Design System" (5 Pastilles + Boutons) */}
-        <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2">
+        {/* 2. Sélecteur rapide de "Mood & Design System" (10 Palettes Autonomes Sans Noir + Dégradés) */}
+        <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/80 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
               <Palette className="w-3 h-3 text-blue-400" />
-              Ambiance & Design Tokens
+              Palettes Autonomes (Sans Noir)
             </span>
-            <span className="text-[10px] font-black text-blue-400 capitalize">
+            <span className="text-[10px] font-black text-emerald-400 capitalize">
               {currentMood.presetId.replace('-', ' ')}
             </span>
           </div>
 
-          {/* 5 Pastilles de Mood */}
-          <div className="flex items-center justify-between gap-2 pt-0.5">
+          {/* 10 Pastilles de Mood (Claires & Profondes Sans Noir) */}
+          <div className="grid grid-cols-5 gap-1.5 pt-0.5">
             {[
-              { id: 'nanasore-royal' as CustomThemeMoodPreset, name: 'Bleu Nanasore', dot: '#2563EB', ring: 'ring-blue-500' },
-              { id: 'spotify-obsidian' as CustomThemeMoodPreset, name: 'Spotify Obsidian', dot: '#1DB954', ring: 'ring-emerald-500' },
-              { id: 'hermes-sand' as CustomThemeMoodPreset, name: 'Sable Hermes', dot: '#C25E00', ring: 'ring-amber-500' },
-              { id: 'emerald-botanic' as CustomThemeMoodPreset, name: 'Émeraude Botanique', dot: '#10B981', ring: 'ring-emerald-400' },
-              { id: 'cyber-neon' as CustomThemeMoodPreset, name: 'Cyber Neon', dot: '#06B6D4', ring: 'ring-cyan-500' }
+              { id: 'nanasore-royal' as CustomThemeMoodPreset, name: 'Ivoire Royal & Cobalt', dot: '#2563EB', bg: '#F8FAFC', ring: 'ring-blue-500' },
+              { id: 'pearl-emerald' as CustomThemeMoodPreset, name: 'Albâtre & Émeraude', dot: '#0D9488', bg: '#F4FBF9', ring: 'ring-teal-500' },
+              { id: 'hermes-sand' as CustomThemeMoodPreset, name: 'Sable & Terracotta', dot: '#C25E00', bg: '#FAF6F0', ring: 'ring-amber-500' },
+              { id: 'cashmere-violet' as CustomThemeMoodPreset, name: 'Cachemire & Lavande', dot: '#7C3AED', bg: '#F6F4FA', ring: 'ring-violet-500' },
+              { id: 'rose-couture' as CustomThemeMoodPreset, name: 'Rose Poudré & Rubis', dot: '#E11D48', bg: '#FFF7F9', ring: 'ring-rose-500' },
+              { id: 'sapphire-ocean' as CustomThemeMoodPreset, name: 'Saphir Océan & Azur', dot: '#0284C7', bg: '#0C192C', ring: 'ring-sky-400' },
+              { id: 'imperial-plum' as CustomThemeMoodPreset, name: 'Pourpre Impérial', dot: '#9333EA', bg: '#1A102E', ring: 'ring-purple-400' },
+              { id: 'emerald-botanic' as CustomThemeMoodPreset, name: 'Forêt Boréale', dot: '#10B981', bg: '#091E1A', ring: 'ring-emerald-400' },
+              { id: 'spotify-obsidian' as CustomThemeMoodPreset, name: 'Ardoise & Émeraude', dot: '#10B981', bg: '#121824', ring: 'ring-emerald-500' },
+              { id: 'cyber-neon' as CustomThemeMoodPreset, name: 'Indigo Céleste & Cyan', dot: '#06B6D4', bg: '#0F152A', ring: 'ring-cyan-500' }
             ].map((p) => {
               const isSelected = currentMood.presetId === p.id;
               return (
@@ -738,17 +744,107 @@ export const CustomThemeArchitectSidebar: React.FC<CustomThemeArchitectSidebarPr
                   type="button"
                   onClick={() => handleSelectMoodPreset(p.id)}
                   title={p.name}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  className={`h-7 rounded-xl border border-slate-700/80 flex items-center justify-center gap-1 transition-all cursor-pointer ${
                     isSelected
-                      ? `ring-2 ${p.ring} scale-110 shadow-lg`
-                      : 'hover:scale-105 opacity-80 hover:opacity-100'
+                      ? `ring-2 ${p.ring} scale-105 shadow-lg`
+                      : 'hover:scale-105 opacity-85 hover:opacity-100'
                   }`}
-                  style={{ backgroundColor: p.dot }}
+                  style={{
+                    background: `linear-gradient(135deg, ${p.bg} 45%, ${p.dot} 100%)`
+                  }}
                 >
-                  {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" style={{ color: readableTextOn(p.dot) }} />}
                 </button>
               );
             })}
+          </div>
+
+          {/* Combinaisons de Dégradés & Couleurs Sur-Mesure */}
+          <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
+            <div className="flex items-center justify-between gap-1 text-[10px]">
+              <span className="text-slate-400 font-medium">Dégradés :</span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {GRADIENT_COMBINATIONS.map((grad) => {
+                  const isActiveGrad = (currentMood.gradientStyle || 'aurora_mesh') === grad.id;
+                  return (
+                    <button
+                      key={grad.id}
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        onChange({
+                          ...config,
+                          gradientStyle: grad.id,
+                          customMood: {
+                            ...currentMood,
+                            gradientStyle: grad.id
+                          }
+                        });
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition cursor-pointer ${
+                        isActiveGrad
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                      title={grad.description}
+                    >
+                      {grad.name.split(' ')[0]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-[10px] pt-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Primaire :</span>
+                <input
+                  type="color"
+                  value={currentMood.accentColor || '#2563EB'}
+                  onChange={(e) => {
+                    const accentVal = e.target.value;
+                    const adaptive = adaptTextColorsForBg(currentMood.bgColor, accentVal, accentVal);
+                    onChange({
+                      ...config,
+                      primaryAccentColor: accentVal,
+                      customMood: {
+                        ...currentMood,
+                        presetId: 'custom',
+                        accentColor: accentVal,
+                        textColor: adaptive.headingText,
+                        mutedTextColor: adaptive.mutedText
+                      }
+                    });
+                  }}
+                  className="w-5 h-5 rounded border border-slate-700 bg-transparent cursor-pointer p-0"
+                  title="Couleur primaire (texte adapté automatiquement)"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Fond :</span>
+                <input
+                  type="color"
+                  value={currentMood.bgColor || '#F8FAFC'}
+                  onChange={(e) => {
+                    const bgVal = e.target.value;
+                    const adaptive = adaptTextColorsForBg(bgVal, currentMood.accentColor, currentMood.accentColor);
+                    onChange({
+                      ...config,
+                      customMood: {
+                        ...currentMood,
+                        presetId: 'custom',
+                        bgColor: bgVal,
+                        surfaceColor: adaptive.surface,
+                        textColor: adaptive.headingText,
+                        mutedTextColor: adaptive.mutedText
+                      }
+                    });
+                  }}
+                  className="w-5 h-5 rounded border border-slate-700 bg-transparent cursor-pointer p-0"
+                  title="Couleur de fond (contraste texte auto-ajusté)"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Arrondi des Boutons */}

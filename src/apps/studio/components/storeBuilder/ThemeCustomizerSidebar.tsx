@@ -32,6 +32,7 @@ import { StoreProductItem } from './types';
 import { playTapBeep } from '../../../../utils/audio';
 import { SIX_PREMIUM_HEADERS } from './headers/AdaptiveHeaderEngine';
 import { THREE_PREMIUM_FOOTERS } from './footers/AdaptiveFooterEngine';
+import { GRADIENT_COMBINATIONS, FUNNEL_PALETTES, readableTextOn } from '../../../../lib/funnelColorLibrary';
 
 export interface ThemeCustomizerSidebarProps {
   isOpen: boolean;
@@ -48,14 +49,12 @@ export interface ThemeCustomizerSidebarProps {
   initialOpenAccordion?: number | null;
 }
 
-const PRESET_ACCENT_COLORS = [
-  { name: 'Bleu Nanasore', value: '#2563EB' },
-  { name: 'Émeraude Botanique', value: '#0F4C3A' },
-  { name: 'Electro Orange', value: '#FF6A00' },
-  { name: 'Violet Royal', value: '#7C3AED' },
-  { name: 'Or Champagne', value: '#C59B27' },
-  { name: 'Noir Carbone', value: '#0F172A' }
-];
+const PRESET_ACCENT_COLORS = FUNNEL_PALETTES.map((p) => ({
+  name: p.name,
+  value: p.primary,
+  bg: p.bg,
+  gradientId: p.gradientId
+}));
 
 const ANNOUNCEMENT_SUGGESTIONS = [
   "🚚 Livraison express 24h & Paiement à la réception",
@@ -452,49 +451,96 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
                 </div>
               </div>
 
-              {/* Couleur d'accent principale & Fond d'en-tête */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  Couleur d'accent de marque :
-                </label>
+              {/* Couleur d'accent principale, Palettes Autonomes & Dégradés */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    Couleur Primaire & Palettes Autonomes (Sans Noir) :
+                  </label>
+                  <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Contraste Texte Auto
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap flex-1">
                     {PRESET_ACCENT_COLORS.map((c) => (
                       <button
-                        key={c.value}
+                        key={c.name}
                         type="button"
                         onClick={() => {
                           playTapBeep();
-                          updateField('primaryAccentColor', c.value);
+                          onChange({
+                            ...config,
+                            primaryAccentColor: c.value,
+                            gradientStyle: c.gradientId || config.gradientStyle || 'aurora_mesh'
+                          });
                         }}
-                        style={{ backgroundColor: c.value }}
-                        className={`w-6 h-6 rounded-full border-2 transition transform hover:scale-110 cursor-pointer ${
+                        style={{
+                          background: `linear-gradient(135deg, ${c.bg} 35%, ${c.value} 100%)`
+                        }}
+                        className={`w-6 h-6 rounded-full border-2 transition transform hover:scale-110 cursor-pointer flex items-center justify-center ${
                           config.primaryAccentColor === c.value ? 'border-blue-600 ring-2 ring-blue-400 ring-offset-1' : 'border-white shadow-xs'
                         }`}
                         title={c.name}
-                      />
+                      >
+                        {config.primaryAccentColor === c.value && (
+                          <Check className="w-3 h-3" style={{ color: readableTextOn(c.value) }} />
+                        )}
+                      </button>
                     ))}
                   </div>
                   <input
                     type="color"
-                    value={config.primaryAccentColor || '#0F4C3A'}
+                    value={config.primaryAccentColor || '#2563EB'}
                     onChange={(e) => updateField('primaryAccentColor', e.target.value)}
                     className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer p-0.5"
-                    title="Choisir une couleur libre"
+                    title="Choisir une couleur libre (contraste des textes adapté automatiquement)"
                   />
+                </div>
+
+                {/* Combinaisons de Dégradés du Thème */}
+                <div className="pt-1">
+                  <span className="block text-[10.5px] font-bold text-slate-600 mb-1">
+                    Combinaisons de Dégradés (Modules & Boutons) :
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {GRADIENT_COMBINATIONS.map((grad) => {
+                      const isActiveGrad = (config.gradientStyle || 'aurora_mesh') === grad.id;
+                      return (
+                        <button
+                          key={grad.id}
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            updateField('gradientStyle', grad.id);
+                          }}
+                          className={`p-1.5 rounded-lg border text-left transition cursor-pointer ${
+                            isActiveGrad
+                              ? 'bg-blue-50 border-blue-500 text-blue-900 font-bold'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10.5px] font-bold truncate">{grad.name}</span>
+                            {isActiveGrad && <Check className="w-3 h-3 text-blue-600 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Couleur de fond de l'en-tête (Header Bg - optionnel) :
+                  Couleur de fond de l'en-tête (Header Bg - contraste texte auto) :
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={config.headerBgColor || ''}
                     onChange={(e) => updateField('headerBgColor', e.target.value)}
-                    placeholder="Par défaut du thème (ou ex: #0F4C3A / #FFFFFF)"
+                    placeholder="Par défaut du thème (ou ex: #0C192C / #F8FAFC)"
                     className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:border-blue-500 outline-none"
                   />
                   <input

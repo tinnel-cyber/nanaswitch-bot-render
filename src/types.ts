@@ -2076,6 +2076,7 @@ export interface ThemeCustomizationConfig {
   customMood?: CustomThemeMood;
   customButtonStyle?: 'none' | 'md' | 'xl' | 'full' | 'rounded-xl' | 'rounded-full' | 'rounded-none';
   customFont?: 'modern-sans' | 'luxury-serif' | 'tech-mono' | 'sans' | 'display' | 'serif';
+  gradientStyle?: string;
 
   // 6. Système des 6 En-Têtes Premium Nanasore
   headerStyle?: HeaderStyleType;
@@ -2134,9 +2135,14 @@ export type FooterStyleType =
 
 export type CustomThemeMoodPreset = 
   | 'nanasore-royal' 
-  | 'spotify-obsidian' 
+  | 'pearl-emerald'
   | 'hermes-sand' 
+  | 'cashmere-violet'
+  | 'rose-couture'
+  | 'sapphire-ocean'
+  | 'imperial-plum'
   | 'emerald-botanic' 
+  | 'spotify-obsidian' 
   | 'cyber-neon' 
   | 'custom';
 
@@ -2149,6 +2155,7 @@ export interface CustomThemeMood {
   accentColor: string;
   buttonRadius: 'none' | 'md' | 'xl' | 'full';
   fontPairing: 'modern-sans' | 'luxury-serif' | 'tech-mono';
+  gradientStyle?: string;
 }
 
 export type CustomSectionType =

@@ -351,9 +351,23 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
 
   return (
     <div 
-      style={cssVariables}
-      className={`min-h-screen ${moodStyle.bg} ${moodStyle.textPrimary} font-sans selection:bg-blue-600 selection:text-white transition-colors duration-200 relative pb-36 md:pb-12`}
+      style={{
+        ...cssVariables,
+        backgroundColor: currentMood.bgColor,
+        backgroundImage: moodStyle.pageGradient,
+        color: currentMood.textColor
+      }}
+      data-theme-mode={moodStyle.isLightBg ? 'light' : 'dark'}
+      className={`nana-architect-theme min-h-screen ${moodStyle.bg} ${moodStyle.textPrimary} font-sans selection:bg-blue-600 selection:text-white transition-colors duration-200 relative pb-36 md:pb-12`}
     >
+      <style>{`
+        .nana-architect-theme[data-theme-mode="light"] .text-white:not([class*="bg-"]) {
+          color: var(--theme-text, #0F172A);
+        }
+        .nana-architect-theme[data-theme-mode="dark"] .text-slate-900:not([class*="bg-white"]) {
+          color: var(--theme-text, #F8FAFC);
+        }
+      `}</style>
       {/* SYSTÈME DES 6 EN-TÊTES PREMIUM NANASORE (<AdaptiveHeaderEngine />) */}
       {!activeDoorProduct && (
         <div className="relative group/header-section">

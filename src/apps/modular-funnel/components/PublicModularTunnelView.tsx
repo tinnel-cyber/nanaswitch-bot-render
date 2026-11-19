@@ -51,9 +51,10 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
       .then((data) => {
         if (isCancelled) return;
         if (data && (data.blocks?.length || data.pages?.length || data.title)) {
-          const resolvedBrand = data.brandColor || data.primaryColor || data.settings?.brandColor || data.settings?.primaryColor || '#f59e0b';
+          const resolvedBrand = data.brandColor || data.primaryColor || data.settings?.brandColor || data.settings?.primaryColor || '#6366F1';
           const resolvedBtn = data.buttonColor || data.settings?.buttonColor || resolvedBrand;
-          const resolvedBg = data.bgColor || data.settings?.bgColor || '#070b14';
+          const resolvedBg = data.bgColor || data.settings?.bgColor || '#0F172A';
+          const resolvedGradient = data.gradientStyle || data.settings?.gradientStyle || 'aurora_mesh';
 
           setFunnelData({
             ...(baseProductFields || {}),
@@ -66,12 +67,14 @@ export const PublicModularTunnelView: React.FC<PublicModularTunnelViewProps> = (
             primaryColor: resolvedBrand,
             buttonColor: resolvedBtn,
             bgColor: resolvedBg,
+            gradientStyle: resolvedGradient,
             settings: {
               ...(data.settings || {}),
               brandColor: resolvedBrand,
               primaryColor: resolvedBrand,
               buttonColor: resolvedBtn,
-              bgColor: resolvedBg
+              bgColor: resolvedBg,
+              gradientStyle: resolvedGradient
             }
           });
         } else if (baseProductFields) {

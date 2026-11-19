@@ -7,6 +7,7 @@ import {
   Copy as DuplicateIcon,
   Trash2
 } from 'lucide-react';
+import { resolveBlockTheme } from '../../lib/funnelColorLibrary';
 
 /**
  * Comparateur chirurgical anti-rerender pour React.memo
@@ -33,6 +34,9 @@ function areBlockPropsEqual(prevProps, nextProps) {
 
   // 6. Produit actif associé (prix, titre, image)
   if (prevProps.activeProduct !== nextProps.activeProduct) return false;
+
+  // 6b. Thème global (palette / dégradé / contraste)
+  if (prevProps.globalTheme !== nextProps.globalTheme) return false;
 
   // 7. Timer liveSeconds : invalide UNIQUEMENT les blocs de type compte à rebours
   if (nextProps.block.type === 'urgency' || nextProps.block.type === 'countdown_timer') {
@@ -61,17 +65,21 @@ export const CanvasBlockItem = memo(function CanvasBlockItem({
   onDelete = () => {},
   renderBlock = () => null,
   activeProduct = null,
-  liveSeconds = 18
+  liveSeconds = 18,
+  globalTheme = null
 }) {
   // En Mode Visiteur (Preview) : Le bloc disparaît totalement s'il ne respecte pas les conditions
   if (viewMode === 'preview' && !condEval.isVisible) {
     return null;
   }
 
+  const blkTheme = globalTheme ? resolveBlockTheme(block.data, globalTheme) : null;
+
   return (
     <motion.div
       layout
       data-block-id={block.id}
+      data-block-light={blkTheme ? (blkTheme.isLightBg ? 'true' : 'false') : undefined}
       onClick={() => {
         if (viewMode === 'builder') {
           onSelect(block.id);
@@ -84,13 +92,21 @@ export const CanvasBlockItem = memo(function CanvasBlockItem({
       } ${
         isSelected
           ? 'ring-2 ring-indigo-500 bg-indigo-600/[0.04] shadow-2xl'
-          : viewMode === 'builder' ? 'hover:bg-slate-900/40 hover:ring-1 hover:ring-slate-700' : ''
+          : viewMode === 'builder' ? 'hover:bg-slate-900/20 hover:ring-1 hover:ring-slate-700/50' : ''
       } ${
         viewMode === 'builder' && !condEval.isVisible
           ? 'opacity-40 border-2 border-dashed border-indigo-500/70'
           : ''
       }`}
-      style={{ backgroundColor: block.data?.bgColor || undefined }}
+      style={{
+        backgroundColor: block.data?.bgColor || undefined,
+        color: blkTheme?.text || undefined,
+        '--blk-text': blkTheme?.text || '#F8FAFC',
+        '--blk-muted': blkTheme?.mutedText || '#94A3B8',
+        '--blk-surface': blkTheme?.cardBg || '#1E293B',
+        '--blk-gradient': blkTheme?.moduleGradient || 'none',
+        '--blk-border': blkTheme?.border || 'rgba(148,163,184,0.2)'
+      }}
     >
       {/* Badge de Condition Non Remplie (Mode Builder uniquement) */}
       {viewMode === 'builder' && !condEval.isVisible && (

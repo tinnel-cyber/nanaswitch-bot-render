@@ -22,6 +22,12 @@ import { resolveProductFunnelEngine } from '../services/omniFunnelService';
 import { StorefrontNeutralLoader } from '../components/common/StorefrontNeutralLoader';
 import { fetchPublicStoreBySlugOrId, getSafeStoreSlug } from '../utils/slugService';
 import { ThemeErrorBoundary } from '../components/theme/ThemeErrorBoundary';
+import {
+  ensureContrastColor,
+  readableTextOn,
+  adaptTextColorsForBg,
+  GRADIENT_COMBINATIONS
+} from '../lib/funnelColorLibrary';
 
 interface ClosedFunnelState {
   id: string;
@@ -412,14 +418,49 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
   const dynamicThemeStyles = useMemo(() => {
     if (!dynamicAccentColor || !resolvedThemeId) return '';
     const activeId = normalizeThemeId(resolvedThemeId);
+    // Couleur de texte garantie lisible sur un bouton ou badge peint avec dynamicAccentColor
+    const onAccentColor = readableTextOn(dynamicAccentColor);
+    // Couleur primaire garantie lisible (WCAG AA >= 4.5:1) sur fond clair et sur fond profond
+    const accentOnLight = ensureContrastColor(dynamicAccentColor, '#FFFFFF', 4.5);
+    const accentOnDark = ensureContrastColor(dynamicAccentColor, '#0F172A', 4.5);
+    const gradCombo =
+      GRADIENT_COMBINATIONS.find((g) => g.id === effectiveCustomConfig?.gradientStyle) ||
+      GRADIENT_COMBINATIONS[0];
+    const ctaGrad = gradCombo.buildCtaGradient(dynamicAccentColor, dynamicAccentColor);
+
+    // Adaptation automatique de l'en-tête si le marchand a choisi un headerBgColor personnalisé
+    const customHeaderBg = effectiveCustomConfig?.headerBgColor?.trim();
+    const headerRules = customHeaderBg
+      ? (() => {
+          const hdrAdapt = adaptTextColorsForBg(customHeaderBg, dynamicAccentColor, dynamicAccentColor);
+          return `
+            .storefront-theme-container[data-theme-id="${activeId}"] header {
+              background-color: ${customHeaderBg} !important;
+              color: ${hdrAdapt.headingText} !important;
+              border-color: ${hdrAdapt.border} !important;
+            }
+            .storefront-theme-container[data-theme-id="${activeId}"] header a,
+            .storefront-theme-container[data-theme-id="${activeId}"] header span:not([class*="bg-"]),
+            .storefront-theme-container[data-theme-id="${activeId}"] header button:not([class*="bg-"]) {
+              color: ${hdrAdapt.headingText} !important;
+            }
+          `;
+        })()
+      : '';
+
     return `
       .storefront-theme-container[data-theme-id="${activeId}"] {
         --theme-primary: ${dynamicAccentColor};
         --theme-primary-hover: ${dynamicAccentColor}ee;
+        --theme-on-primary: ${onAccentColor};
+        --theme-primary-on-light: ${accentOnLight};
+        --theme-primary-on-dark: ${accentOnDark};
+        --theme-cta-gradient: ${ctaGrad};
         --primary-color: ${dynamicAccentColor};
         --primary-accent: ${dynamicAccentColor};
       }
-      /* Electro Orange & Blanc : Répercussion temps-réel */
+      ${headerRules}
+      /* Electro Orange & Blanc : Répercussion temps-réel & contraste anti-effacement */
       .storefront-theme-container[data-theme-id="theme-electro-orange"] .electro-search-pill {
         border-color: ${dynamicAccentColor} !important;
       }
@@ -428,55 +469,77 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="bg-[#FF6A00]"],
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="bg-orange-500"] {
         background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
       }
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="text-[#FF6A00]"],
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="text-orange-500"] {
-        color: ${dynamicAccentColor} !important;
+        color: ${accentOnLight} !important;
       }
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="border-[#FF6A00]"],
       .storefront-theme-container[data-theme-id="theme-electro-orange"] [class*="border-orange-500"] {
         border-color: ${dynamicAccentColor} !important;
       }
 
-      /* Émeraude Prestige : Répercussion temps-réel */
+      /* Émeraude Prestige : Répercussion temps-réel & contraste anti-effacement */
       .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="bg-[#0F4C3A]"] {
         background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
       }
       .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="text-[#0F4C3A]"] {
-        color: ${dynamicAccentColor} !important;
+        color: ${accentOnLight} !important;
       }
       .storefront-theme-container[data-theme-id="theme-beauty-emerald"] [class*="border-[#0F4C3A]"] {
         border-color: ${dynamicAccentColor} !important;
       }
 
-      /* Electro Tech / Pro : Répercussion temps-réel */
+      /* Electro Tech / Pro : Répercussion temps-réel & contraste anti-effacement */
       .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="bg-[#0056D2]"],
       .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="bg-blue-600"] {
         background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
       }
       .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="text-[#0056D2]"],
       .storefront-theme-container[data-theme-id="theme-electro-tech"] [class*="text-blue-600"] {
-        color: ${dynamicAccentColor} !important;
+        color: ${accentOnLight} !important;
       }
 
-      /* Standard Élite : Répercussion temps-réel */
+      /* Standard Élite : Répercussion temps-réel & contraste anti-effacement */
       .storefront-theme-container[data-theme-id="theme-default"] [class*="bg-blue-600"] {
         background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
       }
       .storefront-theme-container[data-theme-id="theme-default"] [class*="text-blue-600"] {
-        color: ${dynamicAccentColor} !important;
+        color: ${accentOnLight} !important;
       }
       .storefront-theme-container[data-theme-id="theme-default"] [class*="border-blue-600"] {
         border-color: ${dynamicAccentColor} !important;
       }
 
-      /* Digital Pro : Répercussion temps-réel */
+      /* Digital Pro & Mega-Store Pro : Répercussion temps-réel & contraste anti-effacement */
       .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="bg-[#0056D2]"],
-      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="bg-blue-600"] {
+      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="bg-blue-600"],
+      .storefront-theme-container[data-theme-id="theme-mega-store-pro"] [class*="bg-blue-600"] {
         background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="text-[#0056D2]"],
+      .storefront-theme-container[data-theme-id="theme-digital-pro"] [class*="text-blue-600"],
+      .storefront-theme-container[data-theme-id="theme-mega-store-pro"] [class*="text-blue-600"] {
+        color: ${accentOnLight} !important;
+      }
+
+      /* Studio Live & Webinaire Pro (Fond profond) : Contraste adapté pour fond sombre */
+      .storefront-theme-container[data-theme-id="theme-livestream-pro"] [class*="bg-rose-600"],
+      .storefront-theme-container[data-theme-id="theme-livestream-pro"] [class*="bg-indigo-600"] {
+        background-color: ${dynamicAccentColor} !important;
+        color: ${onAccentColor} !important;
+      }
+      .storefront-theme-container[data-theme-id="theme-livestream-pro"] [class*="text-rose-400"],
+      .storefront-theme-container[data-theme-id="theme-livestream-pro"] [class*="text-indigo-400"] {
+        color: ${accentOnDark} !important;
       }
     `;
-  }, [dynamicAccentColor, resolvedThemeId]);
+  }, [dynamicAccentColor, resolvedThemeId, effectiveCustomConfig?.gradientStyle, effectiveCustomConfig?.headerBgColor]);
 
   // =========================================================================
   // 2. VERROU DE RENDU : Tant que Supabase n'a pas répondu, affiche le Loader neutre.

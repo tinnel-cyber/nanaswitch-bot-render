@@ -98,6 +98,16 @@ import StealthYouTubePlayer, { extractYouTubeVideoId as rawExtractYouTubeVideoId
 import { cleanDomain, saveTenantCustomDomain } from '../../services/tenantDomainService';
 import { TOOLBOX_PRO_CATALOG, TOOLBOX_PRO_CATEGORIES } from './toolboxData';
 import {
+  FUNNEL_PALETTES,
+  GRADIENT_COMBINATIONS,
+  resolveFunnelTheme,
+  resolveBlockTheme,
+  adaptTextColorsForBg,
+  ensureContrastColor,
+  readableTextOn,
+  alpha
+} from '../../lib/funnelColorLibrary';
+import {
   IconWhatsApp,
   IconTikTok,
   IconFacebook,
@@ -1037,13 +1047,21 @@ export const DIVI_MODULES_CATALOG = [
   }
 ];
 
-// Presets de couleurs pour le constructeur
+// Presets de couleurs autonomes et modernes (Clairs sans noir & Profonds prestige)
 export const COLOR_PRESETS = [
-  { name: 'Obsidian Amber (Signature NaNa)', primary: '#f59e0b', bg: '#070b14', button: '#f59e0b', buttonText: '#000000' },
-  { name: 'Cyber Emerald (Conversion Pro)', primary: '#10b981', bg: '#041014', button: '#10b981', buttonText: '#022c22' },
-  { name: 'Deep Indigo (High-Tech SaaS)', primary: '#6366f1', bg: '#0b0f19', button: '#4f46e5', buttonText: '#ffffff' },
-  { name: 'Neon Violet (Créateurs & VIP)', primary: '#8b5cf6', bg: '#0c071e', button: '#7c3aed', buttonText: '#ffffff' },
-  { name: 'Crimson Luxe (Vente Flash)', primary: '#f43f5e', bg: '#14060b', button: '#e11d48', buttonText: '#ffffff' }
+  ...FUNNEL_PALETTES.map((p) => ({
+    id: p.id,
+    name: p.name,
+    desc: p.desc,
+    category: p.category,
+    primary: p.primary,
+    accent: p.accent,
+    bg: p.bg,
+    button: p.primary,
+    buttonText: readableTextOn(p.primary),
+    gradientId: p.gradientId || 'aurora_mesh'
+  })),
+  { id: 'obsidian_amber', name: 'Obsidian Amber (Signature NaNa)', category: 'deep_vibrant', primary: '#f59e0b', accent: '#fbbf24', bg: '#10172A', button: '#f59e0b', buttonText: '#0F172A', gradientId: 'aurora_mesh' }
 ];
 
 // Gabarits Complets Prêts à l'Emploi (Funnels Clés en Main)
@@ -1406,20 +1424,32 @@ export const FunnelBuilder = ({
       enableWave: s.enableWave !== undefined ? s.enableWave : true,
       enableStripe: s.enableStripe !== undefined ? s.enableStripe : true,
 
-      // Options UI & Moteur
+      // Options UI & Moteur (Palettes autonomes sans noir pur & contraste adaptatif)
       themePreset: initialPreset,
-      brandColor: existingBrand || matchedPreset?.primary || '#f59e0b',
-      primaryColor: existingBrand || matchedPreset?.primary || '#f59e0b',
-      bgColor: s.bgColor || matchedPreset?.bg || '#070b14',
-      buttonColor: s.buttonColor || matchedPreset?.button || '#f59e0b',
-      buttonTextColor: s.buttonTextColor || matchedPreset?.buttonText || '#000000',
+      gradientStyle: s.gradientStyle || matchedPreset?.gradientId || 'aurora_mesh',
+      brandColor: existingBrand || matchedPreset?.primary || '#6366F1',
+      primaryColor: existingBrand || matchedPreset?.primary || '#6366F1',
+      bgColor: s.bgColor || matchedPreset?.bg || '#0F172A',
+      buttonColor: s.buttonColor || matchedPreset?.button || existingBrand || '#6366F1',
+      buttonTextColor: readableTextOn(s.buttonColor || matchedPreset?.button || existingBrand || '#6366F1'),
       enableStickyMobileBar: s.enableStickyMobileBar !== undefined ? s.enableStickyMobileBar : true,
       hapticSoundEnabled: s.hapticSoundEnabled !== undefined ? s.hapticSoundEnabled : true
     };
   });
 
-  const activeBrandColor = funnelSettings.brandColor || funnelSettings.primaryColor || (COLOR_PRESETS.find(p => p.name === funnelSettings.themePreset)?.primary) || '#f59e0b';
+  const activeBrandColor = funnelSettings.brandColor || funnelSettings.primaryColor || (COLOR_PRESETS.find(p => p.name === funnelSettings.themePreset)?.primary) || '#6366F1';
   const activeBtnColor = funnelSettings.buttonColor || activeBrandColor;
+  const resolvedModularTheme = useMemo(
+    () => resolveFunnelTheme({
+      brandColor: activeBrandColor,
+      primaryColor: activeBrandColor,
+      accentColor: funnelSettings.buttonColor || activeBrandColor,
+      bgColor: funnelSettings.bgColor || '#0F172A',
+      gradientStyle: funnelSettings.gradientStyle || 'aurora_mesh',
+      settings: funnelSettings
+    }),
+    [activeBrandColor, funnelSettings]
+  );
 
   // État de sauvegarde & Toast
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
@@ -2256,7 +2286,9 @@ export const FunnelBuilder = ({
 
   const renderBlockWYSIWYG = (block) => {
     const data = block.data || {};
-    const blockAccent = data.accentColor || activeBrandColor;
+    const blkTheme = resolveBlockTheme(data, resolvedModularTheme);
+    // blockAccent est automatiquement ajusté (WCAG AA >= 4.5:1) par rapport au fond du bloc ou de la page
+    const blockAccent = blkTheme.primaryText;
     const blockBtnColor = data.buttonColor || activeBtnColor;
 
     switch (block.type) {
@@ -5592,132 +5624,17 @@ export const FunnelBuilder = ({
   // 6. RENDU DE L'INSPECTEUR EN DIRECT (DATA BINDING SYNCHRONISÉ EN TEMPS RÉEL)
   // ==========================================================================
   const renderInspectorFields = () => {
-    // 1. ONGLET PARAMÈTRES GLOBAUX DU FUNNEL
-    if (inspectorTab === 'global') {
-      return (
-        <div className="space-y-4">
-          <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-            <span className="text-[10px] font-black uppercase text-amber-400 block">Configuration Globale</span>
-            <h4 className="text-xs font-bold text-white">Thème & Identité Visuelle</h4>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">Preset Graphique Signature</label>
-            <div className="space-y-1.5">
-              {COLOR_PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() => {
-                    try { playTapBeep(); } catch (e) {}
-                    setFunnelSettings(prev => ({
-                      ...prev,
-                      themePreset: preset.name,
-                      brandColor: preset.primary,
-                      primaryColor: preset.primary,
-                      bgColor: preset.bg,
-                      buttonColor: preset.button,
-                      buttonTextColor: preset.buttonText
-                    }));
-                  }}
-                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition cursor-pointer ${
-                    funnelSettings.themePreset === preset.name
-                      ? 'bg-amber-500/15 border-amber-500/50 text-white ring-1 ring-amber-400'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: preset.primary }} />
-                    <span className="font-medium text-xs">{preset.name}</span>
-                  </div>
-                  {funnelSettings.themePreset === preset.name && (
-                    <Check className="w-3.5 h-3.5 text-amber-400" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Sélecteur de couleur personnalisée */}
-            <div className="pt-2 border-t border-slate-900 flex items-center gap-2.5">
-              <label className="text-[10.5px] font-bold text-slate-400 shrink-0">Couleur Sur-Mesure :</label>
-              <div className="flex items-center gap-2 flex-1">
-                <input
-                  type="color"
-                  value={activeBrandColor}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFunnelSettings(prev => ({
-                      ...prev,
-                      themePreset: 'Custom',
-                      brandColor: val,
-                      primaryColor: val,
-                      buttonColor: val
-                    }));
-                  }}
-                  className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
-                />
-                <input
-                  type="text"
-                  value={activeBrandColor}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFunnelSettings(prev => ({
-                      ...prev,
-                      themePreset: 'Custom',
-                      brandColor: val,
-                      primaryColor: val,
-                      buttonColor: val
-                    }));
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Titre de la Page (SEO / WhatsApp)</label>
-            <input
-              type="text"
-              value={funnelSettings.pageTitle}
-              onChange={(e) => setFunnelSettings({ ...funnelSettings, pageTitle: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Description Persuasive</label>
-            <textarea
-              rows={2}
-              value={funnelSettings.pageDescription}
-              onChange={(e) => setFunnelSettings({ ...funnelSettings, pageDescription: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none"
-            />
-          </div>
-
-          <div className="pt-2 border-t border-slate-800 space-y-2">
-            <label className="flex items-center justify-between text-xs text-slate-300 font-medium cursor-pointer">
-              <span>Barre Flottante CTA Mobile Sticky</span>
-              <input
-                type="checkbox"
-                checked={funnelSettings.enableStickyMobileBar}
-                onChange={(e) => setFunnelSettings({ ...funnelSettings, enableStickyMobileBar: e.target.checked })}
-                className="rounded accent-amber-500"
-              />
-            </label>
-          </div>
-        </div>
-      );
-    }
-
-    if (!activeBlock) {
+    // 1. ONGLET PARAMÈTRES GLOBAUX DU FUNNEL OU AUCUN BLOC SÉLECTIONNÉ
+    if (inspectorTab === 'global' || !activeBlock) {
       return (
         <div className="space-y-4">
           <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">Espace de Travail • Paramètres Actifs</span>
-            <h4 className="text-xs font-black text-white">Paramètres Généraux du Tunnel</h4>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
+              Configuration Globale • Moteur Adaptatif WCAG
+            </span>
+            <h4 className="text-xs font-black text-white">Palettes Autonomes & Dégradés Modernes</h4>
             <p className="text-[11px] text-slate-300">
-              Paramètres globaux de votre funnel directement accessibles à l'extérieur.
+              Les textes, cartes et boutons s'adaptent automatiquement à vos couleurs sans jamais s'effacer ni dépendre du noir.
             </p>
           </div>
 
@@ -5732,8 +5649,13 @@ export const FunnelBuilder = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">Preset Graphique Signature</label>
-            <div className="space-y-1.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-300">Palettes Autonomes (Sans Noir)</label>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                Anti-Effacement Actif
+              </span>
+            </div>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
               {COLOR_PRESETS.map((preset) => (
                 <button
                   key={preset.name}
@@ -5743,11 +5665,12 @@ export const FunnelBuilder = ({
                     setFunnelSettings(prev => ({
                       ...prev,
                       themePreset: preset.name,
+                      gradientStyle: preset.gradientId || prev.gradientStyle || 'aurora_mesh',
                       brandColor: preset.primary,
                       primaryColor: preset.primary,
                       bgColor: preset.bg,
                       buttonColor: preset.button,
-                      buttonTextColor: preset.buttonText
+                      buttonTextColor: readableTextOn(preset.button)
                     }));
                   }}
                   className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition cursor-pointer ${
@@ -5756,51 +5679,132 @@ export const FunnelBuilder = ({
                       : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: preset.primary }} />
-                    <span className="font-medium text-xs">{preset.name}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center -space-x-1 shrink-0">
+                      <span className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.bg }} />
+                      <span className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.primary }} />
+                      <span className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.button }} />
+                    </div>
+                    <span className="font-bold text-xs truncate">{preset.name}</span>
                   </div>
-                  {funnelSettings.themePreset === preset.name && (
-                    <Check className="w-3.5 h-3.5 text-amber-400" />
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                      {preset.category === 'light_modern' ? '☀️ Clair' : '✨ Profond'}
+                    </span>
+                    {funnelSettings.themePreset === preset.name && (
+                      <Check className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
 
-            {/* Sélecteur de couleur personnalisée */}
-            <div className="pt-2 border-t border-slate-900 flex items-center gap-2.5">
-              <label className="text-[10.5px] font-bold text-slate-400 shrink-0">Couleur Sur-Mesure :</label>
-              <div className="flex items-center gap-2 flex-1">
-                <input
-                  type="color"
-                  value={activeBrandColor}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFunnelSettings(prev => ({
-                      ...prev,
-                      themePreset: 'Custom',
-                      brandColor: val,
-                      primaryColor: val,
-                      buttonColor: val
-                    }));
-                  }}
-                  className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
-                />
-                <input
-                  type="text"
-                  value={activeBrandColor}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFunnelSettings(prev => ({
-                      ...prev,
-                      themePreset: 'Custom',
-                      brandColor: val,
-                      primaryColor: val,
-                      buttonColor: val
-                    }));
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
-                />
+            {/* Combinaisons de Dégradés (Modules, Cartes & Textes) */}
+            <div className="pt-3 mt-3 border-t border-slate-900 space-y-2">
+              <label className="block text-[11px] font-bold text-slate-300">
+                Combinaisons de Dégradés (Modules & Textes)
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {GRADIENT_COMBINATIONS.map((grad) => {
+                  const isActiveGrad = (funnelSettings.gradientStyle || 'aurora_mesh') === grad.id;
+                  return (
+                    <button
+                      key={grad.id}
+                      type="button"
+                      onClick={() => {
+                        try { playTapBeep(); } catch (e) {}
+                        setFunnelSettings(prev => ({
+                          ...prev,
+                          gradientStyle: grad.id
+                        }));
+                      }}
+                      className={`p-2 rounded-xl border text-left transition cursor-pointer ${
+                        isActiveGrad
+                          ? 'bg-indigo-500/15 border-indigo-400 text-white ring-1 ring-indigo-400/50'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[11px] font-black truncate">{grad.name}</span>
+                        {isActiveGrad && <Check className="w-3 h-3 text-indigo-400 shrink-0" />}
+                      </div>
+                      <span className="text-[9.5px] text-slate-400 block line-clamp-1">{grad.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sélecteurs de couleurs personnalisées (Primaire + Fond) */}
+            <div className="pt-3 mt-3 border-t border-slate-900 space-y-2.5">
+              <div className="flex items-center gap-2.5">
+                <label className="text-[10.5px] font-bold text-slate-400 w-28 shrink-0">Couleur Primaire :</label>
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="color"
+                    value={activeBrandColor}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFunnelSettings(prev => ({
+                        ...prev,
+                        themePreset: 'Custom',
+                        brandColor: val,
+                        primaryColor: val,
+                        buttonColor: val,
+                        buttonTextColor: readableTextOn(val)
+                      }));
+                    }}
+                    className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={activeBrandColor}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFunnelSettings(prev => ({
+                        ...prev,
+                        themePreset: 'Custom',
+                        brandColor: val,
+                        primaryColor: val,
+                        buttonColor: val,
+                        buttonTextColor: readableTextOn(val)
+                      }));
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <label className="text-[10.5px] font-bold text-slate-400 w-28 shrink-0">Fond du Tunnel :</label>
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="color"
+                    value={funnelSettings.bgColor || '#0F172A'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFunnelSettings(prev => ({
+                        ...prev,
+                        themePreset: 'Custom',
+                        bgColor: val
+                      }));
+                    }}
+                    className="w-8 h-8 rounded-lg border border-slate-700 bg-transparent cursor-pointer p-0.5 shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={funnelSettings.bgColor || '#0F172A'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFunnelSettings(prev => ({
+                        ...prev,
+                        themePreset: 'Custom',
+                        bgColor: val
+                      }));
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-white focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -5861,6 +5865,9 @@ export const FunnelBuilder = ({
           <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800">
             <span className="text-[10px] font-black uppercase text-indigo-400 block">Personnalisation Style & Couleurs</span>
             <h4 className="text-xs font-bold text-white">{activeBlock.name}</h4>
+            <p className="text-[10.5px] text-slate-400 mt-0.5">
+              Le contraste des textes de ce module s'adapte automatiquement à la couleur de fond choisie.
+            </p>
           </div>
 
           {/* 1. Couleur d'Accentuation du Module */}
@@ -5894,7 +5901,7 @@ export const FunnelBuilder = ({
             </div>
             {/* Presets rapides d'accents */}
             <div className="flex items-center gap-1.5 pt-1 flex-wrap">
-              {[activeBrandColor, '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#ec4899', '#ef4444', '#8b5cf6'].map((col, idx) => (
+              {[activeBrandColor, '#4F46E5', '#0D9488', '#EA580C', '#7C3AED', '#E11D48', '#0284C7', '#D97706'].map((col, idx) => (
                 <button
                   key={`${col}-${idx}`}
                   type="button"
@@ -5957,7 +5964,7 @@ export const FunnelBuilder = ({
             <div className="flex items-center gap-2">
               <input
                 type="color"
-                value={data.bgColor || '#070b14'}
+                value={data.bgColor || funnelSettings.bgColor || '#0F172A'}
                 onChange={(e) => updateBlockField(activeBlock.id, 'bgColor', e.target.value)}
                 className="w-8 h-8 rounded-lg bg-transparent border-0 cursor-pointer shrink-0"
               />
@@ -5971,9 +5978,9 @@ export const FunnelBuilder = ({
             </div>
 
             <div className="pt-1">
-              <span className="block text-[10.5px] font-bold text-slate-400 mb-1.5">Fonds Prédéfinis</span>
+              <span className="block text-[10.5px] font-bold text-slate-400 mb-1.5">Fonds Modernes (Clairs & Profonds Sans Noir)</span>
               <div className="grid grid-cols-4 gap-1.5">
-                {['#070b14', '#041014', '#0b0f19', '#14060b', '#080d1a', '#02040a', '#180728', '#021815'].map((color) => (
+                {['#F8FAFC', '#F4FBF9', '#FAF6F0', '#F6F4FA', '#0C192C', '#1A102E', '#091E1A', '#1E1B38'].map((color) => (
                   <button
                     key={color}
                     type="button"
@@ -5981,7 +5988,7 @@ export const FunnelBuilder = ({
                     className="h-7 rounded-lg border border-slate-700 hover:scale-105 transition cursor-pointer flex items-center justify-center"
                     style={{ backgroundColor: color }}
                   >
-                    {data.bgColor === color && <Check className="w-3.5 h-3.5 text-white" />}
+                    {data.bgColor === color && <Check className="w-3.5 h-3.5" style={{ color: readableTextOn(color) }} />}
                   </button>
                 ))}
               </div>
@@ -12043,21 +12050,70 @@ export const FunnelBuilder = ({
             <div
               onDragOver={handleCanvasDragOver}
               onDrop={handleCanvasDrop}
-              style={{ backgroundColor: funnelSettings.bgColor || undefined }}
-              className={`transition-all duration-300 h-fit min-h-full relative ${
+              data-theme-mode={resolvedModularTheme.isLightBg ? 'light' : 'dark'}
+              style={{
+                backgroundColor: resolvedModularTheme.bg,
+                backgroundImage: resolvedModularTheme.pageGradient,
+                color: resolvedModularTheme.text
+              }}
+              className={`nana-modular-canvas transition-all duration-300 h-fit min-h-full relative ${
                 isEditingPopup
-                  ? 'w-full max-w-2xl rounded-3xl border-2 border-rose-500/70 shadow-[0_25px_90px_rgba(244,63,94,0.25)] bg-slate-950 ring-4 ring-rose-500/20 pb-20'
+                  ? 'w-full max-w-2xl rounded-3xl border-2 border-rose-500/70 shadow-[0_25px_90px_rgba(244,63,94,0.25)] ring-4 ring-rose-500/20 pb-20'
                   : isPublicView || viewMode === 'preview'
-                  ? 'w-full max-w-4xl mx-auto rounded-none sm:rounded-3xl border-0 sm:border sm:border-slate-800/80 shadow-none sm:shadow-2xl bg-slate-950 overflow-hidden pb-16'
+                  ? 'w-full max-w-4xl mx-auto rounded-none sm:rounded-3xl border-0 sm:border sm:border-slate-800/80 shadow-none sm:shadow-2xl overflow-hidden pb-16'
                   : previewDevice === 'mobile'
-                  ? 'w-full max-w-[390px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.8)] bg-slate-950 ring-1 ring-slate-700/60 pb-56 sm:pb-72'
+                  ? 'w-full max-w-[390px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.8)] ring-1 ring-slate-700/60 pb-56 sm:pb-72'
                   : previewDevice === 'tablet'
-                  ? 'w-full max-w-[720px] rounded-3xl border-2 border-slate-800 shadow-2xl bg-slate-950 pb-56 sm:pb-72'
-                  : 'w-full max-w-4xl rounded-3xl border border-slate-800/80 shadow-2xl bg-slate-950 pb-56 sm:pb-72'
+                  ? 'w-full max-w-[720px] rounded-3xl border-2 border-slate-800 shadow-2xl pb-56 sm:pb-72'
+                  : 'w-full max-w-4xl rounded-3xl border border-slate-800/80 shadow-2xl pb-56 sm:pb-72'
               } ${
                 isDraggingActive ? 'ring-2 ring-indigo-500/40 shadow-[0_0_50px_rgba(99,102,241,0.1)]' : ''
               }`}
             >
+              {/* MOTEUR ADAPTATIF ANTI-EFFACEMENT DE TEXTE & DÉGRADÉS POUR TOUS LES MODULES */}
+              <style>{`
+                .nana-modular-canvas [data-block-light="true"] {
+                  color: var(--blk-text, ${resolvedModularTheme.text});
+                }
+                .nana-modular-canvas [data-block-light="true"] .text-white:not(.bg-indigo-600):not(.bg-rose-500):not(.bg-emerald-600),
+                .nana-modular-canvas [data-block-light="true"] .text-slate-50,
+                .nana-modular-canvas [data-block-light="true"] .text-slate-100,
+                .nana-modular-canvas [data-block-light="true"] .text-slate-200 {
+                  color: var(--blk-text, #0F172A) !important;
+                }
+                .nana-modular-canvas [data-block-light="true"] .text-slate-300,
+                .nana-modular-canvas [data-block-light="true"] .text-slate-400,
+                .nana-modular-canvas [data-block-light="true"] .text-slate-500 {
+                  color: var(--blk-muted, #475569) !important;
+                }
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/90,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/80,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/70,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/60,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/50,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-900\\/40,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950\\/90,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950\\/80,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950\\/70,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950\\/60,
+                .nana-modular-canvas [data-block-light="true"] .bg-slate-950\\/50 {
+                  background: var(--blk-gradient, #FFFFFF) !important;
+                  background-color: var(--blk-surface, #FFFFFF) !important;
+                }
+                .nana-modular-canvas [data-block-light="true"] .border-slate-800,
+                .nana-modular-canvas [data-block-light="true"] .border-slate-800\\/80,
+                .nana-modular-canvas [data-block-light="true"] .border-slate-800\\/60,
+                .nana-modular-canvas [data-block-light="true"] .border-slate-700 {
+                  border-color: var(--blk-border, rgba(15, 23, 42, 0.14)) !important;
+                }
+                .nana-modular-canvas [data-block-light="false"] .bg-slate-900,
+                .nana-modular-canvas [data-block-light="false"] .bg-slate-950 {
+                  background-image: var(--blk-gradient, none);
+                }
+              `}</style>
+
               {/* Header simulé de la modale Popup en mode édition */}
               {isEditingPopup && (
                 <div className="p-4 border-b border-rose-500/30 bg-rose-950/20 flex items-center justify-between rounded-t-3xl">
@@ -12135,8 +12191,8 @@ export const FunnelBuilder = ({
                     <Plus className="w-8 h-8" />
                   </div>
                   <div className="space-y-1 max-w-sm">
-                    <h3 className="text-sm font-black text-white">Votre Page Longue est Prête</h3>
-                    <p className="text-xs text-slate-400">
+                    <h3 className="text-sm font-black" style={{ color: resolvedModularTheme.text }}>Votre Page Longue est Prête</h3>
+                    <p className="text-xs" style={{ color: resolvedModularTheme.mutedText }}>
                       Glissez n'importe quel module depuis la colonne de gauche et lâchez-le ici pour commencer l'empilement.
                     </p>
                   </div>
@@ -12147,7 +12203,7 @@ export const FunnelBuilder = ({
               )}
 
               {/* Empilement des Modules de la Page Longue avec marge de respiration (pb-40) */}
-              <div className="divide-y divide-slate-800/40 pb-40">
+              <div className="divide-y pb-40" style={{ borderColor: resolvedModularTheme.border }}>
                 {canvasBlocks.map((block, index) => {
                   const isSelected = String(block.id) === String(selectedBlockId) && viewMode === 'builder';
                   const isHoveredDropZone = dropTargetZone === index + 1;
@@ -12170,6 +12226,7 @@ export const FunnelBuilder = ({
                         renderBlock={renderBlockWYSIWYG}
                         activeProduct={activeProduct}
                         liveSeconds={liveSeconds}
+                        globalTheme={resolvedModularTheme}
                       />
 
                       {/* Zone de Dépôt Inter-Blocs Permissive (si mode builder) */}

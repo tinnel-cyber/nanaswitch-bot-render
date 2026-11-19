@@ -634,51 +634,88 @@ export const CustomThemeBuilderSidebar: React.FC<CustomThemeBuilderSidebarProps>
         )}
 
         {/* ========================================================================= */}
-        {/* ONGLET 2 : AMBIANCE & STYLE (SPOTIFY MOODS) */}
+        {/* ONGLET 2 : AMBIANCE & PALETTES AUTONOMES (SANS NOIR) */}
         {/* ========================================================================= */}
         {activeTab === 'mood' && (
           <div className="space-y-6">
             <div>
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
-                1. Ambiance de Couleur (Style Spotify) :
+                1. Palettes Autonomes & Modernes (Sans Noir) :
               </span>
 
               <div className="space-y-2.5">
                 {[
                   {
-                    id: 'blue_white' as CustomThemeMood,
-                    name: 'Bleu Nanasore Original',
-                    desc: 'L\'ADN officiel : Blanc pur, typographie nette et Bleu Royal #2563EB',
-                    colors: ['#2563EB', '#FFFFFF', '#1D4ED8'],
+                    id: 'nanasore-royal' as const,
+                    name: 'Ivoire Royal & Cobalt',
+                    desc: 'Fond ivoire lumineux, typographie nette et Bleu Royal #2563EB',
+                    colors: ['#2563EB', '#F8FAFC', '#1E40AF'],
                     isOfficial: true
                   },
                   {
-                    id: 'spotify_dark' as CustomThemeMood,
-                    name: 'Spotify Dark Mode',
-                    desc: 'Noir profond, cartes contrastées et vert émeraude percutant',
-                    colors: ['#121212', '#1DB954', '#181818']
+                    id: 'pearl-emerald' as const,
+                    name: 'Albâtre & Émeraude',
+                    desc: 'Clair moderne, accents sarcelle et contraste émeraude profond',
+                    colors: ['#0D9488', '#F4FBF9', '#064E3B']
                   },
                   {
-                    id: 'sand_nature' as CustomThemeMood,
-                    name: 'Nature & Sable Doux',
+                    id: 'hermes-sand' as const,
+                    name: 'Sable Champagne & Terracotta',
                     desc: 'Tons chauds, élégance végétale et sérénité organique',
-                    colors: ['#FAF7F2', '#0F4C3A', '#E7E1D8']
+                    colors: ['#FAF6F0', '#C25E00', '#E7E1D8']
                   },
                   {
-                    id: 'luxury_gold' as CustomThemeMood,
-                    name: 'Luxe Noir & Or Champagne',
-                    desc: 'Contraste noir absolu et accents or pour boutiques haut de gamme',
-                    colors: ['#0A0A0A', '#D4AF37', '#141414']
+                    id: 'cashmere-violet' as const,
+                    name: 'Cachemire & Lavande',
+                    desc: 'Douceur cachemire et accents violet créatif haute conversion',
+                    colors: ['#F6F4FA', '#7C3AED', '#2E1065']
+                  },
+                  {
+                    id: 'rose-couture' as const,
+                    name: 'Rose Poudré & Rubis',
+                    desc: 'Idéal cosmétiques, mode et soins avec contraste bordeaux lisible',
+                    colors: ['#FFF7F9', '#E11D48', '#4C0519']
+                  },
+                  {
+                    id: 'sapphire-ocean' as const,
+                    name: 'Saphir Océan & Azur',
+                    desc: 'Profond sans noir (#0C192C) avec dégradés azur lumineux',
+                    colors: ['#0C192C', '#0284C7', '#38BDF8']
+                  },
+                  {
+                    id: 'imperial-plum' as const,
+                    name: 'Pourpre Impérial & Ambre',
+                    desc: 'Velours prune royal (#1A102E) et éclats ambre doré',
+                    colors: ['#1A102E', '#9333EA', '#F59E0B']
+                  },
+                  {
+                    id: 'emerald-botanic' as const,
+                    name: 'Forêt Boréale & Menthe',
+                    desc: 'Pin boréal profond (#091E1A) et accents émeraude vivifiants',
+                    colors: ['#091E1A', '#10B981', '#6EE7B7']
                   }
                 ].map((item) => {
-                  const isSelected = (config.customMood || 'blue_white') === item.id;
+                  const currentPresetId = typeof config.customMood === 'object' ? config.customMood?.presetId : config.customMood;
+                  const isSelected = (currentPresetId || 'nanasore-royal') === item.id;
 
                   return (
                     <div
                       key={item.id}
                       onClick={() => {
                         playTapBeep();
-                        onChange({ ...config, customMood: item.id });
+                        onChange({
+                          ...config,
+                          customMood: {
+                            presetId: item.id,
+                            bgColor: item.colors[1],
+                            surfaceColor: '#FFFFFF',
+                            textColor: '#0F172A',
+                            mutedTextColor: '#475569',
+                            accentColor: item.colors[0],
+                            buttonRadius: 'xl',
+                            fontPairing: 'modern-sans'
+                          }
+                        });
                       }}
                       className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-3 ${
                         isSelected

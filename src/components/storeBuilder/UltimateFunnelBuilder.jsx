@@ -74,7 +74,17 @@ import {
 import { formatCFA, playTapBeep, playValidationBeep, playCancelSound, playCashChime } from '../../utils/audio';
 import { incrementStoredFunnelsCount } from '../../utils/planFeatures';
 import { saveFunnelConfig, registerSubdomainInFirebase, getFunnelBySlug } from '../../services/omniFunnelService';
-import { FUNNEL_PALETTES, DEFAULT_PALETTE, resolveFunnelTheme, resolveBlockButton, alpha } from '../../lib/funnelColorLibrary';
+import {
+  FUNNEL_PALETTES,
+  DEFAULT_PALETTE,
+  GRADIENT_COMBINATIONS,
+  resolveFunnelTheme,
+  resolveBlockTheme,
+  resolveBlockButton,
+  ensureContrastColor,
+  readableTextOn,
+  alpha
+} from '../../lib/funnelColorLibrary';
 import { saveTenantCustomDomain, cleanDomain } from '../../services/tenantDomainService';
 import { AutoplayVideoBlock, DEFAULT_AUTOPLAY_VIDEO_DATA } from '../cro/AutoplayVideoBlock';
 import { ImageUploadInput } from '../common/ImageUploadInput';
@@ -1873,134 +1883,146 @@ export const UltimateFunnelBuilder = ({
               </div>
             )}
 
-            <div
-              style={{
-                backgroundColor: customizationSettings?.bgColor || undefined,
-                fontFamily: customizationSettings?.fontFamily ? `${customizationSettings.fontFamily}, sans-serif` : undefined
-              }}
-              className={`transition-all duration-300 h-fit min-h-full pb-56 sm:pb-72 relative ${
-                canvasDevice === 'mobile'
-                  ? 'w-[380px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.8)] bg-slate-950 ring-1 ring-slate-700/60'
-                  : canvasDevice === 'tablet'
-                  ? 'w-[640px] rounded-3xl border-2 border-slate-800 shadow-2xl bg-slate-950'
-                  : 'w-full max-w-4xl rounded-3xl border border-slate-800/80 shadow-2xl bg-slate-950'
-              } ${
-                isDraggingActive ? 'ring-2 ring-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.1)]' : ''
-              }`}
-            >
-              {/* Encoche smartphone si mode mobile */}
-              {canvasDevice === 'mobile' && (
-                <div className="h-6 bg-slate-900 flex items-center justify-center border-b border-slate-800/60">
-                  <div className="w-24 h-3.5 bg-black rounded-full" />
-                </div>
-              )}
+            {(() => {
+              const canvasTheme = resolveFunnelTheme({ settings: customizationSettings });
+              return (
+                <div
+                  style={{
+                    background: canvasTheme.pageGradient || canvasTheme.bg,
+                    backgroundColor: canvasTheme.bg,
+                    color: canvasTheme.text,
+                    borderColor: canvasTheme.surfaceBorder,
+                    fontFamily: customizationSettings?.fontFamily ? `${customizationSettings.fontFamily}, sans-serif` : undefined
+                  }}
+                  className={`transition-all duration-300 h-fit min-h-full pb-56 sm:pb-72 relative ${
+                    canvasDevice === 'mobile'
+                      ? 'w-[380px] rounded-[44px] border-[8px] border-slate-800 shadow-[0_30px_90px_rgba(0,0,0,0.45)] ring-1 ring-slate-700/60'
+                      : canvasDevice === 'tablet'
+                      ? 'w-[640px] rounded-3xl border-2 shadow-2xl'
+                      : 'w-full max-w-4xl rounded-3xl border shadow-2xl'
+                  } ${
+                    isDraggingActive ? 'ring-2 ring-amber-500/40 shadow-[0_0_50px_rgba(245,158,11,0.1)]' : ''
+                  }`}
+                >
+                  {/* Encoche smartphone si mode mobile */}
+                  {canvasDevice === 'mobile' && (
+                    <div className="h-6 bg-slate-900 flex items-center justify-center border-b border-slate-800/60">
+                      <div className="w-24 h-3.5 bg-slate-950 rounded-full" />
+                    </div>
+                  )}
 
-              {/* Zone de Dépôt Supérieure Permissive (Insérer au début du tunnel) */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.dataTransfer.dropEffect = 'copy';
-                  setDropTargetZone('top');
-                }}
-                onDragLeave={(e) => {
-                  e.stopPropagation();
-                  if (dropTargetZone === 'top') setDropTargetZone(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleDropAtIndex(e, 0);
-                }}
-                className={`transition-all duration-200 select-none ${
-                  dropTargetZone === 'top'
-                    ? 'h-16 bg-gradient-to-b from-amber-500/20 to-transparent border-b-2 border-amber-400 flex items-center justify-center'
-                    : isDraggingActive
-                    ? 'h-10 border-b border-dashed border-amber-500/40 bg-amber-500/[0.03] flex items-center justify-center'
-                    : 'h-2 hover:h-6 opacity-0 hover:opacity-100 flex items-center justify-center'
-                }`}
-              >
-                {(isDraggingActive || dropTargetZone === 'top') && (
-                  <span className={`text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 px-3 py-1 rounded-full transition shadow-sm ${
-                    dropTargetZone === 'top'
-                      ? 'bg-amber-500 text-slate-950 shadow-amber-500/30 animate-pulse'
-                      : 'bg-slate-900/90 text-amber-400 border border-amber-500/30'
-                  }`}>
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Insérer au début du tunnel</span>
-                  </span>
-                )}
-              </div>
+                  {/* Zone de Dépôt Supérieure Permissive (Insérer au début du tunnel) */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'copy';
+                      setDropTargetZone('top');
+                    }}
+                    onDragLeave={(e) => {
+                      e.stopPropagation();
+                      if (dropTargetZone === 'top') setDropTargetZone(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDropAtIndex(e, 0);
+                    }}
+                    className={`transition-all duration-200 select-none ${
+                      dropTargetZone === 'top'
+                        ? 'h-16 bg-gradient-to-b from-amber-500/20 to-transparent border-b-2 border-amber-400 flex items-center justify-center'
+                        : isDraggingActive
+                        ? 'h-10 border-b border-dashed border-amber-500/40 bg-amber-500/[0.03] flex items-center justify-center'
+                        : 'h-2 hover:h-6 opacity-0 hover:opacity-100 flex items-center justify-center'
+                    }`}
+                  >
+                    {(isDraggingActive || dropTargetZone === 'top') && (
+                      <span className={`text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 px-3 py-1 rounded-full transition shadow-sm ${
+                        dropTargetZone === 'top'
+                          ? 'bg-amber-500 text-slate-950 shadow-amber-500/30 animate-pulse'
+                          : 'bg-slate-900/90 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Insérer au début du tunnel</span>
+                      </span>
+                    )}
+                  </div>
 
-              {/* Rendu des blocs avec micro-animations Framer Motion au survol */}
-              <div className="divide-y divide-slate-800/40 pb-40">
-                {currentStepBlocks.map((block, index) => {
-                  const isSelected = block.id === selectedBlockId;
-                  const isHoveredDropZone = dropTargetZone === index + 1;
+                  {/* Rendu des blocs avec micro-animations Framer Motion au survol */}
+                  <div className="pb-40" style={{ borderColor: canvasTheme.surfaceBorder }}>
+                    {currentStepBlocks.map((block, index) => {
+                      const isSelected = block.id === selectedBlockId;
+                      const isHoveredDropZone = dropTargetZone === index + 1;
+                      const blkTheme = resolveBlockTheme(block.data, canvasTheme);
 
-                  return (
-                    <React.Fragment key={block.id}>
-                      <motion.div
-                        layout
-                        onClick={() => setSelectedBlockId(block.id)}
-                        whileHover={{ scale: 1.002 }}
-                        transition={{ duration: 0.15 }}
-                        className={`relative group p-6 transition-all duration-200 cursor-pointer ${
-                          isSelected
-                            ? 'ring-2 ring-amber-500 bg-amber-500/[0.03] shadow-lg'
-                            : 'hover:bg-slate-900/40'
-                        }`}
-                        style={{ backgroundColor: block.data?.bgColor || undefined }}
-                      >
-                        {/* Barre d'actions contextuelle au survol */}
-                        <div
-                          className={`absolute top-2 right-3 z-30 flex items-center gap-1 bg-slate-900/95 border border-slate-700 px-2.5 py-1 rounded-xl shadow-xl backdrop-blur-md transition-opacity duration-200 ${
-                            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                          }`}
-                        >
-                          <span className="text-[10px] font-bold text-amber-400 mr-1.5 truncate max-w-[110px]">
-                            {block.name}
-                          </span>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); moveBlock(index, 'up'); }}
-                            disabled={index === 0}
-                            className="p-1 rounded hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
-                            title="Monter"
+                      return (
+                        <React.Fragment key={block.id}>
+                          <motion.div
+                            layout
+                            onClick={() => setSelectedBlockId(block.id)}
+                            whileHover={{ scale: 1.002 }}
+                            transition={{ duration: 0.15 }}
+                            className={`relative group p-6 transition-all duration-200 cursor-pointer border-b ${
+                              isSelected
+                                ? 'ring-2 ring-amber-500 shadow-lg'
+                                : ''
+                            }`}
+                            style={{
+                              background: block.data?.bgColor ? blkTheme.moduleGradient : undefined,
+                              backgroundColor: block.data?.bgColor || undefined,
+                              color: blkTheme.text,
+                              borderColor: canvasTheme.surfaceBorder
+                            }}
                           >
-                            <ArrowUp className="w-3 h-3" />
-                          </button>
+                            {/* Barre d'actions contextuelle au survol */}
+                            <div
+                              className={`absolute top-2 right-3 z-30 flex items-center gap-1 bg-slate-900/95 border border-slate-700 px-2.5 py-1 rounded-xl shadow-xl backdrop-blur-md transition-opacity duration-200 ${
+                                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                              }`}
+                            >
+                              <span className="text-[10px] font-bold text-amber-400 mr-1.5 truncate max-w-[110px]">
+                                {block.name}
+                              </span>
 
-                          <button
-                            onClick={(e) => { e.stopPropagation(); moveBlock(index, 'down'); }}
-                            disabled={index === currentStepBlocks.length - 1}
-                            className="p-1 rounded hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
-                            title="Descendre"
-                          >
-                            <ArrowDown className="w-3 h-3" />
-                          </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveBlock(index, 'up'); }}
+                                disabled={index === 0}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
+                                title="Monter"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
 
-                          <button
-                            onClick={(e) => { e.stopPropagation(); duplicateBlock(index); }}
-                            className="p-1 rounded hover:bg-slate-800 text-indigo-300 cursor-pointer"
-                            title="Dupliquer ce bloc"
-                          >
-                            <DuplicateIcon className="w-3 h-3" />
-                          </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveBlock(index, 'down'); }}
+                                disabled={index === currentStepBlocks.length - 1}
+                                className="p-1 rounded hover:bg-slate-800 text-slate-300 disabled:opacity-30 cursor-pointer"
+                                title="Descendre"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
 
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deleteBlock(index); }}
-                            className="p-1 rounded hover:bg-rose-950/60 text-rose-400 cursor-pointer"
-                            title="Supprimer ce bloc"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); duplicateBlock(index); }}
+                                className="p-1 rounded hover:bg-slate-800 text-indigo-300 cursor-pointer"
+                                title="Dupliquer ce bloc"
+                              >
+                                <DuplicateIcon className="w-3 h-3" />
+                              </button>
 
-                        {/* Composant Visuel de Rendu WYSIWYG */}
-                        {renderWYSIWYGBlock(block, activeSource, customizationSettings)}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deleteBlock(index); }}
+                                className="p-1 rounded hover:bg-rose-950/60 text-rose-400 cursor-pointer"
+                                title="Supprimer ce bloc"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
 
-                      </motion.div>
+                            {/* Composant Visuel de Rendu WYSIWYG */}
+                            {renderWYSIWYGBlock(block, activeSource, customizationSettings)}
+
+                          </motion.div>
 
                       {/* Zone de Dépôt Inter-Blocs Permissive et Tolérante */}
                       <div
@@ -2097,7 +2119,9 @@ export const UltimateFunnelBuilder = ({
                 </div>
               </div>
 
-            </div>
+                </div>
+              );
+            })()}
           </div>
         </main>
 
@@ -2298,7 +2322,7 @@ export const UltimateFunnelBuilder = ({
                   {/* Couleurs et Personnalisation */}
                   <div className="pt-3 border-t border-slate-800 space-y-3">
                     <label className="block text-xs font-bold text-slate-300">
-                      Design & Couleurs
+                      Design, Dégradés & Couleurs (Contraste Auto WCAG)
                     </label>
 
                     <div className="flex items-center justify-between">
@@ -2308,15 +2332,15 @@ export const UltimateFunnelBuilder = ({
                           <button
                             type="button"
                             onClick={() => updateSelectedBlock('accentColor', undefined)}
-                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
                             title="Réinitialiser à la couleur du thème"
                           >
-                            Thème
+                            Auto
                           </button>
                         )}
                         <input
                           type="color"
-                          value={currentSelectedBlock.data?.accentColor || customizationSettings?.primaryColor || '#f59e0b'}
+                          value={currentSelectedBlock.data?.accentColor || customizationSettings?.primaryColor || DEFAULT_PALETTE.primary}
                           onChange={(e) => updateSelectedBlock('accentColor', e.target.value)}
                           className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer"
                         />
@@ -2333,7 +2357,7 @@ export const UltimateFunnelBuilder = ({
                               updateSelectedBlock('customBtnColor', false);
                               updateSelectedBlock('btnBgColor', undefined);
                             }}
-                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
                             title="Réinitialiser à la couleur du thème"
                           >
                             Thème
@@ -2361,15 +2385,15 @@ export const UltimateFunnelBuilder = ({
                               updateSelectedBlock('customBlockBg', false);
                               updateSelectedBlock('bgColor', undefined);
                             }}
-                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white"
+                            className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
                             title="Réinitialiser au fond du thème"
                           >
-                            Thème
+                            Auto Thème
                           </button>
                         )}
                         <input
                           type="color"
-                          value={currentSelectedBlock.data.bgColor || customizationSettings?.bgColor || '#090d16'}
+                          value={currentSelectedBlock.data?.bgColor || customizationSettings?.bgColor || DEFAULT_PALETTE.bg}
                           onChange={(e) => {
                             updateSelectedBlock('customBlockBg', true);
                             updateSelectedBlock('bgColor', e.target.value);
@@ -2751,7 +2775,7 @@ export const UltimateFunnelBuilder = ({
                   <div>
                     <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                      <span>Palettes Thématiques Haut de Gamme</span>
+                      <span>Palettes Modernes Autonomes (Claires, Éditoriales & Profondes — Sans Noir)</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {THEME_PRESETS.map((p) => {
@@ -2765,7 +2789,8 @@ export const UltimateFunnelBuilder = ({
                                 themePreset: p.id,
                                 primaryColor: p.primary,
                                 accentColor: p.accent,
-                                bgColor: p.bg
+                                bgColor: p.bg,
+                                gradientStyle: p.gradientId || 'aurora_mesh'
                               };
                               setTempSettings(prev => ({ ...prev, ...newColors }));
                               setCustomizationSettings(prev => ({ ...prev, ...newColors }));
@@ -2795,17 +2820,22 @@ export const UltimateFunnelBuilder = ({
                                 : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40'
                             }`}
                           >
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between mb-1.5">
                               <span className="text-xs font-black text-white">{p.name}</span>
                               {isSelected && (
                                 <CheckCircle2 className="w-4 h-4 text-amber-400" />
                               )}
                             </div>
                             <p className="text-[11px] text-slate-400 mb-3">{p.desc}</p>
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.primary }} title="Couleur Principale" />
-                              <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.accent }} title="Couleur d'Accent" />
-                              <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.bg }} title="Couleur de Fond" />
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.primary }} title="Couleur Principale" />
+                                <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.accent }} title="Couleur d'Accent" />
+                                <span className="w-5 h-5 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: p.bg }} title="Couleur de Fond" />
+                              </div>
+                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
+                                {p.category === 'light_modern' ? '☀️ Clair' : '✨ Profond'}
+                              </span>
                             </div>
                           </div>
                         );
@@ -2813,19 +2843,63 @@ export const UltimateFunnelBuilder = ({
                     </div>
                   </div>
 
+                  {/* Combinaisons de Dégradés (Modules & Textes) */}
+                  <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
+                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>Combinaisons de Dégradés (Modules, Cartes & Textes)</span>
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {GRADIENT_COMBINATIONS.map((g) => {
+                        const isGradSelected = (tempSettings.gradientStyle || 'aurora_mesh') === g.id;
+                        const pCol = tempSettings.primaryColor || DEFAULT_PALETTE.primary;
+                        const aCol = tempSettings.accentColor || DEFAULT_PALETTE.accent;
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() => {
+                              setTempSettings(prev => ({ ...prev, gradientStyle: g.id }));
+                              setCustomizationSettings(prev => ({ ...prev, gradientStyle: g.id }));
+                            }}
+                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isGradSelected
+                                ? 'bg-slate-800/90 border-amber-400 ring-1 ring-amber-400/30'
+                                : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-black text-white truncate">{g.name}</div>
+                              <div className="text-[10px] text-slate-400 truncate mt-0.5">{g.desc}</div>
+                            </div>
+                            <span
+                              className="w-10 h-7 rounded-lg shrink-0 border border-white/20 shadow-sm"
+                              style={{ background: g.ctaGradient(pCol, aCol) }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Couleurs personnalisées */}
                   <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-4">
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Palette className="w-4 h-4 text-indigo-400" />
-                      <span>Ajustement Fin des Couleurs (Hex)</span>
-                    </h4>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <Palette className="w-4 h-4 text-indigo-400" />
+                        <span>Ajustement Fin des Couleurs (Hex)</span>
+                      </h4>
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                        ✓ Adaptation Auto des Textes (Anti-Effacement WCAG)
+                      </span>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="text-[11px] text-slate-400 font-bold block mb-1">Couleur Principale (CTA & Titres)</label>
                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5">
                           <input
                             type="color"
-                            value={tempSettings.primaryColor || '#f59e0b'}
+                            value={tempSettings.primaryColor || DEFAULT_PALETTE.primary}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
@@ -2835,7 +2909,7 @@ export const UltimateFunnelBuilder = ({
                           />
                           <input
                             type="text"
-                            value={tempSettings.primaryColor || '#f59e0b'}
+                            value={tempSettings.primaryColor || DEFAULT_PALETTE.primary}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, primaryColor: val, themePreset: 'custom' }));
@@ -2851,7 +2925,7 @@ export const UltimateFunnelBuilder = ({
                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5">
                           <input
                             type="color"
-                            value={tempSettings.accentColor || '#fbbf24'}
+                            value={tempSettings.accentColor || DEFAULT_PALETTE.accent}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
@@ -2861,7 +2935,7 @@ export const UltimateFunnelBuilder = ({
                           />
                           <input
                             type="text"
-                            value={tempSettings.accentColor || '#fbbf24'}
+                            value={tempSettings.accentColor || DEFAULT_PALETTE.accent}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, accentColor: val, themePreset: 'custom' }));
@@ -2877,7 +2951,7 @@ export const UltimateFunnelBuilder = ({
                         <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5">
                           <input
                             type="color"
-                            value={tempSettings.bgColor || '#090d16'}
+                            value={tempSettings.bgColor || DEFAULT_PALETTE.bg}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
@@ -2887,7 +2961,7 @@ export const UltimateFunnelBuilder = ({
                           />
                           <input
                             type="text"
-                            value={tempSettings.bgColor || '#090d16'}
+                            value={tempSettings.bgColor || DEFAULT_PALETTE.bg}
                             onChange={(e) => {
                               const val = e.target.value;
                               setTempSettings(prev => ({ ...prev, bgColor: val, themePreset: 'custom' }));
@@ -2963,21 +3037,41 @@ export const UltimateFunnelBuilder = ({
 
                   {/* Aperçu en direct du Thème */}
                   <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950 space-y-3">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Aperçu en direct du style</span>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Aperçu en direct du style & contraste automatique</span>
                     {(() => {
                       const previewTheme = resolveFunnelTheme({ settings: tempSettings });
                       return (
-                        <div className="p-5 rounded-2xl border flex flex-col items-center justify-center gap-3 text-center transition-all" style={{ backgroundColor: previewTheme.bg, borderColor: previewTheme.surfaceBorder, color: previewTheme.text, fontFamily: tempSettings.fontFamily || 'Inter, sans-serif' }}>
-                          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider" style={{ backgroundColor: alpha(previewTheme.primary, 0.15), color: previewTheme.primary, border: `1px solid ${alpha(previewTheme.primary, 0.35)}` }}>
+                        <div
+                          className="p-5 rounded-2xl border flex flex-col items-center justify-center gap-3 text-center transition-all"
+                          style={{
+                            background: previewTheme.moduleGradient,
+                            backgroundColor: previewTheme.bg,
+                            borderColor: previewTheme.surfaceBorder,
+                            color: previewTheme.text,
+                            fontFamily: tempSettings.fontFamily || 'Inter, sans-serif'
+                          }}
+                        >
+                          <span
+                            className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider"
+                            style={{
+                              backgroundColor: alpha(previewTheme.primary, 0.14),
+                              color: previewTheme.primaryTextOnBg,
+                              border: `1px solid ${alpha(previewTheme.primary, 0.35)}`
+                            }}
+                          >
                             ⚡ Badge Offre Spéciale
                           </span>
                           <h4 className="text-sm font-black max-w-md" style={{ color: previewTheme.text }}>
                             {tempSettings.funnelTitle || 'Titre de votre Tunnel de Vente'}
                           </h4>
+                          <p className="text-xs max-w-sm" style={{ color: previewTheme.mutedText }}>
+                            Les couleurs de texte s'adaptent automatiquement au fond et aux dégradés choisis.
+                          </p>
                           <button
                             type="button"
                             className={`px-5 py-2.5 font-black text-xs shadow-lg cursor-pointer ${tempSettings.borderRadius || 'rounded-2xl'}`}
                             style={{
+                              background: previewTheme.ctaGradient,
                               backgroundColor: previewTheme.primary,
                               color: previewTheme.onPrimary,
                               boxShadow: tempSettings.ctaGlow !== false ? `0 8px 24px ${alpha(previewTheme.primary, 0.45)}` : undefined
@@ -3677,11 +3771,13 @@ export const UltimateFunnelBuilder = ({
 function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
   const d = block.data || {};
   const resolvedTheme = resolveFunnelTheme({ settings: customizationSettings });
-  const themePrimary = resolvedTheme.primary;
-  const themeAccent = d.accentColor || resolvedTheme.accent;
+  const blk = resolveBlockTheme(d, resolvedTheme);
+  const themePrimary = blk.primaryText;
+  const themeAccent = blk.accentText;
   const resolvedBtn = resolveBlockButton(d, resolvedTheme);
   const btnBg = resolvedBtn.bg;
   const btnText = resolvedBtn.text;
+  const btnGradient = resolvedBtn.gradient;
 
   switch (block.type) {
     case 'autoplay_video':
@@ -3698,7 +3794,11 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
         <div className="flex flex-col items-center text-center">
           {d.promoBadge && (
             <div
-              style={{ backgroundColor: `${themePrimary}18`, borderColor: `${themePrimary}45`, color: themePrimary }}
+              style={{
+                backgroundColor: alpha(resolvedTheme.primary, 0.14),
+                borderColor: alpha(resolvedTheme.primary, 0.35),
+                color: themePrimary
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider uppercase mb-4 border"
             >
               <Award className="w-3.5 h-3.5" style={{ color: themePrimary }} />
@@ -3706,25 +3806,34 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
             </div>
           )}
 
-          <h1 className="text-xl sm:text-3xl font-black text-white leading-tight tracking-tight max-w-2xl mb-3">
+          <h1
+            className="text-xl sm:text-3xl font-black leading-tight tracking-tight max-w-2xl mb-3"
+            style={{ color: blk.text }}
+          >
             {d.headline}
           </h1>
 
           {d.subheadline && (
-            <p className="text-xs sm:text-sm text-slate-300 font-medium max-w-xl mb-5 leading-relaxed">
+            <p
+              className="text-xs sm:text-sm font-medium max-w-xl mb-5 leading-relaxed"
+              style={{ color: blk.bodyText }}
+            >
               {d.subheadline}
             </p>
           )}
 
           {/* Formateur & Accréditation */}
           {d.instructorName && (
-            <div className="flex items-center gap-2.5 mb-5 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-800">
+            <div
+              className="flex items-center gap-2.5 mb-5 px-3.5 py-1.5 rounded-full border shadow-sm"
+              style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+            >
               {d.instructorAvatar && (
-                <img src={d.instructorAvatar} alt={d.instructorName} className="w-7 h-7 rounded-full object-cover border" style={{ borderColor: `${themePrimary}60` }} />
+                <img src={d.instructorAvatar} alt={d.instructorName} className="w-7 h-7 rounded-full object-cover border" style={{ borderColor: alpha(resolvedTheme.primary, 0.5) }} />
               )}
-              <span className="text-xs font-bold text-white">{d.instructorName}</span>
+              <span className="text-xs font-bold" style={{ color: blk.text }}>{d.instructorName}</span>
               {d.instructorRole && (
-                <span className="text-[10px] text-slate-400">• {d.instructorRole}</span>
+                <span className="text-[10px]" style={{ color: blk.mutedText }}>• {d.instructorRole}</span>
               )}
             </div>
           )}
@@ -3742,8 +3851,8 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
                   repeat: Infinity,
                   ease: 'easeInOut'
                 }}
-                className="rounded-2xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-2xl flex items-center justify-center pointer-events-none"
-                style={{ borderColor: `${themePrimary}40` }}
+                className="rounded-2xl overflow-hidden aspect-video border shadow-2xl flex items-center justify-center pointer-events-none"
+                style={{ backgroundColor: blk.surface, borderColor: alpha(resolvedTheme.primary, 0.35) }}
               >
                 <img src={d.image} alt={d.headline || 'Showcase'} className="w-full h-full object-cover" />
               </motion.div>
@@ -3756,7 +3865,7 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
                 {formatCFA(d.price)}
               </span>
               {d.originalPrice && d.originalPrice > d.price && (
-                <span className="text-sm sm:text-lg text-slate-500 line-through font-semibold">
+                <span className="text-sm sm:text-lg line-through font-semibold" style={{ color: blk.mutedText }}>
                   {formatCFA(d.originalPrice)}
                 </span>
               )}
@@ -3768,9 +3877,10 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
               <button
                 className="w-full py-3.5 px-6 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer"
                 style={{
+                  background: btnGradient,
                   backgroundColor: btnBg,
                   color: btnText,
-                  boxShadow: `0 10px 25px ${alpha(btnBg, 0.4)}`
+                  boxShadow: `0 10px 25px ${alpha(btnBg, 0.35)}`
                 }}
               >
                 <span>{d.buttonText}</span>
@@ -3785,22 +3895,32 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
       return (
         <div className="space-y-4 py-2 text-left">
           <div className="text-center">
-            <h3 className="text-base font-black text-white">{d.headline}</h3>
-            {d.subheadline && <p className="text-xs text-slate-400 mt-1">{d.subheadline}</p>}
+            <h3 className="text-base font-black" style={{ color: blk.text }}>{d.headline}</h3>
+            {d.subheadline && <p className="text-xs mt-1" style={{ color: blk.mutedText }}>{d.subheadline}</p>}
           </div>
           <div className="space-y-2.5 max-w-2xl mx-auto">
             {(d.modules || []).map((m, i) => (
-              <div key={i} className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 flex items-center justify-between">
+              <div
+                key={i}
+                className="p-3.5 rounded-2xl border flex items-center justify-between shadow-sm"
+                style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black" style={{ backgroundColor: `${themePrimary}20`, color: themePrimary }}>
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black"
+                    style={{ backgroundColor: alpha(resolvedTheme.primary, 0.15), color: themePrimary }}
+                  >
                     0{i + 1}
                   </div>
                   <div>
-                    <h5 className="text-xs font-bold text-white">{m.title}</h5>
-                    <span className="text-[10px] text-slate-400">{m.lessons}</span>
+                    <h5 className="text-xs font-bold" style={{ color: blk.text }}>{m.title}</h5>
+                    <span className="text-[10px]" style={{ color: blk.mutedText }}>{m.lessons}</span>
                   </div>
                 </div>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md" style={{ color: themeAccent, backgroundColor: `${themeAccent}18` }}>
+                <span
+                  className="text-[11px] font-mono px-2 py-0.5 rounded-md font-bold"
+                  style={{ color: themeAccent, backgroundColor: alpha(resolvedTheme.accent, 0.14) }}
+                >
                   {m.duration}
                 </span>
               </div>
@@ -3811,43 +3931,56 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
 
     case 'webinar_registration_form':
       return (
-        <div className="max-w-md mx-auto p-5 rounded-3xl bg-slate-900/90 text-center space-y-3 shadow-xl border" style={{ borderColor: `${themePrimary}40` }}>
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${themePrimary}20`, color: themePrimary }}>
+        <div
+          className="max-w-md mx-auto p-5 rounded-3xl text-center space-y-3 shadow-xl border"
+          style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: alpha(resolvedTheme.primary, 0.35) }}
+        >
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto"
+            style={{ backgroundColor: alpha(resolvedTheme.primary, 0.15), color: themePrimary }}
+          >
             <MessageSquare className="w-5 h-5" />
           </div>
-          <h3 className="text-sm font-black text-white">{d.headline}</h3>
-          <p className="text-xs text-slate-400">{d.subheadline}</p>
+          <h3 className="text-sm font-black" style={{ color: blk.text }}>{d.headline}</h3>
+          <p className="text-xs" style={{ color: blk.mutedText }}>{d.subheadline}</p>
           <input
             type="tel"
             disabled
             placeholder="Numéro WhatsApp (+226 70 00 00 00)"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+            className="w-full border rounded-xl px-3 py-2 text-xs font-mono text-center"
+            style={{ backgroundColor: blk.inputBg, borderColor: blk.inputBorder, color: blk.inputText }}
           />
-          <button className="w-full py-3 rounded-xl font-black text-xs hover:brightness-110 transition cursor-pointer" style={{ backgroundColor: btnBg, color: btnText, boxShadow: `0 10px 25px ${alpha(btnBg, 0.4)}` }}>
+          <button
+            className="w-full py-3 rounded-xl font-black text-xs hover:brightness-110 transition cursor-pointer"
+            style={{ background: btnGradient, backgroundColor: btnBg, color: btnText, boxShadow: `0 10px 25px ${alpha(btnBg, 0.35)}` }}
+          >
             {d.buttonText}
           </button>
-          <p className="text-[10px] text-slate-400">{d.reassurance}</p>
+          <p className="text-[10px]" style={{ color: blk.mutedText }}>{d.reassurance}</p>
         </div>
       );
 
     case 'countdown_timer':
       return (
-        <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-center max-w-md mx-auto space-y-2">
+        <div
+          className="p-4 rounded-2xl border text-center max-w-md mx-auto space-y-2 shadow-sm"
+          style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+        >
           <div className="text-[11px] font-black tracking-wider flex items-center justify-center gap-1.5" style={{ color: themePrimary }}>
             <Clock className="w-3.5 h-3.5" />
             <span>{d.title}</span>
           </div>
-          <div className="flex items-center justify-center gap-3 font-mono font-black text-lg text-white">
-            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-              {String(d.initialHours || 18).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">HEURES</span>
+          <div className="flex items-center justify-center gap-3 font-mono font-black text-lg" style={{ color: blk.text }}>
+            <div className="px-3 py-1.5 rounded-xl border" style={{ backgroundColor: blk.inputBg, borderColor: blk.border }}>
+              {String(d.initialHours || 18).padStart(2, '0')}<span className="text-[10px] block font-sans" style={{ color: blk.mutedText }}>HEURES</span>
             </div>
             <span>:</span>
-            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800" style={{ color: themePrimary }}>
-              {String(d.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">MINUTES</span>
+            <div className="px-3 py-1.5 rounded-xl border" style={{ backgroundColor: blk.inputBg, borderColor: blk.border, color: themePrimary }}>
+              {String(d.initialMinutes || 30).padStart(2, '0')}<span className="text-[10px] block font-sans" style={{ color: blk.mutedText }}>MINUTES</span>
             </div>
             <span>:</span>
-            <div className="bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800" style={{ color: themePrimary }}>
-              {String(d.initialSeconds || 45).padStart(2, '0')}<span className="text-[10px] block text-slate-500 font-sans">SECONDES</span>
+            <div className="px-3 py-1.5 rounded-xl border" style={{ backgroundColor: blk.inputBg, borderColor: blk.border, color: themePrimary }}>
+              {String(d.initialSeconds || 45).padStart(2, '0')}<span className="text-[10px] block font-sans" style={{ color: blk.mutedText }}>SECONDES</span>
             </div>
           </div>
         </div>
@@ -3855,16 +3988,19 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
 
     case 'seats_progress_bar':
       return (
-        <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 max-w-md mx-auto space-y-2">
+        <div
+          className="p-3.5 rounded-2xl border max-w-md mx-auto space-y-2 shadow-sm"
+          style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+        >
           <div className="flex items-center justify-between text-xs font-bold">
             <span className="flex items-center gap-1.5" style={{ color: themePrimary }}>
               <Flame className="w-3.5 h-3.5" />
               <span>{d.text}</span>
             </span>
-            <span className="text-slate-400 font-mono">{d.percentage}% Réservé</span>
+            <span className="font-mono" style={{ color: blk.mutedText }}>{d.percentage}% Réservé</span>
           </div>
-          <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
-            <div className="h-full rounded-full transition-all" style={{ background: `linear-gradient(to right, ${themePrimary}, ${themeAccent})`, width: `${d.percentage}%` }} />
+          <div className="h-2.5 w-full rounded-full overflow-hidden p-0.5 border" style={{ backgroundColor: blk.inputBg, borderColor: blk.border }}>
+            <div className="h-full rounded-full transition-all" style={{ background: resolvedTheme.ctaGradient, width: `${d.percentage}%` }} />
           </div>
         </div>
       );
@@ -3875,29 +4011,37 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
           <button
             className="w-full py-4 px-6 rounded-2xl font-black text-xs sm:text-sm tracking-wide shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
             style={{
+              background: btnGradient,
               backgroundColor: btnBg,
               color: btnText,
-              boxShadow: (d.customBtnColor && d.glowColor) ? `0 0 35px ${d.glowColor}` : `0 0 30px ${alpha(btnBg, 0.45)}`
+              boxShadow: (d.customBtnColor && d.glowColor) ? `0 0 35px ${d.glowColor}` : `0 0 30px ${alpha(btnBg, 0.4)}`
             }}
           >
             <span>{d.buttonText}</span>
             <Zap className="w-4 h-4" />
           </button>
-          {d.subtext && <p className="text-[10.5px] text-slate-400 font-medium">{d.subtext}</p>}
+          {d.subtext && <p className="text-[10.5px] font-medium" style={{ color: blk.mutedText }}>{d.subtext}</p>}
         </div>
       );
 
     case 'instructor_bio':
       return (
-        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800 max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-          <img src={d.avatar} alt={d.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: `${themePrimary}50` }} />
+        <div
+          className="p-5 rounded-3xl border max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left shadow-sm"
+          style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+        >
+          <img src={d.avatar} alt={d.name} className="w-16 h-16 rounded-2xl object-cover shrink-0 border" style={{ borderColor: alpha(resolvedTheme.primary, 0.5) }} />
           <div className="space-y-1">
-            <h4 className="text-sm font-black text-white">{d.name}</h4>
-            <p className="text-xs font-medium" style={{ color: themePrimary }}>{d.title}</p>
-            <p className="text-xs text-slate-300 leading-relaxed">{d.bio}</p>
+            <h4 className="text-sm font-black" style={{ color: blk.text }}>{d.name}</h4>
+            <p className="text-xs font-bold" style={{ color: themePrimary }}>{d.title}</p>
+            <p className="text-xs leading-relaxed" style={{ color: blk.bodyText }}>{d.bio}</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {(d.badges || []).map((b, idx) => (
-                <span key={idx} className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-950 text-slate-300 border border-slate-800">
+                <span
+                  key={idx}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg border"
+                  style={{ backgroundColor: blk.inputBg, color: blk.bodyText, borderColor: blk.border }}
+                >
                   {b}
                 </span>
               ))}
@@ -3909,13 +4053,17 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
     case 'faq_webinar':
       return (
         <div className="space-y-3 py-2 max-w-2xl mx-auto text-left">
-          <h4 className="text-sm font-black text-white text-center mb-3">{d.headline}</h4>
+          <h4 className="text-sm font-black text-center mb-3" style={{ color: blk.text }}>{d.headline}</h4>
           {(d.items || []).map((item, idx) => (
-            <div key={idx} className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1">
-              <h5 className="text-xs font-bold text-white flex items-center gap-2">
+            <div
+              key={idx}
+              className="p-3.5 rounded-2xl border space-y-1 shadow-sm"
+              style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border }}
+            >
+              <h5 className="text-xs font-bold flex items-center gap-2" style={{ color: blk.text }}>
                 <span style={{ color: themePrimary }} className="font-black">Q :</span> {item.q}
               </h5>
-              <p className="text-xs text-slate-400 pl-4">{item.a}</p>
+              <p className="text-xs pl-4" style={{ color: blk.mutedText }}>{item.a}</p>
             </div>
           ))}
         </div>
@@ -3926,19 +4074,26 @@ function renderWYSIWYGBlock(block, activeSource, customizationSettings = {}) {
         <div className="py-2 text-center space-y-2">
           <div className="flex flex-wrap items-center justify-center gap-2">
             {(d.badges || []).map((badge, i) => (
-              <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-300">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[10px] font-bold"
+                style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border, color: blk.bodyText }}
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-500" />
                 <span>{badge}</span>
               </span>
             ))}
           </div>
-          <p className="text-[10px] text-slate-500">{d.text}</p>
+          <p className="text-[10px]" style={{ color: blk.mutedText }}>{d.text}</p>
         </div>
       );
 
     default:
       return (
-        <div className="p-4 bg-slate-900/40 rounded-xl text-center text-xs text-slate-300">
+        <div
+          className="p-4 rounded-xl text-center text-xs border"
+          style={{ background: blk.moduleGradient, backgroundColor: blk.cardBg, borderColor: blk.border, color: blk.bodyText }}
+        >
           Bloc : {block.name}
         </div>
       );
