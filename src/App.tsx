@@ -145,7 +145,7 @@ import { useTenant } from './context/TenantContext';
 import { CustomDomainNotFoundScreen } from './components/common/CustomDomainNotFoundScreen';
 import { StorefrontNeutralLoader } from './components/common/StorefrontNeutralLoader';
 import { isNativeDomain, extractSubdomain } from './services/tenantDomainService';
-import { saveFunnelConfig } from './services/omniFunnelService';
+import { saveFunnelConfig, registerSubdomainInFirebase, saveProductModularFunnelRTDB } from './services/omniFunnelService';
 import { getSafeStoreSlug } from './utils/slugEngine';
 import { ensureAndPersistTenantSlug } from './utils/slugService';
 import { THEME_PREFIX_REGEX, extractPublicStoreRouteParams } from './utils/themeRoutePrefix';
@@ -571,7 +571,9 @@ export default function App() {
           if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') return 'POS';
           if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') return 'STUDIO';
           if (subMod === 'nana-market' || subMod === 'market') return 'MARKET_DIRECTORY';
-          if (subMod === 'funnel-builder' || subMod === 'funnel' || subMod === 'tunnels') return 'PHYSICAL_FUNNEL';
+          if (subMod === 'modular-funnel' || subMod === 'modular-funnel-builder' || subMod === 'app-modular-funnel' || subMod === 'modular') return 'MODULAR_FUNNEL';
+          if (subMod === 'ultimate-funnel' || subMod === 'ultimate-funnel-builder' || subMod === 'app-ultimate-funnel' || subMod === 'funnel-builder' || subMod === 'funnel') return 'ULTIMATE_FUNNEL';
+          if (subMod === 'deal-builder' || subMod === 'public-deal-builder' || subMod === 'app-deal-builder' || subMod === 'physical-funnel' || subMod === 'tunnels') return 'PHYSICAL_FUNNEL';
           if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock' || subMod === 'excel-importer') return 'INVENTORY';
           if (subMod === 'orders-quotes' || subMod === 'commandes') return 'CUSTOMER_ORDERS';
           if (subMod === 'reports-analytics' || subMod === 'rapports') return 'REPORTS';
@@ -609,7 +611,7 @@ export default function App() {
           if (subMod === 'physical' || subMod === 'checkout') return 'PHYSICAL_FUNNEL';
           if (subMod === 'ultimate') return 'ULTIMATE_FUNNEL';
           if (subMod === 'modular') return 'MODULAR_FUNNEL';
-          return 'PHYSICAL_FUNNEL';
+          return 'MODULAR_FUNNEL';
         }
         if (modName === 'upload' || modName === 'academic') {
           return 'ACADEMIC_UPLOAD';
@@ -1536,7 +1538,9 @@ export default function App() {
           if (subMod === 'caisse-pos' || subMod === 'pos' || subMod === 'caisse') { setCurrentView('POS'); return; }
           if (subMod === 'vitrine-eshop' || subMod === 'vitrine' || subMod === 'eshop' || subMod === 'boutique') { setCurrentView('STUDIO'); return; }
           if (subMod === 'nana-market' || subMod === 'market') { setCurrentView('MARKET_DIRECTORY'); return; }
-          if (subMod === 'funnel-builder' || subMod === 'funnel') { setCurrentView('MODULAR_FUNNEL'); return; }
+          if (subMod === 'modular-funnel' || subMod === 'modular-funnel-builder' || subMod === 'app-modular-funnel' || subMod === 'modular') { setCurrentView('MODULAR_FUNNEL'); return; }
+          if (subMod === 'ultimate-funnel' || subMod === 'ultimate-funnel-builder' || subMod === 'app-ultimate-funnel' || subMod === 'funnel-builder' || subMod === 'funnel') { setCurrentView('ULTIMATE_FUNNEL'); return; }
+          if (subMod === 'deal-builder' || subMod === 'public-deal-builder' || subMod === 'app-deal-builder' || subMod === 'physical-funnel') { setCurrentView('PHYSICAL_FUNNEL'); return; }
           if (subMod === 'inventory-stock' || subMod === 'inventaire' || subMod === 'stock') { setCurrentView('INVENTORY'); return; }
           if (subMod === 'excel-importer') { setCurrentView('INVENTORY'); setIsGlobalExcelImporterOpen(true); return; }
           if (subMod === 'orders-quotes' || subMod === 'commandes') { setCurrentView('CUSTOMER_ORDERS'); return; }
@@ -7156,10 +7160,61 @@ export default function App() {
             </ModuleErrorBoundary>
           )}
 
-          {/* VIEW 2 & 3 : Constructeur Officiel Unifié - Caisse Express 1-Clic & Tunnels Physiques */}
-          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel' || currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
-            <ModuleErrorBoundary moduleName="Tunnels - Caisse Express 1-Clic">
-              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Constructeur de Tunnels..." />}>
+          {/* VIEW 2 : Funnel Builder Modulaire (Constructeur 12 Blocs Drag & Drop) */}
+          {(currentView === 'MODULAR_FUNNEL' || currentView === 'modular_funnel' || currentView === 'NANA_STUDIO' || currentView === 'nana_studio') && (
+            <ModuleErrorBoundary moduleName="Tunnels - Funnel Builder Modulaire">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Funnel Builder Modulaire..." />}>
+                <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden">
+                  <FunnelBuilder
+                    isOpen={true}
+                    product={inventory[0] ? {
+                      ...inventory[0],
+                      id: inventory[0].id || 'prod-funnel-demo',
+                      name: inventory[0].name || 'Pack Élite NaNa Pro X',
+                      price: inventory[0].sellingPrice || (inventory[0] as any).price || 24500,
+                      originalPrice: (inventory[0] as any).originalPrice || Math.round((inventory[0].sellingPrice || (inventory[0] as any).price || 24500) * 1.35),
+                      image: inventory[0].photoUrl || (inventory[0] as any).image || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
+                      category: inventory[0].category || 'E-Commerce & Vente Directe',
+                      description: inventory[0].description || 'Tunnel de conversion modulaire par blocs drag & drop.'
+                    } : null}
+                    onClose={() => {
+                      setCurrentView('NANA_SWITCH_APP');
+                      if (typeof window !== 'undefined') {
+                        window.history.pushState({}, '', '/dashboard');
+                      }
+                    }}
+                    onSave={async (savedPayload: any) => {
+                      try {
+                        if (savedPayload) {
+                          const targetProdId = savedPayload.productId || inventory[0]?.id || 'prod-funnel-demo';
+                          const payload = {
+                            ...savedPayload,
+                            productId: targetProdId,
+                            funnelType: 'modular',
+                            funnelStudio: 'nana_studio_3',
+                            linkPrefix: 't'
+                          };
+                          if (payload.subdomain) {
+                            await registerSubdomainInFirebase(payload.subdomain, payload.title || payload.name, payload);
+                          }
+                          await saveFunnelConfig(payload);
+                          await saveProductModularFunnelRTDB(targetProdId, payload, getCurrentStoreId());
+                        }
+                        playValidationBeep();
+                      } catch (e) {
+                        console.warn('[MODULAR_FUNNEL] Erreur saveFunnelConfig:', e);
+                      }
+                    }}
+                  />
+                </div>
+              </React.Suspense>
+            </ModuleErrorBoundary>
+          )}
+
+          {/* VIEW 3 : Public Deal Page Builder & Tunnels Physiques (Caisse Express 1-Clic) */}
+          {(currentView === 'PHYSICAL_FUNNEL' || currentView === 'physical_funnel' || currentView === 'CHECKOUT_FUNNEL' || currentView === 'checkout_funnel') && (
+            <ModuleErrorBoundary moduleName="Tunnels - Public Deal Page Builder">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement du Public Deal Page Builder..." />}>
                 <div className="fixed inset-0 z-50 bg-[#070b14] overflow-hidden flex flex-col p-2 sm:p-4">
                   <PhysicalFunnelBuilder
                     className="h-full"

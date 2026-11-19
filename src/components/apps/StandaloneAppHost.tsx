@@ -39,6 +39,9 @@ const MarketDirectory = lazy(() => import('../directory/MarketDirectory'));
 const DocuSignHub = lazy(() => import('../DocuSignHub').then(m => ({ default: m.DocuSignHub })));
 const SettingsExtensionsView = lazy(() => import('../SettingsExtensionsView').then(m => ({ default: m.SettingsExtensionsView })));
 const NanaSwitchApp = lazy(() => import('../nanaSwitch/NanaSwitchApp').then(m => ({ default: m.NanaSwitchApp || m.default })));
+const FunnelBuilder = lazy(() => import('../storeBuilder/FunnelBuilder').then(m => ({ default: (m as any).FunnelBuilder || m.default })));
+const UltimateFunnelBuilder = lazy(() => import('../storeBuilder/UltimateFunnelBuilder').then(m => ({ default: (m as any).UltimateFunnelBuilder || m.default })));
+const PhysicalFunnelBuilder = lazy(() => import('../storeBuilder/PhysicalFunnelBuilder').then(m => ({ default: (m as any).PhysicalFunnelBuilder || m.default })));
 
 export interface StandaloneAppHostProps {
   appId: string;
@@ -373,6 +376,43 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                     embedded={true}
                     currentUser={currentUser}
                     onBack={() => onNavigate('NANA_SWITCH_APP')}
+                  />
+                </div>
+              );
+            }
+
+            // Funnel Builder Modulaire (12 Blocs Drag & Drop)
+            if (id === 'modular-funnel' || id === 'modular-funnel-builder' || id === 'app-modular-funnel') {
+              return (
+                <div className="w-full h-full">
+                  <FunnelBuilder
+                    isOpen={true}
+                    product={inventory[0] || null}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
+                  />
+                </div>
+              );
+            }
+
+            // Ultimate Funnel Builder
+            if (id === 'ultimate-funnel' || id === 'ultimate-funnel-builder' || id === 'app-ultimate-funnel') {
+              return (
+                <div className="w-full h-full">
+                  <UltimateFunnelBuilder
+                    isOpen={true}
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
+                  />
+                </div>
+              );
+            }
+
+            // Public Deal Page Builder
+            if (id === 'deal-builder' || id === 'public-deal-builder' || id === 'app-deal-builder' || id === 'physical-funnel') {
+              return (
+                <div className="w-full h-full p-2 sm:p-4">
+                  <PhysicalFunnelBuilder
+                    className="h-full"
+                    onClose={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
