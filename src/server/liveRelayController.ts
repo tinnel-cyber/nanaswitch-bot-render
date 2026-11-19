@@ -16,9 +16,11 @@ export interface DestinationRelayProcess {
   storeSlug: string;
   fullRtmpUrl: string;
   maskedKey: string;
+  pid?: number;
   process?: ChildProcess;
   startedAt: number;
   status: 'starting' | 'streaming' | 'error' | 'stopped';
+  stoppedByUser?: boolean;
   errorMessage?: string | null;
   logs: string[];
 }
@@ -26,9 +28,17 @@ export interface DestinationRelayProcess {
 // Map globale : clé = `${cleanSlug}__${platformId}`
 const activeRelayProcesses = new Map<string, DestinationRelayProcess>();
 
-const MEDIAMTX_HLS_BASE = process.env.LIVE_HLS_INTERNAL_URL || 
-  process.env.VITE_LIVE_HLS_URL || 
+const MEDIAMTX_WHIP_BASE =
+  process.env.LIVE_WHIP_URL ||
+  process.env.VITE_LIVE_WHIP_URL ||
+  process.env.PUBLIC_LIVE_WHIP_URL ||
+  'https://p01--nanasore-live--p8yx28yyjhbx.code.run';
+
+const MEDIAMTX_HLS_BASE =
+  process.env.LIVE_HLS_INTERNAL_URL ||
+  process.env.VITE_LIVE_HLS_URL ||
   process.env.LIVE_HLS_URL ||
+  process.env.PUBLIC_LIVE_HLS_URL ||
   'https://p02--nanasore-live--p8yx28yyjhbx.code.run';
 
 /**
@@ -136,9 +146,10 @@ function spawnSingleRelay(
 ): DestinationRelayProcess {
   const relayKey = `${storeSlug}__${platformId}`;
 
-  // Si un processus tourne déjà sur cette destination, on l'arrête d'abord
+  // Si un processus tourne déjà sur cette destination (starting ou streaming), on l'arrête d'abord
   const existing = activeRelayProcesses.get(relayKey);
-  if (existing && existing.status === 'streaming' && existing.process && !existing.process.killed) {
+  if (existing && existing.process && !existing.process.killed) {
+    existing.stoppedByUser = true;
     try {
       existing.process.kill('SIGTERM');
     } catch (_) {}
@@ -152,24 +163,29 @@ function spawnSingleRelay(
     maskedKey,
     startedAt: Date.now(),
     status: 'starting',
+    stoppedByUser: false,
     errorMessage: null,
     logs: []
   };
 
   activeRelayProcesses.set(relayKey, record);
 
-  // Arguments FFmpeg optimisés :
+  // Arguments FFmpeg optimisés pour Northflank :
+  // -reconnect* : tolère le court délai d'initialisation du manifeste HLS après le handshake WHIP
   // -re : cadence temps réel
-  // -c:v copy : zéro transcodage vidéo = 0% CPU
-  // -c:a aac -ar 44100 -b:a 128k : ré-encodage audio AAC 44.1kHz compatible tous CDN RTMP
+  // -c:v copy : zéro transcodage vidéo = charge CPU minimale
+  // -c:a aac -ar 44100 -b:a 128k : ré-encodage audio AAC 44.1kHz compatible tous CDN RTMP/RTMPS
   // -f flv : muxer RTMP standard
   const ffmpegArgs = [
+    '-reconnect', '1',
+    '-reconnect_streamed', '1',
+    '-reconnect_delay_max', '5',
     '-re',
     '-i', inputSource,
     '-c:v', 'copy',
     '-c:a', 'aac',
-    '-b:a', '128k',
     '-ar', '44100',
+    '-b:a', '128k',
     '-f', 'flv',
     fullRtmpUrl
   ];
@@ -179,6 +195,7 @@ function spawnSingleRelay(
   try {
     const proc = spawn('ffmpeg', ffmpegArgs);
     record.process = proc;
+    record.pid = proc.pid;
 
     proc.stdout?.on('data', (chunk) => {
       const msg = chunk.toString();
@@ -194,15 +211,23 @@ function spawnSingleRelay(
       // Détection des erreurs d'authentification ou réseau RTMP
       if (
         /Authentication failed/i.test(text) ||
+        /NetStream\.Publish\.BadName/i.test(text) ||
+        /RTMP_Connect/i.test(text) ||
         /Server returned 403/i.test(text) ||
+        /Server returned 401/i.test(text) ||
+        /404 Not Found/i.test(text) ||
         /Connection refused/i.test(text) ||
+        /Connection timed out/i.test(text) ||
+        /Operation timed out/i.test(text) ||
         /Failed to resolve/i.test(text) ||
         /Broken pipe/i.test(text) ||
-        /Failed to open/i.test(text)
+        /Failed to open/i.test(text) ||
+        /Input\/output error/i.test(text) ||
+        /Server error/i.test(text)
       ) {
         record.status = 'error';
-        record.errorMessage = text.slice(0, 200).trim();
-        console.error(`[FFMPEG RELAY ERROR] [${platformName}] :`, record.errorMessage);
+        record.errorMessage = text.slice(0, 220).trim();
+        console.error(`[FFMPEG RELAY ERROR] [${platformName}] (PID ${record.pid}):`, record.errorMessage);
       } else if (record.status === 'starting' && /frame=\s*\d+/i.test(text)) {
         // Dès que des frames FLV sortent, le flux est actif !
         record.status = 'streaming';
@@ -216,8 +241,14 @@ function spawnSingleRelay(
     });
 
     proc.on('close', (code) => {
-      console.log(`[FFMPEG RELAY CLOSED] [${platformName}] Code sortie : ${code}`);
-      if (record.status !== 'error') {
+      console.log(`[FFMPEG RELAY CLOSED] [${platformName}] (PID ${record.pid}) Code sortie : ${code}`);
+      if (record.stoppedByUser) {
+        record.status = 'stopped';
+      } else if (code !== 0 && record.status !== 'error') {
+        record.status = 'error';
+        const lastLog = record.logs[record.logs.length - 1] || `Processus FFmpeg interrompu (code ${code})`;
+        record.errorMessage = lastLog.slice(0, 220).trim();
+      } else if (record.status !== 'error') {
         record.status = 'stopped';
       }
     });
@@ -234,6 +265,7 @@ function spawnSingleRelay(
  * Arrête proprement un relais FFmpeg
  */
 function stopRelayProcess(record: DestinationRelayProcess): void {
+  record.stoppedByUser = true;
   if (record.process && !record.process.killed) {
     try {
       record.process.kill('SIGTERM');
@@ -245,6 +277,32 @@ function stopRelayProcess(record: DestinationRelayProcess): void {
     } catch (_) {}
   }
   record.status = 'stopped';
+}
+
+/**
+ * Arrête tous les relais actifs pour un storeSlug donné
+ */
+export function stopAllRelaysForStore(storeSlug: string): number {
+  const cleanSlug = encodeURIComponent(String(storeSlug).replace(/[^a-zA-Z0-9_-]/g, ''));
+  let stoppedCount = 0;
+  for (const [key, record] of activeRelayProcesses.entries()) {
+    if (record.storeSlug === cleanSlug) {
+      stopRelayProcess(record);
+      activeRelayProcesses.delete(key);
+      stoppedCount++;
+    }
+  }
+  return stoppedCount;
+}
+
+// Nettoyage automatique de tous les processus FFmpeg lors de l'arrêt du conteneur Node.js
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(sig, () => {
+    for (const [key, record] of activeRelayProcesses.entries()) {
+      stopRelayProcess(record);
+      activeRelayProcesses.delete(key);
+    }
+  });
 }
 
 // ============================================================================
@@ -391,6 +449,7 @@ export async function handleGetMultistreamStatus(req: Request, res: Response): P
         platform: record.platformId,
         name: record.platformName,
         status: record.status,
+        pid: record.pid,
         startedAt: record.startedAt,
         durationSeconds: Math.floor((Date.now() - record.startedAt) / 1000),
         errorMessage: record.errorMessage,
@@ -437,6 +496,7 @@ export async function handleStartLiveRelay(req: Request, res: Response): Promise
     storeSlug: cleanSlug,
     targetPlatform,
     status: record.status,
+    pid: record.pid,
     startedAt: record.startedAt
   });
 }
@@ -485,6 +545,7 @@ export async function handleGetLiveRelayStatus(req: Request, res: Response): Pro
       targetPlatform: r.platformId,
       platformName: r.platformName,
       status: r.status,
+      pid: r.pid,
       startedAt: r.startedAt,
       durationSeconds: Math.floor((Date.now() - r.startedAt) / 1000),
       errorMessage: r.errorMessage,
@@ -506,8 +567,8 @@ export async function handleStartLiveSession(req: Request, res: Response): Promi
   const cleanSlug = encodeURIComponent(String(storeId).replace(/[^a-zA-Z0-9_-]/g, ''));
 
   const liveId = `live_${cleanSlug}_${Date.now()}`;
-  const whipUrl = `https://p01--nanasore-live--p8yx28yyjhbx.code.run/${cleanSlug}/whip`;
-  const hlsUrl = `https://p02--nanasore-live--p8yx28yyjhbx.code.run/${cleanSlug}/index.m3u8`;
+  const whipUrl = `${MEDIAMTX_WHIP_BASE.replace(/\/+$/, '')}/${cleanSlug}/whip`;
+  const hlsUrl = `${MEDIAMTX_HLS_BASE.replace(/\/+$/, '')}/${cleanSlug}/index.m3u8`;
 
   // Déclencheur temps réel automatique : Envoi réel Web Push à tous les abonnés du store_slug
   import('./webPushService').then(({ sendLiveShoppingPushToStoreSubscribers }) => {
@@ -545,14 +606,16 @@ export function attachLiveRelayRoutes(app: any): void {
   app.post('/api/lives/start', handleStartLiveSession);
   app.get('/api/lives/quota', (_req: Request, res: Response) => {
     res.json({
-      todayCount: 1,
+      todayCount: activeRelayProcesses.size,
       maxDailyLimit: 100,
       date: new Date().toISOString().split('T')[0],
       quotaExceeded: false
     });
   });
   app.post('/api/lives/:liveId/stop', (req: Request, res: Response) => {
-    res.json({ success: true, liveId: req.params.liveId, status: 'ended' });
+    const storeSlug = req.body?.storeSlug || req.params.liveId;
+    const stoppedRelays = stopAllRelaysForStore(storeSlug);
+    res.json({ success: true, liveId: req.params.liveId, status: 'ended', stoppedRelays });
   });
 
   // Nouvelles routes de multidiffusion temps réel (MediaMTX -> multi-réseaux)

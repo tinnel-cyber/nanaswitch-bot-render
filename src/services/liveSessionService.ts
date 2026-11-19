@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { buildStoreHlsUrl } from '../config/liveStreamConfig';
 import { 
   LiveSession, 
   LiveSessionStatus,
@@ -59,26 +60,25 @@ export const DEMO_LIVE_PRODUCTS: StoreProductItem[] = [
   }
 ];
 
-// Session de repli par défaut ultra-complète
+// Session Live native par défaut (MediaMTX HLS réel)
 export const FALLBACK_LIVE_SESSION: LiveSession = {
-  id: 'live-demo-session',
-  storeId: 'demo-store-001',
-  storeName: 'Académie Business Afrique',
-  sessionSlug: 'masterclass-live-2026',
-  title: 'Masterclass Direct : Lancer et Rentabiliser son Business E-Commerce en 2026',
-  description: 'Posez vos questions en direct, téléchargez vos supports de cours, répondez aux quiz et commandez vos accès exclusifs avec Orange Money, Wave, Moov et MTN.',
-  sessionMode: 'webinar_formation',
+  id: 'live-master',
+  storeId: 'live-master',
+  storeName: 'Boutique Nanasore',
+  sessionSlug: 'live-master',
+  title: 'Live Shopping en Direct',
+  description: 'Suivez la démonstration en direct, posez vos questions et commandez en 1 clic par Mobile Money.',
+  sessionMode: 'live_shopping',
   status: 'live',
-  sourceType: 'youtube',
-  streamUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-  viewerCount: 284,
-  pinnedProductId: 'live-prod-01',
-  pinnedProduct: DEMO_LIVE_PRODUCTS[0],
-  products: DEMO_LIVE_PRODUCTS,
-  scheduledAt: Date.now() - 1000 * 60 * 20,
-  whatsappPhone: '+2250700000000',
-  hostName: 'Coach Ibrahim',
-  hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  sourceType: 'hls',
+  streamUrl: '',
+  viewerCount: 0,
+  pinnedProductId: null,
+  pinnedProduct: null,
+  products: [],
+  scheduledAt: Date.now(),
+  whatsappPhone: '',
+  hostName: 'Vendeur Nanasore',
   allowChat: true,
   createdAt: Date.now()
 };
@@ -89,32 +89,38 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
 export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | null> {
   if (!slug) return FALLBACK_LIVE_SESSION;
 
+  const defaultHlsUrl = buildStoreHlsUrl(slug);
+
   try {
-    // 1. Recherche par ID direct
+    // 1. Recherche par ID direct ou tenant_id
     const { data: byId } = await supabase
       .from('live_sessions')
       .select('*')
-      .eq('id', slug)
+      .or(`id.eq.${slug},tenant_id.eq.${slug}`)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (byId) {
+      const resolvedUrl = (byId.stream_url || '').trim() || defaultHlsUrl;
+      const isHls = resolvedUrl.includes('.m3u8');
       return {
         id: byId.id,
-        storeId: byId.tenant_id,
-        storeName: 'Boutique Nanasore',
+        storeId: byId.tenant_id || slug,
+        storeName: byId.store_name || 'Boutique Nanasore',
         sessionSlug: slug,
-        title: byId.title,
+        title: byId.title || 'Live Shopping en Direct',
         description: byId.description || '',
         sessionMode: 'live_shopping',
-        status: byId.status as any,
-        sourceType: 'youtube',
-        streamUrl: byId.stream_url || '',
-        viewerCount: byId.viewer_count || 42,
+        status: (byId.status as any) || 'live',
+        sourceType: isHls ? 'hls' : 'youtube',
+        streamUrl: resolvedUrl,
+        viewerCount: typeof byId.viewer_count === 'number' ? byId.viewer_count : 0,
         pinnedProductId: byId.pinned_product_id,
         pinnedProduct: byId.pinned_product_data,
-        scheduledAt: new Date(byId.created_at).getTime(),
+        scheduledAt: byId.created_at ? new Date(byId.created_at).getTime() : Date.now(),
         allowChat: true,
-        createdAt: new Date(byId.created_at).getTime()
+        createdAt: byId.created_at ? new Date(byId.created_at).getTime() : Date.now()
       };
     }
 

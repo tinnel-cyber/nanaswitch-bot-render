@@ -52,11 +52,11 @@ export async function loadStoreMultistreamConfig(storeSlug: string): Promise<Sto
   let loadedConfig: Partial<StoreMultistreamConfig> = {};
 
   try {
-    // 1. Tente de lire depuis la table live_sessions (ou store_multistream_configs)
+    // 1. Tente de lire depuis la table live_sessions
     const { data, error } = await supabase
       .from('live_sessions')
       .select('multistream_config, youtube_stream_key, facebook_stream_key, twitch_stream_key, tiktok_server_url, tiktok_stream_key, instagram_server_url, instagram_stream_key, linkedin_server_url, linkedin_stream_key, twitter_server_url, twitter_stream_key, telegram_server_url, telegram_stream_key, whatsapp_channel_url, custom_rtmp_destinations')
-      .or(`id.eq.${cleanSlug},sessionSlug.eq.${cleanSlug},tenant_id.eq.${cleanSlug}`)
+      .or(`id.eq.${cleanSlug},tenant_id.eq.${cleanSlug}`)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -260,6 +260,55 @@ export async function stopMultistreamRelay(
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
+}
+
+/**
+ * Vérifie si au moins une destination RTMP est activée et configurée
+ */
+export function hasEnabledMultistreamDestinations(config: StoreMultistreamConfig | null): boolean {
+  if (!config) return false;
+  if (config.youtubeEnabled && config.youtubeStreamKey?.trim()) return true;
+  if (config.facebookEnabled && config.facebookStreamKey?.trim()) return true;
+  if (config.twitchEnabled && config.twitchStreamKey?.trim()) return true;
+  if (config.tiktokEnabled && config.tiktokServerUrl?.trim() && config.tiktokStreamKey?.trim()) return true;
+  if (config.instagramEnabled && config.instagramStreamKey?.trim()) return true;
+  if (config.linkedinEnabled && config.linkedinServerUrl?.trim() && config.linkedinStreamKey?.trim()) return true;
+  if (config.twitterEnabled && config.twitterServerUrl?.trim() && config.twitterStreamKey?.trim()) return true;
+  if (config.telegramEnabled && config.telegramStreamKey?.trim()) return true;
+  if (
+    Array.isArray(config.customRtmpDestinations) &&
+    config.customRtmpDestinations.some(d => d.enabled && d.serverUrl?.trim() && d.streamKey?.trim())
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Envoie un signal d'arrêt fiable lors de la fermeture de l'onglet navigateur (beforeunload)
+ */
+export function stopMultistreamRelayBeacon(storeSlug: string): void {
+  if (!storeSlug) return;
+  const baseUrl = getApiBaseUrl();
+  const endpoint = `${baseUrl}/api/lives/multistream/stop`;
+  const body = JSON.stringify({ storeSlug });
+
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon(endpoint, blob);
+      return;
+    }
+  } catch (_) {}
+
+  try {
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 /**

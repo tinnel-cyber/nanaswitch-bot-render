@@ -1608,7 +1608,7 @@ async function startServer() {
     process.env.VITE_API_URL ||
     process.env.PAYMENT_API_URL || 
     process.env.VITE_PAYMENT_API_URL || 
-    'https://nanaswitch-bot-render-0kqp.onrender.com';
+    'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
   // Endpoint Diagnostic IP Statique Fixie vue par les banques partenaires
   app.get('/api/payment/ip', async (req, res) => {
@@ -4160,7 +4160,31 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         const template = fs.readFileSync(indexPath, 'utf-8');
-        const html = injectThemeIntoHtml(template, theme);
+        let html = injectThemeIntoHtml(template, theme);
+
+        // Balises OpenGraph dynamiques pour les liens partagés sur WhatsApp (/live/:storeSlug)
+        const liveMatch = req.path.match(/^\/live\/([^/?#]+)/i);
+        if (liveMatch && liveMatch[1]) {
+          const rawSlug = decodeURIComponent(liveMatch[1]).replace(/[<>"'&]/g, '');
+          const displayStore = rawSlug
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          const host = req.get('host') || 'nanasore.com';
+          const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+          const livePageUrl = `${proto}://${host}/live/${encodeURIComponent(rawSlug)}`;
+          const ogTitle = `🔴 EN DIRECT — ${displayStore} | Live Shopping Nanasore`;
+          const ogDesc = `Rejoignez le Live Shopping en direct de ${displayStore} sur Nanasore : démonstrations en temps réel et commande 1-clic Mobile Money !`;
+          const ogImage = `${proto}://${host}/pwa-512x512.png`;
+
+          html = html
+            .replace(/<title>.*?<\/title>/i, `<title>${ogTitle}</title>`)
+            .replace(/<meta\s+property="og:title"[^>]*>/i, `<meta property="og:title" content="${ogTitle}" />`)
+            .replace(/<meta\s+property="og:description"[^>]*>/i, `<meta property="og:description" content="${ogDesc}" />`)
+            .replace(/<meta\s+property="og:image"[^>]*>/i, `<meta property="og:image" content="${ogImage}" />`)
+            .replace(/<meta\s+property="og:url"[^>]*>/i, `<meta property="og:url" content="${livePageUrl}" />`)
+            .replace(/<meta\s+property="og:type"[^>]*>/i, `<meta property="og:type" content="video.other" />`);
+        }
+
         res.setHeader('Content-Type', 'text/html');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.send(html);

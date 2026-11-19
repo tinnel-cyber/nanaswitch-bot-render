@@ -25,7 +25,8 @@ import {
   CheckCircle2, 
   Sparkles,
   Settings,
-  Volume2
+  Volume2,
+  Share2
 } from 'lucide-react';
 import { 
   startWhipBroadcast, 
@@ -33,6 +34,13 @@ import {
   getCameraStream, 
   WhipBroadcastSession 
 } from '../../../../services/mediaMtxLiveService';
+import {
+  loadStoreMultistreamConfig,
+  startMultistreamRelay,
+  stopMultistreamRelay,
+  stopMultistreamRelayBeacon,
+  hasEnabledMultistreamDestinations
+} from '../../../../services/liveMultistreamService';
 import { buildStoreHlsUrl, buildStoreWhipUrl } from '../../../../config/liveStreamConfig';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { LiveMultistreamStudioModal } from './LiveMultistreamStudioModal';
@@ -88,14 +96,23 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
     }
   }, []);
 
-  // Montage initial : démarrer la prévisualisation
+  // Montage initial : démarrer la prévisualisation + nettoyage FFmpeg si fermeture onglet
   useEffect(() => {
     initLocalCamera(facingMode);
 
+    const handleBeforeUnload = () => {
+      if (broadcastSessionRef.current) {
+        stopMultistreamRelayBeacon(storeSlug);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
-      // Nettoyage au démontage
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Nettoyage au démontage : arrêter WHIP + tous les relais FFmpeg actifs
       if (broadcastSessionRef.current) {
         stopWhipBroadcast(broadcastSessionRef.current);
+        stopMultistreamRelayBeacon(storeSlug);
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
@@ -104,7 +121,7 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
         clearInterval(timerRef.current);
       }
     };
-  }, []);
+  }, [storeSlug]);
 
   // Bascule Caméra Avant / Arrière (idéal smartphone vendeur)
   const handleToggleFacingMode = async () => {
@@ -144,7 +161,7 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
     }
   };
 
-  // Démarrer la diffusion WebRTC WHIP vers MediaMTX
+  // Démarrer la diffusion WebRTC WHIP vers MediaMTX + lancement automatique des relais FFmpeg configurés
   const handleStartBroadcast = async () => {
     playValidationBeep();
     setIsConnecting(true);
@@ -174,6 +191,17 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
         setLiveDurationSec(prev => prev + 1);
       }, 1000);
 
+      // Démarrer automatiquement le relais FFmpeg réel vers les réseaux sociaux activés
+      loadStoreMultistreamConfig(storeSlug)
+        .then((cfg) => {
+          if (hasEnabledMultistreamDestinations(cfg)) {
+            startMultistreamRelay(storeSlug, cfg).catch((relayErr) => {
+              console.warn('[WHIP BROADCASTER] Erreur démarrage auto multistream :', relayErr);
+            });
+          }
+        })
+        .catch(() => {});
+
       if (onLiveStarted) {
         onLiveStarted(session);
       }
@@ -185,13 +213,16 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
     }
   };
 
-  // Arrêter la diffusion
+  // Arrêter la diffusion WHIP et tuer immédiatement les processus FFmpeg côté serveur
   const handleStopBroadcast = async () => {
     playTapBeep();
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+
+    // Arrêter les relais FFmpeg sur Northflank avant/pendant l'arrêt WHIP
+    await stopMultistreamRelay(storeSlug).catch(() => {});
 
     if (broadcastSessionRef.current) {
       await stopWhipBroadcast(broadcastSessionRef.current);

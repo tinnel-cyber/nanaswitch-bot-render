@@ -213,16 +213,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
       };
     }
 
-    // 5. Daily.co (intégration iframe WebRTC directe de la salle collée)
-    if (raw.includes('daily.co')) {
-      return {
-        type: 'daily' as const,
-        label: 'NaNa Live HD (Daily)',
-        url: raw
-      };
-    }
-
-    // 6. YouTube Live / Vidéo
+    // 5. YouTube Live / Vidéo
     const ytMatch = raw.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/live\/)([^"&?\/\s]{11})/i);
     if (ytMatch && ytMatch[1]) {
       return {
@@ -482,8 +473,8 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                 allowFullScreen
               />
             </div>
-          ) : session.sourceType === 'native_room' ? (
-            /* SALLE WEBRTC / CAMÉRA ET MICRO NATIF */
+          ) : session.sourceType === 'native_room' && isHost ? (
+            /* SALLE WEBRTC / CAMÉRA ET MICRO NATIF (HÔTE) */
             <div className="w-full h-full relative bg-slate-900 flex items-center justify-center">
               <video
                 ref={videoRef}
@@ -503,7 +494,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
               )}
             </div>
           ) : embedSource ? (
-            /* LECTEURS EXTERNES & PASSERELLES DE VISIOCONFÉRENCE (GOOGLE MEET, ZOOM, JITSI, DAILY, YOUTUBE, FACEBOOK, TIKTOK...) */
+            /* LECTEURS EXTERNES & PASSERELLES DE VISIOCONFÉRENCE (GOOGLE MEET, ZOOM, JITSI, YOUTUBE, FACEBOOK, TIKTOK...) */
             embedSource.type === 'external_meeting' ? (
               <div className="w-full h-full relative flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/80 space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/40 flex items-center justify-center shadow-lg">
@@ -549,7 +540,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                   </button>
                 </div>
               </div>
-            ) : embedSource.type === 'jitsi' || embedSource.type === 'daily' ? (
+            ) : embedSource.type === 'jitsi' ? (
               <iframe
                 src={embedSource.url}
                 title={session.title || embedSource.label}
@@ -568,7 +559,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
             ) : embedSource.url.includes('.m3u8') || embedSource.url.includes('live') ? (
               <HlsLivePlayer
                 src={embedSource.url}
-                storeSlug={session.id}
+                storeSlug={session.sessionSlug || session.id}
                 storeName={session.storeName}
                 posterUrl={session.posterUrl}
                 autoPlay={isPlaying}
@@ -589,22 +580,15 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
               />
             )
           ) : (
-            /* AFFICHE SIMULIVE 1080x1080 EN COUVERTURE AVEC BOUTON PLAY */
-            <div className="w-full h-full relative flex items-center justify-center cursor-pointer group">
-              <img
-                src={session.posterUrl || session.pinnedProduct?.image || 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1080&auto=format&fit=crop&q=80'}
-                alt={session.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-slate-950/40 group-hover:bg-slate-950/20 transition-colors flex flex-col items-center justify-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-blue-600 hover:bg-blue-500 text-white border-4 border-white shadow-2xl flex items-center justify-center transform group-hover:scale-110 transition-transform">
-                  <Play className="w-8 h-8 fill-white ml-1" />
-                </div>
-                <span className="px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-md text-xs font-black text-white border border-white/20">
-                  ▶️ Rejoindre la Session en Direct
-                </span>
-              </div>
-            </div>
+            /* LECTEUR NATIF NANASORE LIVE (HLS MEDIAMTX RÉEL) */
+            <HlsLivePlayer
+              storeSlug={session.sessionSlug || session.id}
+              storeName={session.storeName}
+              posterUrl={session.posterUrl}
+              autoPlay={isPlaying}
+              muted={isMuted}
+              className="w-full h-full"
+            />
           )}
         </div>
       </div>

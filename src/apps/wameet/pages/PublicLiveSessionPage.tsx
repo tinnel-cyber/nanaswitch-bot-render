@@ -36,6 +36,7 @@ import { LiveShareModal } from '../../../components/live/LiveShareModal';
 import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
 import { LiveSubscribeButton } from '../../../components/live/LiveSubscribeButton';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
+import { loadStoreMultistreamConfig } from '../../../services/liveMultistreamService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
 export interface PublicLiveSessionPageProps {
@@ -70,6 +71,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
   const [session, setSession] = useState<LiveSession>(initialSession || FALLBACK_LIVE_SESSION);
   const [supabaseUser, setSupabaseUser] = useState<any>(null);
+  const [whatsappChannelUrl, setWhatsappChannelUrl] = useState<string>('');
 
   // Vérification de session Supabase Auth en arrière-plan
   useEffect(() => {
@@ -114,6 +116,21 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [isMultistreamModalOpen, setIsMultistreamModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!initialSession);
 
+  // Slug canonique unifié entre WHIP (caméra vendeur), HLS (lecteur acheteur) et FFmpeg (multistream)
+  const liveStreamSlug = useMemo(
+    () => resolvedSlug || session.sessionSlug || session.storeId || session.id,
+    [resolvedSlug, session.sessionSlug, session.storeId, session.id]
+  );
+
+  // Lien cliquable normalisé vers le groupe / chaîne / numéro WhatsApp du vendeur
+  const resolvedWhatsAppJoinHref = useMemo(() => {
+    const raw = (whatsappChannelUrl || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const digits = raw.replace(/[^0-9]/g, '');
+    return digits ? `https://wa.me/${digits}` : '';
+  }, [whatsappChannelUrl]);
+
   // Chargement de la session depuis Supabase / cache local
   useEffect(() => {
     let isMounted = true;
@@ -124,10 +141,38 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       }
     });
 
+    loadStoreMultistreamConfig(resolvedSlug)
+      .then((cfg) => {
+        if (isMounted && cfg?.whatsappChannelUrl) {
+          setWhatsappChannelUrl(cfg.whatsappChannelUrl);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       isMounted = false;
     };
   }, [resolvedSlug]);
+
+  // Mise à jour dynamique des balises OpenGraph côté navigateur
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const ogTitle = `🔴 EN DIRECT — ${session.storeName} | ${session.title}`;
+    document.title = ogTitle;
+    const setMeta = (prop: string, content: string) => {
+      let el = document.querySelector(`meta[property="${prop}"]`);
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute('property', prop);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+    setMeta('og:title', ogTitle);
+    setMeta('og:description', session.description || `Suivez le Live Shopping de ${session.storeName} en direct sur Nanasore.`);
+    if (session.posterUrl) setMeta('og:image', session.posterUrl);
+    setMeta('og:type', 'video.other');
+  }, [session.storeName, session.title, session.description, session.posterUrl]);
 
   // Abonnement temps réel aux mises à jour (produit épinglé, quiz actif, devoir, etc.)
   useEffect(() => {
@@ -374,7 +419,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
             <div className="rounded-3xl overflow-hidden shadow-2xl bg-black relative">
               {isHostMode && isHostBroadcasterActive ? (
                 <WhipLiveBroadcaster
-                  storeSlug={session.id || resolvedSlug}
+                  storeSlug={liveStreamSlug}
                   storeName={session.storeName}
                   onLiveStopped={() => setIsHostBroadcasterActive(false)}
                 />
@@ -391,7 +436,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
               {/* Moteur E-Commerce & Le Tiroir Nanasore (Supabase Live Sync) */}
               <NanasoreLiveCommerceOverlay
-                liveId={session.id || resolvedSlug}
+                liveId={liveStreamSlug}
                 isHost={isHostMode}
                 availableProducts={session.products?.map(p => ({
                   id: p.id,
@@ -408,14 +453,29 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
             {/* Titre et Détails de la Session */}
             <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
-                  {session.sessionMode.replace('_', ' ')}
-                </span>
-                {session.hostName && (
-                  <span className="text-xs text-slate-400 font-semibold">
-                    Animé par <strong className="text-white">{session.hostName}</strong>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
+                    {session.sessionMode.replace('_', ' ')}
                   </span>
+                  {session.hostName && (
+                    <span className="text-xs text-slate-400 font-semibold">
+                      Animé par <strong className="text-white">{session.hostName}</strong>
+                    </span>
+                  )}
+                </div>
+                {resolvedWhatsAppJoinHref && (
+                  <a
+                    href={resolvedWhatsAppJoinHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={playTapBeep}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition active:scale-95"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Rejoindre la chaîne WhatsApp</span>
+                    <ExternalLink className="w-3 h-3 opacity-80" />
+                  </a>
                 )}
               </div>
               <h1 className="text-lg sm:text-2xl font-black text-white leading-tight">
@@ -441,7 +501,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   </p>
                 </div>
                 <LiveSubscribeButton
-                  storeSlug={resolvedSlug}
+                  storeSlug={liveStreamSlug}
                   storeName={session.storeName}
                   variant="solid"
                   className="w-full sm:w-auto shrink-0 justify-center"
@@ -492,7 +552,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
       {/* 3. MODALE DE PARTAGE MULTI-RÉSEAUX 1-CLIC */}
       <LiveShareModal
-        sessionSlug={session.sessionSlug}
+        sessionSlug={liveStreamSlug}
         title={session.title}
         storeName={session.storeName}
         isOpen={isShareModalOpen}
@@ -502,7 +562,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       {/* 3.B. CONSOLE DE MULTISTREAMING RÉEL (YOUTUBE, FACEBOOK, TIKTOK, INSTAGRAM, ETC.) */}
       <LiveMultistreamStudioModal
         isOpen={isMultistreamModalOpen}
-        storeSlug={session.sessionSlug || session.storeId}
+        storeSlug={liveStreamSlug}
         storeName={session.storeName}
         liveTitle={session.title}
         onClose={() => setIsMultistreamModalOpen(false)}

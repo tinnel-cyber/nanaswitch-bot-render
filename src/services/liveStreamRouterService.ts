@@ -9,7 +9,7 @@
  * - Fournit l'état en temps réel du quota quotidien
  */
 
-export type LiveStreamProvider = 'YOUTUBE' | 'JITSI';
+export type LiveStreamProvider = 'MEDIAMTX' | 'YOUTUBE' | 'JITSI';
 
 export interface StartLiveOptions {
   storeId?: string;
@@ -41,6 +41,8 @@ export interface StartLiveResponse {
   isFallback: boolean;
   failoverReason?: string | null;
   quotaInfo?: LiveStreamQuotaInfo;
+  whipUrl?: string;
+  hlsUrl?: string;
   youtube?: {
     videoId: string;
     broadcastId: string;
@@ -67,18 +69,19 @@ export interface StartLiveResponse {
   error?: string;
 }
 
-import { getApiBaseUrl } from '../config/liveStreamConfig';
+import { getApiBaseUrl, buildStoreWhipUrl, buildStoreHlsUrl } from '../config/liveStreamConfig';
 
 const API_BASE_URL = typeof window !== 'undefined'
   ? (window.location.hostname === 'localhost' ? 'http://localhost:10000' : getApiBaseUrl())
   : getApiBaseUrl();
 
 /**
- * 1. Déclenche une session Live avec Stream Router & Failover automatique
+ * 1. Déclenche une session Live MediaMTX (WHIP + HLS) via le backend Northflank
  */
 export async function startLiveStream(options: StartLiveOptions = {}): Promise<StartLiveResponse> {
+  const storeSlug = options.storeId || 'nanasore_central_hub';
   const payload = {
-    storeId: options.storeId || 'nanasore_central_hub',
+    storeId: storeSlug,
     title: options.title || 'Live Shopping Wameet 🔥',
     description: options.description || 'Session de vente en direct',
     hostName: options.hostName || 'Vendeur Wameet',
@@ -103,34 +106,25 @@ export async function startLiveStream(options: StartLiveOptions = {}): Promise<S
     const data: StartLiveResponse = await res.json();
     return data;
   } catch (err: any) {
-    console.warn('[LIVE ROUTER CLIENT] Erreur appel API backend, fallback local Jitsi :', err.message);
+    console.warn('[LIVE ROUTER CLIENT] Erreur appel API backend, utilisation directe des endpoints MediaMTX :', err.message);
 
-    // Fallback local d'extrême urgence si le backend Render est en veille (Cold Start)
-    const storeClean = (options.storeId || 'nanasore').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    const shortId = Math.random().toString(36).substring(2, 8);
-    const roomName = `wameet_${storeClean}_${shortId}`;
-    const jitsiUrl = `https://meet.jit.si/${roomName}`;
+    const whipUrl = buildStoreWhipUrl(storeSlug);
+    const hlsUrl = buildStoreHlsUrl(storeSlug);
 
     return {
       success: true,
-      liveId: `live_fallback_${Date.now()}`,
-      storeId: options.storeId || 'nanasore_central_hub',
+      liveId: `live_${storeSlug}_${Date.now()}`,
+      storeId: storeSlug,
       title: options.title || 'Live Shopping Wameet',
-      provider: 'JITSI',
-      providerType: 'JITSI',
-      isFallback: true,
-      failoverReason: `CLIENT_OFFLINE_OR_COLD_START: ${err.message}`,
-      jitsi: {
-        domain: 'meet.jit.si',
-        roomName,
-        joinUrl: jitsiUrl,
-        embedUrl: `${jitsiUrl}#userInfo.displayName="${encodeURIComponent(options.hostName || 'Vendeur')}"&config.prejoinPageEnabled=false`
-      },
-      embedUrl: jitsiUrl,
-      streamUrl: jitsiUrl,
+      provider: 'MEDIAMTX',
+      providerType: 'MEDIAMTX',
+      isFallback: false,
+      whipUrl,
+      hlsUrl,
+      embedUrl: hlsUrl,
+      streamUrl: hlsUrl,
       status: 'live',
-      startedAt: new Date().toISOString(),
-      latencyMs: 1
+      startedAt: new Date().toISOString()
     };
   }
 }
