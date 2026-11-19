@@ -14,6 +14,7 @@ import { UltimateFunnelBuilder } from '../../../components/storeBuilder/Ultimate
 import { saveFunnelConfig } from '../../../services/omniFunnelService';
 import { buildStoreHlsUrl } from '../../../config/liveStreamConfig';
 import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
+import { WhipLiveBroadcaster } from '../../../components/live/WhipLiveBroadcaster';
 
 export interface CreateWebinarModalProps {
   isOpen?: boolean;
@@ -1693,19 +1694,26 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
                 </div>
               )}
 
-              {/* ONGLET MULTISTREAMING : TOUS LES CHAMPS CLÉS & URL RÉSEAUX SOCIAUX */}
-              {activeTab === 'multistream' && (
-                <div className="space-y-4">
-                  <LiveMultistreamStudioModal
-                    isOpen={true}
-                    inline={true}
-                    storeSlug={myWebinars[0]?.id || merchantId || 'boutique'}
-                    storeName={storeName}
-                    liveTitle={myWebinars[0]?.title || title || 'Live Shopping Exclusif 🔥'}
-                    onClose={() => setActiveTab('my_webinars')}
-                  />
-                </div>
-              )}
+              {/* ONGLET MULTISTREAMING : STUDIO CAMÉRA WHIP + CLÉS & URL RÉSEAUX SOCIAUX */}
+              {activeTab === 'multistream' && (() => {
+                const activeStudioSlug = myWebinars[0]?.id || merchantId || 'boutique';
+                return (
+                  <div className="space-y-5">
+                    <WhipLiveBroadcaster
+                      storeSlug={activeStudioSlug}
+                      storeName={storeName}
+                    />
+                    <LiveMultistreamStudioModal
+                      isOpen={true}
+                      inline={true}
+                      storeSlug={activeStudioSlug}
+                      storeName={storeName}
+                      liveTitle={myWebinars[0]?.title || title || 'Live Shopping Exclusif 🔥'}
+                      onClose={() => setActiveTab('my_webinars')}
+                    />
+                  </div>
+                );
+              })()}
 
               {/* ---------------------------------------------------- */}
               {/* ONGLET 2 : CATALOGUE DES LIVES & MODÈLES             */}

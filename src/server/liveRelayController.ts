@@ -42,19 +42,29 @@ const MEDIAMTX_HLS_BASE =
   'https://p02--nanasore-live--p8yx28yyjhbx.code.run';
 
 /**
- * Construit l'URL RTMP/RTMPS complète et valide pour chaque plateforme
+ * Vérifie qu'une URL serveur RTMP/RTMPS contient bien un protocole valide et un nom d'hôte réel
+ * (rejette les champs vides, espaces seuls ou placeholders comme "rtmp://").
+ */
+export function isValidRtmpServerUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /^rtmps?:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[^\s]*)?$/i.test(trimmed);
+}
+
+/**
+ * Construit l'URL RTMP/RTMPS complète et valide pour chaque plateforme.
+ * Retourne strictement null si la clé ou l'URL serveur requise est vide ou invalide.
  */
 export function buildFullRtmpDestinationUrl(
   platformId: string,
   credentials: { serverUrl?: string; streamKey?: string }
 ): { fullUrl: string; maskedKey: string; platformName: string } | null {
-  const streamKey = (credentials.streamKey || '').trim();
-  const serverUrl = (credentials.serverUrl || '').trim();
+  const streamKey = typeof credentials.streamKey === 'string' ? credentials.streamKey.trim() : '';
+  const serverUrl = typeof credentials.serverUrl === 'string' ? credentials.serverUrl.trim() : '';
 
   if (!streamKey) return null;
 
-  const maskedKey = streamKey.length > 6 
-    ? `${streamKey.slice(0, 3)}***${streamKey.slice(-3)}` 
+  const maskedKey = streamKey.length > 6
+    ? `${streamKey.slice(0, 3)}***${streamKey.slice(-3)}`
     : '***';
 
   switch (platformId.toLowerCase()) {
@@ -80,7 +90,7 @@ export function buildFullRtmpDestinationUrl(
       };
 
     case 'tiktok':
-      if (!serverUrl) return null;
+      if (!isValidRtmpServerUrl(serverUrl)) return null;
       return {
         fullUrl: `${serverUrl.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -89,6 +99,7 @@ export function buildFullRtmpDestinationUrl(
 
     case 'instagram': {
       const baseInsta = serverUrl || 'rtmps://live-upload.instagram.com:443/rtmp/';
+      if (!isValidRtmpServerUrl(baseInsta)) return null;
       return {
         fullUrl: `${baseInsta.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -97,7 +108,7 @@ export function buildFullRtmpDestinationUrl(
     }
 
     case 'linkedin':
-      if (!serverUrl) return null;
+      if (!isValidRtmpServerUrl(serverUrl)) return null;
       return {
         fullUrl: `${serverUrl.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -106,7 +117,7 @@ export function buildFullRtmpDestinationUrl(
 
     case 'twitter':
     case 'x':
-      if (!serverUrl) return null;
+      if (!isValidRtmpServerUrl(serverUrl)) return null;
       return {
         fullUrl: `${serverUrl.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -115,6 +126,7 @@ export function buildFullRtmpDestinationUrl(
 
     case 'telegram': {
       const baseTg = serverUrl || 'rtmps://dc4-1.rtmp.t.me/s/';
+      if (!isValidRtmpServerUrl(baseTg)) return null;
       return {
         fullUrl: `${baseTg.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -123,8 +135,8 @@ export function buildFullRtmpDestinationUrl(
     }
 
     default:
-      // RTMP Personnalisé
-      if (!serverUrl) return null;
+      // RTMP Personnalisé : URL serveur RTMP/RTMPS + clé obligatoires
+      if (!isValidRtmpServerUrl(serverUrl)) return null;
       return {
         fullUrl: `${serverUrl.replace(/\/+$/, '')}/${streamKey}`,
         maskedKey,
@@ -328,56 +340,84 @@ export async function handleStartMultistream(req: Request, res: Response): Promi
   const inputSource = `${MEDIAMTX_HLS_BASE.replace(/\/+$/, '')}/${cleanSlug}/index.m3u8`;
 
   const results: Record<string, { status: string; message: string; fullUrl?: string }> = {};
+  const skipped: string[] = [];
   let totalLaunched = 0;
 
   // 1. Plateformes fixes (YouTube, Facebook, Twitch, TikTok, Instagram, LinkedIn, Twitter, Telegram)
+  // Filtrage strict : n'ajoute à FFmpeg QUE les plateformes activées dont la clé (et l'URL serveur si requise) est non vide après .trim()
   const standardPlatforms = ['youtube', 'facebook', 'twitch', 'tiktok', 'instagram', 'linkedin', 'twitter', 'telegram'];
 
   for (const plat of standardPlatforms) {
     const cfg = destinations[plat];
-    if (cfg && cfg.enabled && cfg.streamKey) {
-      const built = buildFullRtmpDestinationUrl(plat, cfg);
-      if (built) {
-        const record = spawnSingleRelay(
-          cleanSlug,
-          plat,
-          built.platformName,
-          built.fullUrl,
-          built.maskedKey,
-          inputSource
-        );
-        totalLaunched++;
-        results[plat] = {
-          status: record.status,
-          message: `Relais vers ${built.platformName} initialisé.`
-        };
-      }
+    const trimmedKey = typeof cfg?.streamKey === 'string' ? cfg.streamKey.trim() : '';
+    const trimmedUrl = typeof cfg?.serverUrl === 'string' ? cfg.serverUrl.trim() : '';
+
+    if (!cfg || cfg.enabled !== true || !trimmedKey) {
+      skipped.push(plat);
+      continue;
     }
+
+    const built = buildFullRtmpDestinationUrl(plat, {
+      serverUrl: trimmedUrl,
+      streamKey: trimmedKey
+    });
+
+    if (!built) {
+      skipped.push(plat);
+      continue;
+    }
+
+    const record = spawnSingleRelay(
+      cleanSlug,
+      plat,
+      built.platformName,
+      built.fullUrl,
+      built.maskedKey,
+      inputSource
+    );
+    totalLaunched++;
+    results[plat] = {
+      status: record.status,
+      message: `Relais vers ${built.platformName} initialisé.`
+    };
   }
 
   // 2. Destinations RTMP Personnalisées
   if (Array.isArray(destinations.custom)) {
     destinations.custom.forEach((dest: any, index: number) => {
-      if (dest && dest.enabled && dest.serverUrl && dest.streamKey) {
-        const customId = dest.id || `custom_${index}`;
-        const customName = dest.name || `RTMP Perso ${index + 1}`;
-        const built = buildFullRtmpDestinationUrl(customName, dest);
-        if (built) {
-          const record = spawnSingleRelay(
-            cleanSlug,
-            customId,
-            customName,
-            built.fullUrl,
-            built.maskedKey,
-            inputSource
-          );
-          totalLaunched++;
-          results[customId] = {
-            status: record.status,
-            message: `Relais personnalisé ${customName} initialisé.`
-          };
-        }
+      const customId = (typeof dest?.id === 'string' && dest.id.trim()) || `custom_${index}`;
+      const customName = (typeof dest?.name === 'string' && dest.name.trim()) || `RTMP Perso ${index + 1}`;
+      const trimmedKey = typeof dest?.streamKey === 'string' ? dest.streamKey.trim() : '';
+      const trimmedUrl = typeof dest?.serverUrl === 'string' ? dest.serverUrl.trim() : '';
+
+      if (!dest || dest.enabled !== true || !trimmedKey || !trimmedUrl) {
+        skipped.push(customId);
+        return;
       }
+
+      const built = buildFullRtmpDestinationUrl(customName, {
+        serverUrl: trimmedUrl,
+        streamKey: trimmedKey
+      });
+
+      if (!built) {
+        skipped.push(customId);
+        return;
+      }
+
+      const record = spawnSingleRelay(
+        cleanSlug,
+        customId,
+        customName,
+        built.fullUrl,
+        built.maskedKey,
+        inputSource
+      );
+      totalLaunched++;
+      results[customId] = {
+        status: record.status,
+        message: `Relais personnalisé ${customName} initialisé.`
+      };
     });
   }
 
@@ -386,7 +426,12 @@ export async function handleStartMultistream(req: Request, res: Response): Promi
     storeSlug: cleanSlug,
     inputSource,
     totalLaunched,
-    results
+    skipped,
+    results,
+    message:
+      totalLaunched === 0
+        ? 'Aucune destination RTMP active avec clé/URL valide (champs vides ignorés).'
+        : `${totalLaunched} relais FFmpeg actif(s) démarré(s).`
   });
 }
 

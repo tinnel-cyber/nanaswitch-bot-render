@@ -31,9 +31,12 @@ import {
 import { 
   startWhipBroadcast, 
   stopWhipBroadcast, 
-  getCameraStream, 
+  captureCameraStream,
+  stopMediaStream,
+  switchBroadcastCamera,
+  formatCameraError,
   WhipBroadcastSession 
-} from '../../../../services/mediaMtxLiveService';
+} from '../../../../services/whipBroadcastService';
 import {
   loadStoreMultistreamConfig,
   startMultistreamRelay,
@@ -78,12 +81,12 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
   const initLocalCamera = useCallback(async (newFacing: 'user' | 'environment') => {
     try {
       setErrorMessage(null);
-      // Arrêter le flux précédent si existant
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
+        stopMediaStream(streamRef.current);
+        streamRef.current = null;
       }
 
-      const stream = await getCameraStream({ facingMode: newFacing });
+      const stream = await captureCameraStream({ facingMode: newFacing });
       streamRef.current = stream;
 
       if (videoPreviewRef.current) {
@@ -92,7 +95,7 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
       }
     } catch (err: any) {
       console.error('[WHIP BROADCASTER] Erreur accès caméra/micro :', err);
-      setErrorMessage("Impossible d'accéder à la caméra ou au microphone. Vérifiez les autorisations.");
+      setErrorMessage(formatCameraError(err));
     }
   }, []);
 
@@ -112,10 +115,12 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
       // Nettoyage au démontage : arrêter WHIP + tous les relais FFmpeg actifs
       if (broadcastSessionRef.current) {
         stopWhipBroadcast(broadcastSessionRef.current);
+        broadcastSessionRef.current = null;
         stopMultistreamRelayBeacon(storeSlug);
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
+        stopMediaStream(streamRef.current);
+        streamRef.current = null;
       }
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -123,14 +128,24 @@ export const WhipLiveBroadcaster: React.FC<WhipLiveBroadcasterProps> = ({
     };
   }, [storeSlug]);
 
-  // Bascule Caméra Avant / Arrière (idéal smartphone vendeur)
+  // Bascule Caméra Avant / Arrière (fonctionne avant ET pendant le direct)
   const handleToggleFacingMode = async () => {
     playTapBeep();
     const nextMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextMode);
+    setErrorMessage(null);
 
-    if (isBroadcasting) {
-      setErrorMessage("Veuillez arrêter le direct avant de changer d'angle de caméra.");
+    if (isBroadcasting && broadcastSessionRef.current) {
+      try {
+        const newStream = await switchBroadcastCamera(broadcastSessionRef.current, nextMode);
+        streamRef.current = newStream;
+        if (videoPreviewRef.current) {
+          videoPreviewRef.current.srcObject = newStream;
+          videoPreviewRef.current.play().catch(() => {});
+        }
+      } catch (err: any) {
+        setErrorMessage(formatCameraError(err));
+      }
       return;
     }
 
