@@ -42,6 +42,10 @@ import { supabase } from '../../../lib/supabase';
 import { submitKycSubmission, fileToDataUrl } from '../../../utils/kycService';
 import { KycSubmission } from '../../../types';
 
+const FunnelBuilder = React.lazy(() => import('../../../components/storeBuilder/FunnelBuilder'));
+const UltimateFunnelBuilder = React.lazy(() => import('../../../components/storeBuilder/UltimateFunnelBuilder'));
+const PhysicalFunnelBuilder = React.lazy(() => import('../../../components/storeBuilder/PhysicalFunnelBuilder'));
+
 export interface NanaSwitchAppProps {
   slug?: string;
   appId?: string;
@@ -325,6 +329,15 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const [proFeatureModalTab, setProFeatureModalTab] = useState<ProFeatureTab | null>(null);
+  const [activeBuilderModal, setActiveBuilderModal] = useState<'MODULAR_FUNNEL' | 'ULTIMATE_FUNNEL' | 'PHYSICAL_FUNNEL' | null>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p.includes('/funnel/modular') || p.includes('/apps/modular-funnel')) return 'MODULAR_FUNNEL';
+      if (p.includes('/funnel/ultimate') || p.includes('/apps/ultimate-funnel')) return 'ULTIMATE_FUNNEL';
+      if (p.includes('/funnel/physical') || p.includes('/apps/deal-builder')) return 'PHYSICAL_FUNNEL';
+    }
+    return null;
+  });
   const { activeModules: activeOmnibarModules, isModuleActive, toggleModule } = useActiveOmnibarApps();
 
   const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success') => {
@@ -361,9 +374,32 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       ? target
       : (target.id || target.targetView || target.view || target.actionId || target.route || '');
 
-    const official = getOfficialModuleById(rawKey)
-      || (typeof target === 'object' && target.route ? getModuleByRoute(target.route) : undefined)
-      || (typeof target === 'string' && target.startsWith('/') ? getModuleByRoute(target) : undefined);
+    const rawTitleLower = typeof target === 'object'
+      ? String(target.title || target.name || target.appName || '').toLowerCase()
+      : String(target).toLowerCase();
+    const rawRouteLower = typeof target === 'object'
+      ? String(target.routeUrl || target.route || '').toLowerCase()
+      : (String(target).startsWith('/') ? String(target).toLowerCase() : '');
+    const keyLower = String(rawKey).toLowerCase();
+
+    const isExplicitModularFunnel =
+      keyLower === 'modular-funnel' ||
+      keyLower === 'modular-funnel-builder' ||
+      keyLower === 'app-modular-funnel' ||
+      keyLower === 'modular_funnel' ||
+      keyLower.includes('modulaire') ||
+      rawTitleLower.includes('modulaire') ||
+      rawTitleLower.includes('modular funnel') ||
+      rawRouteLower.includes('/funnel/modular') ||
+      rawRouteLower.includes('/apps/modular-funnel');
+
+    const official = isExplicitModularFunnel
+      ? getOfficialModuleById('modular-funnel')
+      : (getOfficialModuleById(rawKey)
+        || (typeof target === 'object' && target.title ? getOfficialModuleById(target.title) : undefined)
+        || (typeof target === 'object' && target.name ? getOfficialModuleById(target.name) : undefined)
+        || (typeof target === 'object' && (target.route || target.routeUrl) ? getModuleByRoute(target.route || target.routeUrl) : undefined)
+        || (typeof target === 'string' && target.startsWith('/') ? getModuleByRoute(target) : undefined));
 
     if (official?.status === 'UNDER_CONSTRUCTION' || (typeof target === 'object' && target.status === 'UNDER_CONSTRUCTION')) {
       showToast(
@@ -385,8 +421,56 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
       ''
     ).toString();
 
-    const viewUpper = viewOrAction.toUpperCase();
-    const viewLower = viewOrAction.toLowerCase();
+    const viewUpper = isExplicitModularFunnel ? 'MODULAR_FUNNEL' : viewOrAction.toUpperCase();
+    const viewLower = viewUpper.toLowerCase();
+
+    if (
+      isExplicitModularFunnel ||
+      viewUpper === 'MODULAR_FUNNEL' ||
+      official?.id === 'modular-funnel'
+    ) {
+      setActiveBuilderModal('MODULAR_FUNNEL');
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.pushState({}, '', '/dashboard/funnel/modular');
+        } catch {}
+      }
+      return;
+    }
+
+    if (
+      viewUpper === 'ULTIMATE_FUNNEL' ||
+      official?.id === 'ultimate-funnel' ||
+      keyLower === 'ultimate-funnel' ||
+      keyLower === 'ultimate-funnel-builder' ||
+      rawTitleLower.includes('ultimate funnel') ||
+      rawRouteLower.includes('/funnel/ultimate')
+    ) {
+      setActiveBuilderModal('ULTIMATE_FUNNEL');
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.pushState({}, '', '/dashboard/funnel/ultimate');
+        } catch {}
+      }
+      return;
+    }
+
+    if (
+      viewUpper === 'PHYSICAL_FUNNEL' ||
+      official?.id === 'deal-builder' ||
+      keyLower === 'deal-builder' ||
+      keyLower === 'public-deal-builder' ||
+      rawTitleLower.includes('public deal') ||
+      rawRouteLower.includes('/funnel/physical')
+    ) {
+      setActiveBuilderModal('PHYSICAL_FUNNEL');
+      if (typeof window !== 'undefined') {
+        try {
+          window.history.pushState({}, '', '/dashboard/funnel/physical');
+        } catch {}
+      }
+      return;
+    }
 
     // 1. Onglets internes du Dashboard Marchand
     const knownTabs = [
@@ -418,7 +502,7 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
     }
 
     // 3. Résolution de la route et déclenchement du routeur global (src/App.tsx ou Next.js)
-    const finalRoute = official?.route || (typeof target === 'object' ? target.route : (viewOrAction.startsWith('/') ? viewOrAction : ''));
+    const finalRoute = official?.route || (typeof target === 'object' ? (target.route || target.routeUrl) : (viewOrAction.startsWith('/') ? viewOrAction : ''));
 
     if (typeof window !== 'undefined') {
       if (finalRoute && finalRoute.startsWith('/')) {
@@ -1420,6 +1504,137 @@ export const NanaSwitchApp: React.FC<NanaSwitchAppProps> = ({
           setKycForm={setKycForm}
           handleKycSubmit={handleKycSubmit}
         />
+      )}
+
+      {/* CONSTRUCTEURS DE TUNNELS INTÉGRÉS DIRECTEMENT DANS LE NOUVEAU DASHBOARD PAGE */}
+      {activeBuilderModal === 'MODULAR_FUNNEL' && (
+        <div className="fixed inset-0 z-[100] bg-[#070b14] overflow-hidden">
+          <React.Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center h-full bg-[#070b14] text-white gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-amber-400" />
+                <p className="text-sm font-bold">Chargement du Funnel Builder Modulaire (12 Blocs Drag & Drop)...</p>
+              </div>
+            }
+          >
+            <FunnelBuilder
+              isOpen={true}
+              product={{
+                id: selectedApp?.id ? `prod-${selectedApp.id}` : 'prod-funnel-modular',
+                name: selectedApp?.name ? `Offre ${selectedApp.name}` : 'Pack Élite NaNa Pro X',
+                price: 24500,
+                originalPrice: 35000,
+                image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
+                category: selectedApp?.sector || 'E-Commerce & Vente Directe',
+                description: 'Tunnel de conversion modulaire par blocs drag & drop.'
+              }}
+              onClose={() => {
+                setActiveBuilderModal(null);
+                if (typeof window !== 'undefined') {
+                  try {
+                    window.history.pushState({}, '', '/dashboard');
+                  } catch {}
+                }
+              }}
+              onSave={(savedPayload: any) => {
+                if (savedPayload && typeof window !== 'undefined') {
+                  try {
+                    const slug = savedPayload.slug || savedPayload.subdomain || 'mon-tunnel';
+                    localStorage.setItem(`nana_modular_funnel_${slug}`, JSON.stringify(savedPayload));
+                    localStorage.setItem('nana_modular_funnel_latest', JSON.stringify(savedPayload));
+                  } catch {}
+                }
+                showToast('Tunnel modulaire sauvegardé avec succès !', 'success');
+              }}
+            />
+          </React.Suspense>
+        </div>
+      )}
+
+      {activeBuilderModal === 'ULTIMATE_FUNNEL' && (
+        <div className="fixed inset-0 z-[100] bg-[#070b14] overflow-hidden">
+          <React.Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center h-full bg-[#070b14] text-white gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-orange-400" />
+                <p className="text-sm font-bold">Chargement d'Ultimate Funnel Builder...</p>
+              </div>
+            }
+          >
+            <UltimateFunnelBuilder
+              isOpen={true}
+              initialData={{
+                id: 'funnel-store-' + Date.now(),
+                type: 'product',
+                title: selectedApp?.name ? `Tunnel de Vente - ${selectedApp.name}` : 'Grand Live Shopping & Offre Flash',
+                subtitle: 'Tunnel de conversion haute performance avec bon de commande 1-clic et paiement mobile.',
+                image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
+                price: 15000,
+                originalPrice: 22500,
+                instructor: selectedApp?.name || merchantDisplayName || 'Commerçant NaNa',
+                category: selectedApp?.sector || 'E-Commerce & Vente Directe',
+                duration: 'Offre Spéciale Limitée'
+              }}
+              sourceType="product"
+              onClose={() => {
+                setActiveBuilderModal(null);
+                if (typeof window !== 'undefined') {
+                  try {
+                    window.history.pushState({}, '', '/dashboard');
+                  } catch {}
+                }
+              }}
+              onSave={(savedPayload: any) => {
+                if (savedPayload && typeof window !== 'undefined') {
+                  try {
+                    const slug = savedPayload.slug || savedPayload.subdomain || 'mon-funnel';
+                    localStorage.setItem(`nana_ultimate_funnel_${slug}`, JSON.stringify(savedPayload));
+                  } catch {}
+                }
+                showToast('Tunnel Ultimate Funnel sauvegardé avec succès !', 'success');
+              }}
+            />
+          </React.Suspense>
+        </div>
+      )}
+
+      {activeBuilderModal === 'PHYSICAL_FUNNEL' && (
+        <div className="fixed inset-0 z-[100] bg-[#070b14] overflow-hidden flex flex-col p-2 sm:p-4">
+          <React.Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center h-full bg-[#070b14] text-white gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-pink-400" />
+                <p className="text-sm font-bold">Chargement du Public Deal Page Builder...</p>
+              </div>
+            }
+          >
+            <PhysicalFunnelBuilder
+              className="h-full"
+              onClose={() => {
+                setActiveBuilderModal(null);
+                if (typeof window !== 'undefined') {
+                  try {
+                    window.history.pushState({}, '', '/dashboard');
+                  } catch {}
+                }
+              }}
+              onSave={(savedPayload: any) => {
+                if (savedPayload && typeof window !== 'undefined') {
+                  try {
+                    const slug = savedPayload.slug || savedPayload.subdomain || 'mon-deal';
+                    localStorage.setItem(`nana_physical_deal_${slug}`, JSON.stringify(savedPayload));
+                  } catch {}
+                }
+                showToast('Page de Deal Public sauvegardée avec succès !', 'success');
+              }}
+              onViewLive={(slug: string) => {
+                if (typeof window !== 'undefined') {
+                  window.open(`/c/${slug}`, '_blank');
+                }
+              }}
+            />
+          </React.Suspense>
+        </div>
       )}
     </div>
   );

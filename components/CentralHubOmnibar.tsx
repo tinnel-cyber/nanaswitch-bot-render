@@ -1820,10 +1820,18 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       blocks.forEach((row: any, rIdx: number) => {
         if (!row || typeof row !== 'object') return;
         const card = getCardDetails(row);
-        const matchedOfficial =
-          getOfficialModuleById(String(card.id || '')) ||
-          getOfficialModuleById(String(card.title || '')) ||
-          (card.routeUrl ? getModuleByRoute(String(card.routeUrl)) : undefined);
+        const cardIdL = String(card.id || '').toLowerCase();
+        const cardTitleL = String(card.title || '').toLowerCase();
+        const isExplicitModular =
+          cardIdL.includes('modular') ||
+          cardIdL.includes('modulaire') ||
+          cardTitleL.includes('modulaire');
+
+        const matchedOfficial = isExplicitModular
+          ? getOfficialModuleById('modular-funnel')
+          : (getOfficialModuleById(String(card.id || '')) ||
+             getOfficialModuleById(String(card.title || '')) ||
+             (card.routeUrl ? getModuleByRoute(String(card.routeUrl)) : undefined));
 
         if (matchedOfficial) {
           customBlocksById.set(matchedOfficial.id.toLowerCase(), card);
@@ -2199,14 +2207,25 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
   const handleActivateModule = async (e: React.MouseEvent, card: HubCardItem, activatedSubModuleIds?: string[]) => {
     e.stopPropagation();
 
-    // Résolution canonique via src/config/appRegistry.ts
-    const official =
-      getOfficialModuleById(card.id) ||
-      getOfficialModuleById(card.title || '') ||
-      (card.targetView ? getOfficialModuleById(card.targetView) : undefined) ||
-      (card.routeUrl ? getModuleByRoute(card.routeUrl) : undefined);
+    const rawCardIdLower = String(card.id || '').toLowerCase();
+    const rawCardTitleLower = String(card.title || '').toLowerCase();
+    const isModularFunnelCard =
+      rawCardIdLower === 'modular-funnel' ||
+      rawCardIdLower === 'modular-funnel-builder' ||
+      rawCardIdLower === 'app-modular-funnel' ||
+      rawCardIdLower.includes('modulaire') ||
+      rawCardTitleLower.includes('modulaire') ||
+      rawCardTitleLower.includes('modular funnel');
 
-    const canonicalId = official?.id || card.id;
+    // Résolution canonique via src/config/appRegistry.ts
+    const official = isModularFunnelCard
+      ? getOfficialModuleById('modular-funnel')
+      : (getOfficialModuleById(card.id) ||
+         getOfficialModuleById(card.title || '') ||
+         (card.targetView ? getOfficialModuleById(card.targetView) : undefined) ||
+         (card.routeUrl ? getModuleByRoute(card.routeUrl) : undefined));
+
+    const canonicalId = isModularFunnelCard ? 'modular-funnel' : (official?.id || card.id);
     const idLower = (canonicalId || '').toLowerCase();
 
     // 0. Modules en construction ou désactivés de l'appel
