@@ -813,12 +813,12 @@ export function EmailBuilderStudio({
   const preheaderText = blocks.find(b => b.type === 'text')?.content.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1').slice(0, 75) || 'Découvrez nos promotions et nouveautés en exclusivité...';
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col lg:flex-row min-h-[860px]">
+    <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-x-hidden flex flex-col lg:flex-row lg:min-h-[860px] w-full max-w-full">
       
       {/* =========================================================================
           PANNEAU GAUCHE : OUTILS, COULEUR DE FOND, BANNIÈRES, LIENS INLINE, BLOCS
          ========================================================================= */}
-      <div className="w-full lg:w-5/12 p-6 border-r border-slate-200 space-y-6 bg-[#FBF9F5] overflow-y-auto max-h-[940px]">
+      <div className="w-full lg:w-5/12 min-w-0 p-3.5 sm:p-6 border-b lg:border-b-0 lg:border-r border-slate-200 space-y-5 bg-[#FBF9F5] lg:overflow-y-auto lg:max-h-[940px]">
         
         {/* Titre & Sous-titre */}
         <div className="space-y-1">
@@ -1506,10 +1506,10 @@ export function EmailBuilderStudio({
       {/* =========================================================================
           PANNEAU DROITE : PREVIEW EN HAUT & BOÎTE MAIL SIMULÉE
          ========================================================================= */}
-      <div className="w-full lg:w-7/12 bg-slate-100 p-6 flex flex-col justify-between">
+      <div className="w-full lg:w-7/12 min-w-0 overflow-x-hidden bg-slate-100 p-2.5 sm:p-6 flex flex-col justify-between">
         
         {/* BARRE DE PRÉVISUALISATION SUPÉRIEURE AVEC BOUTON "VOIR DANS LA BOÎTE MAIL" */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-slate-200 mb-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 bg-white px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl border border-slate-200 mb-3 sm:mb-4 shadow-xs">
           
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1576,33 +1576,35 @@ export function EmailBuilderStudio({
           </div>
         </div>
 
-        {/* CONTAINER DE L'ÉDITEUR AVEC FOND PERSONNALISÉ */}
-        <div 
-          className="flex-1 flex items-center justify-center overflow-auto p-4 transition-colors duration-300 rounded-2xl border border-slate-200/60"
+        {/* CONTAINER DE L'ÉDITEUR AVEC FOND PERSONNALISÉ (100% RESPONSIVE MOBILE & DESKTOP, ZÉRO GLISSEMENT LATÉRAL) */}
+        <div
+          className="flex-1 w-full max-w-full overflow-x-hidden overflow-y-auto p-2 sm:p-4 transition-colors duration-300 rounded-2xl border border-slate-200/60"
           style={{ backgroundColor: emailBgColor }}
         >
-          <div 
+          <div
             style={{ backgroundColor: cardBgColor }}
-            className={`shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 flex flex-col border border-slate-300/80 ${
-              previewMode === 'mobile' ? 'w-[375px] min-h-[640px]' : 'w-full max-w-xl min-h-[640px]'
+            className={`mx-auto shadow-xl rounded-2xl overflow-hidden transition-all duration-300 flex flex-col border border-slate-300/80 min-w-0 ${
+              previewMode === 'mobile' ? 'w-full max-w-[390px] min-h-[520px]' : 'w-full max-w-[600px] min-h-[560px]'
             }`}
           >
-            
             {/* Header du simulateur */}
-            <div className="bg-white/80 backdrop-blur-xs border-b border-slate-200 px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-500">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black">
+            <div className="bg-white/90 backdrop-blur-xs border-b border-slate-200 px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 max-w-full">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
                   {senderName.charAt(0).toUpperCase()}
                 </div>
-                <span>De : <strong className="text-slate-900">{senderName}</strong> <span className="text-[10px] text-slate-400 font-mono">&lt;{senderEmail}&gt;</span></span>
+                <span className="truncate">
+                  De : <strong className="text-slate-900">{senderName}</strong>{' '}
+                  <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">&lt;{senderEmail}&gt;</span>
+                </span>
               </div>
-              <span className="truncate max-w-[200px] text-slate-600 font-medium">
+              <span className="truncate max-w-full sm:max-w-[220px] text-slate-600 font-medium text-[11px]">
                 Objet : {subject || '(Sans objet)'}
               </span>
             </div>
 
             {/* Contenu visuel des blocs ou code HTML */}
-            <div className="p-5 space-y-3.5 flex-1 overflow-y-auto max-h-[620px]">
+            <div className="p-3 sm:p-5 space-y-3 flex-1 overflow-y-auto overflow-x-hidden min-w-0">
               {activeTab === 'visual' ? (
                 blocks.map((block) => {
                   const isSelected = selectedBlockId === block.id;

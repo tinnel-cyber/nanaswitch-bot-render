@@ -29,6 +29,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+import { supabase } from '@/src/lib/supabase';
+
 export interface EmailContact {
   id: string;
   name: string;
@@ -42,8 +44,9 @@ export interface EmailContact {
 }
 
 export interface CampaignDispatcherProps {
+  tenantId?: string;
   emailCredits: number;
-  onCreditsDrained: (amount: number) => void;
+  onCreditsDrained: (amount: number, remainingCredits?: number) => void;
   savedTemplateHtml?: string;
   savedSubject?: string;
   savedSenderName?: string;
@@ -52,98 +55,8 @@ export interface CampaignDispatcherProps {
   onNavigateToStore?: () => void;
 }
 
-const DEFAULT_INITIAL_CONTACTS: EmailContact[] = [
-  {
-    id: 'ct-1',
-    name: 'Aminata Diallo',
-    email: 'aminata.diallo@gmail.com',
-    phone: '+226 70 12 34 56',
-    type: 'vip',
-    totalSpentCFA: 145000,
-    ordersCount: 8,
-    lastActivity: 'Il y a 2 jours',
-    city: 'Ouagadougou'
-  },
-  {
-    id: 'ct-2',
-    name: 'Kouassi Kouamé',
-    email: 'kouassi.k@yahoo.fr',
-    phone: '+225 07 45 67 89',
-    type: 'buyer',
-    totalSpentCFA: 38000,
-    ordersCount: 3,
-    lastActivity: 'Il y a 5 jours',
-    city: 'Abidjan'
-  },
-  {
-    id: 'ct-3',
-    name: 'Fatou Bamba',
-    email: 'fatou.bamba@outlook.com',
-    phone: '+225 05 88 12 43',
-    type: 'vip',
-    totalSpentCFA: 89000,
-    ordersCount: 5,
-    lastActivity: 'Hier',
-    city: 'Cocody'
-  },
-  {
-    id: 'ct-4',
-    name: 'Ousmane Traoré',
-    email: 'ousmane.traore@business.bf',
-    phone: '+226 76 99 00 11',
-    type: 'buyer',
-    totalSpentCFA: 22500,
-    ordersCount: 2,
-    lastActivity: 'Il y a 1 semaine',
-    city: 'Bobo-Dioulasso'
-  },
-  {
-    id: 'ct-5',
-    name: 'Awa Cissé',
-    email: 'awa.cisse@gmail.com',
-    phone: '+221 77 345 67 89',
-    type: 'lead',
-    totalSpentCFA: 0,
-    ordersCount: 0,
-    lastActivity: 'Il y a 3 jours',
-    city: 'Dakar'
-  },
-  {
-    id: 'ct-6',
-    name: 'Moussa Ouédraogo',
-    email: 'moussa.oued@hotmail.com',
-    phone: '+226 65 21 00 44',
-    type: 'buyer',
-    totalSpentCFA: 45000,
-    ordersCount: 4,
-    lastActivity: 'Il y a 4 jours',
-    city: 'Ouagadougou'
-  },
-  {
-    id: 'ct-7',
-    name: 'Béatrice Konan',
-    email: 'beatrice.konan@gmail.com',
-    phone: '+225 01 22 33 44',
-    type: 'lead',
-    totalSpentCFA: 0,
-    ordersCount: 0,
-    lastActivity: 'Il y a 2 semaines',
-    city: 'Yamoussoukro'
-  },
-  {
-    id: 'ct-8',
-    name: 'Ibrahim Touré',
-    email: 'ibrahim.toure@afrique-tech.com',
-    phone: '+223 66 11 22 33',
-    type: 'vip',
-    totalSpentCFA: 195000,
-    ordersCount: 11,
-    lastActivity: 'Aujourd\'hui',
-    city: 'Bamako'
-  }
-];
-
 export function CampaignDispatcher({
+  tenantId,
   emailCredits,
   onCreditsDrained,
   savedTemplateHtml,
@@ -153,20 +66,10 @@ export function CampaignDispatcher({
   onNavigateToStudio,
   onNavigateToStore
 }: CampaignDispatcherProps) {
-  // Contacts & Sélection
-  const [contacts, setContacts] = useState<EmailContact[]>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('nana_tenant_email_contacts');
-        if (stored) return JSON.parse(stored);
-      }
-    } catch {}
-    return DEFAULT_INITIAL_CONTACTS;
-  });
-
-  const [selectedContactIds, setSelectedContactIds] = useState<string[]>(() => 
-    DEFAULT_INITIAL_CONTACTS.map(c => c.id)
-  );
+  // Vrais contacts réels (chargés depuis Supabase `customers` & `orders` — zéro contact mock)
+  const [contacts, setContacts] = useState<EmailContact[]>([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState<boolean>(true);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
   // Filtres & Recherche
   const [filterType, setFilterType] = useState<'all' | 'buyer' | 'vip' | 'lead'>('all');
@@ -189,14 +92,107 @@ export function CampaignDispatcher({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [bulkEmailsText, setBulkEmailsText] = useState('');
 
-  // Persistance des contacts
+  // Chargement réel des contacts depuis Supabase (`customers` + acheteurs `orders`) + cache local propre
   useEffect(() => {
+    let active = true;
+    (async () => {
+      setIsLoadingContacts(true);
+      const mapByEmail = new Map<string, EmailContact>();
+
+      // 1. Contacts réels enregistrés dans Supabase `customers`
+      if (tenantId) {
+        try {
+          const { data: dbCustomers } = await supabase
+            .from('customers')
+            .select('id, email, first_name, last_name, phone, city, status, created_at')
+            .eq('tenant_id', tenantId)
+            .limit(500);
+
+          for (const c of dbCustomers || []) {
+            const email = String(c.email || '').trim().toLowerCase();
+            if (!email || !email.includes('@')) continue;
+            mapByEmail.set(email, {
+              id: String(c.id || `cust_${email}`),
+              name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || email.split('@')[0],
+              email,
+              phone: c.phone || undefined,
+              city: c.city || undefined,
+              type: c.status === 'vip' ? 'vip' : c.status === 'active' ? 'buyer' : 'lead',
+              ordersCount: 0,
+              totalSpentCFA: 0,
+              lastActivity: c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : undefined,
+            });
+          }
+        } catch {}
+
+        // 2. Acheteurs réels issus des commandes Supabase `orders`
+        try {
+          const { data: dbOrders } = await supabase
+            .from('orders')
+            .select('id, customer_name, customer_email, customer_phone, total_amount, created_at')
+            .eq('store_id', tenantId)
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+          for (const o of dbOrders || []) {
+            const email = String(o.customer_email || '').trim().toLowerCase();
+            if (!email || !email.includes('@')) continue;
+            const prev = mapByEmail.get(email);
+            const ordersCount = (prev?.ordersCount || 0) + 1;
+            const totalSpentCFA = (prev?.totalSpentCFA || 0) + (Number(o.total_amount) || 0);
+            mapByEmail.set(email, {
+              id: prev?.id || `ord_${o.id}`,
+              name: prev?.name || o.customer_name || email.split('@')[0],
+              email,
+              phone: prev?.phone || o.customer_phone || undefined,
+              city: prev?.city,
+              type: ordersCount >= 3 || totalSpentCFA >= 50000 ? 'vip' : 'buyer',
+              ordersCount,
+              totalSpentCFA,
+              lastActivity: o.created_at ? new Date(o.created_at).toLocaleDateString('fr-FR') : prev?.lastActivity,
+            });
+          }
+        } catch {}
+      }
+
+      // 3. Contacts ajoutés manuellement par le marchand dans ce navigateur (hors anciens mocks ct-1..ct-8)
+      try {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem(`nana_real_email_contacts_${tenantId || 'user'}`);
+          if (stored) {
+            const parsed: EmailContact[] = JSON.parse(stored);
+            for (const c of parsed) {
+              const email = String(c.email || '').trim().toLowerCase();
+              if (email && email.includes('@') && !mapByEmail.has(email)) {
+                mapByEmail.set(email, c);
+              }
+            }
+          }
+        }
+      } catch {}
+
+      if (active) {
+        const list = Array.from(mapByEmail.values());
+        setContacts(list);
+        setSelectedContactIds(list.map((c) => c.id));
+        setIsLoadingContacts(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
+
+  // Persistance des contacts réels du marchand
+  useEffect(() => {
+    if (isLoadingContacts) return;
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('nana_tenant_email_contacts', JSON.stringify(contacts));
+        localStorage.setItem(`nana_real_email_contacts_${tenantId || 'user'}`, JSON.stringify(contacts));
       }
     } catch {}
-  }, [contacts]);
+  }, [contacts, tenantId, isLoadingContacts]);
 
   // Filtrage intelligent des contacts
   const filteredContacts = useMemo(() => {
@@ -219,11 +215,9 @@ export function CampaignDispatcher({
 
   const toggleSelectAllFiltered = () => {
     if (isAllFilteredSelected) {
-      // Décocher uniquement les filtrés
       const filteredIds = new Set(filteredContacts.map(c => c.id));
       setSelectedContactIds(prev => prev.filter(id => !filteredIds.has(id)));
     } else {
-      // Cocher tous les filtrés
       const newIds = new Set([...selectedContactIds, ...filteredContacts.map(c => c.id)]);
       setSelectedContactIds(Array.from(newIds));
     }
@@ -239,27 +233,45 @@ export function CampaignDispatcher({
   const requiredCredits = selectedContactIds.length;
   const hasEnoughCredits = emailCredits >= requiredCredits;
 
-  // Ajout manuel d'un contact
-  const handleAddContact = (e: React.FormEvent) => {
+  // Ajout manuel d'un contact réel (sans inventer de fausses commandes)
+  const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail.trim() || !newEmail.includes('@')) {
+    const cleanEmail = newEmail.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       alert("Veuillez saisir une adresse e-mail valide.");
       return;
     }
 
+    const fullName = newName.trim() || cleanEmail.split('@')[0];
     const created: EmailContact = {
       id: `ct-${Date.now()}`,
-      name: newName.trim() || newEmail.split('@')[0],
-      email: newEmail.trim().toLowerCase(),
+      name: fullName,
+      email: cleanEmail,
       phone: newPhone.trim() || undefined,
       type: newType,
       city: newCity.trim() || undefined,
-      ordersCount: newType === 'vip' ? 5 : newType === 'buyer' ? 1 : 0,
-      totalSpentCFA: newType === 'vip' ? 65000 : newType === 'buyer' ? 15000 : 0,
-      lastActivity: 'Aujourd\'hui'
+      ordersCount: 0,
+      totalSpentCFA: 0,
+      lastActivity: "Ajouté aujourd'hui"
     };
 
-    setContacts(prev => [created, ...prev]);
+    if (tenantId) {
+      supabase
+        .from('customers')
+        .upsert({
+          tenant_id: tenantId,
+          email: cleanEmail,
+          first_name: fullName.split(' ')[0] || fullName,
+          last_name: fullName.split(' ').slice(1).join(' ') || '',
+          phone: created.phone || null,
+          city: created.city || null,
+          status: newType === 'vip' ? 'vip' : newType === 'buyer' ? 'active' : 'lead',
+        })
+        .then(() => {})
+        .catch(() => {});
+    }
+
+    setContacts(prev => [created, ...prev.filter(c => c.email !== cleanEmail)]);
     setSelectedContactIds(prev => [created.id, ...prev]);
     setNewName('');
     setNewEmail('');
@@ -274,7 +286,7 @@ export function CampaignDispatcher({
     const rawList = bulkEmailsText
       .split(/[\n,;\s]+/)
       .map(s => s.trim().toLowerCase())
-      .filter(s => s.includes('@') && s.includes('.'));
+      .filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
 
     if (rawList.length === 0) {
       alert("Aucune adresse e-mail valide détectée.");
@@ -282,15 +294,34 @@ export function CampaignDispatcher({
     }
 
     const uniqueEmails = Array.from(new Set(rawList));
-    const newContacts: EmailContact[] = uniqueEmails.map((email, idx) => ({
-      id: `bulk-${Date.now()}-${idx}`,
-      name: email.split('@')[0].replace(/[._-]/g, ' '),
-      email,
-      type: 'subscriber',
-      ordersCount: 0,
-      totalSpentCFA: 0,
-      lastActivity: 'Import récent'
-    }));
+    const existingEmails = new Set(contacts.map(c => c.email.toLowerCase()));
+    const newContacts: EmailContact[] = uniqueEmails
+      .filter(email => !existingEmails.has(email))
+      .map((email, idx) => ({
+        id: `bulk-${Date.now()}-${idx}`,
+        name: email.split('@')[0].replace(/[._-]/g, ' '),
+        email,
+        type: 'subscriber',
+        ordersCount: 0,
+        totalSpentCFA: 0,
+        lastActivity: 'Import récent'
+      }));
+
+    if (tenantId && newContacts.length > 0) {
+      supabase
+        .from('customers')
+        .insert(
+          newContacts.map(c => ({
+            tenant_id: tenantId,
+            email: c.email,
+            first_name: c.name,
+            last_name: '',
+            status: 'lead',
+          }))
+        )
+        .then(() => {})
+        .catch(() => {});
+    }
 
     setContacts(prev => [...newContacts, ...prev]);
     setSelectedContactIds(prev => [...newContacts.map(c => c.id), ...prev]);
@@ -307,7 +338,7 @@ export function CampaignDispatcher({
     }
   };
 
-  // Lancement de la campagne vers les sélectionnés
+  // Lancement réel de la campagne vers les destinataires sélectionnés (JWT Supabase obligatoire)
   const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -327,16 +358,23 @@ export function CampaignDispatcher({
 
     try {
       const selectedContactsData = contacts.filter(c => selectedContactIds.includes(c.id));
-      
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || '';
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
       const res = await fetch('/api/campaigns/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          tenantId: 'default',
-          subject: savedSubject || 'Campagne E-mailing Spéciale',
+          tenantId: tenantId || undefined,
+          subject: savedSubject || 'Campagne E-mailing',
           senderName: savedSenderName || 'Ma Boutique Pro',
-          senderEmail: savedSenderEmail || 'contact@maboutique.com',
-          htmlContent: savedTemplateHtml || '<p>Bonjour {{FIRSTNAME}}, profitez de nos offres !</p>',
+          senderEmail: savedSenderEmail || 'contact@nanasore.com',
+          htmlContent: savedTemplateHtml || '<p>Bonjour {{FIRSTNAME}}, découvrez nos nouveautés.</p>',
           segment: filterType,
           recipientCount: requiredCredits,
           recipients: selectedContactsData.map(c => ({
@@ -351,14 +389,14 @@ export function CampaignDispatcher({
 
       if (res.ok && data.success) {
         const sentCount = data.sentCount || requiredCredits;
-        onCreditsDrained(sentCount);
+        onCreditsDrained(sentCount, data.remainingCredits);
         setSuccessMsg(
-          `🚀 Campagne diffusée avec succès à ${sentCount} contact(s) via le Moteur Pro ! ${
+          `Campagne diffusée avec succès à ${sentCount} contact(s) via Brevo Pro ! ${
             data.remainingCredits !== undefined ? `(Crédits restants : ${data.remainingCredits})` : ''
           }`
         );
       } else {
-        const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne via le Moteur Pro.");
+        const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne.");
         setErrorMsg(errorDetail);
       }
     } catch (networkErr: any) {

@@ -20,36 +20,71 @@ import {
 import { EmailBuilderStudio } from '@/components/tenant/email/EmailBuilderStudio';
 import { CampaignDispatcher } from '@/components/tenant/email/CampaignDispatcher';
 import { QuotaMonetizationStore } from '@/components/tenant/email/QuotaMonetizationStore';
+import { supabase } from '@/src/lib/supabase';
 
 type TabType = 'studio' | 'dispatch' | 'store';
 
 export default function TenantEmailingDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>('studio');
-  const [emailCredits, setEmailCredits] = useState<number>(1500);
+  const [tenantId, setTenantId] = useState<string>('');
+  const [emailCredits, setEmailCredits] = useState<number>(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState<boolean>(true);
   const [savedTemplateHtml, setSavedTemplateHtml] = useState<string>('');
-  const [savedSubject, setSavedSubject] = useState<string>('Offre Spéciale Nanasore 🎁');
+  const [savedSubject, setSavedSubject] = useState<string>('');
   const [savedSenderName, setSavedSenderName] = useState<string>('Ma Boutique Pro');
-  const [savedSenderEmail, setSavedSenderEmail] = useState<string>('contact@maboutique.com');
+  const [savedSenderEmail, setSavedSenderEmail] = useState<string>('contact@nanasore.com');
   const [flashBanner, setFlashBanner] = useState<string | null>(null);
 
-  // Charger le solde depuis le localStorage si existant
+  // Charger le vrai tenantId & le vrai solde `email_credits` depuis Supabase (zéro mock 1500)
   useEffect(() => {
-    try {
-      const storedCredits = localStorage.getItem('tenant_email_credits');
-      if (storedCredits) {
-        setEmailCredits(parseInt(storedCredits, 10));
+    let active = true;
+    (async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+        if (!active) return;
+
+        if (user) {
+          const resolvedTid =
+            String(user.user_metadata?.tenant_id || user.user_metadata?.store_id || user.id);
+          setTenantId(resolvedTid);
+          if (user.email) setSavedSenderEmail(user.email);
+          if (user.user_metadata?.store_name || user.user_metadata?.full_name) {
+            setSavedSenderName(String(user.user_metadata.store_name || user.user_metadata.full_name));
+          }
+
+          const { data: tenantRow } = await supabase
+            .from('tenants')
+            .select('email_credits')
+            .eq('id', resolvedTid)
+            .maybeSingle();
+
+          if (active && tenantRow && typeof tenantRow.email_credits === 'number') {
+            setEmailCredits(tenantRow.email_credits);
+          }
+        }
+      } catch {
+        // non-blocking
+      } finally {
+        if (active) setIsLoadingCredits(false);
       }
-    } catch {
-      // Ignorer
-    }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const handleUpdateCredits = (newCredits: number) => {
+  const handleUpdateCredits = async (newCredits: number) => {
     setEmailCredits(newCredits);
-    try {
-      localStorage.setItem('tenant_email_credits', newCredits.toString());
-    } catch {
-      // Ignorer
+    if (tenantId) {
+      try {
+        await supabase
+          .from('tenants')
+          .update({ email_credits: newCredits })
+          .eq('id', tenantId);
+      } catch {
+        // non-blocking
+      }
     }
   };
 
@@ -58,20 +93,26 @@ export default function TenantEmailingDashboardPage() {
     setSavedSubject(subject);
     if (senderName) setSavedSenderName(senderName);
     if (senderEmail) setSavedSenderEmail(senderEmail);
-    setFlashBanner(`✨ Modèle "${subject || 'Sans titre'}" enregistré avec succès ! Vous pouvez maintenant le diffuser.`);
+    setFlashBanner(`Modèle "${subject || 'Sans titre'}" enregistré avec succès ! Vous pouvez maintenant le diffuser.`);
     setActiveTab('dispatch');
     setTimeout(() => setFlashBanner(null), 5000);
   };
 
-  const handleCreditsDrained = (amount: number) => {
-    const remaining = Math.max(0, emailCredits - amount);
-    handleUpdateCredits(remaining);
+  const handleCreditsDrained = (amount: number, serverRemaining?: number) => {
+    const remaining = typeof serverRemaining === 'number' ? serverRemaining : Math.max(0, emailCredits - amount);
+    setEmailCredits(remaining);
   };
 
-  const handleRecharge = (amount: number, packName: string) => {
+  const handleRecharge = async (
+    amount: number,
+    packName: string,
+    paymentMeta?: { transactionId?: string; paymentMethod?: string; amountPaid?: number }
+  ) => {
     const updated = emailCredits + amount;
-    handleUpdateCredits(updated);
-    setFlashBanner(`🎉 Félicitations ! Votre recharge de ${amount.toLocaleString('fr-FR')} crédits (${packName}) a été activée.`);
+    await handleUpdateCredits(updated);
+    setFlashBanner(
+      `Paiement validé (${paymentMeta?.transactionId || 'UltimateCheckout'}) ! ${amount.toLocaleString('fr-FR')} crédits (${packName}) ajoutés à votre solde Supabase.`
+    );
     setTimeout(() => setFlashBanner(null), 6000);
   };
 
@@ -210,6 +251,7 @@ export default function TenantEmailingDashboardPage() {
           {activeTab === 'dispatch' && (
             <div className="space-y-4">
               <CampaignDispatcher
+                tenantId={tenantId}
                 emailCredits={emailCredits}
                 onCreditsDrained={handleCreditsDrained}
                 savedTemplateHtml={savedTemplateHtml}
@@ -225,6 +267,8 @@ export default function TenantEmailingDashboardPage() {
           {activeTab === 'store' && (
             <div className="space-y-4">
               <QuotaMonetizationStore
+                tenantId={tenantId}
+                storeName={savedSenderName}
                 currentCredits={emailCredits}
                 onRecharge={handleRecharge}
               />
