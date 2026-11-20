@@ -97,15 +97,13 @@ export const LiveRoomHub: React.FC<LiveRoomHubProps> = ({
   // Copie de lien
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Détecte si l'utilisateur est l'animateur (Gérant / Admin de la boutique)
+  // Détecte STRICTEMENT si l'utilisateur est le propriétaire de ce live ou SUPER_ADMIN
   const isHost = useMemo(() => {
     if (!currentUser) return false;
-    if (webinar && webinar.merchantId && currentUser.id === webinar.merchantId) return true;
-    return (
-      currentUser.role === 'GERANT' || 
-      currentUser.role === 'ADMIN' || 
-      currentUser.role === 'SUPER_ADMIN'
-    );
+    if (currentUser.role === 'SUPER_ADMIN') return true;
+    if (webinar?.merchantId && currentUser.id === webinar.merchantId) return true;
+    if (webinar?.storeId && (currentUser.storeId === webinar.storeId || currentUser.id === webinar.storeId)) return true;
+    return false;
   }, [currentUser, webinar]);
 
   // Hook de limitation d'abonnement (20 minutes pour les commerçants en version d'essai)

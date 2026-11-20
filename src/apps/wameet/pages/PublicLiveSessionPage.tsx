@@ -84,30 +84,32 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     return () => { isMounted = false; };
   }, []);
 
-  // Détection souveraine du statut d'hôte (Prop explicite, Paramètre URL, Supabase Auth ou Rôle currentUser)
-  const isHostComputed = useMemo(() => {
+  // Détection STRICTEMENT sécurisée du propriétaire Vendeur / Formateur (ZÉRO contournement URL ?host=true)
+  const isVerifiedHost = useMemo(() => {
     if (initialIsHost) return true;
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('host') === 'true' || params.get('mode') === 'host') return true;
-    }
+    const ownerStoreId = session.storeId || '';
     if (currentUser) {
-      if (session.storeId && (currentUser.id === session.storeId || currentUser.storeId === session.storeId)) return true;
-      if (currentUser.role === 'GERANT' || currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN') return true;
+      if (currentUser.role === 'SUPER_ADMIN') return true;
+      if (ownerStoreId && (currentUser.id === ownerStoreId || currentUser.storeId === ownerStoreId)) return true;
     }
     if (supabaseUser) {
-      if (session.storeId && (supabaseUser.id === session.storeId || supabaseUser.user_metadata?.tenant_id === session.storeId)) return true;
+      const meta = supabaseUser.user_metadata || {};
+      if (meta.role === 'SUPER_ADMIN') return true;
+      if (
+        ownerStoreId &&
+        (supabaseUser.id === ownerStoreId ||
+          meta.tenant_id === ownerStoreId ||
+          meta.store_id === ownerStoreId)
+      ) {
+        return true;
+      }
     }
     return false;
   }, [initialIsHost, currentUser, supabaseUser, session.storeId]);
 
-  const [isHostMode, setIsHostMode] = useState<boolean>(initialIsHost || isHostComputed);
-
-  useEffect(() => {
-    if (isHostComputed) {
-      setIsHostMode(true);
-    }
-  }, [isHostComputed]);
+  // Seul le propriétaire vérifié peut basculer en aperçu spectateur ; un spectateur ne peut JAMAIS activer la régie
+  const [isPreviewingAsSpectator, setIsPreviewingAsSpectator] = useState<boolean>(false);
+  const isHostMode = isVerifiedHost && !isPreviewingAsSpectator;
 
   const [activeClassroomTab, setActiveClassroomTab] = useState<LivePanelTab>('chat');
   const [selectedFunnelProduct, setSelectedFunnelProduct] = useState<StoreProductItem | null>(null);
@@ -183,8 +185,9 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     return () => unsubscribe();
   }, [session?.id]);
 
-  // Épingler un produit en direct
+  // Épingler un produit en direct (strictement réservé à l'hôte vérifié)
   const handlePinProduct = useCallback(async (product: StoreProductItem) => {
+    if (!isVerifiedHost) return;
     playValidationBeep();
     setSession(prev => ({
       ...prev,
@@ -192,10 +195,11 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       pinnedProduct: product
     }));
     await updatePinnedProduct(session.id, product);
-  }, [session.id]);
+  }, [session.id, isVerifiedHost]);
 
-  // Désépingler le produit
+  // Désépingler le produit (strictement réservé à l'hôte vérifié)
   const handleUnpinProduct = useCallback(async () => {
+    if (!isVerifiedHost) return;
     playTapBeep();
     setSession(prev => ({
       ...prev,
@@ -203,7 +207,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       pinnedProduct: null
     }));
     await updatePinnedProduct(session.id, null);
-  }, [session.id]);
+  }, [session.id, isVerifiedHost]);
 
   // Ouvrir le tiroir tunnel sans couper la vidéo
   const handleOpenFunnel = useCallback((product: StoreProductItem) => {
@@ -231,15 +235,31 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* 1. BARRE DE NAVIGATION SUPÉRIEURE : ADN BLEU ROYAL (#2563EB) & BLANC */}
-      <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+    <div
+      className={`min-h-screen w-full flex flex-col font-sans selection:bg-blue-600 selection:text-white ${
+        isHostMode
+          ? 'bg-slate-950 text-slate-100'
+          : 'bg-slate-50 text-slate-900'
+      }`}
+    >
+      {/* 1. BARRE DE NAVIGATION SUPÉRIEURE — THÈME DISTINCT RÉGIE STUDIO vs SALLE SPECTATEUR */}
+      <header
+        className={`sticky top-0 z-40 backdrop-blur-md border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-4 ${
+          isHostMode
+            ? 'bg-slate-950/95 border-indigo-500/40'
+            : 'bg-white/95 border-slate-200 shadow-xs'
+        }`}
+      >
         {/* Identité Boutique & Retour */}
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={handleBack}
-            className="p-2 rounded-xl bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+            className={`p-2 rounded-xl border transition cursor-pointer ${
+              isHostMode
+                ? 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-950 border-slate-200'
+            }`}
             title="Retour à la boutique"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -250,47 +270,65 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               {session.storeName.charAt(0).toUpperCase()}
             </div>
             <div>
-              <span className="font-extrabold text-sm text-white line-clamp-1 block leading-tight">
-                {session.storeName}
-              </span>
-              <span className="text-[10px] text-blue-400 font-bold block">
-                Nanasore Live Studio OS
+              <div className="flex items-center gap-2">
+                <span className={`font-extrabold text-sm line-clamp-1 leading-tight ${isHostMode ? 'text-white' : 'text-slate-900'}`}>
+                  {session.storeName}
+                </span>
+                {isHostMode ? (
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-600/30 border border-indigo-400/40 text-indigo-300 text-[10px] font-black uppercase tracking-wide">
+                    🎬 Régie Studio
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black uppercase tracking-wide flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    En direct
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] font-bold block ${isHostMode ? 'text-indigo-400' : 'text-slate-500'}`}>
+                {isHostMode
+                  ? 'Console Vendeur & Formateur • Administration du Direct'
+                  : 'Salle Directe • Acheteurs & Étudiants'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Actions Droite : Bascule Mode Formateur & Partage */}
+        {/* Actions Droite */}
         <div className="flex items-center gap-2">
-          {/* Bascule Mode Formateur / Vue Élève */}
-          <button
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              setIsHostMode(!isHostMode);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
-              isHostMode
-                ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-600/30'
-                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-            }`}
-            title="Activer ou désactiver la console de contrôle formateur"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{isHostMode ? 'Console Formateur Active' : 'Mode Formateur'}</span>
-          </button>
+          {/* Bascule Aperçu Spectateur / Retour Régie — STRICTEMENT VISIBLE PAR LE PROPRIÉTAIRE VÉRIFIÉ UNIQUEMENT */}
+          {isVerifiedHost && (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setIsPreviewingAsSpectator(!isPreviewingAsSpectator);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                isHostMode
+                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-900 text-white border-slate-700 hover:bg-slate-800'
+              }`}
+              title="Basculer entre votre Régie Studio et l'aperçu spectateur"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">
+                {isHostMode ? 'Aperçu Spectateur' : 'Retour Régie Studio'}
+              </span>
+            </button>
+          )}
 
-          {/* Bouton d'abonnement aux notifications Push de la boutique pour les acheteurs */}
+          {/* Bouton d'abonnement aux notifications Push de la boutique pour les acheteurs / étudiants */}
           {!isHostMode && (
             <LiveSubscribeButton
-              storeSlug={resolvedSlug}
+              storeSlug={liveStreamSlug}
               storeName={session.storeName}
               variant="outline"
               className="hidden sm:flex"
             />
           )}
 
-          {/* Action Droite : Bouton 1-Clic "📲 Partager ce Live" */}
+          {/* Bouton 1-Clic "Partager ce Live" */}
           <button
             type="button"
             onClick={() => {
@@ -309,25 +347,25 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       {/* 2. ZONE CENTRALE : LAYOUT SPLIT ÉCRAN (LECTEUR À GAUCHE + SALLE INTERACTIVE À DROITE) */}
       <main className="flex-1 max-w-[1520px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4">
         
-        {/* Console Formateur / Coach Flottante Supérieure (Si Mode Formateur Activé) */}
+        {/* CONSOLE & PANNEAUX D'ADMINISTRATION — STRICTEMENT RÉSERVÉS AU VENDEUR / FORMATEUR VÉRIFIÉ */}
         {isHostMode && (
-          <div className="mb-2 space-y-2">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900 border border-blue-500/30">
+          <div className="mb-2 space-y-2.5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border border-indigo-500/40 shadow-xl">
               <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
                 <div>
                   <span className="text-xs font-black text-white block">Console Studio Vendeur / Formateur</span>
-                  <span className="text-[11px] text-slate-400">Diffusez en direct via WebRTC WHIP ou pilotez les interactions</span>
+                  <span className="text-[11px] text-slate-300">Pilotez votre caméra WHIP, la multidiffusion réseaux sociaux, les quiz, devoirs et produits épinglés</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
                     playTapBeep();
                     setIsMultistreamModalOpen(true);
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-extrabold text-xs flex items-center gap-1.5 border border-slate-700 transition active:scale-95 cursor-pointer shadow-md"
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-extrabold text-xs flex items-center gap-1.5 border border-slate-700 transition active:scale-95 cursor-pointer shadow-md"
                   title="Configurer le relais simultané vers YouTube, Facebook, TikTok..."
                 >
                   <Share2 className="w-3.5 h-3.5 text-blue-400" />
@@ -343,7 +381,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-950 transition active:scale-95 cursor-pointer border border-blue-400/30"
                 >
                   <Radio className="w-3.5 h-3.5 animate-pulse" />
-                  <span>{isHostBroadcasterActive ? "👁️ Voir l'Aperçu Spectateur" : "📹 Lancer ma Caméra (WHIP Direct)"}</span>
+                  <span>{isHostBroadcasterActive ? "👁️ Voir le Retour Lecteur" : "📹 Lancer ma Caméra (WHIP Direct)"}</span>
                 </button>
               </div>
             </div>
@@ -357,7 +395,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           </div>
         )}
 
-        {/* Bannières d'Alerte Intelligentes Surgissant Instantanément chez les élèves */}
+        {/* Bannières d'Alerte Intelligentes (Quiz & Devoirs à traiter / soumettre par les étudiants) */}
         {session.activeQuiz?.isActive && (
           <div 
             onClick={() => {
@@ -397,7 +435,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               <FileText className="w-5 h-5 shrink-0" />
               <div>
                 <span className="text-xs uppercase tracking-wider block text-blue-200 font-black">
-                  📝 Travaux Pratiques / Support PDF en Direct
+                  📝 Travaux Pratiques / Devoir en Direct
                 </span>
                 <span className="text-sm font-black line-clamp-1">
                   {session.activeAssignment.title}
@@ -405,7 +443,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               </div>
             </div>
             <span className="px-3 py-1.5 rounded-xl bg-white text-blue-700 text-xs font-black shrink-0 flex items-center gap-1 shadow-sm">
-              Voir & Soumettre <ChevronRight className="w-3.5 h-3.5" />
+              Traiter & Soumettre <ChevronRight className="w-3.5 h-3.5" />
             </span>
           </div>
         )}
@@ -415,8 +453,8 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           
           {/* Colonne Gauche (lg:col-span-8) : Lecteur Vidéo + Titre + Carrousel Produits */}
           <div className="lg:col-span-8 space-y-5">
-            {/* Lecteur Caméléon ou Studio Caméra WHIP Vendeur */}
-            <div className="rounded-3xl overflow-hidden shadow-2xl bg-black relative">
+            {/* Lecteur Caméléon (Spectateur) ou Studio Caméra WHIP (Hôte vérifié uniquement) */}
+            <div className={`rounded-3xl overflow-hidden shadow-2xl bg-black relative ${isHostMode ? 'ring-2 ring-indigo-500/40' : 'ring-1 ring-slate-200'}`}>
               {isHostMode && isHostBroadcasterActive ? (
                 <WhipLiveBroadcaster
                   storeSlug={liveStreamSlug}
@@ -430,7 +468,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   onOpenFunnel={handleOpenFunnel}
                   onBuyWhatsApp={handleBuyWhatsApp}
                   onShareClick={() => setIsShareModalOpen(true)}
-                  onUnpinProduct={handleUnpinProduct}
+                  onUnpinProduct={isHostMode ? handleUnpinProduct : undefined}
                 />
               )}
 
@@ -451,16 +489,28 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               />
             </div>
 
-            {/* Titre et Détails de la Session */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            {/* Titre et Détails de la Session — Style adapté au thème */}
+            <div
+              className={`p-4 sm:p-5 rounded-2xl border space-y-2 ${
+                isHostMode
+                  ? 'bg-slate-900 border-slate-800'
+                  : 'bg-white border-slate-200 shadow-sm'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                      isHostMode
+                        ? 'bg-blue-600/30 text-blue-400 border-blue-500/30'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}
+                  >
                     {session.sessionMode.replace('_', ' ')}
                   </span>
                   {session.hostName && (
-                    <span className="text-xs text-slate-400 font-semibold">
-                      Animé par <strong className="text-white">{session.hostName}</strong>
+                    <span className={`text-xs font-semibold ${isHostMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      Animé par <strong className={isHostMode ? 'text-white' : 'text-slate-900'}>{session.hostName}</strong>
                     </span>
                   )}
                 </div>
@@ -470,7 +520,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={playTapBeep}
-                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition active:scale-95"
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-emerald-950/20 transition active:scale-95"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>Rejoindre la chaîne WhatsApp</span>
@@ -478,26 +528,26 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   </a>
                 )}
               </div>
-              <h1 className="text-lg sm:text-2xl font-black text-white leading-tight">
+              <h1 className={`text-lg sm:text-2xl font-black leading-tight ${isHostMode ? 'text-white' : 'text-slate-900'}`}>
                 {session.title}
               </h1>
               {session.description && (
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                <p className={`text-xs sm:text-sm leading-relaxed ${isHostMode ? 'text-slate-300' : 'text-slate-600'}`}>
                   {session.description}
                 </p>
               )}
             </div>
 
-            {/* Bannière Abonnement Alertes Live pour Acheteurs */}
+            {/* Bannière Abonnement Alertes Live pour Acheteurs & Étudiants */}
             {!isHostMode && (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-slate-900 border border-blue-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg shadow-blue-600/20">
                 <div className="space-y-0.5">
                   <span className="text-xs font-black text-white flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+                    <span className="w-2 h-2 rounded-full bg-yellow-300 animate-ping" />
                     Ne manquez aucun direct de {session.storeName}
                   </span>
-                  <p className="text-[11px] text-slate-300">
-                    Soyez prévenu instantanément sur votre téléphone dès le lancement du prochain Live Shopping.
+                  <p className="text-[11px] text-blue-100">
+                    Soyez prévenu instantanément sur votre téléphone dès le lancement du prochain Live.
                   </p>
                 </div>
                 <LiveSubscribeButton
@@ -510,14 +560,14 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
             )}
 
             {/* Carrousel Produits Incitatif Défilant en Continu sous la Vidéo */}
-            <div className="bg-white text-slate-900 rounded-3xl p-4 sm:p-5 shadow-xl border border-slate-100">
+            <div className="bg-white text-slate-900 rounded-3xl p-4 sm:p-5 shadow-md border border-slate-200">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
                   <ShoppingBag className="w-3.5 h-3.5 text-blue-600" />
                   Produits & Offres Présentés en Direct
                 </h3>
                 <span className="text-[11px] text-slate-500">
-                  Commandez sans couper la vidéo
+                  {isHostMode ? 'Cliquez sur Épingler pour pousser en direct' : 'Commandez sans couper la vidéo'}
                 </span>
               </div>
               <LiveProductCarousel
@@ -526,13 +576,13 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 whatsappPhone={session.whatsappPhone}
                 isHost={isHostMode}
                 onOpenFunnel={handleOpenFunnel}
-                onPinProduct={handlePinProduct}
-                onUnpinProduct={handleUnpinProduct}
+                onPinProduct={isHostMode ? handlePinProduct : undefined}
+                onUnpinProduct={isHostMode ? handleUnpinProduct : undefined}
               />
             </div>
           </div>
 
-          {/* Colonne Droite (lg:col-span-4) : Salle de Classe & Coaching Interactive Panel */}
+          {/* Colonne Droite (lg:col-span-4) : Salle Interactive (Chat, Quiz, Devoirs à traiter & soumettre) */}
           <div className="lg:col-span-4 sticky top-20">
             <LiveClassroomInteractivePanel
               session={session}
@@ -540,8 +590,8 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               activeTabOverride={activeClassroomTab}
               onTabChange={setActiveClassroomTab}
               onOpenFunnel={handleOpenFunnel}
-              onPinProduct={handlePinProduct}
-              onUnpinProduct={handleUnpinProduct}
+              onPinProduct={isHostMode ? handlePinProduct : undefined}
+              onUnpinProduct={isHostMode ? handleUnpinProduct : undefined}
               className="h-[680px] lg:h-[740px]"
             />
           </div>
@@ -559,14 +609,16 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         onClose={() => setIsShareModalOpen(false)}
       />
 
-      {/* 3.B. CONSOLE DE MULTISTREAMING RÉEL (YOUTUBE, FACEBOOK, TIKTOK, INSTAGRAM, ETC.) */}
-      <LiveMultistreamStudioModal
-        isOpen={isMultistreamModalOpen}
-        storeSlug={liveStreamSlug}
-        storeName={session.storeName}
-        liveTitle={session.title}
-        onClose={() => setIsMultistreamModalOpen(false)}
-      />
+      {/* 3.B. CONSOLE DE MULTISTREAMING RÉEL — MONTÉE UNIQUEMENT POUR LE PROPRIÉTAIRE VÉRIFIÉ */}
+      {isVerifiedHost && (
+        <LiveMultistreamStudioModal
+          isOpen={isMultistreamModalOpen}
+          storeSlug={liveStreamSlug}
+          storeName={session.storeName}
+          liveTitle={session.title}
+          onClose={() => setIsMultistreamModalOpen(false)}
+        />
+      )}
 
       {/* 4. TIROIR TUNNEL (12 BLOCS) DÉPLOYÉ PAR-DESSUS SANS COUPER LE SON NI LA VIDÉO DU LIVE */}
       {selectedFunnelProduct && (
