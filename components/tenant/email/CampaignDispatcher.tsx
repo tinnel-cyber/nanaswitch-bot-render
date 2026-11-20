@@ -338,6 +338,10 @@ export function CampaignDispatcher({
     }
   };
 
+  // Options Pro : A/B Testing Objet B & Planification (Scheduled Send)
+  const [abSubjectB, setAbSubjectB] = useState<string>('');
+  const [scheduledAt, setScheduledAt] = useState<string>('');
+
   // Lancement réel de la campagne vers les destinataires sélectionnés (JWT Supabase obligatoire)
   const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +376,8 @@ export function CampaignDispatcher({
         body: JSON.stringify({
           tenantId: tenantId || undefined,
           subject: savedSubject || 'Campagne E-mailing',
+          abSubjectB: abSubjectB.trim() || undefined,
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
           senderName: savedSenderName || 'Ma Boutique Pro',
           senderEmail: savedSenderEmail || 'contact@nanasore.com',
           htmlContent: savedTemplateHtml || '<p>Bonjour {{FIRSTNAME}}, découvrez nos nouveautés.</p>',
@@ -388,13 +394,17 @@ export function CampaignDispatcher({
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.success) {
-        const sentCount = data.sentCount || requiredCredits;
-        onCreditsDrained(sentCount, data.remainingCredits);
-        setSuccessMsg(
-          `Campagne diffusée avec succès à ${sentCount} contact(s) via Brevo Pro ! ${
-            data.remainingCredits !== undefined ? `(Crédits restants : ${data.remainingCredits})` : ''
-          }`
-        );
+        if (data.scheduled) {
+          setSuccessMsg(data.message || 'Campagne programmée avec succès.');
+          setScheduledAt('');
+        } else {
+          const sentCount = data.sentCount || requiredCredits;
+          onCreditsDrained(sentCount, data.remainingCredits);
+          setSuccessMsg(
+            data.message ||
+              `Campagne diffusée avec succès à ${sentCount} contact(s) via Brevo Pro !`
+          );
+        }
       } else {
         const errorDetail = data.error || (data.details ? JSON.stringify(data.details) : "Erreur lors de la diffusion de la campagne.");
         setErrorMsg(errorDetail);
@@ -408,7 +418,33 @@ export function CampaignDispatcher({
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 md:p-8 space-y-6">
+    <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 md:p-8 space-y-6">
+      {/* Options Pro : A/B Testing & Planification */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-[#FBF9F5] border border-slate-200">
+        <div>
+          <label className="block text-[11px] font-black text-slate-700 mb-1">
+            A/B Testing — Objet Variante B (optionnel, répartition 50/50)
+          </label>
+          <input
+            type="text"
+            value={abSubjectB}
+            onChange={(e) => setAbSubjectB(e.target.value)}
+            placeholder="ex: Dernières heures pour profiter de l'offre..."
+            className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs focus:outline-none focus:border-blue-600"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-black text-slate-700 mb-1">
+            Planification d'envoi (laisser vide pour envoi immédiat)
+          </label>
+          <input
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs focus:outline-none focus:border-blue-600"
+          />
+        </div>
+      </div>
       
       {/* En-tête Principal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 gap-3">

@@ -20,9 +20,10 @@ import {
 import { EmailBuilderStudio } from '@/components/tenant/email/EmailBuilderStudio';
 import { CampaignDispatcher } from '@/components/tenant/email/CampaignDispatcher';
 import { QuotaMonetizationStore } from '@/components/tenant/email/QuotaMonetizationStore';
+import { CampaignAnalyticsHub } from '@/components/tenant/email/CampaignAnalyticsHub';
 import { supabase } from '@/src/lib/supabase';
 
-type TabType = 'studio' | 'dispatch' | 'store';
+type TabType = 'studio' | 'dispatch' | 'store' | 'analytics';
 
 export default function TenantEmailingDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>('studio');
@@ -224,7 +225,7 @@ export default function TenantEmailingDashboardPage() {
 
           <button
             onClick={() => setActiveTab('store')}
-            className={`flex-1 min-w-[160px] py-3 px-4 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            className={`flex-1 min-w-[150px] py-3 px-4 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
               activeTab === 'store'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-[#FBF9F5]'
@@ -232,6 +233,18 @@ export default function TenantEmailingDashboardPage() {
           >
             <CreditCard className="w-4 h-4" />
             <span>3. Boutique de Quotas</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`flex-1 min-w-[170px] py-3 px-4 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeTab === 'analytics'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-[#FBF9F5]'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>4. Analytics &amp; Domaines Pro</span>
           </button>
         </div>
 
@@ -272,6 +285,12 @@ export default function TenantEmailingDashboardPage() {
                 currentCredits={emailCredits}
                 onRecharge={handleRecharge}
               />
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-4">
+              <CampaignAnalyticsHub tenantId={tenantId} />
             </div>
           )}
         </div>
