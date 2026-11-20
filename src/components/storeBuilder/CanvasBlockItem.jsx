@@ -43,6 +43,12 @@ function areBlockPropsEqual(prevProps, nextProps) {
     if (prevProps.liveSeconds !== nextProps.liveSeconds) return false;
   }
 
+  // 8. Formulaire checkout intégré : invalide UNIQUEMENT les blocs checkout quand l'utilisateur saisit ses coordonnées
+  if (nextProps.block.type === 'checkout' || nextProps.block.type === 'woocommerce_checkout') {
+    if (prevProps.checkoutState !== nextProps.checkoutState) return false;
+    if (prevProps.orderConfirmed !== nextProps.orderConfirmed) return false;
+  }
+
   // Si tous les tests sont passés, le rendu précédent est 100% réutilisable !
   return true;
 }

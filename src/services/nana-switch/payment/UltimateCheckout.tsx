@@ -345,7 +345,10 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     return CHECKOUT_COUNTRIES[0]; // Burkina Faso par défaut
   });
 
-  const [city, setCity] = useState(() => selectedCountry.defaultCity);
+  const [city, setCity] = useState(() => {
+    const savedCity = defaultAddress || (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_address') || '' : '');
+    return savedCity || selectedCountry.defaultCity;
+  });
 
   const [deliveryAddress, setDeliveryAddress] = useState(() => {
     return defaultAddress || (typeof window !== 'undefined' ? localStorage.getItem('nana_customer_address') || '' : '');
@@ -357,7 +360,28 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [promoError, setPromoError] = useState<string | null>(null);
 
   // Le Choix Crucial : Option A (Paiement à la livraison) vs Option B (Mobile Money)
-  const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO'>('MOMO');
+  const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO'>(() => {
+    const savedMethod = typeof window !== 'undefined' ? localStorage.getItem('nana_customer_payment_method') : '';
+    return savedMethod === 'cod' ? 'COD' : 'MOMO';
+  });
+
+  // Synchronisation automatique si de nouvelles coordonnées sont injectées depuis le mini-checkout du Funnel
+  useEffect(() => {
+    if (defaultCustomerName) setCustomerName(defaultCustomerName);
+    if (defaultPhone) {
+      setDeliveryPhone(defaultPhone);
+      setPaymentPhone(defaultPhone);
+    }
+    if (defaultAddress) {
+      setCity(defaultAddress);
+      setDeliveryAddress(defaultAddress);
+    }
+    if (typeof window !== 'undefined') {
+      const savedMethod = localStorage.getItem('nana_customer_payment_method');
+      if (savedMethod === 'cod') setPaymentChoice('COD');
+      else if (savedMethod) setPaymentChoice('MOMO');
+    }
+  }, [defaultCustomerName, defaultPhone, defaultAddress, isOpen]);
 
   // 5. États Étape 2B : L'Expérience Mobile Money Premium
   const [selectedOperator, setSelectedOperator] = useState<OperatorOption>(() => selectedCountry.operators[0]);

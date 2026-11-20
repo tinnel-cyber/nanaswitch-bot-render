@@ -2965,13 +2965,13 @@ export const FunnelBuilder = ({
               </div>
 
               {/* Champs de Saisie Interactifs */}
-              <div className="space-y-3">
+              <div className="space-y-3" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">Nom & Prénom</label>
                   <input
                     type="text"
                     value={simulatedCheckout.fullName}
-                    onChange={(e) => setSimulatedCheckout({ ...simulatedCheckout, fullName: e.target.value })}
+                    onChange={(e) => setSimulatedCheckout((prev) => ({ ...prev, fullName: e.target.value }))}
                     placeholder="Ex: Kouassi Jean-Marc"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
                   />
@@ -2983,7 +2983,7 @@ export const FunnelBuilder = ({
                     <input
                       type="tel"
                       value={simulatedCheckout.phone}
-                      onChange={(e) => setSimulatedCheckout({ ...simulatedCheckout, phone: e.target.value })}
+                      onChange={(e) => setSimulatedCheckout((prev) => ({ ...prev, phone: e.target.value }))}
                       placeholder="+225 07..."
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
                     />
@@ -2993,7 +2993,7 @@ export const FunnelBuilder = ({
                     <input
                       type="text"
                       value={simulatedCheckout.city}
-                      onChange={(e) => setSimulatedCheckout({ ...simulatedCheckout, city: e.target.value })}
+                      onChange={(e) => setSimulatedCheckout((prev) => ({ ...prev, city: e.target.value }))}
                       placeholder="Abidjan, Dakar, Bamako..."
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
                     />
@@ -3006,7 +3006,7 @@ export const FunnelBuilder = ({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button
                       type="button"
-                      onClick={() => setSimulatedCheckout({ ...simulatedCheckout, paymentMethod: 'wave' })}
+                      onClick={() => setSimulatedCheckout((prev) => ({ ...prev, paymentMethod: 'wave' }))}
                       className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex flex-col items-center gap-1 ${
                         simulatedCheckout.paymentMethod === 'wave'
                           ? 'bg-sky-500/20 border-sky-400 text-sky-300 ring-2 ring-sky-500/30'
@@ -3019,7 +3019,7 @@ export const FunnelBuilder = ({
 
                     <button
                       type="button"
-                      onClick={() => setSimulatedCheckout({ ...simulatedCheckout, paymentMethod: 'orange' })}
+                      onClick={() => setSimulatedCheckout((prev) => ({ ...prev, paymentMethod: 'orange' }))}
                       className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex flex-col items-center gap-1 ${
                         simulatedCheckout.paymentMethod === 'orange'
                           ? 'bg-orange-500/20 border-orange-400 text-orange-300 ring-2 ring-orange-500/30'
@@ -3032,7 +3032,7 @@ export const FunnelBuilder = ({
 
                     <button
                       type="button"
-                      onClick={() => setSimulatedCheckout({ ...simulatedCheckout, paymentMethod: 'moov_mtn' })}
+                      onClick={() => setSimulatedCheckout((prev) => ({ ...prev, paymentMethod: 'moov_mtn' }))}
                       className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex flex-col items-center gap-1 ${
                         simulatedCheckout.paymentMethod === 'moov_mtn'
                           ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-500/30'
@@ -3045,7 +3045,7 @@ export const FunnelBuilder = ({
 
                     <button
                       type="button"
-                      onClick={() => setSimulatedCheckout({ ...simulatedCheckout, paymentMethod: 'cod' })}
+                      onClick={() => setSimulatedCheckout((prev) => ({ ...prev, paymentMethod: 'cod' }))}
                       className={`p-2 rounded-xl text-xs font-bold border transition cursor-pointer flex flex-col items-center gap-1 ${
                         simulatedCheckout.paymentMethod === 'cod'
                           ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/30'
@@ -3062,7 +3062,8 @@ export const FunnelBuilder = ({
               {/* Bouton de confirmation en direct avec pré-remplissage et redirection immédiate vers le checkout */}
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   handleProceedToPrimaryCheckout({
                     id: activeProduct?.id || 'funnel-item',
                     name: data.productName || activeProduct?.name || 'Offre Spéciale',
@@ -3080,12 +3081,12 @@ export const FunnelBuilder = ({
                 {orderConfirmed ? (
                   <>
                     <Check className="w-5 h-5 text-slate-950" />
-                    <span>Commande Reçue ! Félicitations 🚀</span>
+                    <span>Ouverture de la Caisse Sécurisée... 🚀</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-5 h-5 fill-slate-950 text-emerald-400" />
-                    <span>Confirmer Ma Commande & Mon Expédition 🚀</span>
+                    <span>{data.ctaText || 'Confirmer Ma Commande & Mon Expédition 🚀'}</span>
                   </>
                 )}
               </button>
@@ -12227,6 +12228,8 @@ export const FunnelBuilder = ({
                         activeProduct={activeProduct}
                         liveSeconds={liveSeconds}
                         globalTheme={resolvedModularTheme}
+                        checkoutState={block.type === 'checkout' || block.type === 'woocommerce_checkout' ? simulatedCheckout : undefined}
+                        orderConfirmed={block.type === 'checkout' || block.type === 'woocommerce_checkout' ? orderConfirmed : undefined}
                       />
 
                       {/* Zone de Dépôt Inter-Blocs Permissive (si mode builder) */}
