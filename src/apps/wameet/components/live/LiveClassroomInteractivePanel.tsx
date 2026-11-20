@@ -51,6 +51,7 @@ import {
   subscribeLiveSubmissions,
   gradeLiveSubmission,
 } from '../../../../services/liveSessionService';
+import { uploadLiveResourceFile } from '../../../../services/liveResourceUploadService';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export type LivePanelTab = 'chat' | 'quiz' | 'assignment' | 'offers';
@@ -323,22 +324,26 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
     });
   }, [hasAnsweredQuiz, session.activeQuiz, session.id, participantName]);
 
-  // Gestion de fichier uploadé pour le devoir (PDF ou image)
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload réel du fichier devoir (PDF, DOCX, Image, ZIP) vers Supabase Storage
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     playTapBeep();
-    const reader = new FileReader();
-    reader.onload = () => {
+    setIsSubmittingWork(true);
+    try {
+      const uploaded = await uploadLiveResourceFile(file, 'submissions', session.id);
       setStudentFile({
-        name: file.name,
-        url: reader.result as string,
-        type: file.type
+        name: uploaded.name,
+        url: uploaded.url,
+        type: uploaded.type,
       });
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    } catch (err: any) {
+      alert(err?.message || "Impossible de téléverser ce fichier.");
+    } finally {
+      setIsSubmittingWork(false);
+    }
+  }, [session.id]);
 
   // Soumission du devoir
   const handleSubmitAssignment = useCallback(async (e: React.FormEvent) => {

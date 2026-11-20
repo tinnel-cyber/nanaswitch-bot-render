@@ -67,6 +67,8 @@ export interface StoreProductItem {
   liveLotBadge?: string;
   currency?: string;
   isFeatured?: boolean;
+  affiliateEnabled?: boolean;
+  affiliateCommissionPercent?: number;
 }
 
 export interface StoreConfig {

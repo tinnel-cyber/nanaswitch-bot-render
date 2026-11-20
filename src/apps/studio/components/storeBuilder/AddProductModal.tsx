@@ -95,6 +95,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [badge, setBadge] = useState<string>('');
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [hasLiveDemo, setHasLiveDemo] = useState(false);
+  const [affiliateEnabled, setAffiliateEnabled] = useState(false);
+  const [affiliateCommissionPercent, setAffiliateCommissionPercent] = useState<number>(10);
 
   // CARTE 2 : Tunnel Dépliable (Hiérarchie : 12 Blocs Modulaire Priorité 1 par défaut vs Ultimate Funnel Priorité 2 conditionnelle)
   const [linkedFunnelId, setLinkedFunnelId] = useState<string | null>(null);
@@ -181,6 +183,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setBadge(productToEdit.badge || '');
         setPhotoUrl(productToEdit.photoUrl || '');
         setHasLiveDemo(Boolean(productToEdit.hasLiveDemo));
+        setAffiliateEnabled(Boolean((productToEdit as any).affiliateEnabled));
+        setAffiliateCommissionPercent(Number((productToEdit as any).affiliateCommissionPercent) || 10);
         setLinkedFunnelId(productToEdit.linkedFunnelId || null);
         setHasModularFunnel(productToEdit.hasModularFunnel !== false);
         setUseUltimateFunnel(productToEdit.hasModularFunnel === false && Boolean(productToEdit.useUltimateFunnel));
@@ -515,6 +519,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         shortDescription: (stripHtmlToPlainText(shortDescription) || cleanPlainDescription).slice(0, 160) || '',
         badge: badge.trim() || '',
         hasLiveDemo: Boolean(hasLiveDemo),
+        affiliateEnabled: Boolean(affiliateEnabled),
+        affiliateCommissionPercent: Boolean(affiliateEnabled) ? Math.max(1, Math.min(80, Number(affiliateCommissionPercent) || 10)) : 0,
         linkedFunnelId: linkedFunnelId || (hasModularFunnel ? finalSlug : null),
         hasModularFunnel: Boolean(hasModularFunnel),
         useUltimateFunnel: !hasModularFunnel && Boolean(useUltimateFunnel),
@@ -1063,6 +1069,51 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 />
                 <div className="w-10 h-5 bg-input border border-theme peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
               </label>
+            </div>
+
+            {/* Toggle Affiliation Produit (% commission pour affiliés & liens partagés) */}
+            <div className="p-3 bg-secondary/60 border border-theme rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    affiliateEnabled ? 'bg-blue-600/20 text-blue-600' : 'bg-input text-muted'
+                  }`}>
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-body text-xs">🤝 Activer l&apos;Affiliation sur ce produit</div>
+                    <p className="text-[10px] text-muted">Reconnaît et rémunère automatiquement les affiliés qui partagent ce produit ou votre Live</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={affiliateEnabled}
+                    onChange={(e) => setAffiliateEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-input border border-theme peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {affiliateEnabled && (
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-theme/50">
+                  <label className="text-[11px] font-bold text-body">
+                    Commission affilié (%) :
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={80}
+                      value={affiliateCommissionPercent}
+                      onChange={(e) => setAffiliateCommissionPercent(Math.max(1, Math.min(80, Number(e.target.value) || 10)))}
+                      className="w-20 bg-input border border-theme rounded-lg px-2.5 py-1 text-body text-xs font-bold text-right focus:border-blue-600 focus:outline-none"
+                    />
+                    <span className="text-xs font-bold text-muted">%</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 1. Courte Description (Pitch d'accroche pour cartes Grid et haut de fiche) */}

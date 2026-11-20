@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft,
   Share2,
@@ -12,9 +12,13 @@ import {
   ChevronRight,
   Calendar,
   Lock,
+  Mic,
+  PhoneOff,
+  Users,
+  X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { LiveSession } from '../../../types/liveSession';
+import { LiveSession, HandRaisedUser } from '../../../types/liveSession';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { StoreUser } from '../../../types';
 import {
@@ -27,6 +31,20 @@ import {
   hasLocalLiveEnrollment,
   FALLBACK_LIVE_SESSION,
 } from '../../../services/liveSessionService';
+import {
+  createLiveStageSpeechChannel,
+  type StageSpeechInvite,
+} from '../../../services/liveStageSpeechService';
+import {
+  createLiveAuctionChannel,
+  getSavedLiveAuction,
+  type LiveAuctionState,
+  type LiveAuctionBid,
+} from '../../../services/liveAuctionService';
+import {
+  captureAffiliateReferralFromUrl,
+  type AffiliateAttribution,
+} from '../../../services/liveAffiliateService';
 import { NanasoreOmniPlayer } from '../../../components/live/NanasoreOmniPlayer';
 import { WhipLiveBroadcaster } from '../../../components/live/WhipLiveBroadcaster';
 import { NanasoreLiveCommerceOverlay } from '../../../components/live/NanasoreLiveCommerceOverlay';
@@ -38,6 +56,9 @@ import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultist
 import { LiveSubscribeButton } from '../../../components/live/LiveSubscribeButton';
 import { Live1to1BookingModal } from '../components/live/Live1to1BookingModal';
 import { LiveAccessGate } from '../components/live/LiveAccessGate';
+import { LiveAuctionWidget } from '../components/live/LiveAuctionWidget';
+import { LiveAffiliatePayoutModal } from '../components/live/LiveAffiliatePayoutModal';
+import { NativeCoaching1to1Room } from '../components/live/NativeCoaching1to1Room';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
 import { loadStoreMultistreamConfig } from '../../../services/liveMultistreamService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
@@ -78,6 +99,47 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [hasUnlockedPaidAccess, setHasUnlockedPaidAccess] = useState<boolean>(() =>
     hasLocalLiveEnrollment(initialSession?.id || resolvedSlug)
   );
+
+  // Affiliation : capture automatique du lien de parrainage (?ref=CODE)
+  const [affiliateAttribution, setAffiliateAttribution] = useState<AffiliateAttribution | null>(null);
+
+  // Prise de parole Audio/Visio WebRTC native
+  const [pendingStageInvite, setPendingStageInvite] = useState<StageSpeechInvite | null>(null);
+  const [activeStageRoom, setActiveStageRoom] = useState<{
+    roomId: string;
+    label: string;
+    mode: 'audio' | 'video';
+  } | null>(null);
+  const stageChannelRef = useRef<ReturnType<typeof createLiveStageSpeechChannel> | null>(null);
+
+  // Vente aux Enchères en Direct (Mode Live Shopping)
+  const [activeAuction, setActiveAuction] = useState<LiveAuctionState | null>(null);
+  const auctionChannelRef = useRef<ReturnType<typeof createLiveAuctionChannel> | null>(null);
+  const activeAuctionRef = useRef<LiveAuctionState | null>(null);
+
+  // Identifiant unique du spectateur/enchérisseur courant
+  const viewerClientId = useMemo(() => {
+    if (currentUser?.id) return currentUser.id;
+    if (typeof window !== 'undefined') {
+      const key = 'nana_live_viewer_uid';
+      let id = sessionStorage.getItem(key);
+      if (!id) {
+        id = `viewer_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        sessionStorage.setItem(key, id);
+      }
+      return id;
+    }
+    return 'viewer_anon';
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    activeAuctionRef.current = activeAuction;
+  }, [activeAuction]);
+
+  useEffect(() => {
+    const attr = captureAffiliateReferralFromUrl(resolvedSlug);
+    setAffiliateAttribution(attr);
+  }, [resolvedSlug]);
 
   // Vérification de session Supabase Auth en arrière-plan
   useEffect(() => {
@@ -136,6 +198,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [isHostBroadcasterActive, setIsHostBroadcasterActive] = useState<boolean>(false);
   const [isMultistreamModalOpen, setIsMultistreamModalOpen] = useState<boolean>(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
+  const [isAffiliatePayoutModalOpen, setIsAffiliatePayoutModalOpen] = useState<boolean>(false);
 
   // Mode visuel de la salle : 'classroom' (Salle de Cours épurée) ou 'live_shopping' (Produits Physiques)
   const roomMode: 'classroom' | 'live_shopping' =
@@ -154,7 +217,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     return digits ? `https://wa.me/${digits}` : '';
   }, [whatsappChannelUrl]);
 
-  // Chargement de la session + préférences runtime (mode salle & sas payant)
+  // Chargement de la session + préférences runtime (mode salle, sas payant & enchère)
   useEffect(() => {
     let isMounted = true;
     getLiveSessionBySlug(resolvedSlug).then((res) => {
@@ -162,6 +225,8 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         const savedCfg = getSavedLiveRoomConfig(res.id);
         setSession({ ...res, ...savedCfg });
         setHasUnlockedPaidAccess(hasLocalLiveEnrollment(res.id));
+        const savedAuction = getSavedLiveAuction(res.id);
+        if (savedAuction) setActiveAuction(savedAuction);
       }
     });
 
@@ -201,20 +266,67 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     setMeta('og:type', 'video.other');
   }, [session.storeName, session.title, session.description, session.posterUrl]);
 
-  // Abonnements temps réel (session + bascule mode salle / sas payant)
+  // Abonnements temps réel : Session, Config salle, Prise de parole Audio/Visio, Enchères
   useEffect(() => {
     if (!session?.id) return;
+
     const unsubSession = subscribeLiveSession(session.id, (updated) => {
       setSession((prev) => ({ ...prev, ...updated }));
     });
     const unsubCfg = subscribeLiveRoomConfig(session.id, (cfg) => {
       setSession((prev) => ({ ...prev, ...cfg }));
     });
+
+    const stageChannel = createLiveStageSpeechChannel(session.id, {
+      onInvite: (invite) => {
+        if (isHostMode) return;
+        const myName =
+          (typeof window !== 'undefined' && localStorage.getItem('nana_live_participant_name')) || '';
+        const normTarget = (invite.targetName || '').trim().toLowerCase();
+        const normMe = myName.trim().toLowerCase();
+        if (!normTarget || !normMe || normTarget === normMe) {
+          playValidationBeep();
+          setPendingStageInvite(invite);
+        }
+      },
+      onStageEnded: ({ roomId }) => {
+        setActiveStageRoom((prev) => (prev?.roomId === roomId ? null : prev));
+        setPendingStageInvite((prev) => (prev?.roomId === roomId ? null : prev));
+      },
+    });
+    stageChannelRef.current = stageChannel;
+
+    const auctionChannel = createLiveAuctionChannel(session.id, {
+      onAuctionSync: (auction) => {
+        setActiveAuction(auction);
+      },
+      onBidPlaced: (bid) => {
+        setActiveAuction((prev) => {
+          if (!prev || prev.id !== bid.auctionId || prev.status !== 'active') return prev;
+          if (bid.amount <= prev.currentPrice && prev.bidsCount > 0) return prev;
+          const updated: LiveAuctionState = {
+            ...prev,
+            currentPrice: bid.amount,
+            highestBidderId: bid.bidderId,
+            highestBidderName: bid.bidderName,
+            bidsCount: prev.bidsCount + 1,
+            recentBids: [bid, ...(prev.recentBids || [])].slice(0, 10),
+          };
+          return updated;
+        });
+      },
+    });
+    auctionChannelRef.current = auctionChannel;
+
     return () => {
       unsubSession();
       unsubCfg();
+      stageChannel.cleanup();
+      stageChannelRef.current = null;
+      auctionChannel.cleanup();
+      auctionChannelRef.current = null;
     };
-  }, [session?.id]);
+  }, [session?.id, isHostMode]);
 
   // Bascule 1-Clic Mode Salle de Cours <-> Live Shopping Produits Physiques
   const handleChangeRoomMode = useCallback(
@@ -236,6 +348,111 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     },
     [isVerifiedHost, session.id]
   );
+
+  // Formateur donne la parole (Audio / Visio WebRTC natif) à un étudiant ayant levé la main
+  const handleGrantStageSpeech = useCallback(
+    async (user: HandRaisedUser, mode: 'audio' | 'video') => {
+      if (!isVerifiedHost) return;
+      const roomId = `stage-${session.id.slice(0, 12)}-${Date.now().toString(36)}`;
+      const invite: StageSpeechInvite = {
+        inviteId: `inv_${Date.now()}`,
+        sessionId: session.id,
+        roomId,
+        targetUserId: user.id,
+        targetName: user.name,
+        hostName: session.hostName || session.storeName,
+        mode,
+        createdAt: Date.now(),
+      };
+      await stageChannelRef.current?.sendInvite(invite);
+      setActiveStageRoom({
+        roomId,
+        label: `Intervention en direct avec ${user.name}`,
+        mode,
+      });
+    },
+    [isVerifiedHost, session.id, session.hostName, session.storeName]
+  );
+
+  // Vendeur lance une vente aux enchères en direct
+  const handleLaunchAuction = useCallback(
+    async (params: {
+      productId?: string;
+      productName: string;
+      productImage?: string;
+      startingPrice: number;
+      minStep: number;
+      durationSeconds: number;
+    }) => {
+      if (!isVerifiedHost) return;
+      const newAuction: LiveAuctionState = {
+        id: `auc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        sessionId: session.id,
+        productId: params.productId,
+        productName: params.productName,
+        productImage: params.productImage,
+        startingPrice: params.startingPrice,
+        currentPrice: params.startingPrice,
+        minStep: params.minStep,
+        bidsCount: 0,
+        recentBids: [],
+        status: 'active',
+        endsAt: Date.now() + params.durationSeconds * 1000,
+        createdAt: Date.now(),
+      };
+      setActiveAuction(newAuction);
+      await auctionChannelRef.current?.broadcastAuction(newAuction);
+    },
+    [isVerifiedHost, session.id]
+  );
+
+  const handlePlaceAuctionBid = useCallback(
+    async (amount: number) => {
+      const current = activeAuctionRef.current;
+      if (!current || current.status !== 'active') return;
+
+      const storedName =
+        (typeof window !== 'undefined' && localStorage.getItem('nana_live_participant_name')) ||
+        currentUser?.name ||
+        'Acheteur Live';
+
+      const bid: LiveAuctionBid = {
+        id: `bid_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        auctionId: current.id,
+        bidderId: viewerClientId,
+        bidderName: storedName,
+        amount,
+        createdAt: Date.now(),
+      };
+
+      const nextState: LiveAuctionState = {
+        ...current,
+        currentPrice: amount,
+        highestBidderId: viewerClientId,
+        highestBidderName: storedName,
+        bidsCount: current.bidsCount + 1,
+        recentBids: [bid, ...(current.recentBids || [])].slice(0, 10),
+      };
+
+      setActiveAuction(nextState);
+      await auctionChannelRef.current?.broadcastBid(bid);
+      await auctionChannelRef.current?.broadcastAuction(nextState);
+    },
+    [viewerClientId, currentUser?.name]
+  );
+
+  const handleEndAuction = useCallback(async () => {
+    const current = activeAuctionRef.current;
+    if (!current || current.status === 'ended') return;
+    const endedState: LiveAuctionState = { ...current, status: 'ended' };
+    setActiveAuction(endedState);
+    await auctionChannelRef.current?.broadcastAuction(endedState);
+  }, []);
+
+  const handleDismissAuction = useCallback(async () => {
+    setActiveAuction(null);
+    await auctionChannelRef.current?.broadcastAuction(null);
+  }, []);
 
   // Épingler / Désépingler un produit en direct (Hôte vérifié uniquement)
   const handlePinProduct = useCallback(
@@ -273,13 +490,16 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       playTapBeep();
       const phone = (session.whatsappPhone || '').replace(/[^0-9]/g, '');
       const priceFormatted = new Intl.NumberFormat('fr-FR').format(product.price) + ' F CFA';
-      const msg = `Bonjour ${session.storeName}, je suis sur votre session en direct et je souhaite commander : *${product.name}* (${priceFormatted}). Pouvez-vous m'envoyer le lien de paiement ?`;
+      const refNote = affiliateAttribution?.referrerCode
+        ? ` (Réf affilié : ${affiliateAttribution.referrerCode})`
+        : '';
+      const msg = `Bonjour ${session.storeName}, je suis sur votre session en direct et je souhaite commander : *${product.name}* (${priceFormatted})${refNote}. Pouvez-vous m'envoyer le lien de paiement ?`;
       const url = phone
         ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
         : `https://wa.me/?text=${encodeURIComponent(msg)}`;
       window.open(url, '_blank');
     },
-    [session.whatsappPhone, session.storeName]
+    [session.whatsappPhone, session.storeName, affiliateAttribution?.referrerCode]
   );
 
   const handleBack = () => {
@@ -298,13 +518,22 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     Number(session.accessPrice || 0) > 0 &&
     !hasUnlockedPaidAccess;
 
+  const auctionLinkedProduct = useMemo(
+    () => session.products?.find((p) => p.id === activeAuction?.productId),
+    [session.products, activeAuction?.productId]
+  );
+
+  const viewerDisplayName =
+    (typeof window !== 'undefined' && localStorage.getItem('nana_live_participant_name')) ||
+    currentUser?.name ||
+    'Participant';
+
   return (
     <div className="min-h-screen w-full flex flex-col font-sans bg-[#F5F7FB] text-slate-900 selection:bg-[#1D4ED8] selection:text-white">
       {/* =====================================================================
           1. BARRE SUPÉRIEURE ÉPURÉE — PALETTE NANASORE BLANC PUR & BLEU ROYAL
          ===================================================================== */}
       <header className="sticky top-0 z-40 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-3 sm:px-6 flex items-center justify-between gap-3">
-        {/* Gauche : Retour + Identité + Mode Salle */}
         <div className="flex items-center gap-2.5 min-w-0">
           <button
             type="button"
@@ -353,7 +582,6 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           </div>
         </div>
 
-        {/* Droite : Actions propres & discrètes */}
         <div className="flex items-center gap-2 shrink-0">
           {isVerifiedHost && (
             <button
@@ -438,8 +666,72 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               onOpenMultistream={() => setIsMultistreamModalOpen(true)}
               onOpenBookingModal={() => setIsBookingModalOpen(true)}
               onUpdateAccessGate={handleUpdateAccessGate}
+              onGrantStageSpeech={handleGrantStageSpeech}
+              onLaunchAuction={handleLaunchAuction}
+              onOpenAffiliatePayouts={() => setIsAffiliatePayoutModalOpen(true)}
               onSelectTab={(tab) => setActiveClassroomTab(tab)}
             />
+          )}
+
+          {/* INVITATION PRISE DE PAROLE AUDIO / VISIO POUR L'ÉTUDIANT */}
+          {!isHostMode && pendingStageInvite && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1D4ED8] to-[#1E40AF] text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <Mic className="w-5 h-5 text-amber-300 animate-bounce" />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-100">
+                    Prise de parole en direct
+                  </p>
+                  <p className="text-sm font-black">
+                    {pendingStageInvite.hostName} vous donne la parole ({pendingStageInvite.mode === 'audio' ? 'Audio' : 'Vidéo'}) !
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    stageChannelRef.current?.sendResponse({
+                      inviteId: pendingStageInvite.inviteId,
+                      roomId: pendingStageInvite.roomId,
+                      accepted: false,
+                      participantName: viewerDisplayName,
+                      timestamp: Date.now(),
+                    });
+                    setPendingStageInvite(null);
+                  }}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+                >
+                  Décliner
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playValidationBeep();
+                    stageChannelRef.current?.sendResponse({
+                      inviteId: pendingStageInvite.inviteId,
+                      roomId: pendingStageInvite.roomId,
+                      accepted: true,
+                      participantName: viewerDisplayName,
+                      timestamp: Date.now(),
+                    });
+                    setActiveStageRoom({
+                      roomId: pendingStageInvite.roomId,
+                      label: `Votre intervention en direct avec ${pendingStageInvite.hostName}`,
+                      mode: pendingStageInvite.mode,
+                    });
+                    setPendingStageInvite(null);
+                  }}
+                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-white text-[#1D4ED8] hover:bg-blue-50 text-xs font-black flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Prendre la parole</span>
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Notifications interactives compactes (Quiz ou Devoir lancé en direct) */}
@@ -489,7 +781,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
           {/* GRILLE PRINCIPALE : SCÈNE VIDÉO (8 COLS) + SALLE INTERACTIVE PRO (4 COLS) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
-            {/* COLONNE GAUCHE : SCÈNE VIDÉO + BARRE SESSION + PRODUITS (SI MODE LIVE SHOPPING) */}
+            {/* COLONNE GAUCHE : SCÈNE VIDÉO + ENCHÈRE (LIVE SHOPPING) + INFOS + PRODUITS */}
             <div className="lg:col-span-8 space-y-4">
               {/* Scène Vidéo Principale (Lecteur Caméléon / YouTube Furtif / HLS / Caméra WHIP) */}
               <div className="rounded-3xl overflow-hidden shadow-xl shadow-blue-950/10 bg-slate-950 relative ring-1 ring-slate-200">
@@ -510,7 +802,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                   />
                 )}
 
-                {/* Overlay Commerce en Direct (activé en mode Live Shopping ou si produits épinglés) */}
+                {/* Overlay Commerce en Direct (activé en mode Live Shopping) */}
                 {roomMode === 'live_shopping' && (
                   <NanasoreLiveCommerceOverlay
                     liveId={liveStreamSlug}
@@ -529,6 +821,24 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 )}
               </div>
 
+              {/* MODULE VENTE AUX ENCHÈRES EN DIRECT (MODE LIVE SHOPPING) */}
+              {roomMode === 'live_shopping' && activeAuction && (
+                <LiveAuctionWidget
+                  auction={activeAuction}
+                  isHost={isHostMode}
+                  storeId={session.storeId || liveStreamSlug}
+                  storeName={session.storeName}
+                  whatsappPhone={session.whatsappPhone}
+                  affiliateEnabled={auctionLinkedProduct?.affiliateEnabled !== false}
+                  affiliateCommissionPercent={auctionLinkedProduct?.affiliateCommissionPercent || 10}
+                  currentBidderId={viewerClientId}
+                  currentBidderName={viewerDisplayName}
+                  onPlaceBid={handlePlaceAuctionBid}
+                  onEndAuction={handleEndAuction}
+                  onDismissAuction={handleDismissAuction}
+                />
+              )}
+
               {/* Cartouche d'information épuré (Blanc pur + Bleu Royal) */}
               <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -540,6 +850,12 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <Lock className="w-2.5 h-2.5" />
                         <span>Accès VIP vérifié</span>
+                      </span>
+                    )}
+                    {affiliateAttribution?.referrerCode && !isHostMode && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#1D4ED8] border border-blue-200">
+                        <Users className="w-2.5 h-2.5" />
+                        <span>Invité par {affiliateAttribution.referrerCode}</span>
                       </span>
                     )}
                     {session.hostName && (
@@ -621,7 +937,52 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         </main>
       )}
 
-      {/* MODALE DE PARTAGE MULTI-RÉSEAUX 1-CLIC */}
+      {/* SALLE DE PRISE DE PAROLE AUDIO / VISIO WEBRTC NATIVE EN OVERLAY */}
+      {activeStageRoom && (
+        <div className="fixed inset-0 z-[9998] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-6">
+          <div className="w-full max-w-4xl h-[82vh] bg-slate-950 border border-blue-500/40 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-4 py-3 bg-[#1D4ED8] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <Mic className="w-4 h-4 text-amber-300 animate-pulse shrink-0" />
+                <span className="text-xs sm:text-sm font-black truncate">
+                  {activeStageRoom.label}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  stageChannelRef.current?.sendStageEnded(
+                    activeStageRoom.roomId,
+                    isHostMode ? 'host' : 'participant'
+                  );
+                  setActiveStageRoom(null);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <PhoneOff className="w-3.5 h-3.5" />
+                <span>Couper la parole</span>
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <NativeCoaching1to1Room
+                roomId={activeStageRoom.roomId}
+                storeSlug={liveStreamSlug}
+                storeName={session.storeName}
+                isHost={isHostMode}
+                onCallEnded={() => {
+                  stageChannelRef.current?.sendStageEnded(
+                    activeStageRoom.roomId,
+                    isHostMode ? 'host' : 'participant'
+                  );
+                  setActiveStageRoom(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE DE PARTAGE MULTI-RÉSEAUX + GÉNÉRATEUR LIEN AFFILIÉ */}
       <LiveShareModal
         sessionSlug={liveStreamSlug}
         title={session.title}
@@ -638,6 +999,16 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           storeName={session.storeName}
           liveTitle={session.title}
           onClose={() => setIsMultistreamModalOpen(false)}
+        />
+      )}
+
+      {/* MODALE PAIEMENT & SUIVI DES COMMISSIONS AFFILIÉS — VENDEUR VÉRIFIÉ UNIQUEMENT */}
+      {isVerifiedHost && (
+        <LiveAffiliatePayoutModal
+          isOpen={isAffiliatePayoutModalOpen}
+          onClose={() => setIsAffiliatePayoutModalOpen(false)}
+          merchantId={session.storeId || liveStreamSlug}
+          storeName={session.storeName}
         />
       )}
 

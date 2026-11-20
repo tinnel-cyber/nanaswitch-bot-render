@@ -45,6 +45,7 @@ import {
   getDigitalReceiptWhatsAppUrl,
   sendDigitalReceiptViaApi
 } from '../../digitalReceiptService';
+import { recordAffiliateSaleCommission } from '../../liveAffiliateService';
 
 // =============================================================================
 // TYPES DU CHECKOUT FINTECH ULTIME
@@ -410,6 +411,31 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
 
   // 6. Succès & Détails finaux
   const [completedDetails, setCompletedDetails] = useState<PaymentSuccessDetails | null>(null);
+  const affiliateRecordedTxRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!completedDetails) return;
+    const txKey = completedDetails.transactionId || `${completedDetails.timestamp}`;
+    if (affiliateRecordedTxRef.current === txKey) return;
+    affiliateRecordedTxRef.current = txKey;
+
+    const prodAny = (product || resolvedProduct) as any;
+    const isAffiliateAllowed = prodAny?.affiliateEnabled !== false;
+    const commPercent = Number(prodAny?.affiliateCommissionPercent) || 10;
+
+    if (isAffiliateAllowed && commPercent > 0) {
+      recordAffiliateSaleCommission({
+        merchantId: merchantId || storeConfig?.slug || 'boutique',
+        productId: resolvedProduct?.id,
+        productName: resolvedProduct?.name || orderDescription || 'Commande Nanasore',
+        orderAmount: completedDetails.amount || finalTotal || 0,
+        commissionPercent: commPercent,
+        buyerName: completedDetails.customerName || customerName,
+        buyerContact: completedDetails.phoneNumber || completedDetails.customerEmail || paymentPhone,
+        transactionId: completedDetails.transactionId,
+      }).catch(() => {});
+    }
+  }, [completedDetails, product, resolvedProduct, merchantId, storeConfig?.slug, orderDescription, finalTotal, customerName, paymentPhone]);
 
   // Calculs financiers dynamiques
   const subtotal = resolvedProduct.price;
