@@ -2,7 +2,7 @@ services:
   - type: web
     name: nana-payment-api
     runtime: node
-    plan: free
+    plan: starter
     region: frankfurt
     buildCommand: npm install
     startCommand: npm start

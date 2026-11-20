@@ -159,10 +159,7 @@ export function getResolvedGeminiApiKey(explicitKey?: string): string {
   } catch {
     // Ignorer
   }
-  const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-  if (envKey && typeof envKey === 'string' && envKey.trim()) {
-    return envKey.trim();
-  }
+  // Sécurité production : ne pas embarquer de clé Gemini serveur dans le bundle client.
   return '';
 }
 

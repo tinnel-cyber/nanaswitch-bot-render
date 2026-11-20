@@ -1,8 +1,8 @@
 /**
  * @file supabase-admin.js
- * @description Client Supabase serveur pour le micro-service de paiement NanaSwitch (Northflank).
+ * @description Client Supabase serveur (Service Role uniquement) pour le micro-service de paiement NanaSwitch.
  * Remplace définitivement firebase-admin / Firestore pour la persistance des transactions,
- * des wallets vendeurs et du split financier idempotent.
+ * des wallets vendeurs, des marchands et du split financier idempotent atomique.
  */
 
 let createClient = null;
@@ -12,26 +12,26 @@ try {
   createClient = null;
 }
 
+// URL unifiée avec src/lib/supabase.ts et server.ts (surchargeable via SUPABASE_URL)
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
-  'https://nqwlvkkxwvwhcwxpxtjq.supabase.co';
+  'https://wsxnznobeefrsoicjqte.supabase.co';
 
-const SUPABASE_KEY =
+// Exige strictement une clé Service Role / Secret côté serveur (jamais de fallback anon silencieux)
+const SUPABASE_SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
   '';
 
 let cachedClient = null;
 
 function getSupabaseAdmin() {
   if (cachedClient) return cachedClient;
-  if (!createClient || !SUPABASE_URL || !SUPABASE_KEY) {
+  if (!createClient || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return null;
   }
-  cachedClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  cachedClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return cachedClient;
@@ -40,5 +40,5 @@ function getSupabaseAdmin() {
 module.exports = {
   getSupabaseAdmin,
   SUPABASE_URL,
-  isSupabaseConfigured: Boolean(createClient && SUPABASE_URL && SUPABASE_KEY),
+  isSupabaseConfigured: Boolean(createClient && SUPABASE_URL && SUPABASE_SERVICE_KEY),
 };

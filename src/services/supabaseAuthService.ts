@@ -102,49 +102,6 @@ export async function loginWithEmail(email: string, password: string): Promise<S
     if (msg.includes('Invalid login credentials')) {
       msg = 'Adresse e-mail ou mot de passe incorrect.';
     } else if (msg.includes('Email not confirmed')) {
-      // Tenter une auto-confirmation via le serveur backend
-      try {
-        const confirmRes = await fetch('/api/auth/confirm-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail }),
-        });
-        const confirmData = await confirmRes.json().catch(() => null);
-        if (confirmData?.confirmed) {
-          const retryRes = await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password,
-          });
-          if (retryRes.data?.user) {
-            const u = retryRes.data.user;
-            const displayName = u.user_metadata?.full_name || u.user_metadata?.name || cleanEmail.split('@')[0];
-            const retryUser: SupabaseAuthUser = {
-              id: u.id,
-              uid: u.id,
-              email: u.email || cleanEmail,
-              displayName,
-              name: displayName,
-              fullName: displayName,
-              emailVerified: true,
-              providerData: [{ providerId: 'password' }],
-              role: u.user_metadata?.seller_mode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-              sellerMode: u.user_metadata?.seller_mode || 'merchant_ecommerce',
-            };
-            if (typeof window !== 'undefined') {
-              try {
-                localStorage.setItem('nana_store_auth_user', JSON.stringify({
-                  ...retryUser,
-                  plan: 'free',
-                }));
-                localStorage.setItem('nana_auth_token', retryRes.data.session?.access_token || '');
-              } catch {}
-            }
-            return retryUser;
-          }
-        }
-      } catch (autoErr) {
-        console.warn('[SUPABASE AUTH] Auto-confirm error:', autoErr);
-      }
       msg = 'Veuillez confirmer votre adresse email avant de vous connecter.';
     }
     throw new Error(msg);

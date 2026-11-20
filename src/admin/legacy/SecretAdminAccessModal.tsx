@@ -28,24 +28,11 @@ export const SecretAdminAccessModal: React.FC<SecretAdminAccessModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCode = codeInput.trim();
-
-    // Codes secrets autorisés pour le Super Admin (*#007#, 007, codes PIN, ou identifiants maîtres)
-    const validCodes = [
-      '*#007#', '007', '*#007', 'pousbila36@gmail.com', 'pousbila04@gmail.com', 
-      'pousbila', 'pousbila04', 'admin2026', '2026', '1234', '7777', '8888', '0007', 'admin', 'superadmin', 'konkobo'
-    ];
-
-    if (validCodes.includes(cleanCode) || validCodes.includes(cleanCode.toLowerCase())) {
-      playValidationBeep();
-      promoteSuperAdminLocally('pousbila04-superadmin');
-      onSuccess();
-      onClose();
-    } else {
-      playCancelSound();
-      setErrorMessage("Code d'accès incorrect.");
-      setTimeout(() => setErrorMessage(null), 3500);
-    }
+    // Sécurité production : les codes locaux en dur sont désactivés.
+    // L'accès Super Admin nécessite une authentification Supabase vérifiée.
+    playCancelSound();
+    setErrorMessage("Déverrouillage par code local désactivé. Connectez-vous avec un compte Super Admin vérifié.");
+    setTimeout(() => setErrorMessage(null), 4000);
   };
 
   return (

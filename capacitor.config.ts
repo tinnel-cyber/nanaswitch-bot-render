@@ -7,12 +7,12 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
-    cleartext: true,
+    cleartext: false,
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
     captureInput: true,
-    webContentsDebuggingEnabled: true,
+    webContentsDebuggingEnabled: false,
   },
   plugins: {
     SplashScreen: {
@@ -27,9 +27,6 @@ const config: CapacitorConfig = {
     },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
-    },
-    FirebaseAuthentication: {
-      skipNativeAuth: false,
     },
     App: {
       allowCustomText: true,

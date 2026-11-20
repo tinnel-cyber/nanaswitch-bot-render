@@ -39,13 +39,13 @@ export function getAwsConfig() {
     (typeof process !== 'undefined' ? process.env?.AWS_BUCKET_NAME : '') ||
     'nsore-video-storage';
 
+  // Sécurité production : jamais de clés AWS secrètes dans le bundle navigateur (VITE_*).
+  // Les uploads client utilisent exclusivement des URLs présignées générées par le backend.
   const accessKeyId =
-    (import.meta as any).env?.VITE_AWS_ACCESS_KEY_ID ||
     (typeof process !== 'undefined' ? process.env?.AWS_ACCESS_KEY_ID : '') ||
     '';
 
   const secretAccessKey =
-    (import.meta as any).env?.VITE_AWS_SECRET_ACCESS_KEY ||
     (typeof process !== 'undefined' ? process.env?.AWS_SECRET_ACCESS_KEY : '') ||
     '';
 

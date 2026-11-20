@@ -1,20 +1,28 @@
 /**
  * ==============================================================================
- * MIDDLEWARE D'AUTHENTIFICATION & SÉCURISATION NANASWITCH CLOUD
+ * MIDDLEWARE D'AUTHENTIFICATION & SÉCURISATION NANASWITCH CLOUD (100% SUPABASE)
  * ==============================================================================
- * 
+ *
  * - Validation stricte des clés secrètes complexes : ns_live_sk_<random>
- * - Vérification cryptographique par hash Bcrypt dans Firestore (collection `merchants`)
- * - Attache les données du marchand authentifié à req.merchant
+ * - Vérification cryptographique par hash Bcrypt dans Supabase (`nanaswitch_merchants`)
+ * - Fail-closed absolu : aucun compte de secours local lorsque la base est indisponible
  * - Bloque avec HTTP 401 Unauthorized en cas d'absence ou d'invalidité
  */
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const { getSupabaseAdmin } = require('../supabase-admin');
+
+function timingSafeStringEqual(a, b) {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(String(a), 'utf8');
+  const bufB = Buffer.from(String(b), 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Génère une clé secrète de signature Webhook HMAC-SHA256 (32 octets aléatoires)
- * @returns {string} Ex: "ns_whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
  */
 function generateWebhookSecret() {
   const whsecRandom = crypto.randomBytes(32).toString('hex');
@@ -23,8 +31,6 @@ function generateWebhookSecret() {
 
 /**
  * Génère une paire de clés d'API NanaSwitch sécurisées et un secret webhook
- * @param {'live' | 'test'} [mode='live']
- * @returns {Promise<{ publicKey: string, secretKey: string, secretKeyHash: string, webhookSecret: string }>}
  */
 async function generateNanaSwitchKeyPair(mode = 'live') {
   const envPrefix = mode === 'test' ? 'ns_test_' : 'ns_live_';
@@ -46,17 +52,15 @@ async function generateNanaSwitchKeyPair(mode = 'live') {
 
 /**
  * Middleware Express vérifiant obligatoirement la clé secrète NanaSwitch
- * @param {admin.firestore.Firestore} db Instance Firestore
  */
 function requireNanaSwitchAuth(db) {
   return async function (req, res, next) {
     try {
-      // 1. Extraction de la clé secrète depuis les en-têtes ou le corps
       const skHeader = req.headers['x-nanaswitch-skey'] ||
                        req.headers['x-nanaswitch-key'] ||
                        req.headers['x-api-key'] ||
                        '';
-      
+
       let providedKey = skHeader;
       const authHeader = req.headers['authorization'] || '';
       if (!providedKey && authHeader.startsWith('Bearer ')) {
@@ -77,59 +81,79 @@ function requireNanaSwitchAuth(db) {
 
       const cleanKey = String(providedKey).trim();
 
-      if (!db) {
-        console.warn('[NANASWITCH AUTH] Firestore non initialisé, bascule sur compte de secours local.');
+      // 1. Clé interne plateforme explicite (via variable d'environnement sécurisée uniquement)
+      const internalMasterKey = process.env.NANASWITCH_INTERNAL_KEY || process.env.ADMIN_API_KEY || '';
+      if (internalMasterKey && timingSafeStringEqual(cleanKey, internalMasterKey)) {
         req.merchant = {
           merchant_id: 'm_live_bf_001',
-          business_name: 'NANASORE TECHNOLOGIES (Mode Secours)',
+          business_name: 'NANASORE TECHNOLOGIES',
           account_type: 'INTERNAL',
           status: 'ACTIVE',
           integration_config: { mode: 'AGREGATED' },
-          api_pricing_config: { cost_per_request_xof: 0.02, api_credits_balance: 5000, auto_block_on_zero: true }
+          api_pricing_config: { cost_per_request_xof: 0, api_credits_balance: 999999, auto_block_on_zero: false }
         };
         return next();
       }
 
-      // 2. Recherche du marchand dans la collection `merchants`
-      // On peut optimiser si un header "x-merchant-id" est transmis
       const explicitMerchantId = req.headers['x-merchant-id'] || req.body?.merchantId || req.body?.merchant_id;
       let targetMerchant = null;
 
-      if (explicitMerchantId) {
-        const docSnap = await db.collection('merchants').doc(explicitMerchantId).get();
-        if (docSnap.exists) {
-          const mData = docSnap.data();
-          const storedHash = mData?.nanaswitch_keys?.secret_key_hash;
-          if (storedHash) {
-            const isMatch = await bcrypt.compare(cleanKey, storedHash).catch(() => false);
+      // 2. Validation via Supabase `nanaswitch_merchants` (source de vérité principale)
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        if (explicitMerchantId) {
+          const { data: row } = await supabase
+            .from('nanaswitch_merchants')
+            .select('*')
+            .eq('merchant_id', String(explicitMerchantId))
+            .maybeSingle();
+
+          if (row && row.secret_key_hash) {
+            const isMatch = await bcrypt.compare(cleanKey, row.secret_key_hash).catch(() => false);
             if (isMatch) {
+              targetMerchant = row;
+            }
+          }
+        } else {
+          // Exige x-merchant-id pour éviter un scan O(N) coûteux en bcrypt DoS
+          const { data: rows } = await supabase
+            .from('nanaswitch_merchants')
+            .select('*')
+            .eq('status', 'ACTIVE')
+            .limit(25);
+
+          for (const row of (rows || [])) {
+            if (row.secret_key_hash) {
+              const isMatch = await bcrypt.compare(cleanKey, row.secret_key_hash).catch(() => false);
+              if (isMatch) {
+                targetMerchant = row;
+                break;
+              }
+            }
+          }
+        }
+      } else if (db) {
+        // Fallback legacy Firestore uniquement si un vrai client Firestore est injecté (tests)
+        if (explicitMerchantId) {
+          const docSnap = await db.collection('merchants').doc(explicitMerchantId).get();
+          if (docSnap.exists) {
+            const mData = docSnap.data();
+            const storedHash = mData?.nanaswitch_keys?.secret_key_hash;
+            if (storedHash && (await bcrypt.compare(cleanKey, storedHash).catch(() => false))) {
               targetMerchant = mData;
             }
           }
         }
+      } else {
+        // Fail-closed strict : jamais d'accès gratuit quand la base n'est pas configurée
+        return res.status(503).json({
+          success: false,
+          errorCode: '503_AUTH_STORE_UNAVAILABLE',
+          error: 'Service Unavailable',
+          message: 'Service d\'authentification marchand indisponible (Supabase Service Role requis).'
+        });
       }
 
-      // 3. Si non trouvé par ID explicite, recherche globale parmi les marchands actifs
-      if (!targetMerchant) {
-        const querySnap = await db.collection('merchants')
-          .where('status', '==', 'ACTIVE')
-          .limit(50)
-          .get();
-
-        for (const doc of querySnap.docs) {
-          const mData = doc.data();
-          const storedHash = mData?.nanaswitch_keys?.secret_key_hash;
-          if (storedHash) {
-            const isMatch = await bcrypt.compare(cleanKey, storedHash).catch(() => false);
-            if (isMatch) {
-              targetMerchant = mData;
-              break;
-            }
-          }
-        }
-      }
-
-      // 4. Si la clé est introuvable ou invalide
       if (!targetMerchant) {
         return res.status(401).json({
           success: false,
@@ -139,7 +163,6 @@ function requireNanaSwitchAuth(db) {
         });
       }
 
-      // Vérification du statut du marchand
       if (targetMerchant.status !== 'ACTIVE') {
         return res.status(403).json({
           success: false,
@@ -149,15 +172,13 @@ function requireNanaSwitchAuth(db) {
         });
       }
 
-      // 5. Attachement des informations du marchand à la requête Express
       req.merchant = targetMerchant;
       next();
     } catch (err) {
       console.error('[NANASWITCH AUTH ERROR]', err.message);
       return res.status(500).json({
         success: false,
-        error: 'Erreur interne lors de la validation des identifiants NanaSwitch',
-        details: err.message
+        error: 'Erreur interne lors de la validation des identifiants NanaSwitch'
       });
     }
   };
@@ -165,7 +186,6 @@ function requireNanaSwitchAuth(db) {
 
 /**
  * Middleware optionnel : tente d'authentifier le marchand, mais ne bloque pas la requête si absent
- * (utile pour les flux publics de paiement direct vitrine).
  */
 function optionalNanaSwitchAuth(db) {
   return async function (req, res, next) {

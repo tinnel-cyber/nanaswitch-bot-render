@@ -1,9 +1,8 @@
 # ==============================================================================
 # Étape 1 : Builder (Compilation du client Vite et du serveur Node.js)
 # ==============================================================================
-FROM node:26.13.0-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
-# Allocation mémoire V8 optimisée pour prévenir tout OOM pendant la compilation
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
@@ -12,15 +11,14 @@ RUN npm run build
 RUN mkdir -p /app/dist /app/build
 
 # ==============================================================================
-# Étape 2 : Production (Image légère, runtime optimisé sous Node 26.13.0)
+# Étape 2 : Production (Image légère, utilisateur non-root)
 # ==============================================================================
-FROM node:26.13.0-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# Installation de FFmpeg pour le transcodage et relais RTMP multi-plateformes en direct
 RUN apk add --no-cache ffmpeg
-# Plafond mémoire strict pour environnement conteneurisé (VPS / Render) évitant les crashs SIGKILL 137 OOM
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=768"
+
 COPY package*.json ./
 RUN npm install --legacy-peer-deps --omit=dev
 
@@ -30,13 +28,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/payment-service ./payment-service
 
-# Ports réseau : Render utilise 10000 par défaut, les environnements locaux/VPS utilisent 3000
+# Installation des dépendances production de payment-service (pour fixie-proxy & modules partagés)
+RUN cd /app/payment-service && npm install --omit=dev
+
+# Permissions et passage en utilisateur non-root
+RUN chown -R node:node /app
+USER node
+
 ENV PORT=10000
 EXPOSE 10000
 EXPOSE 3000
 
-# Healthcheck natif Docker multi-ports (teste 10000 puis fallback 3000)
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:10000/health || wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
-CMD ["node", "--max-old-space-size=512", "dist/server.cjs"]
+CMD ["node", "--max-old-space-size=768", "dist/server.cjs"]

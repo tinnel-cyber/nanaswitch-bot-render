@@ -1,0 +1,54 @@
+name: Production CI — Build & Security Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install payment-service dependencies
+        working-directory: payment-service
+        run: npm install
+
+      - name: Verify payment-service syntax
+        working-directory: payment-service
+        run: |
+          node --check server.js
+          node --check supabase-admin.js
+          node --check nana-switch/split-engine.js
+          node --check nana-switch/validateNanaSwitchKey.js
+          node --check chat-finance-controller.js
+
+      - name: Build frontend & server bundle
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
+
+      - name: Verify Supabase migration version uniqueness
+        run: |
+          python3 -c '
+          import os, sys
+          files = sorted(f for f in os.listdir("supabase/migrations") if f.endswith(".sql"))
+          prefixes = [f.split("_", 1)[0] for f in files]
+          dups = {p for p in prefixes if prefixes.count(p) > 1}
+          if dups:
+              print("Duplicate Supabase migration prefixes:", dups)
+              sys.exit(1)
+          print(f"OK: {len(files)} migrations with unique version prefixes.")
+          '

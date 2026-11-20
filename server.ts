@@ -76,7 +76,71 @@ if (!process.env.SUPABASE_URL && fs.existsSync(path.join(process.cwd(), 'functio
 }
 
 
-const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'konkobo_telecom_webhook_secret_key_2026';
+const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || '';
+
+const KNOWN_ADMIN_EMAILS = new Set([
+  'pousbila04@gmail.com',
+  'pousbila36@gmail.com',
+  'contact@nanasore.com',
+  'admin@nanasore.com',
+  ...(process.env.SUPER_ADMIN_EMAILS ? process.env.SUPER_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : [])
+]);
+
+function timingSafeEqualsServer(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+async function resolveSupabaseUserFromRequest(req: express.Request): Promise<any | null> {
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+  try {
+    const { supabase } = await import('./app/utils/supabase.server');
+    if (!supabase) return null;
+    const { data, error } = await supabase.auth.getUser(token);
+    if (!error && data?.user) return data.user;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+async function requireAuthenticatedUser(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
+  const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
+  if (internalSecret && providedKey && timingSafeEqualsServer(providedKey, internalSecret)) {
+    (req as any).isInternalAdmin = true;
+    return next();
+  }
+  const user = await resolveSupabaseUserFromRequest(req);
+  if (user) {
+    (req as any).authUser = user;
+    return next();
+  }
+  return res.status(401).json({ success: false, error: 'Authentification requise (Bearer JWT valide).' });
+}
+
+async function requireAdminOrInternal(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
+  const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
+  if (internalSecret && providedKey && timingSafeEqualsServer(providedKey, internalSecret)) {
+    (req as any).isInternalAdmin = true;
+    return next();
+  }
+  const user = await resolveSupabaseUserFromRequest(req);
+  const email = String(user?.email || '').toLowerCase();
+  const role = String(user?.app_metadata?.role || user?.user_metadata?.role || '').toUpperCase();
+  if (user && (KNOWN_ADMIN_EMAILS.has(email) || role === 'SUPER_ADMIN' || role === 'ADMIN')) {
+    (req as any).authUser = user;
+    return next();
+  }
+  return res.status(403).json({ success: false, error: 'Accès administrateur requis.' });
+}
 
 /**
  * Extraction SSR du thème depuis le cookie de la requête
@@ -183,25 +247,31 @@ async function callGeminiWithRetry(
 async function startServer() {
   const app = express();
 
-  // Configuration CORS avancée pour nanasore.com, *.nanasore.com, nsore.shop, *.code.run et environnement local
+  // Configuration CORS stricte (sans wildcard *.code.run / *.onrender.com avec credentials)
+  const explicitAllowedOrigins = new Set([
+    'https://nanasore.com',
+    'https://www.nanasore.com',
+    'https://nsore.shop',
+    'https://www.nsore.shop',
+    'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run',
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : [])
+  ]);
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
-      const allowedPatterns = [
-        /^https?:\/\/localhost(:\d+)?$/,
-        /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-        /^https:\/\/([a-zA-Z0-9-]+\.)*nanasore\.com$/,
-        /^https:\/\/([a-zA-Z0-9-]+\.)*nsore\.shop$/,
-        /^https:\/\/([a-zA-Z0-9-]+\.)*code\.run$/,
-        /^https:\/\/([a-zA-Z0-9-]+\.)*onrender\.com$/
-      ];
+      const isAllowed =
+        explicitAllowedOrigins.has(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nanasore\.com$/.test(origin) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nsore\.shop$/.test(origin);
 
-      const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
       if (isAllowed) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-nanaswitch-key, x-tenant-id, x-requested-with, Accept, Origin');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-api-key, x-internal-secret, x-nanaswitch-key, x-nanaswitch-skey, x-merchant-id, x-tenant-id, x-requested-with, Accept, Origin');
+        res.setHeader('Vary', 'Origin');
       }
     }
 
@@ -213,11 +283,38 @@ async function startServer() {
     next();
   });
 
-  // Security Hardening Headers
+  // Security Hardening Headers (incluant HSTS)
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+
+  // Rate limiting léger par IP sur les routes /api/* (150 req/min, hors webhooks & health)
+  const apiRateMap = new Map<string, { count: number; resetAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of apiRateMap.entries()) {
+      if (v.resetAt <= now) apiRateMap.delete(k);
+    }
+  }, 60_000).unref();
+
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/health' || req.path.includes('webhook')) return next();
+    const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+    const now = Date.now();
+    let rec = apiRateMap.get(ip);
+    if (!rec || rec.resetAt <= now) {
+      if (apiRateMap.size > 10000) apiRateMap.clear();
+      rec = { count: 0, resetAt: now + 60_000 };
+      apiRateMap.set(ip, rec);
+    }
+    rec.count += 1;
+    if (rec.count > 150) {
+      return res.status(429).json({ success: false, error: 'Too Many Requests' });
+    }
     next();
   });
 
@@ -245,8 +342,8 @@ async function startServer() {
     });
   });
 
-  // Test de connexion Supabase (lecture de la table organizations)
-  app.get('/api/test-supabase', async (req, res) => {
+  // Test de connexion Supabase (protégé Admin uniquement)
+  app.get('/api/test-supabase', requireAdminOrInternal, async (req, res) => {
     try {
       const { supabase } = await import('./app/utils/supabase.server');
       const { data, error } = await supabase.from('organizations').select('*').limit(50);
@@ -291,7 +388,7 @@ async function startServer() {
   });
 
   // Sauvegarde / publication des tarifs dynamiques vers Supabase
-  app.post('/api/landing-pricing', async (req, res) => {
+  app.post('/api/landing-pricing', requireAdminOrInternal, async (req, res) => {
     try {
       const { pricingSection, author } = req.body;
       const { supabase } = await import('./app/utils/supabase.server');
@@ -793,7 +890,7 @@ async function startServer() {
   });
 
   // 2. Consultation de tous les dossiers KYC / Univers par le Super Admin
-  app.get(['/api/kyc/submissions', '/api/admin/kyc/submissions'], async (_req, res) => {
+  app.get(['/api/kyc/submissions', '/api/admin/kyc/submissions'], requireAdminOrInternal, async (_req, res) => {
     try {
       const stored = getStoredKycSubmissions();
       return res.json({ success: true, submissions: stored });
@@ -868,7 +965,7 @@ async function startServer() {
   });
 
   // 3. Validation ou Rejet par le Super Admin
-  app.post('/api/admin/kyc/validate', async (req, res) => {
+  app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
       const { storeId, userId, action = 'approve', adminEmail = 'Super-Admin', rejectionReason } = req.body || {};
       const isApproved = action === 'approve' || action === 'verified';
@@ -1331,7 +1428,7 @@ async function startServer() {
   app.get('/auth/verify', handleAuthVerify);
 
   // Route POST de confirmation programmatique d'un utilisateur Supabase
-  app.post('/api/auth/confirm-user', async (req, res) => {
+  app.post('/api/auth/confirm-user', requireAdminOrInternal, async (req, res) => {
     try {
       const email = String(req.body?.email || '').trim().toLowerCase();
       if (!email) {
@@ -1383,7 +1480,7 @@ async function startServer() {
   app.get('/api/auth/confirm-email', handleAuthVerify);
 
   // ─── Route S3 Présignée /api/get-upload-url (AWS S3 Direct Upload) ───────
-  app.post('/api/get-upload-url', async (req, res) => {
+  app.post('/api/get-upload-url', requireAuthenticatedUser, async (req, res) => {
     try {
       let fileName = req.body?.fileName;
       let fileType = req.body?.fileType;
@@ -1450,7 +1547,7 @@ async function startServer() {
   });
 
   // ─── Route S3 Présignée /api/media/presign (VideoUploadModal & s3UploadService) ───
-  app.post('/api/media/presign', async (req, res) => {
+  app.post('/api/media/presign', requireAuthenticatedUser, async (req, res) => {
     try {
       const rawName = req.body?.fileName || `reel_${Date.now()}.mp4`;
       const mimeType = req.body?.mimeType || req.body?.fileType || 'video/mp4';
@@ -1603,18 +1700,18 @@ async function startServer() {
   // PROXY ROUTER & ROTATION IP STATIQUE FIXIE MULTI-AGRÉGATEURS (Sebpay / SasPay)
   // ============================================================================
   const PRIMARY_FIXIE_IP = '54.195.3.54';
-  const PAYMENT_API_BASE_URL = 
+  const PAYMENT_API_BASE_URL =
+    process.env.PAYMENT_API_URL ||
+    process.env.VITE_PAYMENT_API_URL ||
     process.env.API_URL ||
     process.env.VITE_API_URL ||
-    process.env.PAYMENT_API_URL || 
-    process.env.VITE_PAYMENT_API_URL || 
     'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
   // Endpoint Diagnostic IP Statique Fixie vue par les banques partenaires
   app.get('/api/payment/ip', async (req, res) => {
     try {
       try {
-        const { getOutboundIp } = await import('./payment-service/fixie-proxy.js');
+        const { getOutboundIp } = await import(path.resolve(process.cwd(), 'payment-service', 'fixie-proxy.js'));
         const force = req.query.force === 'true';
         const gateway = String(req.query.gateway || 'sebpay');
         const ipResult = await getOutboundIp(force, gateway);
@@ -1688,10 +1785,21 @@ async function startServer() {
         'X-Forwarded-Host': req.get('host') || 'nanasore.com',
         'X-Forwarded-Proto': req.protocol || 'https',
       };
-      if (req.headers['authorization']) outgoingHeaders['authorization'] = req.headers['authorization'] as string;
-      if (req.headers['content-type']) outgoingHeaders['content-type'] = req.headers['content-type'] as string;
-      if (req.headers['x-api-key']) outgoingHeaders['x-api-key'] = req.headers['x-api-key'] as string;
-      if (req.headers['x-nanakey']) outgoingHeaders['x-nanakey'] = req.headers['x-nanakey'] as string;
+      const passthroughHeaders = [
+        'authorization', 'content-type', 'x-api-key', 'x-nanakey',
+        'x-nanaswitch-key', 'x-nanaswitch-skey', 'x-merchant-id',
+        'x-admin-api-key', 'x-internal-secret',
+        'x-sebpay-signature', 'x-saspay-signature', 'x-webhook-signature',
+        'x-webhook-timestamp', 'x-webhook-event', 'x-signature-sha256'
+      ];
+      for (const h of passthroughHeaders) {
+        if (req.headers[h]) outgoingHeaders[h] = String(req.headers[h]);
+      }
+      // Protection anti-boucle de proxy vers soi-même
+      const currentHost = (req.get('host') || '').toLowerCase();
+      if (currentHost && targetBase.toLowerCase().includes(currentHost)) {
+        return res.status(502).json({ error: 'Payment proxy misconfigured (self-loop prevented).' });
+      }
 
       const bodyData = req.method !== 'GET' && req.method !== 'HEAD' 
         ? (req.rawBody || JSON.stringify(req.body)) 
@@ -3773,7 +3881,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
   // Endpoint Brevo Emailing Transactionnel & Notifications (v3 REST API)
   // Expéditeur par défaut : Nanasore Team <admin@nanasore.com>
   // =========================================================================
-  app.post('/api/email/send', async (req, res) => {
+  app.post('/api/email/send', requireAuthenticatedUser, async (req, res) => {
     try {
       const { 
         to, 
@@ -3861,7 +3969,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
   });
 
   // Endpoint Passerelle SMS & OTP Transactionnels (Brevo v3, Twilio, Passerelle Locale)
-  app.post('/api/sms/send', async (req, res) => {
+  app.post('/api/sms/send', requireAuthenticatedUser, async (req, res) => {
     try {
       const { to, message, sender = 'NANA_STORE', provider = 'LOCAL_AFRICA', config = {} } = req.body || {};
 
@@ -4455,4 +4563,15 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
   }
 }
 
-startServer();
+// Middleware global Express de gestion d'erreurs & handlers de résilience
+process.on('unhandledRejection', (reason) => {
+  console.error('[SERVER UNHANDLED REJECTION]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER UNCAUGHT EXCEPTION]', err);
+});
+
+startServer().catch((err) => {
+  console.error('[SERVER FATAL STARTUP ERROR]', err);
+  process.exit(1);
+});

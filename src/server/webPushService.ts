@@ -7,25 +7,29 @@
 import webpush from 'web-push';
 import { supabase } from '../../app/utils/supabase.server';
 
-export const VAPID_PUBLIC_KEY = 
-  process.env.VAPID_PUBLIC_KEY || 
-  process.env.VITE_VAPID_PUBLIC_KEY || 
-  'BPEjL4pdmUAfIC5tzapvW_kGem9woSuIPr8zerD45g5-IAYWNNQ8UL466CvEt__oP20wabjzNWxmEerEAyCdBYs';
+export const VAPID_PUBLIC_KEY =
+  process.env.VAPID_PUBLIC_KEY ||
+  process.env.VITE_VAPID_PUBLIC_KEY ||
+  '';
 
-export const VAPID_PRIVATE_KEY = 
-  process.env.VAPID_PRIVATE_KEY || 
-  'P-GqP1OZqb0EcF3lIdAlj4o76tnmumxyDRqoC98Rcb8';
+export const VAPID_PRIVATE_KEY =
+  process.env.VAPID_PRIVATE_KEY ||
+  '';
 
-export const VAPID_SUBJECT = 
-  process.env.VAPID_SUBJECT || 
+export const VAPID_SUBJECT =
+  process.env.VAPID_SUBJECT ||
   'mailto:contact@nanasore.com';
 
-// Configuration VAPID globale du serveur
-try {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  console.log('[WEB PUSH SERVER] Certificat VAPID initialisé avec succès.');
-} catch (err: any) {
-  console.warn('[WEB PUSH SERVER] Avertissement configuration VAPID :', err?.message);
+// Configuration VAPID globale du serveur (uniquement si les clés d'environnement sont présentes)
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log('[WEB PUSH SERVER] Certificat VAPID initialisé avec succès.');
+  } catch (err: any) {
+    console.warn('[WEB PUSH SERVER] Avertissement configuration VAPID :', err?.message);
+  }
+} else {
+  console.warn('[WEB PUSH SERVER] VAPID_PUBLIC_KEY ou VAPID_PRIVATE_KEY non configuré — notifications Web Push désactivées.');
 }
 
 export interface WebPushPayload {

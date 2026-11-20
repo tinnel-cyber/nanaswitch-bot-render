@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+test-*.js
+README.md
+render.yaml
+vercel.json
+.DS_Store
+*.log

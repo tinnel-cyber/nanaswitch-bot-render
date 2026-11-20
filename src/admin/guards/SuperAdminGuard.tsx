@@ -125,24 +125,19 @@ export const SuperAdminGuard: React.FC<SuperAdminGuardProps> = ({
     };
   }, [currentUser]);
 
-  // Gestion du déverrouillage direct sur place sans expulsion vers le hub
+  // Vérification stricte de la session Super Admin authentifiée (aucun code backdoor client)
   const handleInlineUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = inlineCodeInput.trim();
-    const validCodes = [
-      '*#007#', '007', '*#007', 'pousbila04@gmail.com', 'pousbila36@gmail.com',
-      'pousbila', 'pousbila04', 'admin2026', '2026', '1234', '7777', '8888', '0007', 'admin'
-    ];
+    const isAuthorizedEmail = Boolean(
+      currentUser?.email && KNOWN_SUPERADMIN_EMAILS.includes(currentUser.email.toLowerCase())
+    );
 
-    const isAuthorizedEmail = currentUser?.email && KNOWN_SUPERADMIN_EMAILS.includes(currentUser.email.toLowerCase());
-
-    if (validCodes.includes(clean) || isAuthorizedEmail) {
-      promoteSuperAdminLocally('pousbila04-superadmin');
+    if (isAuthorizedEmail) {
       setIsAuthorized(true);
       setIsVerifying(false);
       setInlineError(null);
     } else {
-      setInlineError("Code d'accès non reconnu.");
+      setInlineError("Accès refusé. Connectez-vous avec un compte Super Admin vérifié.");
       setTimeout(() => setInlineError(null), 3500);
     }
   };

@@ -1,7 +1,7 @@
 
 [functions.hello-world]
-enabled = true
-verify_jwt = false
+enabled = false
+verify_jwt = true
 entrypoint = "./functions/hello-world/index.ts"
 
 [functions.payment-webhook]
@@ -11,5 +11,5 @@ entrypoint = "./functions/payment-webhook/index.ts"
 
 [functions.email-campaign]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/email-campaign/index.ts"

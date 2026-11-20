@@ -30,8 +30,8 @@ async function sendTwilioSms({ to, message }) {
   const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
   if (!accountSid || !authToken || !fromNumber) {
-    console.log(`[TWILIO SIMULATION] Clés Twilio absentes du .env. Envoi simulé à destination de ${to} : "${message.substring(0, 60)}..."`);
-    return { success: true, simulated: true, messageId: `mock_twilio_${Date.now()}` };
+    console.error(`[TWILIO CONFIG ERROR] Clés Twilio absentes du .env. Envoi impossible vers ${to}.`);
+    return { success: false, error: 'TWILIO_CREDENTIALS_MISSING' };
   }
 
   const postData = new URLSearchParams({
@@ -85,8 +85,8 @@ async function sendBrevoEmail({ toEmail, toName, subject, htmlContent }) {
   const brevoApiKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
 
   if (!brevoApiKey) {
-    console.log(`[BREVO SIMULATION] Clé BREVO_SMTP_KEY / BREVO_API_KEY absente. Envoi simulé vers ${toEmail} : "${subject}"`);
-    return { success: true, simulated: true, messageId: `mock_brevo_${Date.now()}` };
+    console.error(`[BREVO CONFIG ERROR] Clé BREVO_SMTP_KEY / BREVO_API_KEY absente. Envoi impossible vers ${toEmail}.`);
+    return { success: false, error: 'BREVO_CREDENTIALS_MISSING' };
   }
 
   const payload = JSON.stringify({

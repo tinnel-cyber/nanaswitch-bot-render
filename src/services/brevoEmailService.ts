@@ -46,7 +46,8 @@ export interface EmailCampaign {
 }
 
 export const DEFAULT_BREVO_CONFIG: BrevoConfig = {
-  apiKey: (import.meta as any).env?.VITE_BREVO_SMTP_KEY || (import.meta as any).env?.VITE_BREVO_API_KEY || '',
+  // Sécurité production : la clé Brevo reste strictement côté serveur (/api/email/send ou Edge Function).
+  apiKey: '',
   senderEmail: 'contact@nanasore.com',
   senderName: 'Nanasore Team',
   endpointUrl: 'https://api.brevo.com/v3',

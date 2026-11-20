@@ -572,7 +572,33 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
   // --------------------------------------------------------------------------
   router.post('/webhook', requireDb, async (req, res) => {
     try {
-      console.log('[CHAT FINANCE WEBHOOK] Notification reçue :', req.body);
+      const crypto = require('crypto');
+      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || process.env.SEBPAY_WEBHOOK_SECRET || process.env.SASPAY_WEBHOOK_SECRET || '';
+      const receivedSig = String(
+        req.headers['x-webhook-signature'] ||
+        req.headers['x-sebpay-signature'] ||
+        req.headers['x-saspay-signature'] ||
+        req.headers['x-signature-sha256'] ||
+        ''
+      ).replace(/^sha256=/i, '').trim().toLowerCase();
+
+      if (!webhookSecret) {
+        console.error('[CHAT FINANCE WEBHOOK] Secret webhook non configuré sur le serveur.');
+        return res.status(500).json({ success: false, error: 'Webhook secret not configured' });
+      }
+      const rawPayload = req.rawBody ? String(req.rawBody) : JSON.stringify(req.body || {});
+      const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawPayload).digest('hex').toLowerCase();
+      const validSig =
+        receivedSig.length === expectedSig.length &&
+        receivedSig.length > 0 &&
+        crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(expectedSig, 'utf8'));
+
+      if (!validSig) {
+        console.warn('[CHAT FINANCE WEBHOOK REJECT] Signature HMAC invalide ou absente.');
+        return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+      }
+
+      console.log('[CHAT FINANCE WEBHOOK] Notification signée reçue.');
 
       // Extraction des identifiants selon format CinetPay ou Sebpay
       const body = req.body || {};

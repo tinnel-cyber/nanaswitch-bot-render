@@ -253,28 +253,6 @@ export async function verifyCashierPin(
     }
   }
 
-  // D. Code PIN Gérant par défaut (Fallback Sécurité démo 0000 / 1234 / 4092)
-  if (['0000', '1234', '4092'].includes(cleanPin)) {
-    const tid = candidateTenants[0] || 'store-default';
-    const resolvedCaisseId = caisseIdParam || 'caisse-principale';
-    const defaultCashier: SellerUser = {
-      id: `cashier-demo-${cleanPin}`,
-      name: 'Caissier Express',
-      role: 'CAISSIER',
-      pinCode: cleanPin,
-      signatureCode: 'CS-01',
-      storeId: tid,
-      active: true
-    };
-    persistCashierSession(tid, resolvedCaisseId, defaultCashier);
-    return {
-      success: true,
-      cashier: defaultCashier,
-      tenantId: tid,
-      caisseId: resolvedCaisseId
-    };
-  }
-
   return {
     success: false,
     error: 'Code PIN incorrect ou caisse introuvable. Veuillez vérifier avec votre gérant.'

@@ -81,11 +81,90 @@ const {
   optionalNanaSwitchAuth
 } = require('./nana-switch/validateNanaSwitchKey');
 
+const { getSupabaseAdmin } = require('./supabase-admin');
+
 const app = express();
-const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'konkobo_telecom_webhook_secret_key_2026';
+const PAYMENT_WEBHOOK_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || '';
 const PROJECT_ID = process.env.PROJECT_ID || 'nanasore';
 
-// 1. Initialisation résiliente de Firebase Admin SDK
+function timingSafeStrEqual(a, b) {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(String(a), 'utf8');
+  const bufB = Buffer.from(String(b), 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Middleware d'authentification stricte pour les routes financières/admin critiques
+ * (payouts, bank-proxy, coffre AES, gestion des clés marchands, config switch).
+ */
+async function requireInternalAdminAuth(req, res, next) {
+  try {
+    const adminSecret = process.env.ADMIN_API_KEY || process.env.NANASWITCH_INTERNAL_KEY || '';
+    const providedApiKey =
+      req.headers['x-admin-api-key'] ||
+      req.headers['x-internal-secret'] ||
+      req.headers['x-nanaswitch-skey'] ||
+      req.headers['x-api-key'] ||
+      '';
+    const authHeader = req.headers['authorization'] || '';
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (adminSecret && (timingSafeStrEqual(providedApiKey, adminSecret) || timingSafeStrEqual(bearerToken, adminSecret))) {
+      req.isInternalAdmin = true;
+      return next();
+    }
+
+    // Alternative : JWT Supabase vérifié d'un administrateur/utilisateur authentifié
+    if (bearerToken) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        const { data: { user }, error } = await supabase.auth.getUser(bearerToken);
+        if (!error && user) {
+          req.authUser = user;
+          return next();
+        }
+      }
+    }
+
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
+      message: 'Authentification requise (x-admin-api-key ou Bearer JWT valide).'
+    });
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+}
+
+const ALLOWED_BANK_PROXY_HOSTS = new Set([
+  'newapi.sebpay.bj',
+  'api.sebpay.bj',
+  'api.saspay.io',
+  'pay.saspay.io',
+  'api-checkout.cinetpay.com',
+  'api.fedapay.com',
+  'sandbox-api.fedapay.com',
+  'app.paydunya.com',
+  'app.ligdicash.com',
+  'api.pawapay.cloud',
+  'api.stripe.com',
+  'api.wave.com'
+]);
+
+function isAllowedBankProxyUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return ALLOWED_BANK_PROXY_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+}
+
+// 1. Initialisation résiliente de Firebase Admin SDK (legacy optionnel)
 let isDatabaseInitialized = false;
 let db = null;
 
@@ -254,17 +333,70 @@ function broadcastToChat(chatId, event, data, senderWs = null) {
   }
 }
 
-// 2. Middlewares de Sécurité & Parsing
+// 2. Middlewares de Sécurité, En-têtes HTTP, Rate Limiting & CORS strict
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://nsore.shop',
+  'https://www.nsore.shop',
+  'https://nanasore.com',
+  'https://www.nanasore.com',
+  'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean) : [])
+]);
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Rate limiter léger (120 req/min par IP, exemptant /health et les webhooks signés)
+const rateLimitStore = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 60_000;
+  for (const [k, entry] of rateLimitStore.entries()) {
+    if (entry.resetAt < cutoff) rateLimitStore.delete(k);
+  }
+}, 60_000).unref();
+
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path.includes('webhook')) return next();
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+  const now = Date.now();
+  let entry = rateLimitStore.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + 60_000 };
+    if (rateLimitStore.size > 10000) rateLimitStore.clear();
+    rateLimitStore.set(ip, entry);
+  }
+  entry.count += 1;
+  if (entry.count > 120) {
+    return res.status(429).json({ success: false, error: 'Too Many Requests' });
+  }
+  next();
+});
+
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_CORS_ORIGINS.has(origin) || origin.endsWith('.nsore.shop') || origin.endsWith('.nanasore.com')) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
     'X-Requested-With',
+    'x-admin-api-key',
+    'x-internal-secret',
     'x-sebpay-signature',
     'X-SebPay-Signature',
     'x-webhook-signature',
+    'x-webhook-timestamp',
     'x-fedapay-signature',
     'x-cinetpay-signature',
     'x-signature-sha256',
@@ -421,8 +553,7 @@ app.post(
         req.headers['x-signature'] ||
         req.headers['X-Signature'] ||
         req.headers['x-fedapay-signature'] ||
-        req.headers['x-cinetpay-signature'] ||
-        req.query.signature;
+        req.headers['x-cinetpay-signature'];
 
       if (!sebpaySignature) {
         console.error('[SECURITY REJECT] Webhook Sebpay rejeté : En-tête X-SebPay-Signature manquant.');
@@ -448,8 +579,7 @@ app.post(
         && crypto.timingSafeEqual(Buffer.from(cleanSignature, 'utf8'), Buffer.from(calculatedHash, 'utf8'));
 
       if (!isSignatureValid) {
-        console.error(`[SECURITY REJECT] Signature HMAC invalide.`);
-        console.error(`[SECURITY AUDIT] Reçue: ${cleanSignature} | Calculée: ${calculatedHash}`);
+        console.error('[SECURITY REJECT] Signature HMAC invalide.');
         return res.status(401).json({ error: 'Invalid signature' });
       }
 
@@ -574,7 +704,83 @@ async function processWebhookTransaction(payload) {
   console.log(`[PAYMENT WEBHOOK PROCESSING] Provider: ${resolvedProvider} | Transaction: ${transactionId} | Order: ${resolvedOrderId} | Tenant: ${resolvedTenantId} | Status: ${status} | Montant: ${amount}`);
 
   if (!db) {
-    console.warn('[FIRESTORE NOTICE] Firebase Admin SDK non initialisé, traitement mémoire.');
+    const supabase = getSupabaseAdmin();
+    const isSuccessSupabase = ['APPROVED', 'SUCCESS', 'COMPLETED', 'PAID', 'VALIDATED', 'CONFIRMED', 'VALIDE', 'PAYÉ'].includes(status);
+
+    if (!supabase) {
+      console.error('[PAYMENT WEBHOOK CRITICAL] Ni Supabase Service Role ni Firestore ne sont initialisés — impossible de persister la transaction.');
+      return;
+    }
+
+    if (isSuccessSupabase) {
+      try {
+        // 1. Marquer la commande comme payée dans Supabase (`orders` & `sales`)
+        const nowIso = new Date().toISOString();
+        await Promise.allSettled([
+          supabase
+            .from('orders')
+            .update({ payment_status: 'paid', status: 'paid', updated_at: nowIso })
+            .eq('id', resolvedOrderId),
+          supabase
+            .from('sales')
+            .update({ payment_status: 'paid', updated_at: nowIso })
+            .eq('id', resolvedOrderId),
+          supabase.from('payment_logs').insert({
+            tenant_id: resolvedTenantId,
+            transaction_id: transactionId || null,
+            amount: Number(amount) || 0,
+            status,
+            customer_phone: txData.client_phone || txData.phone || payload.client_phone || null,
+            raw_payload: payload,
+            created_at: nowIso
+          })
+        ]);
+
+        // 2. Exécuter le Split Financier Atomique ACID sur Supabase (95% Vendeur / 5% Plateforme)
+        await switchManager.dispatchPostPaymentWorkflow({
+          db: null,
+          orderId: resolvedOrderId,
+          storeId: resolvedTenantId,
+          totalAmount: Number(amount),
+          transactionId: transactionId || `tx_${Date.now()}`,
+          gateway: String(resolvedProvider || 'saspay').toLowerCase(),
+          currency,
+          customerPhone: txData.client_phone || txData.phone || payload.client_phone || '',
+          customerEmail: txData.client_email || txData.email || payload.client_email || '',
+          customerName: txData.client_name || txData.name || 'Client Wameet',
+          productTitle: txData.description || payload.description || 'Commande Nanasore',
+          storeName: resolvedTenantId
+        });
+
+        broadcastPaymentEvent({
+          type: 'PAYMENT_CONFIRMED',
+          orderId: resolvedOrderId,
+          transactionId,
+          storeId: resolvedTenantId,
+          amount,
+          currency,
+          status: 'PAID'
+        });
+
+        console.log(`[SUPABASE WEBHOOK SUCCESS] Transaction ${transactionId} / Commande ${resolvedOrderId} validée et splittée atomiquement.`);
+      } catch (supaErr) {
+        console.error('[SUPABASE WEBHOOK ERROR]', supaErr.message);
+      }
+    } else {
+      await supabase
+        .from('nanaswitch_transactions')
+        .upsert({
+          order_id: resolvedOrderId,
+          store_id: resolvedTenantId,
+          transaction_id: transactionId || null,
+          amount: Number(amount) || 0,
+          currency,
+          gateway: String(resolvedProvider || 'saspay').toLowerCase(),
+          status: status || 'FAILED',
+          updated_at: new Date().toISOString()
+        })
+        .catch(err => console.warn('[SUPABASE WEBHOOK FAILED LOG]', err.message));
+    }
     return;
   }
 
@@ -784,12 +990,11 @@ async function processWebhookTransaction(payload) {
         }
       }
 
-      // 4. Déblocage du produit / Abonnement Élite
+      // 4. Déblocage du produit / Abonnement Élite (vérification explicite uniquement)
       const isElitePurchase =
-        resolvedOrderId.includes('elite') ||
-        resolvedOrderId.includes('20') ||
-        externalRef.includes('elite') ||
-        amount === 15000;
+        String(resolvedOrderId).toLowerCase().includes('elite') ||
+        String(externalRef).toLowerCase().includes('elite') ||
+        txData.metadata?.plan === 'elite';
 
       if (isElitePurchase) {
         const tenantRef = db.collection('tenants').doc(resolvedTenantId);
@@ -1651,7 +1856,7 @@ app.post(['/api/payment/saspay/payin', '/api/payment/saspay/initiate'], async (r
 // ============================================================================
 // ROUTE SASPAY 2 : Décaissement (Pay-Out / Transfers) - VIA PROXY FIXIE (FIXIE_URL_SASPAY)
 // ============================================================================
-app.post('/api/payment/saspay/payout', async (req, res) => {
+app.post('/api/payment/saspay/payout', requireInternalAdminAuth, async (req, res) => {
   try {
     const {
       amount,
@@ -1775,7 +1980,7 @@ app.post(
 
       const rawBuffer = Buffer.isBuffer(req.body)
         ? req.body
-        : Buffer.from(req.rawBody || req.body || '', 'utf8');
+        : Buffer.from(req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {})), 'utf8');
 
       // Vérification cryptographique stricte avec SASPAY_WEBHOOK_SECRET
       const sasSecret = process.env.SASPAY_WEBHOOK_SECRET || process.env.SASPAY_API_KEY;
@@ -1839,10 +2044,16 @@ app.post('/api/payment/initiate', async (req, res) => {
       return res.status(400).json({ error: 'Montant de paiement invalide.' });
     }
 
-    const txId = `TX_${Date.now()}_${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const txId = `TX_${Date.now()}_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
-    // Si une URL bancaire spécifique est fournie, on la contacte via le proxy Fixie
+    // Si une URL bancaire spécifique est fournie, vérifier qu'elle est dans l'allowlist anti-SSRF
     if (targetBankApiUrl) {
+      if (!isAllowedBankProxyUrl(targetBankApiUrl)) {
+        return res.status(403).json({
+          success: false,
+          error: 'URL de passerelle bancaire non autorisée (protection anti-SSRF).'
+        });
+      }
       console.log(`[BANK OUTBOUND] Appel sortant vers ${targetBankApiUrl} via proxy Fixie IP Statique...`);
       const bankResponse = await fetchViaFixie(targetBankApiUrl, {
         method: 'POST',
@@ -1889,15 +2100,16 @@ app.post('/api/payment/initiate', async (req, res) => {
 // ============================================================================
 /**
  * POST /api/payment/bank-proxy
- * Permet au frontend ou aux modules métiers de relayer n'importe quel appel
- * vers l'API d'une banque partenaire en garantissant la sortie par l'adresse IP statique Fixie.
+ * Protégé par authentification admin + allowlist stricte anti-SSRF.
  */
-app.post('/api/payment/bank-proxy', async (req, res) => {
+app.post('/api/payment/bank-proxy', requireInternalAdminAuth, async (req, res) => {
   try {
     const { endpoint, method = 'POST', headers = {}, body } = req.body;
 
-    if (!endpoint || !endpoint.startsWith('http')) {
-      return res.status(400).json({ error: 'Paramètre "endpoint" HTTP/HTTPS valide requis.' });
+    if (!endpoint || !isAllowedBankProxyUrl(endpoint)) {
+      return res.status(403).json({
+        error: 'Paramètre "endpoint" invalide ou domaine non autorisé dans la liste blanche bancaire.'
+      });
     }
 
     console.log(`[BANK PROXY] Relais vers ${endpoint} (${method}) via Fixie...`);
@@ -2146,7 +2358,7 @@ app.get(['/api/switch/config', '/api/payments/config'], (req, res) => {
   });
 });
 
-app.post(['/api/switch/config', '/api/payments/config'], express.json(), (req, res) => {
+app.post(['/api/switch/config', '/api/payments/config'], requireInternalAdminAuth, express.json(), (req, res) => {
   const { primaryGateway, fallbackGateway, primary, fallback } = req.body;
   if (primaryGateway || primary) {
     switchManager.setPrimaryGateway(primaryGateway || primary);
@@ -2210,7 +2422,7 @@ app.post(['/api/escrow/initiate', '/api/payments/escrow/initiate'], async (req, 
       return res.status(400).json({ success: false, error: 'Montant invalide pour le séquestre.' });
     }
 
-    const transactionId = customTxId || `ESC_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const transactionId = customTxId || `ESC_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const externalReference = `escrow___${transactionId}`;
 
     console.log(`[SMART ESCROW INITIATE] ${transactionId} | Article: ${itemTitle} | Montant: ${amount} ${currency}`);
@@ -2287,21 +2499,21 @@ app.post(['/api/escrow/initiate', '/api/payments/escrow/initiate'], async (req, 
 
 /**
  * 2. POST /api/escrow/release & POST /api/payments/escrow/release
- * Déclenché par l'ACHETEUR qui confirme la réception de la marchandise.
- * Valide la libération des fonds et crédite le vendeur (avec split 95% / 5%).
+ * Déclenché par l'ACHETEUR authentifié ou Super Admin qui confirme la réception.
  */
-app.post(['/api/escrow/release', '/api/payments/escrow/release'], async (req, res) => {
+app.post(['/api/escrow/release', '/api/payments/escrow/release'], requireInternalAdminAuth, async (req, res) => {
   try {
     const { transactionId, chatId, messageId, buyerId } = req.body;
+    const authenticatedActorId = req.authUser?.id || buyerId || '';
 
     if (!transactionId) {
       return res.status(400).json({ success: false, error: 'transactionId obligatoire.' });
     }
 
-    console.log(`[SMART ESCROW RELEASE] Transaction: ${transactionId} demandée par l'acheteur: ${buyerId}`);
+    console.log(`[SMART ESCROW RELEASE] Transaction: ${transactionId} demandée par: ${authenticatedActorId || 'internal-admin'}`);
 
     if (!db) {
-      return res.status(500).json({ success: false, error: 'Base de données Firestore indisponible.' });
+      return res.status(503).json({ success: false, error: 'Base de données séquestre indisponible.' });
     }
 
     const escrowRef = db.collection('wameet_escrow_transactions').doc(transactionId);
@@ -2313,8 +2525,8 @@ app.post(['/api/escrow/release', '/api/payments/escrow/release'], async (req, re
 
     const escrowData = escrowSnap.data();
 
-    // Vérification de sécurité : Seul l'acheteur ou Super Admin peut débloquer les fonds
-    if (buyerId && escrowData.buyerId && escrowData.buyerId !== buyerId) {
+    // Vérification stricte de propriété (jamais contournée si buyerId est omis)
+    if (!req.isInternalAdmin && escrowData.buyerId && escrowData.buyerId !== authenticatedActorId) {
       return res.status(403).json({ success: false, error: 'Seul l\'acheteur enregistré peut confirmer la réception.' });
     }
 
@@ -3080,10 +3292,13 @@ app.get('/api/flash-live/rooms/:roomId', async (req, res) => {
 // ROUTE 6 : NANASWITCH CLOUD NODE — ROUTEUR SAAS MULTI-CONNECTEURS & VAULT AES-256
 // ============================================================================
 
-const NANASWITCH_MASTER_KEY = process.env.NANASWITCH_MASTER_KEY || 'nanaswitch_node_master_aes256_gcm_vault_key_prod_v2';
-const NANASWITCH_SALT = 'nanaswitch_cloud_node_master_salt_2026';
+const NANASWITCH_MASTER_KEY = process.env.NANASWITCH_MASTER_KEY || '';
+const NANASWITCH_SALT = process.env.NANASWITCH_VAULT_SALT || 'nanaswitch_cloud_node_master_salt_2026';
 
 function deriveNodeKey(secret = NANASWITCH_MASTER_KEY) {
+  if (!secret) {
+    throw new Error('NANASWITCH_MASTER_KEY non configuré sur le serveur.');
+  }
   return crypto.pbkdf2Sync(secret, NANASWITCH_SALT, 100000, 32, 'sha256');
 }
 
@@ -3165,16 +3380,20 @@ app.get(['/v1/switch/status', '/api/switch/status'], async (req, res) => {
 
 /**
  * POST /v1/switch/encrypt & POST /v1/switch/decrypt
- * Utilitaires de chiffrement/déchiffrement pour le coffre Cloud
+ * Utilitaires de chiffrement/déchiffrement pour le coffre Cloud (AUTH ADMIN OBLIGATOIRE)
  */
-app.post(['/v1/switch/encrypt', '/api/switch/encrypt'], express.json(), (req, res) => {
+app.post(['/v1/switch/encrypt', '/api/switch/encrypt'], requireInternalAdminAuth, express.json(), (req, res) => {
   const { secret } = req.body;
   if (!secret) return res.status(400).json({ error: 'Secret requis' });
-  const encrypted = encryptNodeSecret(secret);
-  return res.json({ success: true, encrypted });
+  try {
+    const encrypted = encryptNodeSecret(secret);
+    return res.json({ success: true, encrypted });
+  } catch (err) {
+    return res.status(500).json({ error: 'Chiffrement indisponible', details: err.message });
+  }
 });
 
-app.post(['/v1/switch/decrypt', '/api/switch/decrypt'], express.json(), (req, res) => {
+app.post(['/v1/switch/decrypt', '/api/switch/decrypt'], requireInternalAdminAuth, express.json(), (req, res) => {
   const { encrypted } = req.body;
   if (!encrypted) return res.status(400).json({ error: 'Payload chiffré requis' });
   try {
@@ -3186,23 +3405,28 @@ app.post(['/v1/switch/decrypt', '/api/switch/decrypt'], express.json(), (req, re
 });
 
 /**
- * POST /v1/switch/route & POST /api/switch/route
- * Cœur du Routeur SaaS Cloud Intelligent :
- * - Étape A : Authentification & Coupe-Circuit Crédits (402_INSUFFICIENT_CLOUD_CREDITS)
- * - Étape B : Sélection Géographique par Pays
- * - Étape C : Exécution & Auto-Failover 0ms
- * - Étape D : Décompte de Crédit & Traçabilité Firestore
- */
-/**
  * POST /v1/switch/keys/generate & POST /api/switch/keys/generate
- * Génération cryptographique sécurisée d'une paire de clés NanaSwitch (Public Key + Secret Key)
- * Stocke le hash Bcrypt de la clé secrète dans Firestore et renvoie la clé secrète brute UNE SEULE FOIS.
+ * Génération cryptographique sécurisée d'une paire de clés NanaSwitch (AUTH ADMIN OBLIGATOIRE)
  */
-app.post(['/v1/switch/keys/generate', '/api/switch/keys/generate'], express.json(), async (req, res) => {
+app.post(['/v1/switch/keys/generate', '/api/switch/keys/generate'], requireInternalAdminAuth, express.json(), async (req, res) => {
   try {
     const { merchantId = 'm_live_bf_001', mode = 'live', businessName, webhookUrl, webhook_url } = req.body;
     const keyPair = await generateNanaSwitchKeyPair(mode);
     const targetWebhookUrl = webhookUrl || webhook_url || null;
+
+    // Persistance prioritaire dans Supabase `nanaswitch_merchants`
+    const supabase = getSupabaseAdmin();
+    if (supabase && merchantId) {
+      await supabase.from('nanaswitch_merchants').upsert({
+        merchant_id: String(merchantId),
+        business_name: businessName || 'NANASORE TECHNOLOGIES',
+        status: 'ACTIVE',
+        public_key: keyPair.publicKey,
+        secret_key_hash: keyPair.secretKeyHash,
+        webhook_secret: keyPair.webhookSecret,
+        updated_at: new Date().toISOString()
+      });
+    }
 
     if (db && merchantId) {
       const nowServer = admin.firestore.FieldValue.serverTimestamp();
@@ -3251,9 +3475,9 @@ app.post(['/v1/switch/keys/generate', '/api/switch/keys/generate'], express.json
 
 /**
  * POST /v1/switch/merchant/integration-mode & POST /api/switch/merchant/integration-mode
- * Mise à jour sécurisée du mode d'intégration (AGREGATED vs BYOK) et des clés passerelles personnalisées
+ * Mise à jour sécurisée du mode d'intégration (AUTH ADMIN OBLIGATOIRE)
  */
-app.post(['/v1/switch/merchant/integration-mode', '/api/switch/merchant/integration-mode'], express.json(), async (req, res) => {
+app.post(['/v1/switch/merchant/integration-mode', '/api/switch/merchant/integration-mode'], requireInternalAdminAuth, express.json(), async (req, res) => {
   try {
     const { merchantId, mode, customCredentials } = req.body;
     if (!merchantId) {
@@ -3272,6 +3496,17 @@ app.post(['/v1/switch/merchant/integration-mode', '/api/switch/merchant/integrat
       }
     };
 
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      await supabase
+        .from('nanaswitch_merchants')
+        .update({
+          integration_config: { mode: cleanMode, custom_credentials: sanitizedCredentials },
+          updated_at: new Date().toISOString()
+        })
+        .eq('merchant_id', String(merchantId));
+    }
+
     if (db) {
       const nowServer = admin.firestore.FieldValue.serverTimestamp();
       await db.collection('merchants').doc(merchantId).set({
@@ -3289,7 +3524,6 @@ app.post(['/v1/switch/merchant/integration-mode', '/api/switch/merchant/integrat
       success: true,
       merchantId,
       mode: cleanMode,
-      custom_credentials: sanitizedCredentials,
       message: `Mode d'intégration mis à jour avec succès (${cleanMode}).`
     });
   } catch (err) {
@@ -3304,9 +3538,9 @@ app.post(['/v1/switch/merchant/integration-mode', '/api/switch/merchant/integrat
 
 /**
  * POST /v1/switch/merchant/credits/recharge & POST /api/switch/merchant/credits/recharge
- * Recharge du portefeuille de crédits API SaaS (0.02 XOF / requête)
+ * Recharge du portefeuille de crédits API SaaS (AUTH ADMIN OBLIGATOIRE)
  */
-app.post(['/v1/switch/merchant/credits/recharge', '/api/switch/merchant/credits/recharge'], express.json(), async (req, res) => {
+app.post(['/v1/switch/merchant/credits/recharge', '/api/switch/merchant/credits/recharge'], requireInternalAdminAuth, express.json(), async (req, res) => {
   try {
     const { merchantId, creditsAmount = 5000 } = req.body;
     if (!merchantId) {
@@ -3551,12 +3785,42 @@ app.post(['/v1/switch/route', '/api/switch/route'], express.json(), async (req, 
   });
 });
 
+// Middleware global de gestion d'erreurs Express
+app.use((err, _req, res, _next) => {
+  console.error('[PAYMENT SERVICE EXPRESS ERROR]', err?.stack || err?.message || err);
+  if (!res.headersSent) {
+    res.status(err?.status || 500).json({
+      success: false,
+      error: 'Erreur interne du service de paiement'
+    });
+  }
+});
+
 // Démarrage du serveur et initialisation WebSocket
 const PORT = process.env.PORT || 10000;
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 NaNa Payment Micro-service actif sur le port ${PORT}`);
 });
 initWebSocketServer(server);
+
+// Gestionnaires globaux de résilience & arrêt gracieux (Docker / Northflank / Render)
+process.on('unhandledRejection', (reason) => {
+  console.error('[PAYMENT SERVICE UNHANDLED REJECTION]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[PAYMENT SERVICE UNCAUGHT EXCEPTION]', err);
+});
+
+function gracefulShutdown(signal) {
+  console.log(`[PAYMENT SERVICE] Signal ${signal} reçu, arrêt gracieux en cours...`);
+  server.close(() => {
+    console.log('[PAYMENT SERVICE] Serveur HTTP fermé proprement.');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = app;
 module.exports.server = server;

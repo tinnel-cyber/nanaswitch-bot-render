@@ -170,11 +170,22 @@ export async function getDoc(docRef: any) {
   }
 
   if (!data && docRef.path) {
-    const segments = docRef.path.split('/');
+    const segments = docRef.path.split('/').filter(Boolean);
     if (segments.length === 2) {
       const [table, id] = segments;
       try {
         const { data: row } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+        if (row) data = row;
+      } catch {}
+    } else if (segments.length === 4 && (segments[0] === 'stores' || segments[0] === 'tenants')) {
+      const [, tenantId, subTable, id] = segments;
+      try {
+        const { data: row } = await supabase
+          .from(subTable)
+          .select('*')
+          .eq('id', id)
+          .eq('store_id', tenantId)
+          .maybeSingle();
         if (row) data = row;
       } catch {}
     }
@@ -210,11 +221,18 @@ export async function setDoc(docRef: any, data: any, options: any = {}) {
   }
 
   if (docRef.path) {
-    const segments = docRef.path.split('/');
+    const segments = docRef.path.split('/').filter(Boolean);
     if (segments.length === 2) {
       const [table, id] = segments;
       try {
-        await supabase.from(table).upsert({ ...finalData, id });
+        const { error } = await supabase.from(table).upsert({ ...finalData, id });
+        if (error) console.warn(`[supabaseBridge.setDoc] ${table}/${id}:`, error.message);
+      } catch {}
+    } else if (segments.length === 4 && (segments[0] === 'stores' || segments[0] === 'tenants')) {
+      const [, tenantId, subTable, id] = segments;
+      try {
+        const { error } = await supabase.from(subTable).upsert({ ...finalData, id, store_id: finalData?.store_id || tenantId });
+        if (error) console.warn(`[supabaseBridge.setDoc] ${subTable}/${id}:`, error.message);
       } catch {}
     }
   }
@@ -232,11 +250,16 @@ export async function deleteDoc(docRef: any) {
     } catch {}
   }
   if (docRef.path) {
-    const segments = docRef.path.split('/');
+    const segments = docRef.path.split('/').filter(Boolean);
     if (segments.length === 2) {
       const [table, id] = segments;
       try {
         await supabase.from(table).delete().eq('id', id);
+      } catch {}
+    } else if (segments.length === 4 && (segments[0] === 'stores' || segments[0] === 'tenants')) {
+      const [, tenantId, subTable, id] = segments;
+      try {
+        await supabase.from(subTable).delete().eq('id', id).eq('store_id', tenantId);
       } catch {}
     }
   }
@@ -251,17 +274,43 @@ export async function addDoc(colRef: any, data: any) {
 
 export async function getDocs(target: any) {
   const path = target.path || target.colRef?.path || '';
-  const segments = path.split('/');
-  const table = segments[0];
+  const segments = path.split('/').filter(Boolean);
+  let table = segments[0];
+  let scopedTenantId: string | null = null;
+
+  if (segments.length === 3 && (segments[0] === 'stores' || segments[0] === 'tenants')) {
+    scopedTenantId = segments[1];
+    table = segments[2];
+  }
+
   let docs: any[] = [];
 
   if (table) {
     try {
-      const { data, error } = await supabase.from(table).select('*').limit(target.limitCount || 100);
+      let q: any = supabase.from(table).select('*');
+      if (scopedTenantId) {
+        q = q.eq('store_id', scopedTenantId);
+      }
+      const constraints = Array.isArray(target.constraints) ? target.constraints : [];
+      for (const c of constraints) {
+        if (!c || typeof c !== 'object') continue;
+        if (c.type === 'where' && c.field) {
+          if (c.op === '==') q = q.eq(c.field, c.value);
+          else if (c.op === '!=') q = q.neq(c.field, c.value);
+          else if (c.op === '>') q = q.gt(c.field, c.value);
+          else if (c.op === '>=') q = q.gte(c.field, c.value);
+          else if (c.op === '<') q = q.lt(c.field, c.value);
+          else if (c.op === '<=') q = q.lte(c.field, c.value);
+          else if (c.op === 'in' && Array.isArray(c.value)) q = q.in(c.field, c.value);
+        } else if (c.type === 'orderBy' && c.field) {
+          q = q.order(c.field, { ascending: c.dir !== 'desc' });
+        }
+      }
+      const { data, error } = await q.limit(target.limitCount || 100);
       if (!error && Array.isArray(data)) {
-        docs = data.map(item => ({
+        docs = data.map((item: any) => ({
           id: item.id || `doc_${Date.now()}`,
-          ref: { id: item.id, path: `${table}/${item.id}` },
+          ref: { id: item.id, path: `${path}/${item.id}` },
           data: () => item,
           exists: () => true
         }));

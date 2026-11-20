@@ -1,14 +1,24 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-/**
- * En-têtes CORS universels pour autoriser les appels Webhook & applications clientes
- */
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://nsore.shop",
+  "https://www.nsore.shop",
+  "https://nanasore.com",
+  "https://www.nanasore.com",
+  "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run",
+]);
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://nsore.shop";
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-signature, x-nanaswitch-signature, x-sebpay-signature, x-saspay-signature",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 interface WebhookPayload {
   transaction_id?: string;
@@ -20,146 +30,151 @@ interface WebhookPayload {
   [key: string]: unknown;
 }
 
+function timingSafeEqualHex(a: string, b: string): boolean {
+  const cleanA = a.replace(/^sha256=/i, "").trim().toLowerCase();
+  const cleanB = b.replace(/^sha256=/i, "").trim().toLowerCase();
+  if (cleanA.length !== cleanB.length || cleanA.length === 0) return false;
+  let diff = 0;
+  for (let i = 0; i < cleanA.length; i++) {
+    diff |= cleanA.charCodeAt(i) ^ cleanB.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function verifyHmacSha256(rawBody: string, secret: string, receivedSignature: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sigBuffer = await crypto.subtle.sign("HMAC", key, enc.encode(rawBody));
+  const expectedHex = Array.from(new Uint8Array(sigBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return timingSafeEqualHex(expectedHex, receivedSignature);
+}
+
 Deno.serve(async (req: Request) => {
-  // 1. Gestion des requêtes CORS Preflight (OPTIONS)
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Vérification de la méthode HTTP
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Méthode non autorisée. Utilisez POST." }),
-      {
-        status: 405,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 
   try {
-    // 2. Initialisation du client Supabase avec la clé de rôle de service (Service Role Key)
-    // Permet de contourner les politiques RLS pour l'écriture système sécurisée
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const webhookSecret = Deno.env.get("PAYMENT_WEBHOOK_SECRET") || Deno.env.get("SASPAY_WEBHOOK_SECRET") || Deno.env.get("SEBPAY_WEBHOOK_SECRET");
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[PAYMENT-WEBHOOK] Variables d'environnement Supabase manquantes");
+    if (!supabaseUrl || !supabaseServiceKey || !webhookSecret) {
+      console.error("[PAYMENT-WEBHOOK] Variables d'environnement critiques manquantes (SUPABASE_* ou PAYMENT_WEBHOOK_SECRET)");
       return new Response(
-        JSON.stringify({
-          error: "Configuration serveur incomplète (SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquant)",
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Configuration serveur incomplète." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 1. Lecture du corps brut et vérification cryptographique HMAC-SHA256 obligatoire
+    const rawBody = await req.text();
+    const receivedSignature =
+      req.headers.get("x-webhook-signature") ||
+      req.headers.get("x-nanaswitch-signature") ||
+      req.headers.get("x-sebpay-signature") ||
+      req.headers.get("x-saspay-signature") ||
+      "";
+
+    if (!receivedSignature || !(await verifyHmacSha256(rawBody, webhookSecret, receivedSignature))) {
+      console.warn("[PAYMENT-WEBHOOK] Signature HMAC manquante ou invalide — requête rejetée.");
+      return new Response(
+        JSON.stringify({ error: "Signature webhook invalide ou manquante." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let payload: WebhookPayload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Corps de requête JSON invalide ou illisible." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { transaction_id, status, tenant_id, amount, customer_phone, order_id } = payload;
+
+    if (!order_id || !status) {
+      return new Response(
+        JSON.stringify({ error: "Champs obligatoires manquants : 'order_id' et 'status' sont requis." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-
-    // 3. Réception et validation du body JSON
-    let payload: WebhookPayload;
-    try {
-      payload = await req.json();
-    } catch (_err) {
-      return new Response(
-        JSON.stringify({ error: "Corps de requête JSON invalide ou illisible" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const {
-      transaction_id,
-      status,
-      tenant_id,
-      amount,
-      customer_phone,
-      order_id,
-    } = payload;
-
-    // Validation des paramètres minimaux requis
-    if (!order_id || !status) {
-      return new Response(
-        JSON.stringify({
-          error: "Champs obligatoires manquants : 'order_id' et 'status' sont requis.",
-          received: { order_id, status },
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
 
     const nowIso = new Date().toISOString();
     const cleanStatus = String(status).trim().toUpperCase();
-    const isSuccess = cleanStatus === "SUCCESS" || cleanStatus === "COMPLETED";
+    const isSuccess = cleanStatus === "SUCCESS" || cleanStatus === "COMPLETED" || cleanStatus === "PAID";
     const numericAmount = typeof amount === "number" ? amount : parseFloat(String(amount || "0")) || 0;
 
-    // 4. Traitement selon le statut du paiement
     if (isSuccess) {
-      console.log(`[PAYMENT-WEBHOOK] Paiement réussi détecté pour la commande ${order_id} (Transaction: ${transaction_id})`);
-
-      // A. Mise à jour de la commande dans la table `sales`
-      // On cherche par identifiant direct ou par référence
-      let salesQuery = supabase
-        .from("sales")
-        .update({
-          payment_status: "paid",
-          updated_at: nowIso,
-        })
-        .eq("id", order_id);
-
-      // Si tenant_id est fourni, on filtre également par tenant/organisation si possible
-      if (tenant_id) {
-        salesQuery = salesQuery.or(`organization_id.eq.${tenant_id},metadata->>tenant_id.eq.${tenant_id}`);
-      }
-
-      const { data: updatedSales, error: updateError } = await salesQuery.select();
-
-      if (updateError) {
-        console.warn(`[PAYMENT-WEBHOOK] Avertissement mise à jour sales:`, updateError.message);
-        // Si le filtre par tenant_id a échoué car le schéma diffère, on tente la mise à jour directe par id
-        const { error: directUpdateError } = await supabase
-          .from("sales")
-          .update({
-            payment_status: "paid",
-            updated_at: nowIso,
-          })
-          .eq("id", order_id);
-
-        if (directUpdateError) {
-          console.error(`[PAYMENT-WEBHOOK] Erreur persistante mise à jour sales :`, directUpdateError);
+      // Vérification d'idempotence sur transaction_id dans payment_logs
+      if (transaction_id) {
+        const { data: existingLog } = await supabase
+          .from("payment_logs")
+          .select("id")
+          .eq("transaction_id", transaction_id)
+          .in("status", ["SUCCESS", "COMPLETED", "PAID"])
+          .maybeSingle();
+        if (existingLog) {
+          return new Response(
+            JSON.stringify({ success: true, already_processed: true, order_id, transaction_id }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
         }
       }
 
-      // B. Insertion de la trace d'audit dans `payment_logs`
-      const { error: logError } = await supabase
-        .from("payment_logs")
-        .insert({
-          tenant_id: tenant_id || null,
-          transaction_id: transaction_id || null,
-          amount: numericAmount,
-          status: cleanStatus,
-          customer_phone: customer_phone || null,
-          raw_payload: payload,
-          created_at: nowIso,
-        });
+      // Mise à jour sécurisée sans interpolation PostgREST brute et sans contournement de tenant_id
+      let salesQuery = supabase
+        .from("sales")
+        .update({ payment_status: "paid", updated_at: nowIso })
+        .eq("id", String(order_id));
 
-      if (logError) {
-        console.error("[PAYMENT-WEBHOOK] Erreur insertion payment_logs :", logError);
+      if (tenant_id && typeof tenant_id === "string" && /^[a-zA-Z0-9_-]+$/.test(tenant_id)) {
+        salesQuery = salesQuery.eq("organization_id", tenant_id);
       }
 
-      // Réponse HTTP 200 en cas de succès
+      const { error: updateError } = await salesQuery.select("id");
+      if (updateError) {
+        console.error("[PAYMENT-WEBHOOK] Erreur mise à jour sales:", updateError.message);
+      }
+
+      const { error: logError } = await supabase.from("payment_logs").insert({
+        tenant_id: tenant_id || null,
+        transaction_id: transaction_id || null,
+        amount: numericAmount,
+        status: cleanStatus,
+        customer_phone: customer_phone || null,
+        raw_payload: payload,
+        created_at: nowIso,
+      });
+
+      if (logError) {
+        console.error("[PAYMENT-WEBHOOK] Erreur insertion payment_logs:", logError.message);
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -169,54 +184,41 @@ Deno.serve(async (req: Request) => {
           payment_status: "paid",
           recorded_at: nowIso,
         }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    } else {
-      // Cas de statut non abouti (FAILED, CANCELLED, REJECTED, EXPIRED, etc.)
-      console.warn(`[PAYMENT-WEBHOOK] Statut de paiement non validé : ${cleanStatus} pour order_id ${order_id}`);
-
-      // Enregistrement de l'échec dans les logs pour audit commerçant
-      await supabase
-        .from("payment_logs")
-        .insert({
-          tenant_id: tenant_id || null,
-          transaction_id: transaction_id || null,
-          amount: numericAmount,
-          status: cleanStatus,
-          customer_phone: customer_phone || null,
-          raw_payload: payload,
-          created_at: nowIso,
-        })
-        .catch((e: unknown) => console.warn("[PAYMENT-WEBHOOK] Erreur log échec :", e));
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Le statut de paiement n'est pas un succès (reçu : ${cleanStatus}).`,
-          order_id,
-          transaction_id: transaction_id || null,
-          status: cleanStatus,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-  } catch (error: any) {
-    console.error("[PAYMENT-WEBHOOK] Exception non interceptée :", error);
+
+    // Statut d'échec/annulation : journaliser et renvoyer 200 pour éviter des relances infinies de la passerelle
+    await supabase
+      .from("payment_logs")
+      .insert({
+        tenant_id: tenant_id || null,
+        transaction_id: transaction_id || null,
+        amount: numericAmount,
+        status: cleanStatus,
+        customer_phone: customer_phone || null,
+        raw_payload: payload,
+        created_at: nowIso,
+      })
+      .then(({ error }) => {
+        if (error) console.warn("[PAYMENT-WEBHOOK] Erreur log échec:", error.message);
+      });
+
     return new Response(
       JSON.stringify({
-        error: "Erreur interne du serveur lors du traitement du Webhook",
-        details: error?.message || String(error),
+        success: true,
+        acknowledged: true,
+        order_id,
+        transaction_id: transaction_id || null,
+        status: cleanStatus,
       }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (error: unknown) {
+    console.error("[PAYMENT-WEBHOOK] Exception non interceptée:", error);
+    return new Response(
+      JSON.stringify({ error: "Erreur interne du serveur lors du traitement du Webhook." }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
