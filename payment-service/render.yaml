@@ -13,6 +13,11 @@ services:
         value: 10000
       - key: PROJECT_ID
         value: nanasore
+      # Base de données officielle Supabase (remplace Firebase/Firestore)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       # Proxies Fixie dédiés avec priorité & fallback
       - key: SEBPAY_FIXIE_URL
         sync: false
@@ -23,7 +28,9 @@ services:
       - key: SEBPAY_WEBHOOK_SECRET
         sync: false
       - key: PAYMENT_WEBHOOK_SECRET
-        value: konkobo_telecom_webhook_secret_key_2026
+        sync: false
+      - key: PAYMENT_CALLBACK_URL
+        value: https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook
       # Routage NaNaSwitch (SasPay Prioritaire 100% / Sebpay Secours)
       - key: PRIMARY_GATEWAY
         value: saspay
@@ -40,12 +47,10 @@ services:
       - key: YOUTUBE_CLIENT_SECRET
         sync: false
       - key: YOUTUBE_REDIRECT_URI
-        value: https://nana-payment-api.onrender.com/api/youtube/callback
-      # Stream Router (YouTube / Jitsi Failover)
+        value: https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/youtube/callback
+      # Stream Router
       - key: MAX_YOUTUBE_DAILY_LIVES
         value: "30"
-      - key: JITSI_DOMAIN
-        value: meet.jit.si
       # Sebpay Gateway
       - key: SEBPAY_PUBLIC_KEY
         sync: false

@@ -295,9 +295,7 @@ class NaNaSwitchManager {
         failover: false
       };
 
-      if (options.db) {
-        await this.persistTransactionIntent(options.db, resolved, params);
-      }
+      await this.persistTransactionIntent(options.db, resolved, params);
 
       return resolved;
     } catch (primaryErr) {
@@ -345,9 +343,7 @@ class NaNaSwitchManager {
           message: getDynamicFailoverMessage(params)
         };
 
-        if (options.db) {
-          await this.persistTransactionIntent(options.db, resolved, params);
-        }
+        await this.persistTransactionIntent(options.db, resolved, params);
 
         return resolved;
       } catch (fallbackErr) {
@@ -394,58 +390,50 @@ class NaNaSwitchManager {
   }
 
   /**
-   * Persiste l'intention de transaction dans Firestore en garantissant la traçabilité de la passerelle
-   * @param {admin.firestore.Firestore} db
-   * @param {object} initResult
-   * @param {object} originalParams
+   * Persiste l'intention de transaction dans Supabase (`nanaswitch_transactions`)
+   * en garantissant la traçabilité complète de la passerelle (SasPay / SebPay) et du failover.
    */
-  async persistTransactionIntent(db, initResult, originalParams = {}) {
-    if (!db) return;
-
+  async persistTransactionIntent(_legacyDb, initResult, originalParams = {}) {
     try {
-      const orderId = originalParams.orderId || initResult.orderId;
-      const externalReference = originalParams.externalReference || initResult.reference || `${originalParams.storeId || 'nanasore'}___${orderId}`;
-      const chosenGateway = initResult.gateway || this.getPrimaryGateway();
+      const { getSupabaseAdmin } = require('../supabase-admin');
+      const supabase = getSupabaseAdmin();
+      if (!supabase) return;
 
+      const orderId = originalParams.orderId || initResult.orderId || `ORD_${Date.now()}`;
+      const externalReference =
+        originalParams.externalReference ||
+        initResult.reference ||
+        `${originalParams.storeId || 'nanasore'}___${orderId}`;
+      const chosenGateway = initResult.gateway || this.getPrimaryGateway();
       const nowServer = new Date().toISOString();
 
-      const payload = {
-        id: orderId,
-        orderId,
-        externalReference,
-        storeId: originalParams.storeId || 'nanasore_central_hub',
-        tenantId: originalParams.storeId || originalParams.tenantId || 'nanasore_central_hub',
+      await supabase.from('nanaswitch_transactions').upsert({
+        order_id: orderId,
+        external_reference: externalReference,
+        store_id: originalParams.storeId || 'nanasore_central_hub',
+        tenant_id: originalParams.storeId || originalParams.tenantId || 'nanasore_central_hub',
         amount: Number(originalParams.amount || initResult.amount || 0),
         currency: (originalParams.currency || initResult.currency || 'XOF').toUpperCase(),
-        gateway: chosenGateway, // "saspay" par défaut ou "sebpay"
+        gateway: chosenGateway,
         provider: chosenGateway.toUpperCase(),
-        failedOver: Boolean(initResult.failedOver),
-        originalGateway: initResult.originalGateway || null,
-        failoverReason: initResult.failoverReason || null,
+        failed_over: Boolean(initResult.failedOver),
+        original_gateway: initResult.originalGateway || null,
+        failover_reason: initResult.failoverReason || null,
         status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentUrl: initResult.paymentUrl || initResult.checkout_url || null,
-        redirectUrl: initResult.paymentUrl || initResult.checkout_url || null,
-        transactionId: initResult.transactionId || null,
-        customerPhone: originalParams.customerPhone || originalParams.phone || null,
-        customerEmail: originalParams.customerEmail || null,
-        customerName: originalParams.customerName || null,
+        payment_url: initResult.paymentUrl || initResult.checkout_url || null,
+        transaction_id: initResult.transactionId || null,
+        customer_phone: originalParams.customerPhone || originalParams.phone || null,
+        customer_email: originalParams.customerEmail || null,
+        customer_name: originalParams.customerName || null,
         description: originalParams.description || null,
-        updatedAt: nowServer
-      };
+        updated_at: nowServer,
+      });
 
-      const promises = [];
-      if (orderId) {
-        promises.push(db.collection('payment_intents').doc(orderId).set(payload, { merge: true }));
-      }
-      if (externalReference && externalReference !== orderId) {
-        promises.push(db.collection('payment_intents').doc(externalReference).set(payload, { merge: true }));
-      }
-
-      await Promise.all(promises);
-      console.log(`[FIRESTORE TRANSACTION] Intent persisté avec succès | Order #${orderId} | Gateway: "${chosenGateway}" | Failover: ${Boolean(initResult.failedOver)}`);
-    } catch (fbErr) {
-      console.warn('[FIRESTORE PERSIST NOTICE] Écriture intent :', fbErr.message);
+      console.log(
+        `[SUPABASE TRANSACTION] Intent persisté | Order #${orderId} | Gateway: "${chosenGateway}" | Failover: ${Boolean(initResult.failedOver)}`
+      );
+    } catch (supaErr) {
+      console.warn('[SUPABASE PERSIST NOTICE] Écriture intent :', supaErr.message);
     }
   }
 

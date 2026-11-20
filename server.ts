@@ -1639,14 +1639,16 @@ async function startServer() {
         const data = await upstreamRes.json();
         return res.status(upstreamRes.status).json(data);
       }
-    } catch {
-      return res.json({
-        status: 'success',
+    } catch (err: any) {
+      return res.status(503).json({
+        status: 'warning',
         service: 'nana-backend-router',
         ip: PRIMARY_FIXIE_IP,
         isProxyActive: false,
+        proxyConfigured: Boolean(process.env.SEBPAY_FIXIE_URL || process.env.SASPAY_FIXIE_URL || process.env.FIXIE_URL),
         fallbackStaticIp: true,
-        message: 'IP statique Fixie déclarée par défaut (mode offline/fallback).'
+        error: err?.message || 'Proxy Fixie injoignable',
+        message: 'Proxy Fixie non actif ou injoignable. Vérifiez SEBPAY_FIXIE_URL / SASPAY_FIXIE_URL / FIXIE_URL sur Northflank.'
       });
     }
   });

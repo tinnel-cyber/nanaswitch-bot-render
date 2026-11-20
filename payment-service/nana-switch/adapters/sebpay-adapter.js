@@ -67,8 +67,8 @@ class SebpayAdapter extends PaymentGatewayAdapter {
     const externalReference = params.externalReference || params.external_reference || `nanasore_${cleanShopName}___${orderId}`;
     const resolvedPhone = customerPhone || customer_phone || phone || '';
 
-    const effectiveRedirectUrl = redirectUrl || redirect_url || returnUrl || 'https://nanasore.com/checkout/return';
-    const effectiveCallbackUrl = callbackUrl || callback_url || process.env.PAYMENT_CALLBACK_URL || 'https://nana-payment-api.onrender.com/api/payment/webhook';
+    const effectiveRedirectUrl = redirectUrl || redirect_url || returnUrl || 'https://nsore.shop/checkout/return';
+    const effectiveCallbackUrl = callbackUrl || callback_url || process.env.PAYMENT_CALLBACK_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/payment/webhook';
 
     console.log(`[SEBPAY ADAPTER] Création Hosted Checkout Session pour commande ${orderId} (${amount} ${currency})...`);
 

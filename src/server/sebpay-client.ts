@@ -145,50 +145,88 @@ export class SebpayClient {
   private apiKey: string;
   private apiSecret: string;
   private baseUrl: string;
+  private paymentRouterUrl: string;
 
   constructor() {
-    this.apiKey = process.env.SEBPAY_PUBLIC_KEY || process.env.S_API_KEY || 's_live_sec_key_2026';
-    this.apiSecret = process.env.SEBPAY_SECRET_KEY || process.env.S_API_SECRET || 's_secret_hash_auth';
+    this.apiKey = process.env.SEBPAY_PUBLIC_KEY || process.env.S_API_KEY || '';
+    this.apiSecret = process.env.SEBPAY_SECRET_KEY || process.env.S_API_SECRET || '';
     this.baseUrl = process.env.SEBPAY_BASE_URL || process.env.S_API_BASE_URL || 'https://newapi.sebpay.bj/api/v1/';
+    this.paymentRouterUrl = (
+      process.env.PAYMENT_API_URL ||
+      process.env.API_URL ||
+      'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'
+    ).replace(/\/+$/, '');
   }
 
   /**
-   * Crée un paiement bloqué / sous séquestre (Escrow)
-   * Bloque le montant plein (ex: 20 000 FCFA) lors de la participation à la Tontine
+   * Crée un paiement bloqué / sous séquestre (Escrow) via le routeur réel NanaSwitch / SebPay (IP statique Fixie)
    */
   async createEscrowPayment(params: CreateEscrowPaymentParams): Promise<SEscrowResponse> {
     const {
       amount,
-      currency = 'FCFA',
+      currency = 'XOF',
       description,
       customerPhone,
-      customerName = 'Participant Tontine',
+      customerName = 'Participant Nanasore',
       buyerId = `buyer_${Date.now()}`,
       tontineId = 'tontine_default',
+      returnUrl = 'https://nsore.shop/checkout/return',
+      webhookUrl = `${this.paymentRouterUrl}/api/payment/webhook`,
       metadata = {}
     } = params;
 
-    const transactionId = `seb_tx_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const { country, currency: resolvedCurrency } = resolveCountryAndCurrency(undefined, customerPhone, currency);
+    const orderId = `escrow_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const escrowId = `seb_escrow_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
     const now = Date.now();
-    const expiresAt = now + 15 * 60 * 1000; // 15 minutes pour finaliser
+    const expiresAt = now + 15 * 60 * 1000;
 
-    // URL de paiement sécurisée Mobile Money (Orange, Wave, MTN, Moov)
-    const paymentUrl = `https://checkout.sebpay.africa/pay/${transactionId}?amount=${amount}&currency=${currency}&phone=${encodeURIComponent(
-      customerPhone
-    )}&desc=${encodeURIComponent(description)}`;
+    let transactionId = orderId;
+    let paymentUrl = '';
+
+    // Appel réel vers le routeur NanaSwitch Northflank (qui passe par le proxy IP Statique Fixie -> SebPay/SasPay)
+    try {
+      const response = await fetch(`${this.paymentRouterUrl}/api/payment/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          provider: 'sebpay',
+          orderId,
+          amount: Math.round(Number(amount)),
+          currency: resolvedCurrency,
+          country,
+          customerPhone,
+          customerName,
+          description,
+          returnUrl,
+          callbackUrl: webhookUrl,
+          metadata: { ...metadata, escrowId, buyerId, tontineId }
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const data: any = await response.json().catch(() => ({}));
+      if (response.ok && (data.checkout_url || data.paymentUrl || data.redirectUrl || data.provider_link)) {
+        paymentUrl = data.checkout_url || data.paymentUrl || data.redirectUrl || data.provider_link;
+        transactionId = data.transactionId || data.transaction_id || data.id || orderId;
+      } else {
+        throw new Error(data.error || data.message || `HTTP ${response.status}`);
+      }
+    } catch (err: any) {
+      console.error(`[SEBPAY CLIENT] Échec initiation réelle NanaSwitch (${orderId}):`, err?.message || err);
+      throw new Error(`Impossible d'initier le paiement SebPay via NanaSwitch : ${err?.message || 'Passerelle indisponible'}`);
+    }
 
     const escrowData = {
       transactionId,
       escrowId,
-      amount,
-      currency,
+      amount: Math.round(Number(amount)),
+      currency: resolvedCurrency,
       description,
       customerPhone,
       customerName,
       buyerId,
       tontineId,
-      status: 'BLOCKED',
+      status: 'PENDING' as const,
       paymentUrl,
       metadata,
       createdAt: now,
@@ -197,18 +235,14 @@ export class SebpayClient {
 
     S_ESCROWS.set(transactionId, escrowData);
 
-    console.log(
-      `[SEBPAY CLIENT] Escrow initialisé pour ${customerPhone} : ${amount} ${currency} (Tx: ${transactionId})`
-    );
-
     return {
       success: true,
       transactionId,
       escrowId,
-      amount,
-      currency,
+      amount: escrowData.amount,
+      currency: resolvedCurrency,
       paymentUrl,
-      status: 'BLOCKED',
+      status: 'PENDING',
       expiresAt,
       createdAt: now
     };

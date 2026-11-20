@@ -37,8 +37,8 @@ export interface PaymentInitiateResponse {
   error?: string;
 }
 
-// URL officielle du micro-service Render (avec sortie par IP Statique Fixie)
-export const DEFAULT_PAYMENT_API_URL = 'https://nanaswitch-bot-render-0kqp.onrender.com';
+// URL officielle du micro-service Northflank (Always-On, zéro sommeil, sortie IP Statique Fixie)
+export const DEFAULT_PAYMENT_API_URL = 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
 
 // Adresses IP statiques de sortie Fixie enregistrées auprès de la banque
 export const PRIMARY_FIXIE_IP = '54.195.3.54';
