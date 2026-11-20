@@ -25,11 +25,15 @@ import {
   Square,
   GraduationCap,
   MessageCircle,
-  X
+  X,
+  Pencil,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
-import { LiveSession, LiveAspectRatio, LiveSessionMode, LiveSourceType } from '../../../../types/liveSession';
+import { LiveSession, LiveAspectRatio, LiveBadgeColor, LiveSessionMode, LiveSourceType } from '../../../../types/liveSession';
 import { StoreProductItem } from '../../../../components/storeBuilder/types';
 import { HlsLivePlayer } from './HlsLivePlayer';
+import { NanasoreChameleonPlayer } from './NanasoreChameleonPlayer';
 import { NativeCoaching1to1Room } from './NativeCoaching1to1Room';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
@@ -40,6 +44,7 @@ export interface NanasoreOmniPlayerProps {
   onBuyWhatsApp?: (product: StoreProductItem) => void;
   onShareClick?: () => void;
   onUnpinProduct?: () => void;
+  onUpdateBadge?: (cfg: { customBadgeLabel: string; customBadgeColor: LiveBadgeColor }) => void;
   className?: string;
 }
 
@@ -50,6 +55,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
   onBuyWhatsApp,
   onShareClick,
   onUnpinProduct,
+  onUpdateBadge,
   className = ''
 }) => {
   // 1. DÉCLARATION STRICTE DE TOUS LES HOOKS AU SOMMET DU COMPOSANT (ZÉRO ERREUR #310)
@@ -62,7 +68,13 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
     return (params.get('room') || '').trim();
   }, []);
 
-  const [aspectRatio, setAspectRatio] = useState<LiveAspectRatio>(session.aspectRatio || '16:9');
+  const [aspectRatio, setAspectRatio] = useState<LiveAspectRatio>(session.aspectRatio || 'auto');
+  const [detectedRatio, setDetectedRatio] = useState<LiveAspectRatio>('16:9');
+  const [isEditingBadge, setIsEditingBadge] = useState<boolean>(false);
+  const [badgeDraftLabel, setBadgeDraftLabel] = useState<string>(session.customBadgeLabel || '');
+  const [badgeDraftColor, setBadgeDraftColor] = useState<LiveBadgeColor>(
+    session.customBadgeColor || (session.sessionMode === 'live_shopping' ? 'red' : 'blue')
+  );
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -326,32 +338,55 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
     return null;
   }, [session.streamUrl, (session as any).meetingUrl, session.coachingRoomUrl, session.sourceType, isMuted]);
 
-  // Résolution du badge dynamique selon le mode de session
+  // Résolution du badge dynamique (personnalisable par le vendeur, formateur, acheteur ou modérateur)
   const badgeConfig = useMemo(() => {
+    const colorMap: Record<LiveBadgeColor, string> = {
+      red: 'bg-rose-600',
+      blue: 'bg-blue-600',
+      emerald: 'bg-emerald-600',
+      indigo: 'bg-indigo-600',
+      amber: 'bg-amber-600',
+    };
+    const customLabel = (session.customBadgeLabel || '').trim();
+    const customColor = session.customBadgeColor ? colorMap[session.customBadgeColor] : null;
+
+    if (customLabel) {
+      return {
+        label: `EN DIRECT • ${customLabel.toUpperCase()}`,
+        icon: Radio,
+        color: customColor || (session.sessionMode === 'live_shopping' ? 'bg-rose-600' : 'bg-blue-600'),
+      };
+    }
+
     switch (session.sessionMode) {
       case 'live_shopping':
-        return { label: '🔴 EN DIRECT • LIVE SHOPPING', icon: ShoppingBag, color: 'bg-rose-600' };
+        return { label: 'EN DIRECT • LIVE SHOPPING', icon: ShoppingBag, color: customColor || 'bg-rose-600' };
       case 'webinar_training':
-        return { label: '🎓 WEBINAIRE & FORMATION EN DIRECT', icon: GraduationCap, color: 'bg-blue-600' };
+        return { label: 'SALLE DE FORMATION EN DIRECT', icon: GraduationCap, color: customColor || 'bg-blue-600' };
       case 'coaching_1to1':
-        return { label: '🤝 COACHING 1-TO-1 EN DIRECT', icon: Sparkles, color: 'bg-emerald-600' };
+        return { label: 'COACHING 1-TO-1 EN DIRECT', icon: Sparkles, color: customColor || 'bg-emerald-600' };
       case 'interactive_class':
-        return { label: '🏫 CLASSE INTERACTIVE EN DIRECT', icon: Users, color: 'bg-indigo-600' };
+        return { label: 'CLASSE INTERACTIVE EN DIRECT', icon: Users, color: customColor || 'bg-indigo-600' };
       default:
-        return { label: '🔴 EN DIRECT', icon: Radio, color: 'bg-blue-600' };
+        return { label: 'EN DIRECT', icon: Radio, color: customColor || 'bg-blue-600' };
     }
-  }, [session.sessionMode]);
+  }, [session.sessionMode, session.customBadgeLabel, session.customBadgeColor]);
 
-  // Classe CSS selon le ratio Caméléon choisi
+  // Ratio effectif Caméléon (Auto -> utilise le format détecté de la vidéo/société source)
+  const effectiveRatio: LiveAspectRatio = aspectRatio === 'auto' ? detectedRatio : aspectRatio;
+
   const ratioClasses = useMemo(() => {
-    if (aspectRatio === '9:16') {
-      return 'aspect-[9/16] max-h-[85vh] mx-auto';
+    if (effectiveRatio === '9:16') {
+      return 'aspect-[9/16] max-h-[82vh] w-full max-w-[420px] mx-auto';
     }
-    if (aspectRatio === '1:1') {
-      return 'aspect-square max-h-[75vh] mx-auto';
+    if (effectiveRatio === '1:1') {
+      return 'aspect-square max-h-[75vh] w-full max-w-[600px] mx-auto';
+    }
+    if (effectiveRatio === '4:3') {
+      return 'aspect-[4/3] max-h-[78vh] w-full mx-auto';
     }
     return 'aspect-video w-full'; // 16:9 Cinema par défaut
-  }, [aspectRatio]);
+  }, [effectiveRatio]);
 
   const formatPrice = (p: number) => {
     return new Intl.NumberFormat('fr-FR').format(p) + ' F CFA';
@@ -362,14 +397,86 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
       ref={containerRef}
       className={`w-full rounded-3xl overflow-hidden bg-slate-950 text-white relative shadow-2xl border border-blue-900/40 select-none ${className}`}
     >
-      {/* 1. EN-TÊTE DU LECTEUR : BADGE EN DIRECT + SPECTATEURS + COMPTE À REBOURS BLEU & BLANC */}
-      <div className="absolute top-0 left-0 right-0 z-30 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pointer-events-auto">
-        {/* Gauche : Badge Statut + Nombre de Spectateurs */}
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${badgeConfig.color} text-white text-[11px] font-black uppercase tracking-wider shadow-lg animate-pulse`}>
-            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-            <span>{badgeConfig.label}</span>
-          </span>
+      {/* 1. EN-TÊTE DU LECTEUR : BADGE PERSONNALISABLE + SPECTATEURS + COMPTE À REBOURS + FORMAT CAMÉLÉON */}
+      <div className="absolute top-0 left-0 right-0 z-30 p-3 sm:p-4 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pointer-events-auto">
+        {/* Gauche : Badge Personnalisable (éditable en 1 clic) + Nombre de Spectateurs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isEditingBadge && onUpdateBadge ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                playValidationBeep();
+                onUpdateBadge({
+                  customBadgeLabel: badgeDraftLabel.trim(),
+                  customBadgeColor: badgeDraftColor,
+                });
+                setIsEditingBadge(false);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-2xl bg-slate-950/95 border border-white/25 backdrop-blur-md shadow-xl"
+            >
+              {([
+                { id: 'red', cls: 'bg-rose-600' },
+                { id: 'blue', cls: 'bg-blue-600' },
+                { id: 'emerald', cls: 'bg-emerald-600' },
+                { id: 'indigo', cls: 'bg-indigo-600' },
+                { id: 'amber', cls: 'bg-amber-500' },
+              ] as const).map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setBadgeDraftColor(c.id)}
+                  className={`w-3.5 h-3.5 rounded-full ${c.cls} cursor-pointer ${
+                    badgeDraftColor === c.id ? 'ring-2 ring-white scale-110' : 'opacity-60 hover:opacity-100'
+                  }`}
+                />
+              ))}
+              <input
+                type="text"
+                autoFocus
+                value={badgeDraftLabel}
+                onChange={(e) => setBadgeDraftLabel(e.target.value)}
+                placeholder="ex: Conférence, Réunion, Coaching..."
+                className="w-36 sm:w-44 bg-white/10 text-white placeholder:text-slate-400 text-[11px] font-bold px-2 py-0.5 rounded-lg border border-white/20 focus:outline-none focus:border-blue-400"
+              />
+              <button
+                type="submit"
+                className="px-2 py-0.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black cursor-pointer"
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingBadge(false)}
+                className="p-0.5 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          ) : (
+            <div className="inline-flex items-center gap-1">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${badgeConfig.color} text-white text-[11px] font-black uppercase tracking-wider shadow-lg`}>
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                <span className="truncate max-w-[200px] sm:max-w-[280px]">{badgeConfig.label}</span>
+              </span>
+              {onUpdateBadge && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setBadgeDraftLabel(session.customBadgeLabel || '');
+                    setBadgeDraftColor(
+                      session.customBadgeColor || (session.sessionMode === 'live_shopping' ? 'red' : 'blue')
+                    );
+                    setIsEditingBadge(true);
+                  }}
+                  title="Modifier le libellé & la couleur du badge (Conférence, Réunion, Formation, Vente...)"
+                  className="w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 border border-white/20 text-white/90 hover:text-white flex items-center justify-center transition cursor-pointer"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-bold text-slate-200">
             <Users className="w-3.5 h-3.5 text-blue-400" />
@@ -377,8 +484,8 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
           </div>
         </div>
 
-          {/* Droite : Bouton Face-à-Face 1-to-1 + Compte à Rebours Bleu & Blanc + Switcher de Format Caméléon */}
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        {/* Droite : Bouton Face-à-Face 1-to-1 + Compte à Rebours + Switcher de Format Caméléon (Mobile & Desktop) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 self-end sm:self-auto flex-wrap justify-end">
           {session.sessionMode === 'coaching_1to1' && (
             <button
               type="button"
@@ -389,12 +496,12 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
               className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition cursor-pointer"
             >
               <Camera className="w-3.5 h-3.5" />
-              <span>{isFaceToFaceActive ? '📺 Stream' : '📹 Face-à-Face 1-to-1'}</span>
+              <span>{isFaceToFaceActive ? 'Stream' : 'Face-à-Face 1-to-1'}</span>
             </button>
           )}
 
           {/* Chrono Compact Lumineux */}
-          <div className="flex items-center gap-1 bg-gradient-to-r from-blue-600 to-blue-700 px-3 py-1 rounded-xl border border-blue-400/40 shadow-md">
+          <div className="hidden md:flex items-center gap-1 bg-gradient-to-r from-blue-600 to-blue-700 px-2.5 py-1 rounded-xl border border-blue-400/40 shadow-md">
             <Zap className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 animate-pulse shrink-0" />
             <div className="flex items-center gap-1 text-[11px] font-black tracking-tight text-white">
               <span className="bg-white text-blue-600 px-1.5 py-0.5 rounded font-black text-[10px]">
@@ -411,8 +518,21 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
             </div>
           </div>
 
-          {/* Sélecteur de Ratio Caméléon (9:16 / 1:1 / 16:9) */}
-          <div className="hidden sm:flex items-center bg-black/60 backdrop-blur-md rounded-xl p-0.5 border border-white/15">
+          {/* Sélecteur de Ratio Caméléon (Auto / 16:9 / 1:1 / 9:16) — visible Mobile & Desktop */}
+          <div className="flex items-center bg-black/65 backdrop-blur-md rounded-xl p-0.5 border border-white/15">
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setAspectRatio('auto');
+              }}
+              title="Format Caméléon Automatique"
+              className={`px-2 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                aspectRatio === 'auto' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Auto
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -445,7 +565,7 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                 playTapBeep();
                 setAspectRatio('9:16');
               }}
-              title="Format 9:16 Mobile / TikTok"
+              title="Format 9:16 Mobile / Vertical"
               className={`p-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 aspectRatio === '9:16' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
               }`}
@@ -457,9 +577,9 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
       </div>
 
       {/* 2. ZONE CENTRALE DU LECTEUR CAMÉLÉON (AVEC FOND AMBIANT FLOUTÉ EN 9:16) */}
-      <div className="relative w-full overflow-hidden flex items-center justify-center bg-slate-950 min-h-[360px] sm:min-h-[480px]">
+      <div className="relative w-full overflow-hidden flex items-center justify-center bg-slate-950 min-h-[280px] sm:min-h-[440px]">
         {/* Fond d'ambiance flouté (effet glassmorphism haute immersion) */}
-        {aspectRatio === '9:16' && (
+        {effectiveRatio === '9:16' && (
           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
             <img 
               src={session.posterUrl || session.pinnedProduct?.image || 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1080&auto=format&fit=crop&q=80'}
@@ -502,7 +622,6 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                 muted={isHost || isMuted}
                 className="w-full h-full object-cover"
               />
-              {/* Overlay d'état si caméra coupée */}
               {!isCameraActive && (
                 <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3">
                   <div className="w-20 h-20 rounded-full bg-blue-600/20 border border-blue-500/40 flex items-center justify-center">
@@ -513,7 +632,6 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
               )}
             </div>
           ) : embedSource ? (
-            /* LECTEURS EXTERNES & PASSERELLES DE VISIOCONFÉRENCE (GOOGLE MEET, ZOOM, JITSI, YOUTUBE, FACEBOOK, TIKTOK...) */
             embedSource.type === 'external_meeting' ? (
               <div className="w-full h-full relative flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/80 space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 border border-blue-500/40 flex items-center justify-center shadow-lg">
@@ -567,35 +685,21 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
                 allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
                 allowFullScreen
               />
-            ) : embedSource.type === 'youtube' || embedSource.type === 'facebook' || embedSource.type === 'vimeo' || embedSource.type === 'twitch' || embedSource.type === 'tiktok' || embedSource.type === 'instagram' ? (
-              <iframe
-                src={embedSource.url}
-                title={session.title}
-                className="w-full h-full border-none"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            ) : embedSource.url.includes('.m3u8') || embedSource.url.includes('live') ? (
-              <HlsLivePlayer
-                src={embedSource.url}
+            ) : (
+              /* LECTEUR UNIVERSEL MARQUE BLANCHE CAMÉLÉON NANASORE (YouTube, Vimeo, Dailymotion, Twitch, Facebook, TikTok, Instagram, HLS, MP4) */
+              <NanasoreChameleonPlayer
+                videoUrl={session.streamUrl || (session as any).meetingUrl || embedSource.url}
+                title={session.title || session.storeName}
                 storeSlug={session.sessionSlug || session.id}
                 storeName={session.storeName}
                 posterUrl={session.posterUrl}
                 autoPlay={isPlaying}
                 muted={isMuted}
+                isFullscreen={isFullscreen}
+                onMutedChange={setIsMuted}
+                onRequestFullscreen={handleToggleFullscreen}
+                onDetectedAspectRatio={(ratio) => setDetectedRatio(ratio)}
                 className="w-full h-full"
-              />
-            ) : (
-              <video
-                ref={videoRef}
-                src={embedSource.url}
-                poster={session.posterUrl}
-                preload="none"
-                autoPlay
-                controls
-                playsInline
-                muted={isMuted}
-                className="w-full h-full object-cover"
               />
             )
           ) : (

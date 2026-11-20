@@ -291,3 +291,103 @@ export async function markAffiliateCommissionPaid(commissionId: string): Promise
     console.warn('[liveAffiliateService] markAffiliateCommissionPaid warning:', err);
   }
 }
+
+/**
+ * Charge les commissions d'affiliation en temps réel pour un affilié (acheteur / étudiant) par son code.
+ */
+export async function listAffiliateCommissionsByCode(
+  referrerCode: string
+): Promise<AffiliateCommissionRecord[]> {
+  const cleanCode = (referrerCode || '').trim().toUpperCase();
+  if (!cleanCode) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('affiliate_commissions')
+      .select('*')
+      .eq('referrer_code', cleanCode)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (!error && Array.isArray(data)) {
+      return data.map((r: any) => ({
+        id: r.id,
+        merchantId: r.merchant_id,
+        sessionId: r.session_id || undefined,
+        productId: r.product_id || undefined,
+        productName: r.product_name,
+        referrerCode: r.referrer_code,
+        referrerPhone: r.referrer_phone || undefined,
+        buyerName: r.buyer_name || undefined,
+        buyerContact: r.buyer_contact || undefined,
+        orderAmount: Number(r.order_amount) || 0,
+        commissionPercent: Number(r.commission_percent) || 10,
+        commissionAmount: Number(r.commission_amount) || 0,
+        currency: r.currency || 'XOF',
+        transactionId: r.transaction_id || undefined,
+        status: r.status === 'paid' ? 'paid' : 'pending',
+        paidAt: r.paid_at || undefined,
+        createdAt: r.created_at,
+      }));
+    }
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(LOCAL_COMMISSIONS_KEY);
+      if (raw) {
+        const list: AffiliateCommissionRecord[] = JSON.parse(raw);
+        return list.filter((c) => c.referrerCode?.toUpperCase() === cleanCode);
+      }
+    } catch {}
+  }
+  return [];
+}
+
+/**
+ * Abonnement Supabase Realtime aux gains de l'affilié (Mini-Wallet acheteur/étudiant en direct).
+ */
+export function subscribeAffiliateCommissionsByCode(
+  referrerCode: string,
+  onUpdate: (records: AffiliateCommissionRecord[]) => void
+): () => void {
+  const cleanCode = (referrerCode || '').trim().toUpperCase();
+  if (!cleanCode) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  let active = true;
+  const refresh = () => {
+    listAffiliateCommissionsByCode(cleanCode).then((rows) => {
+      if (active) onUpdate(rows);
+    });
+  };
+
+  refresh();
+
+  const channel = supabase
+    .channel(`affiliate_wallet_${cleanCode}_${Date.now()}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'affiliate_commissions',
+        filter: `referrer_code=eq.${cleanCode}`,
+      },
+      () => {
+        refresh();
+      }
+    )
+    .subscribe();
+
+  const pollTimer = setInterval(refresh, 15000);
+
+  return () => {
+    active = false;
+    clearInterval(pollTimer);
+    supabase.removeChannel(channel);
+  };
+}
+

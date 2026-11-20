@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   LiveSession,
+  LiveBadgeColor,
   LiveQuizQuestion,
   HandRaisedUser,
 } from '../../../../types/liveSession';
@@ -38,6 +39,7 @@ export interface LiveInstructorControlBarProps {
   session: LiveSession;
   roomMode: 'classroom' | 'live_shopping';
   onChangeRoomMode: (mode: 'classroom' | 'live_shopping') => void;
+  onUpdateBadge?: (cfg: { customBadgeLabel: string; customBadgeColor: LiveBadgeColor }) => void;
   isBroadcasterActive: boolean;
   onToggleBroadcaster: () => void;
   onOpenMultistream: () => void;
@@ -61,6 +63,7 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
   session,
   roomMode,
   onChangeRoomMode,
+  onUpdateBadge,
   isBroadcasterActive,
   onToggleBroadcaster,
   onOpenMultistream,
@@ -78,6 +81,10 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
   const [isHandRaiseDrawerOpen, setIsHandRaiseDrawerOpen] = useState<boolean>(false);
   const [isAccessModalOpen, setIsAccessModalOpen] = useState<boolean>(false);
   const [isAuctionModalOpen, setIsAuctionModalOpen] = useState<boolean>(false);
+  const [badgeLabelInput, setBadgeLabelInput] = useState<string>(session.customBadgeLabel || '');
+  const [badgeColorInput, setBadgeColorInput] = useState<LiveBadgeColor>(
+    session.customBadgeColor || (roomMode === 'live_shopping' ? 'red' : 'blue')
+  );
 
   // Formulaire Quiz
   const [quizQuestion, setQuizQuestion] = useState<string>('');
@@ -218,6 +225,70 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
               <span>Live Shopping</span>
             </button>
           </div>
+
+          {/* Champ personnalisable du Badge de Rencontre (Rouge / Bleu / Vert / Indigo / Ambre) */}
+          {onUpdateBadge && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                playValidationBeep();
+                onUpdateBadge({
+                  customBadgeLabel: badgeLabelInput.trim(),
+                  customBadgeColor: badgeColorInput,
+                });
+              }}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-xl bg-[#F5F7FB] border border-slate-200/90"
+              title="Personnalisez le titre du badge en direct (ex: Conférence, Réunion, Coaching, Culte, Vente Flash...)"
+            >
+              <div className="flex items-center gap-1">
+                {([
+                  { id: 'red', cls: 'bg-rose-600' },
+                  { id: 'blue', cls: 'bg-blue-600' },
+                  { id: 'emerald', cls: 'bg-emerald-600' },
+                  { id: 'indigo', cls: 'bg-indigo-600' },
+                  { id: 'amber', cls: 'bg-amber-500' },
+                ] as const).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setBadgeColorInput(c.id);
+                      onUpdateBadge({
+                        customBadgeLabel: badgeLabelInput.trim(),
+                        customBadgeColor: c.id,
+                      });
+                    }}
+                    className={`w-3.5 h-3.5 rounded-full ${c.cls} cursor-pointer transition-transform ${
+                      badgeColorInput === c.id ? 'ring-2 ring-offset-1 ring-slate-900 scale-110' : 'opacity-65 hover:opacity-100'
+                    }`}
+                    title={`Couleur ${c.id}`}
+                  />
+                ))}
+              </div>
+              <input
+                type="text"
+                value={badgeLabelInput}
+                onChange={(e) => setBadgeLabelInput(e.target.value)}
+                onBlur={() => {
+                  if (badgeLabelInput.trim() !== (session.customBadgeLabel || '')) {
+                    onUpdateBadge({
+                      customBadgeLabel: badgeLabelInput.trim(),
+                      customBadgeColor: badgeColorInput,
+                    });
+                  }
+                }}
+                placeholder="Titre badge (ex: Conférence, Réunion...)"
+                className="w-36 sm:w-44 bg-white px-2 py-1 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-800 focus:outline-none focus:border-[#1D4ED8]"
+              />
+              <button
+                type="submit"
+                className="px-2 py-1 rounded-lg bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-[10px] font-black cursor-pointer"
+              >
+                OK
+              </button>
+            </form>
+          )}
 
           {/* Bouton Accès Libre / Cours Payant */}
           <button

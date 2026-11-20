@@ -15,10 +15,11 @@ import {
   Mic,
   PhoneOff,
   Users,
+  Upload,
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { LiveSession, HandRaisedUser } from '../../../types/liveSession';
+import { LiveSession, LiveBadgeColor, HandRaisedUser } from '../../../types/liveSession';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { StoreUser } from '../../../types';
 import {
@@ -58,6 +59,7 @@ import { Live1to1BookingModal } from '../components/live/Live1to1BookingModal';
 import { LiveAccessGate } from '../components/live/LiveAccessGate';
 import { LiveAuctionWidget } from '../components/live/LiveAuctionWidget';
 import { LiveAffiliatePayoutModal } from '../components/live/LiveAffiliatePayoutModal';
+import { LiveAffiliateMiniWallet } from '../components/live/LiveAffiliateMiniWallet';
 import { NativeCoaching1to1Room } from '../components/live/NativeCoaching1to1Room';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
 import { loadStoreMultistreamConfig } from '../../../services/liveMultistreamService';
@@ -502,6 +504,21 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     [session.whatsappPhone, session.storeName, affiliateAttribution?.referrerCode]
   );
 
+  const handleUpdateBadge = useCallback(
+    async (cfg: { customBadgeLabel: string; customBadgeColor: LiveBadgeColor }) => {
+      setSession((prev) => ({
+        ...prev,
+        customBadgeLabel: cfg.customBadgeLabel,
+        customBadgeColor: cfg.customBadgeColor,
+      }));
+      await updateLiveRoomConfig(session.id, {
+        customBadgeLabel: cfg.customBadgeLabel,
+        customBadgeColor: cfg.customBadgeColor,
+      });
+    },
+    [session.id]
+  );
+
   const handleBack = () => {
     playTapBeep();
     if (onBackToStore) {
@@ -610,6 +627,19 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 type="button"
                 onClick={() => {
                   playTapBeep();
+                  setActiveClassroomTab('assignment');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                title="Envoyer un document ou une ressource au professeur"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Envoyer ressource</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
                   setIsBookingModalOpen(true);
                 }}
                 className="px-3 py-1.5 rounded-xl bg-[#F5F7FB] hover:bg-blue-50 text-[#1D4ED8] border border-blue-200/80 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
@@ -652,7 +682,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         />
       ) : (
         /* =====================================================================
-            3. VRAIE SALLE STRUCTURÉE : BARRE STUDIO UNIFIÉE + SCÈNE + CHAT PRO
+            3. VRAIE SALLE STRUCTURÉE : BARRE STUDIO UNIFIÉE + MINI-WALLET AFFILIÉ + SCÈNE + CHAT PRO
            ===================================================================== */
         <main className="flex-1 max-w-[1560px] w-full mx-auto px-3 sm:px-5 lg:px-6 py-3.5 sm:py-4 space-y-3.5">
           {/* UNE SEULE BARRE RÉGIE STUDIO UNIFIÉE (Formateur / Vendeur vérifié uniquement) */}
@@ -661,6 +691,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               session={session}
               roomMode={roomMode}
               onChangeRoomMode={handleChangeRoomMode}
+              onUpdateBadge={handleUpdateBadge}
               isBroadcasterActive={isHostBroadcasterActive}
               onToggleBroadcaster={() => setIsHostBroadcasterActive((prev) => !prev)}
               onOpenMultistream={() => setIsMultistreamModalOpen(true)}
@@ -670,6 +701,15 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
               onLaunchAuction={handleLaunchAuction}
               onOpenAffiliatePayouts={() => setIsAffiliatePayoutModalOpen(true)}
               onSelectTab={(tab) => setActiveClassroomTab(tab)}
+            />
+          )}
+
+          {/* MINI-WALLET AFFILIATION TEMPS RÉEL (CÔTÉ ACHETEURS & ÉTUDIANTS) */}
+          {!isHostMode && (
+            <LiveAffiliateMiniWallet
+              sessionSlug={liveStreamSlug}
+              sessionTitle={session.title}
+              defaultDisplayName={viewerDisplayName}
             />
           )}
 
@@ -783,7 +823,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-start">
             {/* COLONNE GAUCHE : SCÈNE VIDÉO + ENCHÈRE (LIVE SHOPPING) + INFOS + PRODUITS */}
             <div className="lg:col-span-8 space-y-4">
-              {/* Scène Vidéo Principale (Lecteur Caméléon / YouTube Furtif / HLS / Caméra WHIP) */}
+              {/* Scène Vidéo Principale (Lecteur Caméléon Marque Blanche Nanasore / HLS / Caméra WHIP) */}
               <div className="rounded-3xl overflow-hidden shadow-xl shadow-blue-950/10 bg-slate-950 relative ring-1 ring-slate-200">
                 {isHostMode && isHostBroadcasterActive ? (
                   <WhipLiveBroadcaster
@@ -799,6 +839,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                     onBuyWhatsApp={handleBuyWhatsApp}
                     onShareClick={() => setIsShareModalOpen(true)}
                     onUnpinProduct={isHostMode ? handleUnpinProduct : undefined}
+                    onUpdateBadge={handleUpdateBadge}
                   />
                 )}
 

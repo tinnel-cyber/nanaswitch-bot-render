@@ -790,6 +790,8 @@ export interface LiveRoomRuntimeConfig {
   isPaid?: boolean;
   accessPrice?: number;
   accessLabel?: string;
+  customBadgeLabel?: string;
+  customBadgeColor?: LiveSession['customBadgeColor'];
 }
 
 const ROOM_CFG_PREFIX = 'nana_live_room_cfg_';

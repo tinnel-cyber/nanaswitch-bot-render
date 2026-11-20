@@ -911,290 +911,309 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
         )}
 
         {/* ========================================================================= */}
-        {/* ONGLET 3 : DEVOIR, SUPPORT PDF & SOUMISSION */}
+        {/* ONGLET 3 : RESSOURCES ÉTUDIANT, DEVOIR, SUPPORT PDF & SOUMISSION */}
         {/* ========================================================================= */}
         {activeTab === 'assignment' && (
-          <div className="flex-1 p-4 overflow-y-auto">
+          <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            {/* Carte du Devoir Administré (si un devoir formel est actif) */}
             {session.activeAssignment?.isActive ? (
-              <div className="space-y-4">
-                {/* Carte du Devoir Administré */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-extrabold uppercase">
-                      <FileText className="w-3 h-3" /> Travaux Pratiques en Direct
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-extrabold uppercase">
+                    <FileText className="w-3 h-3" /> Travaux Pratiques en Direct
+                  </span>
+                  {assignmentTimeRemaining && (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-lg shadow-sm">
+                      <Clock className="w-3 h-3" /> {assignmentTimeRemaining}
                     </span>
-                    {assignmentTimeRemaining && (
-                      <span className="inline-flex items-center gap-1 text-xs font-bold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-lg shadow-sm">
-                        <Clock className="w-3 h-3" /> {assignmentTimeRemaining}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="text-base font-extrabold tracking-tight mb-1">
-                    {session.activeAssignment.title}
-                  </h3>
-                  <p className="text-xs text-blue-100 leading-relaxed mb-3">
-                    {session.activeAssignment.instructions}
-                  </p>
-
-                  {/* Bouton Télécharger le PDF de l'énoncé */}
-                  {session.activeAssignment.pdfUrl && (
-                    <a
-                      href={session.activeAssignment.pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 py-2 px-3.5 rounded-xl bg-white text-blue-700 text-xs font-bold hover:bg-blue-50 transition-all shadow-sm"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Télécharger le Support PDF du Formateur
-                    </a>
                   )}
                 </div>
 
-                {/* Zone de Soumission Élève (Si non formateur) */}
-                {!isHost && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                      <Upload className="w-3.5 h-3.5 text-blue-600" /> Remettre mon Devoir au Formateur
-                    </h4>
+                <h3 className="text-base font-extrabold tracking-tight mb-1">
+                  {session.activeAssignment.title}
+                </h3>
+                <p className="text-xs text-blue-100 leading-relaxed mb-3">
+                  {session.activeAssignment.instructions}
+                </p>
 
-                    {hasSubmittedWork ? (
-                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                        <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1.5" />
-                        <h5 className="text-xs font-bold text-emerald-900">Devoir Soumis avec Succès !</h5>
-                        <p className="text-[11px] text-emerald-700 mt-1">
-                          Le formateur a reçu votre travail et va le corriger en direct.
-                        </p>
-                      </div>
-                    ) : (
-                      <form onSubmit={handleSubmitAssignment} className="space-y-3">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Votre Nom & Prénom *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={participantName}
-                            onChange={(e) => setParticipantName(e.target.value)}
-                            placeholder="ex: Amina Coulibaly"
-                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Numéro WhatsApp ou Email (pour le corrigé personnel) *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={participantContact}
-                            onChange={(e) => setParticipantContact(e.target.value)}
-                            placeholder="ex: +225 07 00 00 00"
-                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
-                          />
-                        </div>
-
-                        {/* Zone d'upload de fichier PDF ou document */}
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Joindre un Fichier PDF ou Capture
-                          </label>
-                          <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl cursor-pointer bg-white transition-colors">
-                            <Upload className="w-5 h-5 text-slate-400 mb-1" />
-                            <span className="text-xs font-bold text-blue-600">
-                              {studentFile ? studentFile.name : 'Choisir un fichier PDF / image'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 mt-0.5">
-                              Glisser-déposer ou cliquer pour parcourir
-                            </span>
-                            <input
-                              type="file"
-                              accept=".pdf,image/*,.doc,.docx"
-                              onChange={handleFileUpload}
-                              className="hidden"
-                            />
-                          </label>
-                        </div>
-
-                        {/* Réponse texte alternative */}
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                            Réponse ou note explicative
-                          </label>
-                          <textarea
-                            rows={3}
-                            value={studentTextAnswer}
-                            onChange={(e) => setStudentTextAnswer(e.target.value)}
-                            placeholder="Détaillez vos réponses ou précisions..."
-                            className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
-                          />
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={isSubmittingWork}
-                          className="w-full py-2.5 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center gap-2"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>{isSubmittingWork ? 'Envoi en cours...' : '✅ Soumettre mon Devoir au Formateur'}</span>
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                )}
-
-                {/* Vue Côté Formateur : Liste des Devoirs Soumis en Direct */}
-                {isHost && (
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                        <Award className="w-3.5 h-3.5 text-blue-600" /> 
-                        Devoirs Reçus en Direct ({assignmentSubmissions.length})
-                      </h4>
-                      <button
-                        onClick={() => closeLiveAssignment(session.id)}
-                        className="text-[11px] text-red-600 hover:underline font-semibold"
-                      >
-                        Clôturer le devoir
-                      </button>
-                    </div>
-
-                    {assignmentSubmissions.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic text-center py-4">
-                        En attente des premières soumissions des élèves...
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {assignmentSubmissions.map((sub) => (
-                          <div 
-                            key={sub.id}
-                            className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm"
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1.5">
-                              <div>
-                                <span className="text-xs font-bold text-slate-900 block">
-                                  {sub.studentName}
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                  Contact : {sub.studentContact || sub.studentPhone || 'N/A'}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-slate-400">
-                                {new Date(sub.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-
-                            {sub.textContent && (
-                              <p className="text-xs text-slate-700 bg-slate-50 p-2 rounded-lg mb-2 italic">
-                                "{sub.textContent}"
-                              </p>
-                            )}
-
-                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                              <div className="flex items-center gap-2">
-                                {sub.fileUrl && (
-                                  <a
-                                    href={sub.fileUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
-                                  >
-                                    <FileText className="w-3 h-3" /> 👁️ Voir le PDF
-                                  </a>
-                                )}
-                                {sub.studentContact && (
-                                  <a
-                                    href={`https://wa.me/${sub.studentContact.replace(/[^0-9]/g, '')}?text=Bonjour%20${encodeURIComponent(sub.studentName)},%20voici%20mon%20retour%20sur%20votre%20exercice%20en%20direct`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline"
-                                  >
-                                    <Phone className="w-3 h-3" /> WhatsApp
-                                  </a>
-                                )}
-                              </div>
-
-                              {sub.grade ? (
-                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                                  {sub.grade}
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => setGradingSubmissionId(sub.id)}
-                                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
-                                >
-                                  Attribuer une note
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Formulaire rapide de notation */}
-                            {gradingSubmissionId === sub.id && (
-                              <div className="mt-2.5 p-2.5 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2">
-                                <input
-                                  type="text"
-                                  value={gradeInput}
-                                  onChange={(e) => setGradeInput(e.target.value)}
-                                  placeholder="Note (ex: 18/20 - Félicitations !)"
-                                  className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
-                                />
-                                <input
-                                  type="text"
-                                  value={feedbackInput}
-                                  onChange={(e) => setFeedbackInput(e.target.value)}
-                                  placeholder="Commentaire de correction..."
-                                  className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
-                                />
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    onClick={() => setGradingSubmissionId(null)}
-                                    className="text-[11px] text-slate-500 hover:underline"
-                                  >
-                                    Annuler
-                                  </button>
-                                  <button
-                                    onClick={() => handleGradeSubmission(sub.id)}
-                                    className="px-3 py-1 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700"
-                                  >
-                                    Valider la note
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                {session.activeAssignment.pdfUrl && (
+                  <a
+                    href={session.activeAssignment.pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 py-2 px-3.5 rounded-xl bg-white text-blue-700 text-xs font-bold hover:bg-blue-50 transition-all shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Télécharger le Support PDF du Formateur
+                  </a>
                 )}
               </div>
             ) : (
-              <div className="text-center py-12 px-4">
-                <FileText className="w-12 h-12 text-slate-200 mx-auto mb-3 stroke-1" />
-                <h4 className="text-sm font-bold text-slate-800 mb-1">
-                  Aucun Devoir Administré pour le Moment
-                </h4>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto mb-4">
-                  Les travaux pratiques ou documents PDF transmis par le formateur apparaîtront directement ici.
-                </p>
+              <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200/80 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-[#1D4ED8]" />
+                    <span>Espace Ressources &amp; Documents du Cours</span>
+                  </h4>
+                  <p className="text-[11px] text-blue-800/80 mt-0.5 leading-relaxed">
+                    {isHost
+                      ? 'Publiez un devoir chronométré ou consultez ci-dessous les ressources envoyées par vos étudiants.'
+                      : 'Envoyez vos fichiers, captures, PDF ou exercices directement au professeur à tout moment.'}
+                  </p>
+                </div>
                 {isHost && (
                   <button
+                    type="button"
                     onClick={() => {
                       publishLiveAssignment(session.id, {
                         id: `assign_${Date.now()}`,
-                        title: "Exercice Pratique : Structurez votre Offre Irrésistible",
-                        instructions: "Prenez 15 minutes pour lister vos 3 bonus exclusifs et définir votre garantie anti-risque.",
-                        pdfUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+                        title: 'Exercice Pratique en Direct',
+                        instructions: 'Téléversez votre document ou partagez votre réponse ci-dessous pour correction en direct.',
                         durationMinutes: 20,
-                        deadline: Date.now() + 1000 * 60 * 20
+                        deadline: Date.now() + 1000 * 60 * 20,
                       });
                     }}
-                    className="py-2 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors"
+                    className="px-3 py-1.5 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-[11px] font-black shrink-0 cursor-pointer"
                   >
-                    🚀 Lancer l'Exercice Exemple Démo
+                    + Devoir
                   </button>
+                )}
+              </div>
+            )}
+
+            {/* ZONE D'UPLOAD ÉTUDIANT TOUJOURS VISIBLE (POUR ENVOYER DES RESSOURCES AU PROFESSEUR) */}
+            {!isHost && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                  <Upload className="w-4 h-4 text-[#1D4ED8]" />
+                  <span>
+                    {session.activeAssignment?.isActive
+                      ? 'Remettre mon Devoir / Fichier au Professeur'
+                      : 'Envoyer une Ressource / Fichier au Professeur'}
+                  </span>
+                </h4>
+
+                {hasSubmittedWork ? (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center space-y-2">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                    <h5 className="text-xs font-black text-emerald-900">Ressource envoyée au professeur avec succès !</h5>
+                    <p className="text-[11px] text-emerald-700">
+                      Le formateur a reçu votre document en temps réel.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasSubmittedWork(false);
+                        setStudentFile(null);
+                        setStudentTextAnswer('');
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-800 text-[11px] font-extrabold hover:bg-emerald-100 transition cursor-pointer"
+                    >
+                      + Envoyer un autre fichier
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmitAssignment} className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Votre Nom &amp; Prénom *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={participantName}
+                        onChange={(e) => setParticipantName(e.target.value)}
+                        placeholder="ex: Amina Coulibaly"
+                        className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        WhatsApp ou Email (pour le retour du professeur)
+                      </label>
+                      <input
+                        type="text"
+                        value={participantContact}
+                        onChange={(e) => setParticipantContact(e.target.value)}
+                        placeholder="ex: +225 07 00 00 00"
+                        className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Importer un Fichier / Ressource (PDF, Word, Excel, Image, Audio, Vidéo, ZIP)
+                      </label>
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-blue-300 hover:border-[#1D4ED8] rounded-xl cursor-pointer bg-white transition-colors">
+                        <Upload className="w-5 h-5 text-[#1D4ED8] mb-1" />
+                        <span className="text-xs font-extrabold text-[#1D4ED8] text-center">
+                          {studentFile ? `📎 ${studentFile.name}` : 'Cliquez ici pour choisir un fichier à envoyer'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          PDF, DOCX, XLSX, PPTX, PNG, JPG, MP3, MP4, ZIP
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,image/*,audio/*,video/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Titre du document ou note pour le professeur
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={studentTextAnswer}
+                        onChange={(e) => setStudentTextAnswer(e.target.value)}
+                        placeholder="Décrivez votre fichier ou posez votre question au professeur..."
+                        className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 bg-white"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingWork}
+                      className="w-full py-2.5 px-4 rounded-xl bg-[#1D4ED8] text-white text-xs font-extrabold hover:bg-[#1E40AF] transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>{isSubmittingWork ? 'Envoi en cours...' : 'Envoyer la Ressource au Professeur'}</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* VUE CÔTÉ FORMATEUR : LISTE EN DIRECT DES RESSOURCES & DEVOIRS REÇUS (TOUJOURS VISIBLE) */}
+            {isHost && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Award className="w-3.5 h-3.5 text-blue-600" />
+                    Ressources &amp; Devoirs Reçus ({assignmentSubmissions.length})
+                  </h4>
+                  {session.activeAssignment?.isActive && (
+                    <button
+                      type="button"
+                      onClick={() => closeLiveAssignment(session.id)}
+                      className="text-[11px] text-red-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      Clôturer le devoir
+                    </button>
+                  )}
+                </div>
+
+                {assignmentSubmissions.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic text-center py-4">
+                    En attente des fichiers ou devoirs envoyés par les étudiants...
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {assignmentSubmissions.map((sub) => (
+                      <div
+                        key={sub.id}
+                        className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 block">
+                              {sub.studentName}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              Contact : {sub.studentContact || sub.studentPhone || 'N/A'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(sub.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {sub.textContent && (
+                          <p className="text-xs text-slate-700 bg-slate-50 p-2 rounded-lg mb-2 italic">
+                            "{sub.textContent}"
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center gap-2">
+                            {sub.fileUrl && (
+                              <a
+                                href={sub.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                              >
+                                <FileText className="w-3 h-3" /> {sub.fileName || 'Ouvrir le fichier'}
+                              </a>
+                            )}
+                            {sub.studentContact && (
+                              <a
+                                href={`https://wa.me/${sub.studentContact.replace(/[^0-9]/g, '')}?text=Bonjour%20${encodeURIComponent(sub.studentName)},%20voici%20mon%20retour%20sur%20votre%20ressource%20en%20direct`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline"
+                              >
+                                <Phone className="w-3 h-3" /> WhatsApp
+                              </a>
+                            )}
+                          </div>
+
+                          {sub.grade ? (
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                              {sub.grade}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setGradingSubmissionId(sub.id)}
+                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                            >
+                              Attribuer une note
+                            </button>
+                          )}
+                        </div>
+
+                        {gradingSubmissionId === sub.id && (
+                          <div className="mt-2.5 p-2.5 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2">
+                            <input
+                              type="text"
+                              value={gradeInput}
+                              onChange={(e) => setGradeInput(e.target.value)}
+                              placeholder="Note (ex: 18/20 - Félicitations !)"
+                              className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
+                            />
+                            <input
+                              type="text"
+                              value={feedbackInput}
+                              onChange={(e) => setFeedbackInput(e.target.value)}
+                              placeholder="Commentaire de correction..."
+                              className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setGradingSubmissionId(null)}
+                                className="text-[11px] text-slate-500 hover:underline cursor-pointer"
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleGradeSubmission(sub.id)}
+                                className="px-3 py-1 rounded bg-blue-600 text-white text-[11px] font-bold hover:bg-blue-700 cursor-pointer"
+                              >
+                                Valider la note
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

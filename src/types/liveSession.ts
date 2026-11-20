@@ -16,7 +16,9 @@ export type LiveSourceType =
   | 'hls'                 // Flux HLS (.m3u8)
   | 'mp4';                // Vidéo MP4 pré-enregistrée (Simulive)
 
-export type LiveAspectRatio = 'auto' | '16:9' | '9:16' | '1:1';
+export type LiveAspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3';
+
+export type LiveBadgeColor = 'red' | 'blue' | 'emerald' | 'indigo' | 'amber';
 
 export type LiveSessionStatus = 'scheduled' | 'live' | 'ended';
 
@@ -144,4 +146,8 @@ export interface LiveSession {
   accessPrice?: number;
   accessCurrency?: string;
   accessLabel?: string;
+
+  // Badge de rencontre personnalisable (remplace "Live Shopping" / "Salle de Formation" par tout type d'événement)
+  customBadgeLabel?: string;
+  customBadgeColor?: LiveBadgeColor;
 }
