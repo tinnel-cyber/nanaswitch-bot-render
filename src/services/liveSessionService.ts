@@ -382,8 +382,10 @@ export function generateLiveShareLinks(
   title: string = 'Rejoignez notre Live en Direct',
   storeName: string = 'Boutique Nanasore'
 ) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nsore.shop';
-  const liveUrl = `${origin}/live/${sessionSlug}`;
+  const publicLiveOrigin =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PUBLIC_LIVE_DOMAIN) ||
+    'https://nsore.shop';
+  const liveUrl = `${String(publicLiveOrigin).replace(/\/+$/, '')}/live/${sessionSlug}`;
   const encodedUrl = encodeURIComponent(liveUrl);
   
   const invitationMessage = `🔴 *DIRECT EN COURS SUR ${storeName.toUpperCase()}* 🔴\n\n📺 *${title}*\n\n👉 Cliquez ici pour nous rejoindre immédiatement et profiter des offres exclusives : \n${liveUrl}\n\n⚡ Offres limitées aux spectateurs du direct !`;

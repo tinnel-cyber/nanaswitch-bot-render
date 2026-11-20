@@ -340,8 +340,10 @@ export function buildWhatsAppLiveShare(
   shareMessage: string;
   whatsAppShareUrl: string;
 } {
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
-  const publicLiveUrl = `${origin}/live/${storeSlug}`;
+  const publicLiveOrigin =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PUBLIC_LIVE_DOMAIN) ||
+    'https://nsore.shop';
+  const publicLiveUrl = `${String(publicLiveOrigin).replace(/\/+$/, '')}/live/${storeSlug}`;
 
   const shareMessage = `🔴 *DIRECT EN COURS SUR ${storeName.toUpperCase()}* 🔴\n\n` +
     `📺 *${liveTitle}*\n\n` +

@@ -200,7 +200,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
   // Helper pour générer un ID de salle unique
   const generateUniqueRoomId = useCallback(() => {
-    return 'nana-live-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+    return 'nanasore-coaching-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
   }, []);
 
   // Définitions et descriptions des plateformes
@@ -300,8 +300,10 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       return;
     }
     const roomId = generateUniqueRoomId();
+    const jitsiDomain =
+      (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
     if (targetPlatform === 'jitsi') {
-      const url = `https://meet.jit.si/${roomId}`;
+      const url = `https://${jitsiDomain}/${roomId}`;
       setMeetingUrl(url);
       setStreamUrl(url);
     } else if (targetPlatform === 'daily') {

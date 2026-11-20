@@ -70,9 +70,11 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
   const [assignPdfUrl, setAssignPdfUrl] = useState<string>('');
   const [assignDuration, setAssignDuration] = useState<number>(20);
 
-  // Formulaire Coaching 1-to-1
+  // Formulaire Coaching 1-to-1 (Serveur Jitsi ouvert sans login Firebase/Google forcé)
+  const defaultJitsiDomain =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
   const [coachingRoomInput, setCoachingRoomInput] = useState<string>(
-    session.coachingRoomUrl || `https://meet.jit.si/nanasore-coaching-${session.id}`
+    session.coachingRoomUrl || `https://${defaultJitsiDomain}/nanasore-coaching-${session.id}`
   );
 
   // Lancement du Quiz

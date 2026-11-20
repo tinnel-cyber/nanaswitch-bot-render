@@ -466,7 +466,10 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
             /* SALLE FACE-À-FACE COACHING 1-TO-1 PRIVÉE */
             <div className="w-full h-full relative bg-slate-900">
               <iframe
-                src={session.coachingRoomUrl || `https://meet.jit.si/nanasore-coaching-${session.id}#config.startWithAudioMuted=false&config.startWithVideoMuted=false`}
+                src={
+                  session.coachingRoomUrl ||
+                  `https://${((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net')}/nanasore-coaching-${session.id}#config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&config.disableDeepLinking=true`
+                }
                 title="Salon Face-à-Face Coaching 1-to-1"
                 className="w-full h-full border-none"
                 allow="camera; microphone; fullscreen; display-capture"

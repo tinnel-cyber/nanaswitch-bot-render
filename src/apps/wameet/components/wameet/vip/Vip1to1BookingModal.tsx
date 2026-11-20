@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Calendar as CalendarIcon,
@@ -13,6 +13,7 @@ import {
   FileText,
   User,
   Phone,
+  Mail,
   HelpCircle,
   AlertCircle
 } from 'lucide-react';
@@ -24,8 +25,13 @@ import {
 } from './types';
 import {
   DEFAULT_VIP_1TO1_TYPES,
-  DEFAULT_VIP_1TO1_SLOTS
 } from './mockVipData';
+import { supabase } from '../../../../../lib/supabase';
+import {
+  getUpcomingBookingDates,
+  STANDARD_1TO1_TIME_SLOTS,
+  submitCoachingBooking,
+} from '../../../../../services/coachingBookingService';
 import { playTapBeep, playValidationBeep } from '../../../../../utils/audio';
 
 export interface Vip1to1BookingModalProps {
@@ -42,49 +48,85 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
   onClose,
   lounge,
   consultationTypes = DEFAULT_VIP_1TO1_TYPES,
-  availableSlots = DEFAULT_VIP_1TO1_SLOTS,
   onConfirmBooking
 }) => {
+  const upcomingDates = useMemo(() => getUpcomingBookingDates(7), []);
   const [selectedTypeId, setSelectedTypeId] = useState<string>(consultationTypes[0]?.id || '');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-10-16');
-  const [selectedSlotId, setSelectedSlotId] = useState<string>('s-1');
-  const [briefText, setBriefText] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>(upcomingDates[0]?.date || new Date().toISOString().split('T')[0]);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>(STANDARD_1TO1_TIME_SLOTS[0]);
+  const [fullName, setFullName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
   const [phoneContact, setPhoneContact] = useState<string>('');
+  const [briefText, setBriefText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [confirmedRoomUrl, setConfirmedRoomUrl] = useState<string>('');
+
+  // Pré-remplissage depuis Supabase Auth (ZÉRO Firebase)
+  useEffect(() => {
+    if (!isOpen) return;
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data?.user;
+      if (user) {
+        if (!email && user.email) setEmail(user.email);
+        const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
+        if (!fullName && metaName) setFullName(String(metaName));
+      }
+    }).catch(() => {});
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Filtrer les créneaux pour la date sélectionnée
-  const slotsForSelectedDate = availableSlots.filter(
-    (slot) => slot.date === selectedDate
-  );
-
   const selectedType = consultationTypes.find((t) => t.id === selectedTypeId) || consultationTypes[0];
-  const selectedSlot = availableSlots.find((s) => s.id === selectedSlotId);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    setSubmitError(null);
+    if (!fullName.trim() || !phoneContact.trim()) {
+      setSubmitError('Veuillez renseigner votre nom complet et votre numéro WhatsApp.');
+      return;
+    }
+
     setIsSubmitting(true);
     playValidationBeep();
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
+    const res = await submitCoachingBooking({
+      sessionId: lounge.id || 'vip-1to1',
+      storeSlug: lounge.id || 'nanasore',
+      coachName: lounge.coachName,
+      consultationType: selectedType?.title || 'Coaching 1-to-1',
+      date: selectedDate,
+      timeSlot: selectedTimeSlot,
+      fullName,
+      email,
+      whatsappPhone: phoneContact,
+      objectiveNotes: briefText,
+    });
 
-      const bookingData: Vip1to1BookingData = {
-        consultationType: selectedType.title,
-        date: selectedDate,
-        time: selectedSlot ? selectedSlot.time : '10:00 - 10:45',
-        memberNotes: briefText,
-        memberPhone: phoneContact
-      };
+    setIsSubmitting(false);
 
-      onConfirmBooking?.(bookingData);
-    }, 1000);
+    if (!res.success || !res.booking) {
+      setSubmitError(res.error || "Erreur lors de l'enregistrement du rendez-vous.");
+      return;
+    }
+
+    setConfirmedRoomUrl(res.booking.roomUrl || '');
+    setIsSuccess(true);
+
+    const bookingData: Vip1to1BookingData = {
+      consultationType: selectedType?.title || 'Coaching 1-to-1',
+      date: selectedDate,
+      time: selectedTimeSlot,
+      memberNotes: briefText,
+      memberPhone: phoneContact
+    };
+
+    onConfirmBooking?.(bookingData);
   };
 
   const handleResetAndClose = () => {
     setIsSuccess(false);
+    setSubmitError(null);
     onClose();
   };
 
@@ -161,21 +203,31 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Date & Heure :</span>
                   <span className="font-bold text-white">
-                    {selectedDate} à {selectedSlot ? selectedSlot.time : '10:00 GMT'}
+                    {selectedDate} à {selectedTimeSlot}
                   </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Participant :</span>
+                  <span className="font-bold text-white">{fullName} ({phoneContact})</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Canal vidéo :</span>
                   <span className="font-bold text-emerald-400 flex items-center gap-1">
-                    <Video className="w-3.5 h-3.5" /> Wameet Room Sécurisée 1-to-1
+                    <Video className="w-3.5 h-3.5" /> Salle Visio Privée 1-to-1 (Supabase)
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Facturation :</span>
-                  <span className="font-bold text-cyan-300">
-                    Inclus dans votre Pass VIP Wameet
-                  </span>
-                </div>
+                {confirmedRoomUrl && (
+                  <div className="pt-2 border-t border-slate-800">
+                    <a
+                      href={confirmedRoomUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-amber-300 hover:underline break-all"
+                    >
+                      🔗 Lien Visio 1-to-1 : {confirmedRoomUrl}
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex justify-center gap-3">
@@ -190,6 +242,13 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
           ) : (
             /* FORMULAIRE DE RÉSERVATION ÉTAPE PAR ÉTAPE */
             <>
+              {submitError && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
               {/* ÉTAPE 1 : CHOIX DU TYPE DE CONSULTATION */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-amber-300 mb-3 flex items-center gap-2">
@@ -233,19 +292,14 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
                 </div>
               </div>
 
-              {/* ÉTAPE 2 : SÉLECTION DE LA DATE DU CALENDRIER */}
+              {/* ÉTAPE 2 : SÉLECTION DE LA DATE RÉELLE */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-amber-300 mb-3 flex items-center gap-2">
                   <CalendarIcon className="w-3.5 h-3.5" />
                   2. Sélectionnez le jour de rendez-vous
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {[
-                    { label: 'Vendredi 16 Oct', date: '2026-10-16', active: true },
-                    { label: 'Samedi 17 Oct', date: '2026-10-17', active: true },
-                    { label: 'Lundi 19 Oct', date: '2026-10-19', active: true },
-                    { label: 'Mardi 20 Oct', date: '2026-10-20', active: false }
-                  ].map((d) => {
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2.5">
+                  {upcomingDates.slice(0, 4).map((d) => {
                     const isSelected = selectedDate === d.date;
                     return (
                       <button
@@ -255,7 +309,7 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
                           playTapBeep();
                           setSelectedDate(d.date);
                         }}
-                        className={`p-3 rounded-xl text-center border font-bold text-xs transition-all ${
+                        className={`p-2.5 rounded-xl text-center border font-bold text-xs transition-all ${
                           isSelected
                             ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
                             : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600'
@@ -266,64 +320,104 @@ export const Vip1to1BookingModal: React.FC<Vip1to1BookingModalProps> = ({
                     );
                   })}
                 </div>
+                <input
+                  type="date"
+                  min={upcomingDates[0]?.date}
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
               </div>
 
-              {/* ÉTAPE 3 : CRÉNEAUX DISPONIBLES */}
+              {/* ÉTAPE 3 : CRÉNEAUX HORAIRES */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-amber-300 mb-3 flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5" />
                   3. Choisissez un créneau horaire (GMT)
                 </label>
-                {slotsForSelectedDate.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {slotsForSelectedDate.map((slot) => {
-                      const isSelected = selectedSlotId === slot.id;
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          disabled={!slot.isAvailable}
-                          onClick={() => {
-                            playTapBeep();
-                            setSelectedSlotId(slot.id);
-                          }}
-                          className={`p-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-between ${
-                            !slot.isAvailable
-                              ? 'bg-slate-950/60 border-slate-800 text-slate-600 cursor-not-allowed line-through'
-                              : isSelected
-                              ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                              : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-slate-600'
-                          }`}
-                        >
-                          <span>{slot.time}</span>
-                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-400">
-                    Aucun créneau libre pour ce jour. Veuillez sélectionner une autre date.
-                  </div>
-                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {STANDARD_1TO1_TIME_SLOTS.map((slot) => {
+                    const isSelected = selectedTimeSlot === slot;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          setSelectedTimeSlot(slot);
+                        }}
+                        className={`p-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                            : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-slate-600'
+                        }`}
+                      >
+                        <span>{slot}</span>
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* ÉTAPE 4 : BRIEF CONFIDENTIEL DE LA DEMANDE */}
+              {/* ÉTAPE 4 : COORDONNÉES DU PARTICIPANT */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                    <User className="w-3 h-3 text-amber-400" /> Nom complet *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Votre nom et prénom"
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-amber-400" /> WhatsApp *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={phoneContact}
+                    onChange={(e) => setPhoneContact(e.target.value)}
+                    placeholder="+226 70 00 00 00"
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-amber-400" /> E-mail
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="vous@exemple.com"
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* ÉTAPE 5 : BRIEF CONFIDENTIEL DE LA DEMANDE */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-amber-300 mb-2 flex items-center gap-2">
                   <FileText className="w-3.5 h-3.5" />
-                  4. Brief confidentiel / Objet de la consultation
+                  5. Brief confidentiel / Questions à soumettre
                 </label>
                 <textarea
                   rows={3}
                   value={briefText}
                   onChange={(e) => setBriefText(e.target.value)}
-                  placeholder="Ex : Revue de term sheet de levée 50M FCFA, arbitrage sur pacte d'associés, questions fiscales OHADA..."
+                  placeholder="Décrivez votre objectif, vos questions ou les données que vous souhaitez aborder avec le coach..."
                   className="w-full p-3.5 rounded-2xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition-colors leading-relaxed"
                 />
                 <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  Secret professionnel garanti par la charte d'éthique Wameet Executive.
+                  Enregistrement direct et confidentiel sur Supabase.
                 </div>
               </div>
             </>

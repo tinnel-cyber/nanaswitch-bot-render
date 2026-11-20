@@ -14,7 +14,8 @@ import {
   HelpCircle,
   FileText,
   SlidersHorizontal,
-  ChevronRight
+  ChevronRight,
+  Calendar
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LiveSession } from '../../../types/liveSession';
@@ -35,6 +36,7 @@ import { LiveInstructorControlBar } from '../../../components/live/LiveInstructo
 import { LiveShareModal } from '../../../components/live/LiveShareModal';
 import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
 import { LiveSubscribeButton } from '../../../components/live/LiveSubscribeButton';
+import { Live1to1BookingModal } from '../components/live/Live1to1BookingModal';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
 import { loadStoreMultistreamConfig } from '../../../services/liveMultistreamService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
@@ -84,8 +86,18 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     return () => { isMounted = false; };
   }, []);
 
+  // Séparation stricte des domaines :
+  // - nsore.shop => STRICTEMENT réservé aux spectateurs / acheteurs / étudiants (jamais de console studio)
+  // - nanasore.com => réservé aux formateurs / animateurs / vendeurs authentifiés
+  const isPublicSpectatorDomain = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const h = window.location.hostname.toLowerCase();
+    return h === 'nsore.shop' || h.endsWith('.nsore.shop');
+  }, []);
+
   // Détection STRICTEMENT sécurisée du propriétaire Vendeur / Formateur (ZÉRO contournement URL ?host=true)
   const isVerifiedHost = useMemo(() => {
+    if (isPublicSpectatorDomain) return false;
     if (initialIsHost) return true;
     const ownerStoreId = session.storeId || '';
     if (currentUser) {
@@ -105,7 +117,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       }
     }
     return false;
-  }, [initialIsHost, currentUser, supabaseUser, session.storeId]);
+  }, [isPublicSpectatorDomain, initialIsHost, currentUser, supabaseUser, session.storeId]);
 
   // Seul le propriétaire vérifié peut basculer en aperçu spectateur ; un spectateur ne peut JAMAIS activer la régie
   const [isPreviewingAsSpectator, setIsPreviewingAsSpectator] = useState<boolean>(false);
@@ -116,6 +128,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isHostBroadcasterActive, setIsHostBroadcasterActive] = useState<boolean>(false);
   const [isMultistreamModalOpen, setIsMultistreamModalOpen] = useState<boolean>(false);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!initialSession);
 
   // Slug canonique unifié entre WHIP (caméra vendeur), HLS (lecteur acheteur) et FFmpeg (multistream)
@@ -318,6 +331,22 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
             </button>
           )}
 
+          {/* Bouton Prendre RDV Coaching 1-to-1 pour les spectateurs / étudiants */}
+          {!isHostMode && (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setIsBookingModalOpen(true);
+              }}
+              className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer active:scale-95"
+              title="Réserver une séance de coaching 1-to-1"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">RDV 1-to-1</span>
+            </button>
+          )}
+
           {/* Bouton d'abonnement aux notifications Push de la boutique pour les acheteurs / étudiants */}
           {!isHostMode && (
             <LiveSubscribeButton
@@ -359,6 +388,19 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setIsBookingModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-extrabold text-xs flex items-center gap-1.5 border border-slate-700 transition active:scale-95 cursor-pointer shadow-md"
+                  title="Consulter les demandes de rendez-vous Coaching 1-to-1"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Demandes RDV 1-to-1</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -619,6 +661,17 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
           onClose={() => setIsMultistreamModalOpen(false)}
         />
       )}
+
+      {/* 3.C. MODALE PRISE DE RENDEZ-VOUS COACHING 1-TO-1 (100 % SUPABASE) */}
+      <Live1to1BookingModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        sessionId={session.id}
+        storeSlug={liveStreamSlug}
+        coachName={session.hostName || session.storeName}
+        isHost={isHostMode}
+        defaultRoomUrl={session.coachingRoomUrl}
+      />
 
       {/* 4. TIROIR TUNNEL (12 BLOCS) DÉPLOYÉ PAR-DESSUS SANS COUPER LE SON NI LA VIDÉO DU LIVE */}
       {selectedFunnelProduct && (

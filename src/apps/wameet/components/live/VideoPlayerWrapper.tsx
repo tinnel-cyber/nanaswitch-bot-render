@@ -116,14 +116,18 @@ export const VideoPlayerWrapper: React.FC<VideoPlayerWrapperProps> = React.memo(
       }
 
       case 'jitsi': {
-        const rawUrl = raw || dailyRoomUrl || 'nana-live-room';
-        const roomName = rawUrl.includes('meet.jit.si/') 
-          ? rawUrl.split('meet.jit.si/')[1]?.split('?')[0]?.split('#')[0] 
+        const jitsiDomain =
+          (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
+        const rawUrl = raw || dailyRoomUrl || 'nanasore-coaching-room';
+        const roomName = rawUrl.includes('meet.jit.si/')
+          ? rawUrl.split('meet.jit.si/')[1]?.split('?')[0]?.split('#')[0]
+          : rawUrl.includes(`${jitsiDomain}/`)
+          ? rawUrl.split(`${jitsiDomain}/`)[1]?.split('?')[0]?.split('#')[0]
           : rawUrl.replace(/[^a-zA-Z0-9_-]/g, '');
         return {
-          src: `https://meet.jit.si/${encodeURIComponent(roomName || 'nana-live-room')}#userInfo.displayName="${encodeURIComponent(userName)}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true`,
+          src: `https://${jitsiDomain}/${encodeURIComponent(roomName || 'nanasore-coaching-room')}#userInfo.displayName="${encodeURIComponent(userName)}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true`,
           type: 'jitsi' as const,
-          label: 'Jitsi Meet HD',
+          label: 'Visio Coaching HD',
           brandColor: 'text-cyan-400',
           thumbnail: null
         };
