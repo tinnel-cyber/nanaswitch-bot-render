@@ -11371,7 +11371,7 @@ export const FunnelBuilder = ({
   // ==========================================================================
   return (
     <div className={isPublicView
-      ? "min-h-screen w-full bg-[#030610] flex flex-col font-sans select-none text-slate-100 overflow-y-auto"
+      ? "min-h-full w-full bg-[#030610] flex flex-col font-sans text-slate-100 overflow-visible"
       : "fixed inset-0 z-[100] h-screen h-[100dvh] max-h-screen w-screen max-w-[100vw] overflow-hidden bg-[#030610] flex flex-col font-sans select-none text-slate-100 animate-in fade-in duration-300"
     }>
       
@@ -12002,11 +12002,11 @@ export const FunnelBuilder = ({
             ref={canvasScrollRef}
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
-            className={`flex-1 overflow-y-auto h-full min-h-0 overscroll-contain flex flex-col items-center custom-scrollbar relative ${
+            className={
               isPublicView
-                ? 'p-0 sm:p-4 pb-20'
-                : 'p-4 sm:p-8 pb-48 sm:pb-64'
-            }`}
+                ? 'w-full h-auto overflow-visible flex flex-col items-center relative p-0 sm:p-4 pb-20'
+                : 'flex-1 overflow-y-auto h-full min-h-0 overscroll-contain flex flex-col items-center custom-scrollbar relative p-4 sm:p-8 pb-48 sm:pb-64'
+            }
           >
             {/* Bannière flottante d'aide au drop */}
             {isDraggingActive && !isPublicView && viewMode === 'builder' && (

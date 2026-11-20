@@ -770,23 +770,41 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         </aside>
       )}
 
-      {/* 3. Fiche Produit au Clic */}
-      {selectedProduct && (
-        <ProductDetailModal
-          product={selectedProduct}
-          storeName={storeConfig.storeName}
-          whatsappPhone={storeConfig.whatsappPhone}
-          merchantId={targetStoreId}
-          onClose={() => handleSelectProduct(null)}
-          onAddToCart={handleAddToCart}
-          onDirectCheckout={(prod, qty) => {
-            handleSelectProduct(null);
-            handleBuyNow(prod, qty);
-          }}
-          onOpenTunnel={handleOpenTunnel}
-          isPublicView={true}
-        />
-      )}
+      {/* 3. Fiche Produit Modale — UNIQUEMENT pour les thèmes sans grande vue produit (PDP) native */}
+      {selectedProduct && (() => {
+        const rawTheme = String(
+          urlPreviewTheme || activeInitialTheme || storeConfig.active_theme_id || storeConfig.activeThemeId || ''
+        ).toLowerCase();
+        const hasNativeLargePDP =
+          rawTheme.includes('electro-orange') ||
+          rawTheme.includes('orange') ||
+          rawTheme.includes('beauty-emerald') ||
+          rawTheme.includes('beauty') ||
+          rawTheme.includes('mega-store') ||
+          rawTheme.includes('megastore') ||
+          rawTheme.includes('digital-pro') ||
+          rawTheme.includes('digital') ||
+          rawTheme.includes('electro-tech') ||
+          rawTheme.includes('livestream-pro') ||
+          rawTheme.includes('livestream');
+        if (hasNativeLargePDP) return null;
+        return (
+          <ProductDetailModal
+            product={selectedProduct}
+            storeName={storeConfig.storeName}
+            whatsappPhone={storeConfig.whatsappPhone}
+            merchantId={targetStoreId}
+            onClose={() => handleSelectProduct(null)}
+            onAddToCart={handleAddToCart}
+            onDirectCheckout={(prod, qty) => {
+              handleSelectProduct(null);
+              handleBuyNow(prod, qty);
+            }}
+            onOpenTunnel={handleOpenTunnel}
+            isPublicView={true}
+          />
+        );
+      })()}
 
       {/* 4. Caisse Checkout Principale Sebpay Pop-in */}
       {showCheckoutDrawer && (

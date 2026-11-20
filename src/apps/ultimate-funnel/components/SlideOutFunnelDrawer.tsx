@@ -268,6 +268,16 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  // Verrouillage du scroll de la page arrière-plan tant que le tiroir tunnel est ouvert (évite le gel tactile sur mobile)
+  useEffect(() => {
+    if (!isOpen || typeof document === 'undefined') return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   // 1. LAZY LOADING STRICT : Si le tiroir est fermé, on ne monte RIEN dans le DOM (aucun flux vidéo en tâche de fond)
   if (!isOpen || !funnelId) return null;
 
@@ -311,9 +321,9 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
           </button>
         </div>
 
-        {/* 2b. L'ASCENSEUR LATÉRAL TACTILE ULTRA-EFFICACE (Spécial Desktop & Tablette - masqué sur petit mobile pour ne pas masquer les champs) */}
+        {/* 2b. L'ASCENSEUR LATÉRAL TACTILE ULTRA-EFFICACE (Visible sur Mobile, Tablette & Desktop) */}
         <div 
-          className="hidden sm:flex absolute right-2 sm:right-3.5 top-1/2 -translate-y-1/2 z-50 flex-col items-center bg-slate-950/90 backdrop-blur-md border border-white/20 rounded-full shadow-2xl p-1 sm:p-1.5 gap-1.5 select-none"
+          className="flex absolute right-1.5 sm:right-3.5 top-1/2 -translate-y-1/2 z-50 flex-col items-center bg-slate-950/90 backdrop-blur-md border border-white/20 rounded-full shadow-2xl p-1 sm:p-1.5 gap-1.5 select-none"
           aria-label="Scrolleur rapide du tunnel de vente"
         >
           {/* Bouton Haut de Page */}
@@ -386,12 +396,11 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 w-full overflow-y-auto custom-scrollbar relative touch-pan-y"
+          className="flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar relative touch-pan-y"
           style={{
             WebkitOverflowScrolling: 'touch',
             overscrollBehaviorY: 'contain',
-            touchAction: 'pan-y',
-            scrollBehavior: 'smooth'
+            touchAction: 'pan-y'
           }}
         >
           <div className="w-full min-h-full pb-28">
