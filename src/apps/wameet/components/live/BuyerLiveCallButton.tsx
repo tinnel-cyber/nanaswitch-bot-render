@@ -1,101 +1,103 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { 
-  Video, PhoneOff, Loader2, ShieldCheck, AlertCircle, 
-  Sparkles, Maximize2, Minimize2, Check, RefreshCw 
+import {
+  Video,
+  PhoneOff,
+  Loader2,
+  AlertCircle,
+  ShoppingBag,
+  Zap,
+  CheckCircle2,
+  RefreshCw,
+  X,
+  PhoneCall,
 } from 'lucide-react';
-
-import { 
-  getMonthlyLiveCallsCount, 
-  incrementMonthlyLiveCallsCount, 
-  isLimitReached, 
-  triggerLimitReachedUpsell 
+import {
+  getMonthlyLiveCallsCount,
+  incrementMonthlyLiveCallsCount,
+  isLimitReached,
+  triggerLimitReachedUpsell,
 } from '../../../../utils/planFeatures';
+import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
+import {
+  createLiveProductCallChannel,
+  logLiveProductCallToSupabase,
+  updateLiveProductCallStatusInSupabase,
+  type LiveProductCallPayload,
+} from '../../../../services/liveProductCallService';
+import { NativeCoaching1to1Room } from './NativeCoaching1to1Room';
+import { UltimateCheckout } from '../../../../components/payment/UltimateCheckout';
 
 export interface BuyerLiveCallButtonProps {
-  /**
-   * Identifiant du produit ou article en vedette (optionnel)
-   */
+  /** Identifiant du produit ou article en vedette */
   productId?: string;
-  /**
-   * Nom du produit affiché (optionnel)
-   */
+  /** Nom du produit affiché */
   productName?: string;
-  /**
-   * Identifiant de l'acheteur (si non fourni, utilise auth.currentUser?.uid ou génère un ID aléatoire)
-   */
+  /** Prix du produit (FCFA) pour le bouton "Acheter maintenant" et le Checkout en popup */
+  productPrice?: number;
+  /** Image miniature du produit affichée pendant l'appel et dans le Checkout */
+  productImage?: string;
+  /** Nom de la boutique */
+  storeName?: string;
+  /** Numéro WhatsApp / Wameet de la boutique pour le Checkout */
+  whatsappPhone?: string;
+  /** Identifiant de l'acheteur (optionnel, généré automatiquement en session sinon) */
   buyerId?: string;
-  /**
-   * Identifiant du vendeur/boutique cible (optionnel)
-   */
+  /** Identifiant du vendeur/boutique cible */
   sellerId?: string;
-  /**
-   * Libellé personnalisé du bouton (défaut : "Voir en direct")
-   */
+  /** Libellé personnalisé du bouton (défaut : "Voir en direct") */
   buttonText?: string;
-  /**
-   * Classes CSS Tailwind additionnelles pour le conteneur du bouton
-   */
+  /** Classes CSS Tailwind additionnelles pour le bouton */
   className?: string;
-  /**
-   * Callback déclenché dès que la salle est rejointe
-   */
-  onCallJoined?: (roomUrl: string, requestId: string) => void;
-  /**
-   * Callback déclenché lorsque l'appel prend fin
-   */
+  /** Callback déclenché dès que l'appel est initié/rejoint */
+  onCallJoined?: (roomId: string, requestId: string) => void;
+  /** Callback déclenché lorsque l'appel prend fin */
   onCallEnded?: () => void;
-  /**
-   * Abonnement actuel pour vérification des quotas
-   */
+  /** Abonnement actuel pour vérification des quotas */
   subscription?: any;
 }
 
-interface CreateLiveRoomResponse {
-  success?: boolean;
-  roomUrl: string;
-  roomName?: string;
-  message?: string;
-}
+type LiveCallState = 'idle' | 'ringing' | 'connected' | 'rejected' | 'no_answer';
+
+const RING_TIMEOUT_SECONDS = 45;
 
 /**
- * Composant Client (Acheteur) : Bouton "Voir en direct" & Lecteur Vidéo Daily.co
- * - Étape 1 : Appel httpsCallable de la fonction createLiveRoom
- * - Étape 2 : Écriture instantanée dans Firestore live_requests (status: 'ringing', dailyRoomUrl)
- * - Étape 3 : Bascule d'interface et chargement du flux vidéo WebRTC Daily.co
+ * Composant Client (Acheteur) : "Voir le produit en direct avant achat"
+ * 100 % Natif WebRTC + Supabase Realtime Broadcast (Zéro Firebase, Zéro Daily.co).
+ * - Déclenche une sonnerie temps réel sur l'écran du vendeur.
+ * - Ouvre la salle vidéo WebRTC native Nanasore dès que le vendeur décroche.
+ * - Affiche en bas de l'écran acheteur la carte produit + bouton "Acheter maintenant".
+ * - Ouvre UltimateCheckout en popup par-dessus la vidéo sans couper l'appel.
  */
 export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
   productId,
   productName = 'Article sélectionné',
+  productPrice = 0,
+  productImage,
+  storeName = 'Boutique Nanasore',
+  whatsappPhone = '',
   buyerId: customBuyerId,
   sellerId,
   buttonText = 'Voir en direct',
   className = '',
   onCallJoined,
   onCallEnded,
-  subscription
+  subscription,
 }) => {
-  // États de l'interaction
-  const [isLoading, setIsLoading] = useState(false);
-  const [isInCall, setIsInCall] = useState(false);
-  const [dailyRoomUrl, setDailyRoomUrl] = useState<string | null>(null);
-  const [meetingToken, setMeetingToken] = useState<string | null>(null);
+  const [callState, setCallState] = useState<LiveCallState>('idle');
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
-  const [loadingStep, setLoadingStep] = useState<string>('');
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [ringSeconds, setRingSeconds] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [callStatus, setCallStatus] = useState<'ringing' | 'connected' | 'ended'>('ringing');
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
+  const [orderCompleted, setOrderCompleted] = useState<boolean>(false);
 
-  // Références Daily.co
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-  const dailyCallFrameRef = useRef<any>(null);
+  const channelHandleRef = useRef<ReturnType<typeof createLiveProductCallChannel> | null>(null);
+  const ringPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringClockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeRequestIdRef = useRef<string | null>(null);
 
-  /**
-    * Génère ou récupère l'identifiant de l'acheteur
-    */
   const getEffectiveBuyerId = useCallback((): string => {
     if (customBuyerId && customBuyerId.trim()) return customBuyerId.trim();
-    // ID anonyme unique persisté en session pour identifier le device acheteur
     const sessionKey = 'nana_buyer_anon_id';
     let storedId = sessionStorage.getItem(sessionKey);
     if (!storedId) {
@@ -105,371 +107,415 @@ export const BuyerLiveCallButton: React.FC<BuyerLiveCallButtonProps> = ({
     return storedId;
   }, [customBuyerId]);
 
-  /**
-   * Action principale : Clic sur "Voir en direct"
-   */
-  const handleStartLiveCall = async () => {
-    if (isLoading || isInCall) return;
+  const clearTimers = useCallback(() => {
+    if (ringPingIntervalRef.current) {
+      clearInterval(ringPingIntervalRef.current);
+      ringPingIntervalRef.current = null;
+    }
+    if (ringClockIntervalRef.current) {
+      clearInterval(ringClockIntervalRef.current);
+      ringClockIntervalRef.current = null;
+    }
+  }, []);
 
-    // Vérification du quota mensuel d'appels en direct (Plan Gratuit : max 3 appels/mois)
+  const cleanupChannel = useCallback(() => {
+    clearTimers();
+    if (channelHandleRef.current) {
+      channelHandleRef.current.cleanup();
+      channelHandleRef.current = null;
+    }
+  }, [clearTimers]);
+
+  useEffect(() => {
+    return () => {
+      cleanupChannel();
+    };
+  }, [cleanupChannel]);
+
+  const handleHangUp = useCallback(
+    async (notifySeller = true) => {
+      const reqId = activeRequestIdRef.current;
+      clearTimers();
+
+      if (notifySeller && reqId) {
+        try {
+          await channelHandleRef.current?.sendCallEnded({
+            requestId: reqId,
+            endedBy: 'buyer',
+            timestamp: Date.now(),
+          });
+        } catch {
+          // ignore
+        }
+        updateLiveProductCallStatusInSupabase(reqId, 'completed');
+      }
+
+      cleanupChannel();
+      activeRequestIdRef.current = null;
+      setActiveRequestId(null);
+      setActiveRoomId(null);
+      setCallState('idle');
+      setRingSeconds(0);
+      setIsCheckoutOpen(false);
+      setOrderCompleted(false);
+      onCallEnded?.();
+    },
+    [clearTimers, cleanupChannel, onCallEnded]
+  );
+
+  const handleStartLiveCall = async () => {
+    if (callState !== 'idle') return;
+    playTapBeep();
+
     const currentCalls = getMonthlyLiveCallsCount(sellerId);
     if (isLimitReached(subscription, 'LIVE_CALLS', currentCalls)) {
-      triggerLimitReachedUpsell(
-        'LIVE_CALLS',
-        currentCalls,
-        3,
-        'appels en direct ce mois-ci'
-      );
+      triggerLimitReachedUpsell('LIVE_CALLS', currentCalls, 3, 'appels en direct ce mois-ci');
       return;
     }
 
-    setIsLoading(true);
     setErrorMessage(null);
-    setLoadingStep('Connexion au serveur Daily.co...');
+    setOrderCompleted(false);
+    setRingSeconds(0);
 
     try {
       const effectiveBuyerId = getEffectiveBuyerId();
+      const cleanProdId = (productId || 'article').replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 24);
+      const requestId = `livecall_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const roomId = `prod-${cleanProdId}-${Date.now().toString(36)}`;
 
-      // 1. Création dynamique de la salle souveraine MediaMTX / Wameet
-      const cleanProdId = (productId || 'general').replace(/[^a-zA-Z0-9-_]/g, '-');
-      const generatedRoomName = `live-${cleanProdId}-${Date.now().toString(36)}`;
-      const liveHlsBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LIVE_HLS_URL) || 'https://p02--nanasore-live--p8yx28yyjhbx.code.run';
-      const roomUrl: string = `${liveHlsBase}/${generatedRoomName}/index.m3u8`;
-      const roomName: string = generatedRoomName;
-      const acquiredToken: string | undefined = undefined;
+      const payload: LiveProductCallPayload = {
+        requestId,
+        roomId,
+        sellerId: sellerId || 'merchant-direct',
+        buyerId: effectiveBuyerId,
+        buyerName: 'Client Boutique',
+        productId: productId || cleanProdId,
+        productName,
+        productPrice: Number(productPrice) || 0,
+        productImage: productImage || '',
+        storeName,
+        createdAt: Date.now(),
+      };
 
-      if (acquiredToken) {
-        setMeetingToken(acquiredToken);
-      }
+      activeRequestIdRef.current = requestId;
+      setActiveRequestId(requestId);
+      setActiveRoomId(roomId);
+      setCallState('ringing');
 
-      setLoadingStep('Envoi du signal de sonnerie au vendeur...');
+      cleanupChannel();
+      const handle = createLiveProductCallChannel({
+        onCallAccepted: (evt) => {
+          if (evt.requestId !== requestId) return;
+          clearTimers();
+          playValidationBeep();
+          setCallState('connected');
+          onCallJoined?.(evt.roomId || roomId, requestId);
+        },
+        onCallRejected: (evt) => {
+          if (evt.requestId !== requestId) return;
+          clearTimers();
+          setCallState('rejected');
+        },
+        onCallEnded: (evt) => {
+          if (evt.requestId !== requestId) return;
+          if (evt.endedBy === 'seller') {
+            handleHangUp(false);
+          }
+        },
+      });
+      channelHandleRef.current = handle;
 
-      // 2. Signalisation Supabase Realtime (La Sonnerie) : Enregistrement dans wameet_messages
-      const requestId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      try {
-        await supabase.from('wameet_messages').insert({
-          id: requestId,
-          type: 'call',
-          status: 'ringing',
-          sender_id: effectiveBuyerId,
-          text: productName,
-          media_url: roomUrl,
-          created_at: new Date().toISOString()
-        });
-      } catch (signalErr) {
-        console.warn('[BUYER LIVE CALL] Repli signalisation Supabase:', signalErr);
-      }
-
-      // Incrémentation du compteur d'appels mensuel
+      // Émission initiale + relance toutes les 3s pendant la sonnerie (jusqu'à 45s)
+      await handle.sendIncomingCall(payload);
+      logLiveProductCallToSupabase(payload, 'ringing');
       incrementMonthlyLiveCallsCount(sellerId);
 
-      // 3. Bascule locale de l'interface React
-      setActiveRequestId(requestId);
-      setDailyRoomUrl(roomUrl);
-      setCallStatus('ringing');
-      setIsInCall(true);
-      setIsLoading(false);
+      ringPingIntervalRef.current = setInterval(() => {
+        if (activeRequestIdRef.current === requestId) {
+          handle.sendIncomingCall(payload);
+        }
+      }, 3000);
 
-      if (onCallJoined) {
-        onCallJoined(roomUrl, requestId);
-      }
-    } catch (err: any) {
-      console.error('[BUYER LIVE ERROR]', err);
-      setIsLoading(false);
-      setErrorMessage(
-        err?.message || "Impossible d'initier l'appel en direct. Veuillez réessayer."
-      );
-    }
-  };
-
-  /**
-   * Écoute en temps réel de l'état de la demande via Supabase Realtime
-   */
-  useEffect(() => {
-    if (!activeRequestId || !isInCall) return;
-
-    const channelName = `call_req_${activeRequestId}_${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'wameet_messages',
-          filter: `id=eq.${activeRequestId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            const data = payload.new as any;
-            if (data.status === 'connected') {
-              setCallStatus('connected');
-            } else if (data.status === 'rejected' || data.status === 'completed' || data.status === 'ended') {
-              handleHangUp();
-            }
+      ringClockIntervalRef.current = setInterval(() => {
+        setRingSeconds((prev) => {
+          const next = prev + 1;
+          if (next >= RING_TIMEOUT_SECONDS) {
+            clearTimers();
+            handle.sendCallEnded({
+              requestId,
+              endedBy: 'buyer',
+              reason: 'timeout',
+              timestamp: Date.now(),
+            });
+            updateLiveProductCallStatusInSupabase(requestId, 'completed');
+            setCallState('no_answer');
           }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [activeRequestId, isInCall]);
-
-  /**
-   * Initialisation du lecteur Daily.co via @daily-co/daily-js
-   */
-  useEffect(() => {
-    if (!isInCall || !dailyRoomUrl || !videoContainerRef.current) return;
-
-    let isMounted = true;
-
-    const mountDailyCall = async () => {
-      try {
-        if (!isMounted || !videoContainerRef.current) return;
-
-        // Nettoyage préalable d'une éventuelle iframe précédente
-        if (dailyCallFrameRef.current) {
-          try {
-            dailyCallFrameRef.current.destroy();
-          } catch (e) {}
-          dailyCallFrameRef.current = null;
-        }
-
-        // Création de l'iframe vidéo intégrée sécurisée
-        const iframe = document.createElement('iframe');
-        iframe.src = dailyRoomUrl;
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = 'none';
-        iframe.style.borderRadius = '1rem';
-        iframe.style.backgroundColor = '#020617';
-        iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
-
-        videoContainerRef.current.innerHTML = '';
-        videoContainerRef.current.appendChild(iframe);
-        dailyCallFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
-        setCallStatus('connected');
-      } catch (embedError) {
-        console.error('[LIVE MOUNT FAILED]', embedError);
-      }
-    };
-
-    mountDailyCall();
-
-    return () => {
-      isMounted = false;
-      if (dailyCallFrameRef.current) {
-        try {
-          dailyCallFrameRef.current.destroy();
-        } catch (e) {}
-        dailyCallFrameRef.current = null;
-      }
-    };
-  }, [isInCall, dailyRoomUrl]);
-
-  /**
-   * Action de Raccrochage / Fin d'appel
-   */
-  const handleHangUp = async () => {
-    // 1. Quitter la frame Daily
-    if (dailyCallFrameRef.current) {
-      try {
-        await dailyCallFrameRef.current.leave();
-        dailyCallFrameRef.current.destroy();
-      } catch (e) {}
-      dailyCallFrameRef.current = null;
-    }
-
-    // 2. Mettre à jour le statut Supabase
-    if (activeRequestId) {
-      try {
-        await supabase
-          .from('wameet_messages')
-          .update({
-            status: 'completed'
-          })
-          .eq('id', activeRequestId);
-      } catch (e) {
-        console.warn('[HANGUP SUPABASE ERROR]', e);
-      }
-    }
-
-    // 3. Réinitialiser les états locaux pour réafficher le bouton d'appel
-    setIsInCall(false);
-    setDailyRoomUrl(null);
-    setActiveRequestId(null);
-    setCallStatus('ringing');
-    setLoadingStep('');
-
-    if (onCallEnded) {
-      onCallEnded();
+          return next;
+        });
+      }, 1000);
+    } catch (err: any) {
+      console.error('[BUYER LIVE CALL ERROR]', err);
+      cleanupChannel();
+      setCallState('idle');
+      setErrorMessage(err?.message || "Impossible de lancer l'appel en direct. Veuillez réessayer.");
     }
   };
 
-  /**
-   * Bascule Plein Écran
-   */
-  const toggleFullscreen = () => {
-    const el = videoContainerRef.current;
-    if (!el) return;
-
-    if (!document.fullscreenElement) {
-      el.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
+  const formattedPrice = productPrice > 0 ? formatCFA(productPrice) : '';
 
   return (
-    <div className={`w-full ${className}`}>
-      {/* =========================================================================
-          ÉTAT A : LE BOUTON D'APPEL INITIAL "VOIR EN DIRECT"
-         ========================================================================= */}
-      {!isInCall ? (
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={handleStartLiveCall}
-            disabled={isLoading}
-            className={`
-              relative group overflow-hidden py-3.5 px-5 rounded-2xl font-black text-sm
-              transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xl select-none cursor-pointer
-              ${isLoading 
-                ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700' 
-                : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white shadow-emerald-950/40 active:scale-[0.98] border border-emerald-400/40'
-              }
-            `}
-            title="Démarrer un appel vidéo direct avec le vendeur"
-          >
-            {/* Halo lumineux animé si actif */}
-            {!isLoading && (
-              <span className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-2xl blur-md opacity-40 group-hover:opacity-80 transition duration-500 animate-pulse pointer-events-none" />
-            )}
+    <div className="w-full">
+      {/* =====================================================================
+          1. BOUTON "VOIR EN DIRECT" SUR LA FICHE PRODUIT
+         ===================================================================== */}
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={handleStartLiveCall}
+          disabled={callState !== 'idle'}
+          className={
+            className ||
+            'relative group overflow-hidden w-full py-3.5 px-5 rounded-2xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xl select-none cursor-pointer bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white active:scale-[0.98] border border-white/20'
+          }
+          title="Appeler le vendeur en vidéo en direct pour voir le produit avant achat"
+        >
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+          </span>
+          <Video className="w-4 h-4 shrink-0" />
+          <span className="truncate">{buttonText}</span>
+        </button>
 
-            <div className="relative flex items-center gap-2.5">
-              {isLoading ? (
+        {errorMessage && (
+          <div className="flex items-start gap-2 p-3 bg-rose-950/70 border border-rose-500/50 rounded-xl text-rose-200 text-xs">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span>{errorMessage}</span>
+              <button
+                type="button"
+                onClick={() => setErrorMessage(null)}
+                className="ml-2 font-bold underline hover:text-white cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* =====================================================================
+          2. ÉCRAN DE SONNERIE / ATTENTE DU VENDEUR (OU REFUS / SANS RÉPONSE)
+         ===================================================================== */}
+      {(callState === 'ringing' || callState === 'rejected' || callState === 'no_answer') && (
+        <div className="fixed inset-0 z-[9998] bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-5 text-white animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center gap-5">
+            {/* Miniature du produit */}
+            <div className="relative">
+              {callState === 'ringing' && (
                 <>
-                  {/* Spinner Tailwind pendant l'attente */}
-                  <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
-                  <span className="tracking-wide text-xs sm:text-sm font-bold text-slate-200">
-                    {loadingStep || 'Connexion au direct en cours...'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="relative flex h-3 w-3 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400" />
-                  </span>
-                  <Video className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform shrink-0" />
-                  <span className="tracking-wide uppercase text-xs font-black">
-                    {buttonText}
-                  </span>
-                  <span className="hidden sm:inline-flex text-[11px] font-medium text-emerald-200/90 font-mono bg-black/20 px-2 py-0.5 rounded-full">
-                    HD Live
-                  </span>
+                  <span className="absolute -inset-3 rounded-3xl border-2 border-emerald-500/40 animate-ping pointer-events-none" />
+                  <span className="absolute -inset-1.5 rounded-3xl border border-emerald-400/50 animate-pulse pointer-events-none" />
                 </>
               )}
+              <div className="w-24 h-24 rounded-2xl overflow-hidden bg-slate-800 border-2 border-slate-700 flex items-center justify-center shadow-xl">
+                {productImage ? (
+                  <img
+                    src={productImage}
+                    alt={productName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <ShoppingBag className="w-10 h-10 text-emerald-400" />
+                )}
+              </div>
             </div>
-          </button>
 
-          {/* Affichage d'erreur avec possibilité de réessai */}
-          {errorMessage && (
-            <div className="flex items-start gap-2 p-3 bg-rose-950/70 border border-rose-500/50 rounded-xl text-rose-200 text-xs animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <span>{errorMessage}</span>
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[11px] font-bold text-emerald-400">
+                {callState === 'ringing' ? (
+                  <>
+                    <PhoneCall className="w-3.5 h-3.5 animate-bounce" />
+                    <span>Appel Live en cours… 00:{String(ringSeconds).padStart(2, '0')}</span>
+                  </>
+                ) : callState === 'rejected' ? (
+                  <span className="text-amber-400">Vendeur occupé</span>
+                ) : (
+                  <span className="text-amber-400">Aucune réponse</span>
+                )}
+              </div>
+
+              <h3 className="text-base font-black text-white line-clamp-2">{productName}</h3>
+              {formattedPrice && (
+                <p className="text-sm font-black text-emerald-400">{formattedPrice}</p>
+              )}
+
+              <p className="text-xs text-slate-400 pt-1">
+                {callState === 'ringing'
+                  ? `Nous prévenons ${storeName} en temps réel. La vidéo s'ouvrira dès que le vendeur décroche.`
+                  : callState === 'rejected'
+                  ? 'Le vendeur est momentanément indisponible. Vous pouvez réessayer ou commander directement.'
+                  : "Le vendeur n'a pas pu décrocher dans le délai imparti. Vous pouvez réessayer ou commander directement."}
+              </p>
+            </div>
+
+            {callState === 'ringing' ? (
+              <button
+                type="button"
+                onClick={() => handleHangUp(true)}
+                className="w-full py-3.5 px-5 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-950/50 transition cursor-pointer"
+              >
+                <PhoneOff className="w-4 h-4" />
+                <span>Annuler l&apos;appel</span>
+              </button>
+            ) : (
+              <div className="w-full flex flex-col gap-2.5">
+                {productPrice > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setIsCheckoutOpen(true);
+                    }}
+                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 fill-slate-950" />
+                    <span>Acheter maintenant</span>
+                  </button>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleHangUp(false);
+                      setTimeout(() => handleStartLiveCall(), 80);
+                    }}
+                    className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Réessayer</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleHangUp(false)}
+                    className="py-3 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Fermer</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          3. SALLE VIDÉO LIVE NATIVE WEBRTC + CARTE FLOTTANTE "ACHETER MAINTENANT"
+         ===================================================================== */}
+      {callState === 'connected' && activeRoomId && (
+        <div className="fixed inset-0 z-[9998] bg-slate-950 flex flex-col animate-in fade-in duration-200">
+          {/* Salle Visio Native WebRTC Nanasore (Zéro iframe, Zéro Daily.co) */}
+          <div className="flex-1 min-h-0 relative">
+            <NativeCoaching1to1Room
+              roomId={activeRoomId}
+              storeSlug={sellerId || 'boutique'}
+              storeName={`${storeName} • Live Produit`}
+              isHost={false}
+              onCallEnded={() => handleHangUp(true)}
+            />
+
+            {/* Carte Produit Flottante + Bouton "Acheter maintenant" (au-dessus de la barre vidéo) */}
+            <div className="fixed bottom-24 left-3 right-3 sm:left-auto sm:right-5 sm:w-96 z-[9999] pointer-events-auto">
+              <div className="bg-slate-950/90 backdrop-blur-xl border border-emerald-500/40 rounded-2xl p-2.5 sm:p-3 shadow-2xl shadow-black/70 flex items-center gap-3">
+                {/* Miniature produit */}
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-800 border border-white/10 shrink-0 flex items-center justify-center">
+                  {productImage ? (
+                    <img
+                      src={productImage}
+                      alt={productName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ShoppingBag className="w-6 h-6 text-emerald-400" />
+                  )}
+                </div>
+
+                {/* Nom + Prix */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                      En direct
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm font-black text-white truncate">
+                    {productName}
+                  </p>
+                  {formattedPrice && (
+                    <p className="text-xs font-black text-amber-400">
+                      {formattedPrice}
+                    </p>
+                  )}
+                </div>
+
+                {/* CTA Acheter maintenant -> ouvre UltimateCheckout en popup */}
                 <button
                   type="button"
-                  onClick={() => setErrorMessage(null)}
-                  className="ml-2 font-bold underline hover:text-white cursor-pointer"
+                  onClick={() => {
+                    playTapBeep();
+                    setIsCheckoutOpen(true);
+                  }}
+                  className={`shrink-0 py-2.5 px-3.5 sm:px-4 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition cursor-pointer ${
+                    orderCompleted
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 shadow-amber-950/40'
+                  }`}
                 >
-                  Fermer
+                  {orderCompleted ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>Commandé</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3.5 h-3.5 fill-slate-950 shrink-0" />
+                      <span>Acheter</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      ) : (
-        /* =========================================================================
-            ÉTAT B : LECTEUR VIDÉO DAILY.CO WEBRTC EMBEDDÉ
-           ========================================================================= */
-        <div className="w-full bg-[#020617] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col text-slate-100 transition-all duration-300 animate-in fade-in zoom-in-95">
-          {/* Barre supérieure d'état */}
-          <div className="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              {callStatus === 'ringing' ? (
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-extrabold animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                  <span>Sonnerie chez le vendeur...</span>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[11px] font-extrabold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>EN DIRECT</span>
-                </span>
-              )}
+      )}
 
-              <span className="text-xs text-slate-300 font-bold truncate max-w-[180px] sm:max-w-xs">
-                {productName}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Plein écran */}
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700"
-                title="Basculer plein écran"
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
-
-              {/* Bouton Raccrocher */}
-              <button
-                type="button"
-                onClick={handleHangUp}
-                className="py-1.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-rose-950/50 active:scale-95"
-                title="Quitter et raccrocher"
-              >
-                <PhoneOff className="w-3.5 h-3.5" />
-                <span>Raccrocher</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Conteneur Iframe Daily.co */}
-          <div 
-            ref={videoContainerRef}
-            className="w-full aspect-video sm:min-h-[380px] bg-[#020617] relative flex items-center justify-center overflow-hidden"
-          >
-            {/* Placeholder / Indicateur de connexion pendant le chargement du flux */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 pointer-events-none">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 animate-pulse">
-                <Video className="w-6 h-6" />
-              </div>
-              <p className="text-xs text-slate-400">
-                Initialisation du flux vidéo WebRTC sécurisé...
-              </p>
-            </div>
-          </div>
-
-          {/* Barre inférieure de réassurance */}
-          <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Communication chiffrée Daily.co</span>
-            </span>
-            <span className="font-mono text-[10px] text-slate-500">
-              ID: {activeRequestId?.slice(-6) || 'LIVE'}
-            </span>
-          </div>
+      {/* =====================================================================
+          4. POPUP CHECKOUT (ULTIMATE CHECKOUT) SANS COUPER L'APPEL VIDÉO
+         ===================================================================== */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-[10000]">
+          <UltimateCheckout
+            isModal={true}
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            onCancel={() => setIsCheckoutOpen(false)}
+            product={{
+              id: productId || activeRequestId || 'live-product',
+              name: productName,
+              price: Number(productPrice) || 0,
+              imageUrl: productImage,
+              quantity: 1,
+            }}
+            amount={Number(productPrice) || 0}
+            storeName={storeName}
+            whatsappPhone={whatsappPhone}
+            merchantId={sellerId}
+            onSuccess={() => {
+              playValidationBeep();
+              setOrderCompleted(true);
+            }}
+          />
         </div>
       )}
     </div>

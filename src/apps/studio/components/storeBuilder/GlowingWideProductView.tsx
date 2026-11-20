@@ -727,16 +727,22 @@ export const GlowingWideProductView: React.FC<GlowingWideProductViewProps> = ({
             <span>💬 Acheter sur Wameet Direct</span>
           </button>
 
-          {/* 6b. BOUTON LIVE SHOPPING : 🔴 Voir en Direct (WebRTC Daily.co) */}
-          <div className="w-full mt-2">
-            <BuyerLiveCallButton
-              productId={currentProduct.id}
-              productName={currentProduct.name}
-              sellerId={effectiveMerchantId}
-              buttonText="📹 Voir en Direct • Live Shopping"
-              className="w-full h-12 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-sm rounded-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
-            />
-          </div>
+          {/* 6b. BOUTON LIVE SHOPPING : 🔴 Voir en Direct (WebRTC Natif) */}
+          {currentProduct.hasLiveDemo !== false && (
+            <div className="w-full mt-2">
+              <BuyerLiveCallButton
+                productId={currentProduct.id}
+                productName={currentProduct.name}
+                productPrice={currentProduct.price}
+                productImage={currentProduct.image}
+                storeName={storeName}
+                whatsappPhone={effectiveWPhone}
+                sellerId={effectiveMerchantId}
+                buttonText="Voir en Direct • Live Shopping"
+                className="w-full h-12 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-sm rounded-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.99]"
+              />
+            </div>
+          )}
 
           {/* 7. Barre des 3 Liens d'Action (⇄ Compare | ☆ Add To Wishlist | 🔗 Share) */}
           <div className="flex items-center gap-6 py-4 mt-4 border-b border-slate-200 text-xs sm:text-sm text-slate-700 select-none">

@@ -8280,7 +8280,7 @@ export default function App() {
           </React.Suspense>
         )}
 
-        {/* Sonnerie et Réception des Appels Directs Live Daily.co (Ordinateur Vendeur) */}
+        {/* Sonnerie et Réception des Appels Directs Live Produit (WebRTC Natif + Supabase Realtime) */}
         <React.Suspense fallback={null}>
           <LiveIncomingCallAlert
             merchantId={getCurrentStoreId()}

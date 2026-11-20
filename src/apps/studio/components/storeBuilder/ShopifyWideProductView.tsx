@@ -1193,16 +1193,22 @@ export const ShopifyWideProductView: React.FC<ShopifyWideProductViewProps> = ({
                 <span>Acheter sur Wameet Direct</span>
               </button>
 
-              {/* Ligne 3 : Voir en Direct / Live Shopping (WebRTC Daily.co) */}
-              <div className="w-full mt-2.5">
-                <BuyerLiveCallButton
-                  productId={currentProduct.id}
-                  productName={currentProduct.name}
-                  sellerId={effectiveMerchantId}
-                  buttonText="📹 Voir en Direct • Live Shopping (Daily.co)"
-                  className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
-                />
-              </div>
+              {/* Ligne 3 : Voir en Direct / Live Shopping (WebRTC Natif) */}
+              {currentProduct.hasLiveDemo !== false && (
+                <div className="w-full mt-2.5">
+                  <BuyerLiveCallButton
+                    productId={currentProduct.id}
+                    productName={currentProduct.name}
+                    productPrice={currentProduct.price}
+                    productImage={currentProduct.image}
+                    storeName={storeName}
+                    whatsappPhone={effectiveWPhone}
+                    sellerId={effectiveMerchantId}
+                    buttonText="Voir en Direct • Live Shopping"
+                    className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
+                  />
+                </div>
+              )}
 
               {/* =================================================================
                   8. SUITE COLONNE DROITE (PROMPT 3/4 : LES 6 BLOCS EXACTS CAPTURE 226)

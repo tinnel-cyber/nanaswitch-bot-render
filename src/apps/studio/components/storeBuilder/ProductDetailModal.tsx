@@ -540,17 +540,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Bouton Live Shopping / Voir en Direct (WebRTC Daily.co) */}
-          <div className="w-full my-1">
-            <BuyerLiveCallButton
-              productId={product.id}
-              productName={product.name}
-              sellerId={merchantId}
-              subscription={subscription}
-              buttonText="📹 Voir en Direct • Live Shopping"
-              className="w-full text-xs font-black py-2.5 rounded-xl shadow-md bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white flex items-center justify-center gap-2"
-            />
-          </div>
+          {/* Bouton Live Shopping / Voir en Direct (WebRTC Natif) */}
+          {product.hasLiveDemo !== false && (
+            <div className="w-full my-1">
+              <BuyerLiveCallButton
+                productId={product.id}
+                productName={product.name}
+                productPrice={product.price}
+                productImage={product.image}
+                storeName={storeName}
+                whatsappPhone={wPhone}
+                sellerId={merchantId}
+                subscription={subscription}
+                buttonText="Voir en Direct • Live Shopping"
+                className="w-full text-xs font-black py-2.5 rounded-xl shadow-md bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white flex items-center justify-center gap-2"
+              />
+            </div>
+          )}
 
           {/* Bouton Prominent : Voir le tunnel de vente interactif (Tiroir Dépliable - Priorité 1 : 12 Blocs Modulaire) */}
           {Boolean(product.linkedFunnelId || product.hasModularFunnel !== false || product.useUltimateFunnel) && (

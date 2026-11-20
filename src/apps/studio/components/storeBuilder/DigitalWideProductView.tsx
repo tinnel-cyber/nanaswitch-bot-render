@@ -798,16 +798,22 @@ export const DigitalWideProductView: React.FC<DigitalWideProductViewProps> = ({
                 <span>Acheter / Réserver sur Wameet Direct</span>
               </button>
 
-              {/* Bouton 2b : 📹 Voir en Direct / Live Shopping (Daily.co) */}
-              <div className="w-full">
-                <BuyerLiveCallButton
-                  productId={product.id}
-                  productName={product.name}
-                  sellerId={effectiveMerchantId}
-                  buttonText="📹 Voir en Direct • Live Shopping"
-                  className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
-                />
-              </div>
+              {/* Bouton 2b : 📹 Voir en Direct / Live Shopping Natif WebRTC */}
+              {product.hasLiveDemo !== false && (
+                <div className="w-full">
+                  <BuyerLiveCallButton
+                    productId={product.id}
+                    productName={product.name}
+                    productPrice={product.price}
+                    productImage={product.image}
+                    storeName={storeName}
+                    whatsappPhone={effectiveWPhone}
+                    sellerId={effectiveMerchantId}
+                    buttonText="Voir en Direct • Live Shopping"
+                    className="w-full py-3 bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 border border-white/20"
+                  />
+                </div>
+              )}
 
               {/* Bouton 3 : 🛒 Ajouter au panier */}
               <button

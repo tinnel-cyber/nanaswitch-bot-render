@@ -1,143 +1,155 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { 
-  PhoneCall, PhoneOff, Video, ShoppingBag, ShieldCheck, 
-  Maximize2, Minimize2, Loader2, Sparkles, X, AlertCircle 
+import {
+  PhoneCall,
+  PhoneOff,
+  Video,
+  ShoppingBag,
+  ShieldCheck,
 } from 'lucide-react';
 import { playIncomingCallRingtone } from '../../../../services/flashLiveService';
+import { formatCFA } from '../../../../utils/audio';
+import {
+  createLiveProductCallChannel,
+  isCallForMerchant,
+  updateLiveProductCallStatusInSupabase,
+  type LiveProductCallPayload,
+} from '../../../../services/liveProductCallService';
+import { NativeCoaching1to1Room } from './NativeCoaching1to1Room';
 
 export interface LiveIncomingCallAlertProps {
-  /**
-   * Filtrer par identifiant de commerçant (optionnel)
-   */
+  /** Filtrer par identifiant de commerçant / boutique (optionnel) */
   merchantId?: string;
-  /**
-   * Nom de la boutique (optionnel)
-   */
+  /** Nom de la boutique (optionnel) */
   storeName?: string;
 }
 
-interface IncomingLiveRequest {
-  id: string;
-  buyerId?: string;
-  dailyRoomUrl: string;
-  roomName?: string;
-  status: 'ringing' | 'connected' | 'rejected' | 'completed';
-  productName?: string;
-  productId?: string;
-  createdAt?: any;
-}
-
 /**
- * Composant Récepteur Vendeur (Ordinateur / Dashboard POS)
- * - Écoute en temps réel la collection Firestore `live_requests` (status: 'ringing')
- * - Déclenche la sonnerie audio et l'alerte visuelle sur l'ordinateur
- * - Permet au commerçant de "Décrocher" pour ouvrir la même salle Daily.co
+ * Composant Récepteur Vendeur (Dashboard / Téléphone ou Ordinateur Vendeur)
+ * 100 % Supabase Realtime Broadcast + Salle WebRTC Native Nanasore (Zéro Firebase, Zéro Daily.co).
+ * - Reçoit en temps réel les demandes d'appel "Voir en direct" des acheteurs.
+ * - Déclenche la sonnerie audio et la carte d'appel entrant avec photo, nom et prix du produit.
+ * - Au clic sur "Décrocher (Live)", ouvre immédiatement la salle WebRTC native Nanasore
+ *   pour présenter le produit au client pendant que celui-ci peut commander en popup.
  */
 export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
   merchantId,
-  storeName = 'Boutique NaNa'
+  storeName = 'Boutique Nanasore',
 }) => {
-  const [incomingCall, setIncomingCall] = useState<IncomingLiveRequest | null>(null);
-  const [activeCallRoomUrl, setActiveCallRoomUrl] = useState<string | null>(null);
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
-  const [activeProductName, setActiveProductName] = useState<string>('Direct Boutique');
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<LiveProductCallPayload | null>(null);
+  const [activeCall, setActiveCall] = useState<LiveProductCallPayload | null>(null);
 
-  const ringtoneTimerRef = useRef<any>(null);
-  const hostVideoContainerRef = useRef<HTMLDivElement>(null);
-  const hostDailyFrameRef = useRef<any>(null);
+  const ringtoneTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const channelHandleRef = useRef<ReturnType<typeof createLiveProductCallChannel> | null>(null);
+  const activeCallRef = useRef<LiveProductCallPayload | null>(null);
+  const incomingCallRef = useRef<LiveProductCallPayload | null>(null);
+  const dismissedIdsRef = useRef<Set<string>>(new Set());
 
-  /**
-   * 1. Écoute Supabase Realtime des appels entrants
-   */
   useEffect(() => {
-    const channelName = `incoming_calls_${merchantId || 'all'}_${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'wameet_messages',
-        },
-        (payload) => {
-          if (payload.new) {
-            const row = payload.new as any;
-            if (row.type === 'call' && row.status === 'ringing') {
-              setIncomingCall({
-                id: row.id,
-                buyerId: row.sender_id,
-                dailyRoomUrl: row.media_url || '',
-                roomName: row.text || 'Appel Live',
-              });
-              startRingtone();
-            } else if (row.status !== 'ringing') {
-              setIncomingCall(null);
-              stopRingtone();
-            }
-          }
-        }
-      )
-      .subscribe();
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
 
-    return () => {
-      supabase.removeChannel(channel);
-      stopRingtone();
-    };
-  }, [merchantId, activeCallRoomUrl]);
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
 
-  /**
-   * Gestion de la sonnerie
-   */
-  const startRingtone = () => {
-    if (!ringtoneTimerRef.current) {
-      try {
-        playIncomingCallRingtone();
-      } catch (e) {}
-      ringtoneTimerRef.current = setInterval(() => {
-        try {
-          playIncomingCallRingtone();
-        } catch (e) {}
-      }, 3500);
-    }
-  };
-
-  const stopRingtone = () => {
+  const stopRingtone = useCallback(() => {
     if (ringtoneTimerRef.current) {
       clearInterval(ringtoneTimerRef.current);
       ringtoneTimerRef.current = null;
     }
-  };
+  }, []);
+
+  const startRingtone = useCallback(() => {
+    if (!ringtoneTimerRef.current) {
+      try {
+        playIncomingCallRingtone();
+      } catch {
+        // Autoplay policy may block before first gesture
+      }
+      ringtoneTimerRef.current = setInterval(() => {
+        try {
+          playIncomingCallRingtone();
+        } catch {
+          // ignore
+        }
+      }, 3200);
+    }
+  }, []);
 
   /**
-   * 2. Le vendeur décroche l'appel
+   * 1. Abonnement Supabase Realtime Broadcast aux appels Live Produit entrants
+   */
+  useEffect(() => {
+    const handle = createLiveProductCallChannel({
+      onIncomingCall: (payload) => {
+        // Ignorer si déjà refusé/terminé ou si le vendeur est déjà en appel actif
+        if (dismissedIdsRef.current.has(payload.requestId)) return;
+        if (activeCallRef.current) return;
+        if (!isCallForMerchant(payload, merchantId, storeName)) return;
+
+        // Éviter de réinitialiser si c'est une relance de sonnerie du même appel
+        if (incomingCallRef.current?.requestId === payload.requestId) return;
+
+        setIncomingCall(payload);
+        startRingtone();
+      },
+      onCallAccepted: (evt) => {
+        // Si décroché depuis un autre onglet/appareil du vendeur, couper la sonnerie ici
+        if (incomingCallRef.current?.requestId === evt.requestId) {
+          dismissedIdsRef.current.add(evt.requestId);
+          setIncomingCall(null);
+          stopRingtone();
+        }
+      },
+      onCallRejected: (evt) => {
+        if (incomingCallRef.current?.requestId === evt.requestId) {
+          dismissedIdsRef.current.add(evt.requestId);
+          setIncomingCall(null);
+          stopRingtone();
+        }
+      },
+      onCallEnded: (evt) => {
+        dismissedIdsRef.current.add(evt.requestId);
+        if (incomingCallRef.current?.requestId === evt.requestId) {
+          setIncomingCall(null);
+          stopRingtone();
+        }
+        if (activeCallRef.current?.requestId === evt.requestId && evt.endedBy === 'buyer') {
+          setActiveCall(null);
+        }
+      },
+    });
+
+    channelHandleRef.current = handle;
+
+    return () => {
+      handle.cleanup();
+      channelHandleRef.current = null;
+      stopRingtone();
+    };
+  }, [merchantId, storeName, startRingtone, stopRingtone]);
+
+  /**
+   * 2. Le vendeur décroche l'appel -> signalisation immédiate + ouverture salle WebRTC native
    */
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
 
     stopRingtone();
-    const roomUrl = incomingCall.dailyRoomUrl;
-    const reqId = incomingCall.id;
-    const prodName = incomingCall.productName || 'Article Boutique';
-
-    setActiveCallRoomUrl(roomUrl);
-    setActiveRequestId(reqId);
-    setActiveProductName(prodName);
+    const callToAccept = incomingCall;
+    dismissedIdsRef.current.add(callToAccept.requestId);
     setIncomingCall(null);
+    setActiveCall(callToAccept);
 
-    // Mettre à jour le message Supabase -> 'connected'
-    try {
-      await supabase
-        .from('wameet_messages')
-        .update({
-          status: 'connected'
-        })
-        .eq('id', reqId);
-    } catch (e) {
-      console.warn('[ACCEPT SUPABASE UPDATE ERROR]', e);
-    }
+    await channelHandleRef.current?.sendCallAccepted({
+      requestId: callToAccept.requestId,
+      roomId: callToAccept.roomId,
+      sellerId: merchantId || callToAccept.sellerId,
+      sellerName: storeName,
+      timestamp: Date.now(),
+    });
+
+    updateLiveProductCallStatusInSupabase(callToAccept.requestId, 'connected');
   };
 
   /**
@@ -147,115 +159,44 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
     if (!incomingCall) return;
 
     stopRingtone();
-    const reqId = incomingCall.id;
+    const reqId = incomingCall.requestId;
+    dismissedIdsRef.current.add(reqId);
     setIncomingCall(null);
 
-    try {
-      await supabase
-        .from('wameet_messages')
-        .update({
-          status: 'rejected'
-        })
-        .eq('id', reqId);
-    } catch (e) {
-      console.warn('[REJECT SUPABASE UPDATE ERROR]', e);
-    }
+    await channelHandleRef.current?.sendCallRejected({
+      requestId: reqId,
+      sellerId: merchantId,
+      reason: 'rejected_by_seller',
+      timestamp: Date.now(),
+    });
+
+    updateLiveProductCallStatusInSupabase(reqId, 'rejected');
   };
 
   /**
-   * 4. Initialisation du lecteur vidéo Daily.co côté vendeur une fois l'appel décroché
+   * 4. Fin d'appel côté vendeur
    */
-  useEffect(() => {
-    if (!activeCallRoomUrl || !hostVideoContainerRef.current) return;
+  const handleEndCall = useCallback(async () => {
+    const current = activeCallRef.current;
+    setActiveCall(null);
 
-    let isMounted = true;
-
-    const mountHostDaily = async () => {
-      try {
-        if (!isMounted || !hostVideoContainerRef.current) return;
-
-        if (hostDailyFrameRef.current) {
-          try {
-            hostDailyFrameRef.current.destroy();
-          } catch (e) {}
-          hostDailyFrameRef.current = null;
-        }
-
-        const iframe = document.createElement('iframe');
-        iframe.src = activeCallRoomUrl;
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = 'none';
-        iframe.style.borderRadius = '1.25rem';
-        iframe.style.backgroundColor = '#020617';
-        iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
-
-        hostVideoContainerRef.current.innerHTML = '';
-        hostVideoContainerRef.current.appendChild(iframe);
-        hostDailyFrameRef.current = { destroy: () => iframe.remove(), leave: () => iframe.remove() };
-      } catch (err) {
-        console.error('[HOST LIVE MOUNT ERROR]', err);
-      }
-    };
-
-    mountHostDaily();
-
-    return () => {
-      isMounted = false;
-      if (hostDailyFrameRef.current) {
-        try {
-          hostDailyFrameRef.current.destroy();
-        } catch (e) {}
-        hostDailyFrameRef.current = null;
-      }
-    };
-  }, [activeCallRoomUrl]);
-
-  /**
-   * 5. Fin d'appel côté vendeur
-   */
-  const handleEndCall = async () => {
-    if (hostDailyFrameRef.current) {
-      try {
-        await hostDailyFrameRef.current.leave();
-        hostDailyFrameRef.current.destroy();
-      } catch (e) {}
-      hostDailyFrameRef.current = null;
+    if (current) {
+      dismissedIdsRef.current.add(current.requestId);
+      await channelHandleRef.current?.sendCallEnded({
+        requestId: current.requestId,
+        endedBy: 'seller',
+        timestamp: Date.now(),
+      });
+      updateLiveProductCallStatusInSupabase(current.requestId, 'completed');
     }
-
-    if (activeRequestId) {
-      try {
-        await supabase
-          .from('wameet_messages')
-          .update({
-            status: 'completed'
-          })
-          .eq('id', activeRequestId);
-      } catch (e) {}
-    }
-
-    setActiveCallRoomUrl(null);
-    setActiveRequestId(null);
-  };
-
-  const toggleFullscreen = () => {
-    const el = hostVideoContainerRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) {
-      el.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
+  }, []);
 
   return (
     <>
       {/* =========================================================================
-          1. TOAST / MODALE D'APPEL ENTRANT (SONNERIE SUR L'ORDINATEUR)
+          1. CARTE D'APPEL ENTRANT (SONNERIE SUR L'ÉCRAN DU VENDEUR)
          ========================================================================= */}
-      {incomingCall && !activeCallRoomUrl && (
+      {incomingCall && !activeCall && (
         <div className="fixed top-5 right-5 z-[9999] max-w-md w-[calc(100vw-2.5rem)] sm:w-96 animate-in slide-in-from-top duration-300">
           <div className="bg-slate-900/95 backdrop-blur-2xl border-2 border-emerald-500 rounded-3xl p-4 sm:p-5 shadow-2xl shadow-emerald-950/70 text-slate-100 flex flex-col gap-3 relative overflow-hidden">
             {/* Halo vert pulsant */}
@@ -270,26 +211,39 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
                 </span>
                 <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                   <PhoneCall className="w-4 h-4 text-emerald-400 animate-bounce" />
-                  <span>Appel Vidéo Client Entrant !</span>
+                  <span>Appel Live Produit Entrant !</span>
                 </span>
               </div>
 
-              <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">
-                Live NaNa
+              <span className="text-[10px] font-mono text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                WebRTC Natif
               </span>
             </div>
 
-            {/* Détails du produit et de l'acheteur */}
+            {/* Détails du produit demandé par l'acheteur */}
             <div className="flex items-center gap-3 bg-slate-950/90 p-3 rounded-2xl border border-slate-800">
-              <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-emerald-400 shrink-0">
-                <ShoppingBag className="w-6 h-6" />
+              <div className="w-14 h-14 rounded-xl bg-slate-800 overflow-hidden flex items-center justify-center text-emerald-400 shrink-0 border border-slate-700">
+                {incomingCall.productImage ? (
+                  <img
+                    src={incomingCall.productImage}
+                    alt={incomingCall.productName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <ShoppingBag className="w-6 h-6" />
+                )}
               </div>
               <div className="min-w-0 flex-1">
-                <h4 className="text-xs font-black text-white truncate">
+                <h4 className="text-xs sm:text-sm font-black text-white truncate">
                   {incomingCall.productName || 'Article en boutique'}
                 </h4>
+                {incomingCall.productPrice > 0 && (
+                  <p className="text-xs font-black text-amber-400 mt-0.5">
+                    {formatCFA(incomingCall.productPrice)}
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                  Un client sur téléphone souhaite voir l'article en direct !
+                  Un client souhaite voir cet article en direct avant d&apos;acheter !
                 </p>
               </div>
             </div>
@@ -319,67 +273,67 @@ export const LiveIncomingCallAlert: React.FC<LiveIncomingCallAlertProps> = ({
       )}
 
       {/* =========================================================================
-          2. SALLE VIDÉO ACTIVE SUR L'ORDINATEUR DU VENDEUR
+          2. SALLE VIDÉO NATIVE WEBRTC ACTIVE CÔTÉ VENDEUR
          ========================================================================= */}
-      {activeCallRoomUrl && (
-        <div className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 animate-in fade-in duration-300">
-          <div className="w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh] text-slate-100">
-            {/* Header Vendeur */}
-            <div className="px-5 py-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-black">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>COMMUNICATION LIVE ACTIVE</span>
-                </span>
-                <span className="text-xs text-slate-300 font-bold truncate">
-                  {activeProductName}
-                </span>
+      {activeCall && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200">
+          <div className="w-full max-w-5xl h-[92vh] bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col text-slate-100">
+            {/* Header Vendeur avec info produit */}
+            <div className="px-4 sm:px-5 py-3 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                {activeCall.productImage && (
+                  <img
+                    src={activeCall.productImage}
+                    alt={activeCall.productName}
+                    className="w-9 h-9 rounded-lg object-cover border border-slate-700 shrink-0"
+                  />
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-black uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      <span>LIVE PRODUIT ACTIF</span>
+                    </span>
+                    {activeCall.productPrice > 0 && (
+                      <span className="text-xs font-black text-amber-400 shrink-0">
+                        {formatCFA(activeCall.productPrice)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm text-white font-bold truncate mt-0.5">
+                    {activeCall.productName}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700"
-                  title="Plein écran"
-                >
-                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleEndCall}
-                  className="py-2 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-rose-950/50 active:scale-95"
-                  title="Mettre fin à l'appel"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  <span>Raccrocher</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleEndCall}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer shrink-0"
+              >
+                <PhoneOff className="w-3.5 h-3.5" />
+                <span>Terminer</span>
+              </button>
             </div>
 
-            {/* Zone Vidéo Daily.co */}
-            <div 
-              ref={hostVideoContainerRef}
-              className="w-full aspect-video sm:min-h-[480px] bg-[#020617] relative flex items-center justify-center overflow-hidden"
-            >
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 pointer-events-none">
-                <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-                <p className="text-xs text-slate-400">
-                  Connexion au flux vidéo de l'acheteur...
-                </p>
-              </div>
+            {/* Salle WebRTC Native Nanasore (avec bascule caméra avant/arrière 1 clic) */}
+            <div className="flex-1 min-h-0 relative bg-slate-950">
+              <NativeCoaching1to1Room
+                roomId={activeCall.roomId}
+                storeSlug={merchantId || activeCall.sellerId || 'boutique'}
+                storeName={storeName || activeCall.storeName}
+                isHost={true}
+                onCallEnded={handleEndCall}
+              />
             </div>
 
-            {/* Pied de page Vendeur */}
-            <div className="px-5 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-              <span className="flex items-center gap-1.5 text-slate-400">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Flux Direct Haute Définition WebRTC Daily.co</span>
+            {/* Footer rassurant vendeur */}
+            <div className="px-4 py-2 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Le bouton « Acheter maintenant » est affiché en direct sur le téléphone du client.</span>
               </span>
-              <span className="font-mono text-slate-400 text-[11px]">
-                ID: {activeRequestId?.slice(-6) || 'ROOM'}
-              </span>
+              <span className="hidden sm:inline font-mono text-slate-500">Nanasore WebRTC Natif</span>
             </div>
           </div>
         </div>
