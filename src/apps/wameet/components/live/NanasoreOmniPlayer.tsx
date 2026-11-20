@@ -30,6 +30,7 @@ import {
 import { LiveSession, LiveAspectRatio, LiveSessionMode, LiveSourceType } from '../../../../types/liveSession';
 import { StoreProductItem } from '../../../../components/storeBuilder/types';
 import { HlsLivePlayer } from './HlsLivePlayer';
+import { NativeCoaching1to1Room } from './NativeCoaching1to1Room';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface NanasoreOmniPlayerProps {
@@ -55,6 +56,12 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const urlCoachingRoomId = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('room') || '').trim();
+  }, []);
+
   const [aspectRatio, setAspectRatio] = useState<LiveAspectRatio>(session.aspectRatio || '16:9');
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -64,7 +71,9 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
   const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [showPinnedCard, setShowPinnedCard] = useState<boolean>(true);
-  const [isFaceToFaceActive, setIsFaceToFaceActive] = useState<boolean>(session.sessionMode === 'coaching_1to1');
+  const [isFaceToFaceActive, setIsFaceToFaceActive] = useState<boolean>(
+    session.sessionMode === 'coaching_1to1' || Boolean(urlCoachingRoomId)
+  );
 
   // Compte à Rebours en Direct (Bleu & Blanc)
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>(() => {
@@ -463,18 +472,25 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
         {/* Le Conteneur Vidéo Adapté */}
         <div className={`relative ${ratioClasses} flex items-center justify-center transition-all duration-300 z-10`}>
           {isFaceToFaceActive ? (
-            /* SALLE FACE-À-FACE COACHING 1-TO-1 PRIVÉE */
-            <div className="w-full h-full relative bg-slate-900">
-              <iframe
-                src={
-                  session.coachingRoomUrl ||
-                  `https://${((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net')}/nanasore-coaching-${session.id}#config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&config.disableDeepLinking=true`
-                }
-                title="Salon Face-à-Face Coaching 1-to-1"
-                className="w-full h-full border-none"
-                allow="camera; microphone; fullscreen; display-capture"
-                allowFullScreen
-              />
+            /* SALLE FACE-À-FACE COACHING 1-TO-1 NATIVE NANASORE (WebRTC + Supabase Realtime — 100 % Marque Blanche) */
+            <div className="w-full h-full relative bg-slate-950">
+              {session.coachingRoomUrl && /zoom\.us|meet\.google\.com|teams\.microsoft\.com/i.test(session.coachingRoomUrl) ? (
+                <iframe
+                  src={session.coachingRoomUrl}
+                  title="Salon Face-à-Face Coaching 1-to-1"
+                  className="w-full h-full border-none"
+                  allow="camera; microphone; fullscreen; display-capture"
+                  allowFullScreen
+                />
+              ) : (
+                <NativeCoaching1to1Room
+                  roomId={urlCoachingRoomId || session.id || session.sessionSlug || 'coaching-room'}
+                  storeSlug={session.sessionSlug || session.storeId || session.id}
+                  storeName={session.storeName}
+                  isHost={isHost}
+                  onCallEnded={() => setIsFaceToFaceActive(false)}
+                />
+              )}
             </div>
           ) : session.sourceType === 'native_room' && isHost ? (
             /* SALLE WEBRTC / CAMÉRA ET MICRO NATIF (HÔTE) */

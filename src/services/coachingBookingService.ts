@@ -82,10 +82,14 @@ export async function submitCoachingBooking(
 
   const bookingId = `rdv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   const nowIso = new Date().toISOString();
-  const jitsiDomain =
-    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
+  const publicLiveOrigin =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PUBLIC_LIVE_DOMAIN) ||
+    'https://nsore.shop';
+  const cleanSlug = encodeURIComponent(String(input.storeSlug || 'coaching').replace(/[^a-zA-Z0-9_-]/g, ''));
   const safeRoomUrl =
-    input.roomUrl || `https://${jitsiDomain}/nanasore-1to1-${input.storeSlug.replace(/[^a-zA-Z0-9_-]/g, '')}-${bookingId}`;
+    input.roomUrl && !/meet\.jit\.si|meet\.ffmuc\.net/i.test(input.roomUrl)
+      ? input.roomUrl
+      : `${String(publicLiveOrigin).replace(/\/+$/, '')}/live/${cleanSlug}?room=${bookingId}`;
 
   const record: CoachingBookingRecord = {
     ...input,
