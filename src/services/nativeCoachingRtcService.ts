@@ -1,7 +1,7 @@
 /**
  * @file nativeCoachingRtcService.ts
- * @description Moteur WebRTC 1-to-1 natif Nanasore utilisant Supabase Realtime (Broadcast)
- * comme canal de signalisation (ZÉRO Jitsi, ZÉRO Firebase, ZÉRO serveur externe, 100 % marque blanche).
+ * @description Moteur WebRTC Mesh multi-participants (2 à 6 personnes) natif Nanasore utilisant
+ * Supabase Realtime (Broadcast) comme signalisation (ZÉRO Jitsi, ZÉRO Firebase, 100 % marque blanche).
  */
 
 import { supabase } from '../lib/supabase';
@@ -16,13 +16,21 @@ export type CoachingRtcStatus =
   | 'disconnected'
   | 'error';
 
+export interface RemotePeerInfo {
+  peerId: string;
+  displayName: string;
+  stream: MediaStream;
+  connectionState: RTCPeerConnectionState;
+}
+
 export interface CoachingRtcCallbacks {
   onStatusChange?: (status: CoachingRtcStatus) => void;
   onLocalStream?: (stream: MediaStream | null) => void;
-  onRemoteStream?: (stream: MediaStream | null) => void;
-  onPeerName?: (name: string) => void;
+  onPeersChange?: (peers: RemotePeerInfo[]) => void;
   onError?: (message: string) => void;
 }
+
+const MAX_REMOTE_PEERS = 5; // Jusqu'à 6 participants au total (soi + 5 distants)
 
 function getIceServers(): RTCIceServer[] {
   const servers: RTCIceServer[] = [
@@ -51,7 +59,7 @@ function getIceServers(): RTCIceServer[] {
 
 export function formatRtcError(err: any): string {
   if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost') {
-    return 'Connexion HTTPS requise pour activer la caméra et le micro en visio 1-to-1.';
+    return 'Connexion HTTPS requise pour activer la caméra et le micro en visio.';
   }
   const name = err?.name || '';
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -63,7 +71,15 @@ export function formatRtcError(err: any): string {
   if (name === 'NotReadableError' || name === 'TrackStartError') {
     return 'La caméra ou le micro est déjà utilisé par une autre application.';
   }
-  return err?.message || 'Erreur lors de la connexion WebRTC 1-to-1.';
+  return err?.message || 'Erreur lors de la connexion WebRTC.';
+}
+
+interface InternalPeerEntry {
+  peerId: string;
+  displayName: string;
+  pc: RTCPeerConnection;
+  stream: MediaStream;
+  pendingIce: RTCIceCandidateInit[];
 }
 
 export class NativeCoachingRtcSession {
@@ -73,13 +89,11 @@ export class NativeCoachingRtcSession {
   private isHost: boolean;
   private callbacks: CoachingRtcCallbacks;
 
-  private pc: RTCPeerConnection | null = null;
+  private peers = new Map<string, InternalPeerEntry>();
   private channel: RealtimeChannel | null = null;
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
-  private remoteStream: MediaStream | null = null;
   private facingMode: 'user' | 'environment' = 'user';
-  private pendingIceCandidates: RTCIceCandidateInit[] = [];
   private closed = false;
 
   constructor(options: {
@@ -101,6 +115,23 @@ export class NativeCoachingRtcSession {
     }
   }
 
+  private emitPeers() {
+    if (this.closed) return;
+    const list: RemotePeerInfo[] = Array.from(this.peers.values()).map((entry) => ({
+      peerId: entry.peerId,
+      displayName: entry.displayName,
+      stream: entry.stream,
+      connectionState: entry.pc.connectionState,
+    }));
+    this.callbacks.onPeersChange?.(list);
+
+    const anyConnected = list.some((p) => p.connectionState === 'connected');
+    const anyConnecting = list.some((p) => p.connectionState === 'connecting' || p.connectionState === 'new');
+    if (anyConnected) this.setStatus('connected');
+    else if (anyConnecting) this.setStatus('connecting');
+    else this.setStatus('waiting_peer');
+  }
+
   async start(): Promise<void> {
     this.closed = false;
     this.setStatus('acquiring_media');
@@ -116,8 +147,8 @@ export class NativeCoachingRtcSession {
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: this.facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 960 },
+          height: { ideal: 540 },
         },
         audio: {
           echoCancellation: true,
@@ -133,39 +164,51 @@ export class NativeCoachingRtcSession {
       return;
     }
 
-    this.createPeerConnection();
     this.connectSignalingChannel();
   }
 
-  private createPeerConnection() {
-    if (this.pc) {
-      try {
-        this.pc.close();
-      } catch (_) {}
+  private getOrCreatePeer(remotePeerId: string, remoteDisplayName: string): InternalPeerEntry | null {
+    const existing = this.peers.get(remotePeerId);
+    if (existing) {
+      if (remoteDisplayName) existing.displayName = remoteDisplayName;
+      return existing;
+    }
+
+    if (this.peers.size >= MAX_REMOTE_PEERS) {
+      return null;
     }
 
     const pc = new RTCPeerConnection({ iceServers: getIceServers() });
-    this.pc = pc;
-    this.pendingIceCandidates = [];
-    this.remoteStream = new MediaStream();
+    const remoteStream = new MediaStream();
+    const entry: InternalPeerEntry = {
+      peerId: remotePeerId,
+      displayName: remoteDisplayName || 'Participant',
+      pc,
+      stream: remoteStream,
+      pendingIce: [],
+    };
+    this.peers.set(remotePeerId, entry);
 
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
+    const activeVideoTrack = this.screenStream?.getVideoTracks()[0] || this.localStream?.getVideoTracks()[0];
+    const activeAudioTrack = this.localStream?.getAudioTracks()[0];
+
+    if (activeVideoTrack && this.localStream) {
+      pc.addTrack(activeVideoTrack, this.localStream);
+    }
+    if (activeAudioTrack && this.localStream) {
+      pc.addTrack(activeAudioTrack, this.localStream);
     }
 
     pc.ontrack = (event) => {
-      if (!this.remoteStream) this.remoteStream = new MediaStream();
       event.streams[0]?.getTracks().forEach((t) => {
-        if (!this.remoteStream!.getTracks().some((existing) => existing.id === t.id)) {
-          this.remoteStream!.addTrack(t);
+        if (!entry.stream.getTracks().some((e) => e.id === t.id)) {
+          entry.stream.addTrack(t);
         }
       });
-      if (event.track && !this.remoteStream.getTracks().some((existing) => existing.id === event.track.id)) {
-        this.remoteStream.addTrack(event.track);
+      if (event.track && !entry.stream.getTracks().some((e) => e.id === event.track.id)) {
+        entry.stream.addTrack(event.track);
       }
-      this.callbacks.onRemoteStream?.(this.remoteStream);
+      this.emitPeers();
     };
 
     pc.onicecandidate = (event) => {
@@ -176,6 +219,7 @@ export class NativeCoachingRtcSession {
           payload: {
             kind: 'ice',
             from: this.peerId,
+            to: remotePeerId,
             candidate: event.candidate.toJSON(),
           },
         });
@@ -184,26 +228,29 @@ export class NativeCoachingRtcSession {
 
     pc.onconnectionstatechange = () => {
       if (this.closed) return;
-      switch (pc.connectionState) {
-        case 'connecting':
-          this.setStatus('connecting');
-          break;
-        case 'connected':
-          this.setStatus('connected');
-          break;
-        case 'disconnected':
-        case 'failed':
-          this.setStatus('waiting_peer');
-          break;
-        case 'closed':
-          this.setStatus('disconnected');
-          break;
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this.removePeer(remotePeerId);
+      } else {
+        this.emitPeers();
       }
     };
+
+    this.emitPeers();
+    return entry;
+  }
+
+  private removePeer(remotePeerId: string) {
+    const entry = this.peers.get(remotePeerId);
+    if (!entry) return;
+    try {
+      entry.pc.close();
+    } catch (_) {}
+    this.peers.delete(remotePeerId);
+    this.emitPeers();
   }
 
   private connectSignalingChannel() {
-    const channelName = `coaching_1to1_${this.roomId}`;
+    const channelName = `coaching_group_${this.roomId}`;
     this.setStatus('waiting_peer');
 
     const channel = supabase.channel(channelName, {
@@ -214,66 +261,68 @@ export class NativeCoachingRtcSession {
     channel
       .on('broadcast', { event: 'rtc_signal' }, async ({ payload }) => {
         if (this.closed || !payload || payload.from === this.peerId) return;
+        if (payload.to && payload.to !== this.peerId) return;
+
+        const remoteId = String(payload.from);
+        const remoteName = String(payload.displayName || 'Participant');
 
         try {
           if (payload.kind === 'join') {
-            if (payload.displayName) this.callbacks.onPeerName?.(String(payload.displayName));
-            // L'hôte (ou le peer ayant l'ID le plus petit si même rôle) initie l'offre SDP
-            const shouldInitiate = this.isHost || (!payload.isHost && this.peerId < payload.from);
-            if (shouldInitiate) {
-              await this.sendOffer();
-            } else {
-              // Répondre présent pour que l'autre pair initie l'offre
-              this.channel?.send({
-                type: 'broadcast',
-                event: 'rtc_signal',
-                payload: {
-                  kind: 'ready',
-                  from: this.peerId,
-                  isHost: this.isHost,
-                  displayName: this.displayName,
-                },
-              });
-            }
-          } else if (payload.kind === 'ready') {
-            if (payload.displayName) this.callbacks.onPeerName?.(String(payload.displayName));
-            await this.sendOffer();
+            // Chaque participant déjà présent crée une offre vers le nouvel arrivant
+            const entry = this.getOrCreatePeer(remoteId, remoteName);
+            if (!entry) return;
+            const offer = await entry.pc.createOffer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true,
+            });
+            await entry.pc.setLocalDescription(offer);
+            this.channel?.send({
+              type: 'broadcast',
+              event: 'rtc_signal',
+              payload: {
+                kind: 'offer',
+                from: this.peerId,
+                to: remoteId,
+                displayName: this.displayName,
+                sdp: offer,
+              },
+            });
           } else if (payload.kind === 'offer' && payload.sdp) {
-            if (payload.displayName) this.callbacks.onPeerName?.(String(payload.displayName));
-            this.setStatus('connecting');
-            if (!this.pc || this.pc.signalingState === 'closed') {
-              this.createPeerConnection();
-            }
-            await this.pc!.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-            await this.flushPendingIce();
-            const answer = await this.pc!.createAnswer();
-            await this.pc!.setLocalDescription(answer);
+            const entry = this.getOrCreatePeer(remoteId, remoteName);
+            if (!entry) return;
+            await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            await this.flushPendingIce(entry);
+            const answer = await entry.pc.createAnswer();
+            await entry.pc.setLocalDescription(answer);
             this.channel?.send({
               type: 'broadcast',
               event: 'rtc_signal',
               payload: {
                 kind: 'answer',
                 from: this.peerId,
+                to: remoteId,
                 displayName: this.displayName,
                 sdp: answer,
               },
             });
-          } else if (payload.kind === 'answer' && payload.sdp && this.pc) {
-            if (payload.displayName) this.callbacks.onPeerName?.(String(payload.displayName));
-            if (this.pc.signalingState === 'have-local-offer') {
-              await this.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-              await this.flushPendingIce();
+          } else if (payload.kind === 'answer' && payload.sdp) {
+            const entry = this.peers.get(remoteId);
+            if (entry && entry.pc.signalingState === 'have-local-offer') {
+              if (remoteName) entry.displayName = remoteName;
+              await entry.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+              await this.flushPendingIce(entry);
+              this.emitPeers();
             }
-          } else if (payload.kind === 'ice' && payload.candidate && this.pc) {
-            if (this.pc.remoteDescription) {
-              await this.pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+          } else if (payload.kind === 'ice' && payload.candidate) {
+            const entry = this.peers.get(remoteId);
+            if (!entry) return;
+            if (entry.pc.remoteDescription) {
+              await entry.pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
             } else {
-              this.pendingIceCandidates.push(payload.candidate);
+              entry.pendingIce.push(payload.candidate);
             }
-          } else if (payload.kind === 'hangup') {
-            this.callbacks.onRemoteStream?.(null);
-            this.createPeerConnection();
-            this.setStatus('waiting_peer');
+          } else if (payload.kind === 'leave' || payload.kind === 'hangup') {
+            this.removePeer(remoteId);
           }
         } catch (err) {
           console.warn('[NativeCoachingRTC] Erreur signalisation:', err);
@@ -295,35 +344,13 @@ export class NativeCoachingRtcSession {
       });
   }
 
-  private async sendOffer() {
-    if (!this.pc || this.pc.signalingState === 'closed') {
-      this.createPeerConnection();
-    }
-    this.setStatus('connecting');
-    const offer = await this.pc!.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await this.pc!.setLocalDescription(offer);
-    this.channel?.send({
-      type: 'broadcast',
-      event: 'rtc_signal',
-      payload: {
-        kind: 'offer',
-        from: this.peerId,
-        displayName: this.displayName,
-        sdp: offer,
-      },
-    });
-  }
-
-  private async flushPendingIce() {
-    if (!this.pc || !this.pc.remoteDescription) return;
-    while (this.pendingIceCandidates.length > 0) {
-      const candidate = this.pendingIceCandidates.shift();
+  private async flushPendingIce(entry: InternalPeerEntry) {
+    if (!entry.pc.remoteDescription) return;
+    while (entry.pendingIce.length > 0) {
+      const candidate = entry.pendingIce.shift();
       if (candidate) {
         try {
-          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await entry.pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (_) {}
       }
     }
@@ -345,10 +372,21 @@ export class NativeCoachingRtcSession {
     return track.enabled;
   }
 
+  private async replaceVideoTrackOnAllPeers(newTrack: MediaStreamTrack) {
+    const tasks: Promise<void>[] = [];
+    for (const entry of this.peers.values()) {
+      const sender = entry.pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) {
+        tasks.push(sender.replaceTrack(newTrack).catch(() => {}));
+      }
+    }
+    await Promise.all(tasks);
+  }
+
   async switchCamera(): Promise<'user' | 'environment'> {
     const nextMode: 'user' | 'environment' = this.facingMode === 'user' ? 'environment' : 'user';
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: nextMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: nextMode, width: { ideal: 960 }, height: { ideal: 540 } },
       audio: false,
     });
     const newVideoTrack = newStream.getVideoTracks()[0];
@@ -361,11 +399,7 @@ export class NativeCoachingRtcSession {
       this.localStream.addTrack(newVideoTrack);
     }
 
-    const sender = this.pc?.getSenders().find((s) => s.track?.kind === 'video');
-    if (sender) {
-      await sender.replaceTrack(newVideoTrack);
-    }
-
+    await this.replaceVideoTrackOnAllPeers(newVideoTrack);
     this.facingMode = nextMode;
     this.callbacks.onLocalStream?.(this.localStream);
     return nextMode;
@@ -378,10 +412,7 @@ export class NativeCoachingRtcSession {
       const screenTrack = this.screenStream.getVideoTracks()[0];
       if (!screenTrack) return false;
 
-      const sender = this.pc?.getSenders().find((s) => s.track?.kind === 'video');
-      if (sender) {
-        await sender.replaceTrack(screenTrack);
-      }
+      await this.replaceVideoTrackOnAllPeers(screenTrack);
 
       screenTrack.onended = () => {
         this.toggleScreenShare(false).catch(() => {});
@@ -393,9 +424,8 @@ export class NativeCoachingRtcSession {
         this.screenStream = null;
       }
       const camTrack = this.localStream?.getVideoTracks()[0];
-      const sender = this.pc?.getSenders().find((s) => s.track?.kind === 'video');
-      if (sender && camTrack) {
-        await sender.replaceTrack(camTrack);
+      if (camTrack) {
+        await this.replaceVideoTrackOnAllPeers(camTrack);
       }
       return false;
     }
@@ -407,7 +437,7 @@ export class NativeCoachingRtcSession {
       this.channel?.send({
         type: 'broadcast',
         event: 'rtc_signal',
-        payload: { kind: 'hangup', from: this.peerId },
+        payload: { kind: 'leave', from: this.peerId },
       });
     } catch (_) {}
 
@@ -417,12 +447,14 @@ export class NativeCoachingRtcSession {
       } catch (_) {}
       this.channel = null;
     }
-    if (this.pc) {
+
+    for (const entry of this.peers.values()) {
       try {
-        this.pc.close();
+        entry.pc.close();
       } catch (_) {}
-      this.pc = null;
     }
+    this.peers.clear();
+
     if (this.screenStream) {
       this.screenStream.getTracks().forEach((t) => t.stop());
       this.screenStream = null;
@@ -431,9 +463,8 @@ export class NativeCoachingRtcSession {
       this.localStream.getTracks().forEach((t) => t.stop());
       this.localStream = null;
     }
-    this.remoteStream = null;
     this.callbacks.onLocalStream?.(null);
-    this.callbacks.onRemoteStream?.(null);
+    this.callbacks.onPeersChange?.([]);
     this.callbacks.onStatusChange?.('disconnected');
   }
 }
