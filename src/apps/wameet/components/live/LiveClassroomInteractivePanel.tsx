@@ -1,51 +1,55 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { 
-  MessageCircle, 
-  HelpCircle, 
-  FileText, 
-  ShoppingBag, 
-  Send, 
-  Pin, 
-  Hand, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  Download, 
-  Upload, 
-  Trash2, 
-  Award, 
-  Sparkles, 
-  Phone, 
-  User, 
+import {
+  MessageCircle,
+  HelpCircle,
+  FileText,
+  ShoppingBag,
+  Send,
+  Pin,
+  Hand,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Download,
+  Upload,
+  Trash2,
+  Award,
+  Sparkles,
+  Phone,
+  User,
   AlertCircle,
   ExternalLink,
   ChevronRight,
   Zap,
-  BarChart2
+  BarChart2,
+  Pencil,
+  Check,
+  Users,
 } from 'lucide-react';
-import { 
-  LiveSession, 
-  LiveChatMessage, 
-  LiveQuizQuestion, 
-  LiveAssignment, 
-  LiveSubmission, 
-  HandRaisedUser 
+import { supabase } from '@/lib/supabase';
+import {
+  LiveSession,
+  LiveChatMessage,
+  LiveQuizQuestion,
+  LiveAssignment,
+  LiveSubmission,
+  HandRaisedUser,
 } from '../../../../types/liveSession';
 import { StoreProductItem } from '../../../../components/storeBuilder/types';
-import { 
-  sendLiveChatMessage, 
-  subscribeLiveChatMessages, 
+import {
+  sendLiveChatMessage,
+  subscribeLiveChatMessages,
   pinLiveChatMessage,
-  raiseHandInSession, 
+  raiseHandInSession,
   lowerHandInSession,
-  pinLiveQuiz, 
-  closeLiveQuiz, 
+  pinLiveQuiz,
+  closeLiveQuiz,
   submitQuizAnswer,
-  publishLiveAssignment, 
-  closeLiveAssignment, 
-  submitLiveAssignmentWork, 
-  subscribeLiveSubmissions, 
-  gradeLiveSubmission 
+  publishLiveAssignment,
+  closeLiveAssignment,
+  submitLiveAssignmentWork,
+  subscribeLiveSubmissions,
+  gradeLiveSubmission,
 } from '../../../../services/liveSessionService';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
@@ -54,6 +58,7 @@ export type LivePanelTab = 'chat' | 'quiz' | 'assignment' | 'offers';
 export interface LiveClassroomInteractivePanelProps {
   session: LiveSession;
   isHost?: boolean;
+  roomMode?: 'classroom' | 'live_shopping';
   onOpenFunnel?: (product: StoreProductItem) => void;
   onPinProduct?: (product: StoreProductItem) => void;
   onUnpinProduct?: () => void;
@@ -62,27 +67,55 @@ export interface LiveClassroomInteractivePanelProps {
   className?: string;
 }
 
+const AVATAR_PALETTE = [
+  'bg-blue-100 text-[#1D4ED8]',
+  'bg-indigo-100 text-indigo-700',
+  'bg-sky-100 text-sky-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-violet-100 text-violet-700',
+];
+
+function getInitials(name: string): string {
+  const parts = (name || 'E').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'E';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function getAvatarColor(name: string, isHostMsg: boolean): string {
+  if (isHostMsg) return 'bg-[#1D4ED8] text-white';
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % AVATAR_PALETTE.length;
+  }
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
 export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePanelProps> = ({
   session,
   isHost = false,
+  roomMode = 'classroom',
   onOpenFunnel,
   onPinProduct,
   onUnpinProduct,
   activeTabOverride,
   onTabChange,
-  className = ''
+  className = '',
 }) => {
   // 1. DÉCLARATION STRICTE DE TOUS LES HOOKS AU SOMMET (ZÉRO ERREUR #310)
   const [internalTab, setInternalTab] = useState<LivePanelTab>('chat');
   const activeTab = activeTabOverride || internalTab;
 
-  // Profil participant local (mémorisé dans le navigateur)
+  // Profil participant local (mémorisé dans le navigateur, sans disparition pendant la frappe)
   const [participantName, setParticipantName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('nana_live_participant_name') || '';
     }
     return '';
   });
+  const [nameDraft, setNameDraft] = useState<string>(participantName);
+  const [isEditingName, setIsEditingName] = useState<boolean>(!participantName && !isHost);
+
   const [participantContact, setParticipantContact] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('nana_live_participant_contact') || '';
@@ -90,10 +123,14 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
     return '';
   });
 
+  // Compteur réel de participants en ligne via Supabase Realtime Presence
+  const [onlineCount, setOnlineCount] = useState<number>(1);
+
   // Chat state
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState<string>('');
   const [isQuestionChecked, setIsQuestionChecked] = useState<boolean>(false);
+  const [chatFilter, setChatFilter] = useState<'all' | 'questions'>('all');
   const [hasRaisedHand, setHasRaisedHand] = useState<boolean>(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -127,6 +164,38 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
     }
   }, [participantContact]);
 
+  // Suivi réel des participants connectés via Supabase Realtime Presence
+  useEffect(() => {
+    if (!session?.id) return;
+    const presenceKey = `p_${Math.random().toString(36).substring(2, 10)}`;
+    const presenceChannel = supabase.channel(`live_presence_${session.id}`, {
+      config: { presence: { key: presenceKey } },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const count = Object.keys(state).length;
+        setOnlineCount(Math.max(1, count));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await presenceChannel.track({
+              role: isHost ? 'host' : 'participant',
+              joinedAt: Date.now(),
+            });
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [session?.id, isHost]);
+
   // Abonnement aux messages du chat
   useEffect(() => {
     if (!session?.id) return;
@@ -136,7 +205,7 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
         if (chatScrollRef.current) {
           chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
-      }, 100);
+      }, 80);
     });
     return () => unsubscribe();
   }, [session?.id]);
@@ -307,72 +376,96 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
     setGradingSubmissionId(null);
   }, [session.id, gradeInput, feedbackInput]);
 
+  const questionsCount = useMemo(() => messages.filter((m) => m.isQuestion).length, [messages]);
+  const visibleMessages = useMemo(
+    () => (chatFilter === 'questions' ? messages.filter((m) => m.isQuestion) : messages),
+    [messages, chatFilter]
+  );
+
+  const showOffersTab = roomMode === 'live_shopping' || (session.products && session.products.length > 0);
+
+  const handleSaveNameDraft = () => {
+    const trimmed = nameDraft.trim();
+    if (trimmed) {
+      setParticipantName(trimmed);
+      setIsEditingName(false);
+    }
+  };
+
   return (
-    <div className={`flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden ${className}`}>
-      {/* 1. Onglets Intelligents Bleu & Blanc */}
-      <div className="flex items-center border-b border-slate-200 bg-slate-50/90 px-2 pt-2 gap-1 select-none">
+    <div className={`flex flex-col bg-white rounded-3xl border border-slate-200/90 shadow-lg shadow-blue-950/5 overflow-hidden ${className}`}>
+      {/* 1. Barre d'Onglets Épurée Nanasore (Blanc cassé + Bleu Royal) */}
+      <div className="flex items-center border-b border-slate-200/80 bg-[#F5F7FB] px-2.5 pt-2.5 pb-0 gap-1 select-none shrink-0">
         <button
+          type="button"
           onClick={() => handleTabChange('chat')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-t-xl text-xs font-bold transition-all relative ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-t-2xl text-xs font-bold transition-all relative cursor-pointer ${
             activeTab === 'chat'
-              ? 'bg-white text-blue-600 shadow-sm border-t-2 border-blue-600'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-white text-[#1D4ED8] shadow-xs border-x border-t border-slate-200/80 -mb-px'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <MessageCircle className="w-3.5 h-3.5" />
+          <MessageCircle className="w-3.5 h-3.5 shrink-0" />
           <span>Chat</span>
           {messages.length > 0 && (
-            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 font-semibold">
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === 'chat' ? 'bg-blue-100 text-[#1D4ED8]' : 'bg-slate-200/80 text-slate-600'
+            }`}>
               {messages.length}
             </span>
           )}
         </button>
 
+        {showOffersTab && (
+          <button
+            type="button"
+            onClick={() => handleTabChange('offers')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-t-2xl text-xs font-bold transition-all relative cursor-pointer ${
+              activeTab === 'offers'
+                ? 'bg-white text-[#1D4ED8] shadow-xs border-x border-t border-slate-200/80 -mb-px'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+            <span>{roomMode === 'live_shopping' ? 'Produits' : 'Offres'}</span>
+            {session.products && session.products.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-bold">
+                {session.products.length}
+              </span>
+            )}
+          </button>
+        )}
+
         <button
+          type="button"
           onClick={() => handleTabChange('quiz')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-t-xl text-xs font-bold transition-all relative ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-t-2xl text-xs font-bold transition-all relative cursor-pointer ${
             activeTab === 'quiz'
-              ? 'bg-white text-blue-600 shadow-sm border-t-2 border-blue-600'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-white text-[#1D4ED8] shadow-xs border-x border-t border-slate-200/80 -mb-px'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <HelpCircle className="w-3.5 h-3.5" />
+          <HelpCircle className="w-3.5 h-3.5 shrink-0" />
           <span>Quiz</span>
           {session.activeQuiz?.isActive && (
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute top-2 right-2" />
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping absolute top-2 right-2" />
           )}
         </button>
 
         <button
+          type="button"
           onClick={() => handleTabChange('assignment')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-t-xl text-xs font-bold transition-all relative ${
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2.5 rounded-t-2xl text-xs font-bold transition-all relative cursor-pointer ${
             activeTab === 'assignment'
-              ? 'bg-white text-blue-600 shadow-sm border-t-2 border-blue-600'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-white text-[#1D4ED8] shadow-xs border-x border-t border-slate-200/80 -mb-px'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Devoir & PDF</span>
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+          <span>Devoir</span>
           {session.activeAssignment?.isActive && (
-            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 font-extrabold animate-pulse">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-[#1D4ED8] font-extrabold animate-pulse">
               1
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => handleTabChange('offers')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-t-xl text-xs font-bold transition-all relative ${
-            activeTab === 'offers'
-              ? 'bg-white text-blue-600 shadow-sm border-t-2 border-blue-600'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <ShoppingBag className="w-3.5 h-3.5" />
-          <span>Offres</span>
-          {session.products && session.products.length > 0 && (
-            <span className="ml-1 text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 font-bold">
-              {session.products.length}
             </span>
           )}
         </button>
@@ -380,162 +473,280 @@ export const LiveClassroomInteractivePanel: React.FC<LiveClassroomInteractivePan
 
       {/* 2. Contenu des Onglets */}
       <div className="flex-1 flex flex-col min-h-0 bg-white">
-        
         {/* ========================================================================= */}
-        {/* ONGLET 1 : CHAT EN DIRECT & Q&A */}
+        {/* ONGLET 1 : CHAT EN DIRECT & Q&A PROFESSIONNEL                             */}
         {/* ========================================================================= */}
         {activeTab === 'chat' && (
-          <div className="flex-1 flex flex-col min-h-[380px] h-full justify-between">
-            {/* Barre d'état & Bouton Lever la main */}
-            <div className="p-3 bg-blue-50/60 border-b border-blue-100 flex items-center justify-between gap-2">
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Sous-barre : Présence temps réel + Filtre Tous / Q&A + Lever la main */}
+            <div className="px-3.5 py-2.5 bg-[#F8FAFD] border-b border-slate-200/70 flex items-center justify-between gap-2 shrink-0 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-semibold text-slate-700">
-                  {session.viewerCount || 120} participants connectés
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/70 text-[11px] font-bold text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <Users className="w-3 h-3" />
+                  <span>{onlineCount}</span>
                 </span>
+
+                {/* Filtre Tous / Questions */}
+                <div className="inline-flex items-center rounded-lg bg-slate-200/60 p-0.5 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter('all')}
+                    className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                      chatFilter === 'all'
+                        ? 'bg-white text-[#1D4ED8] shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Tous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatFilter('questions')}
+                    className={`px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                      chatFilter === 'questions'
+                        ? 'bg-white text-[#1D4ED8] shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <span>Q&amp;A</span>
+                    {questionsCount > 0 && (
+                      <span className="text-[10px] px-1 rounded-full bg-amber-100 text-amber-800">
+                        {questionsCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={handleToggleHandRaise}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  hasRaisedHand 
-                    ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-300 animate-pulse'
-                    : 'bg-white text-slate-700 hover:bg-blue-50 border border-slate-200 hover:border-blue-300'
-                }`}
-              >
-                <Hand className={`w-3.5 h-3.5 ${hasRaisedHand ? 'text-white' : 'text-amber-500'}`} />
-                <span>{hasRaisedHand ? 'Main levée ✋' : 'Lever la main'}</span>
-              </button>
+              {!isHost && (
+                <button
+                  type="button"
+                  onClick={handleToggleHandRaise}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                    hasRaisedHand
+                      ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-200'
+                      : 'bg-white text-slate-700 hover:text-[#1D4ED8] hover:bg-blue-50 border border-slate-200'
+                  }`}
+                >
+                  <Hand className={`w-3.5 h-3.5 ${hasRaisedHand ? 'text-white' : 'text-amber-500'}`} />
+                  <span>{hasRaisedHand ? 'Main levée' : 'Lever la main'}</span>
+                </button>
+              )}
             </div>
 
             {/* Message Épinglé Formateur */}
             {session.pinnedMessage && (
-              <div className="mx-3 mt-2 p-2.5 bg-blue-50/90 border border-blue-200 rounded-xl flex items-start gap-2 shadow-sm">
-                <Pin className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+              <div className="mx-3 mt-2.5 p-2.5 bg-blue-50/90 border border-blue-200/80 rounded-2xl flex items-start gap-2.5 shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-[#1D4ED8] text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <Pin className="w-3.5 h-3.5" />
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[11px] font-bold text-blue-900">
-                      Épinglé par {session.pinnedMessage.senderName}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-extrabold text-[#1D4ED8] truncate">
+                      Message épinglé • {session.pinnedMessage.senderName}
                     </span>
                     {isHost && (
-                      <button 
+                      <button
+                        type="button"
                         onClick={() => pinLiveChatMessage(session.id, null)}
-                        className="text-[10px] text-slate-400 hover:text-red-500"
+                        className="text-[10px] font-bold text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
                       >
                         Retirer
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-blue-800 leading-snug mt-0.5">
+                  <p className="text-xs text-slate-800 leading-snug mt-0.5 break-words">
                     {session.pinnedMessage.text}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Liste scrollable des messages */}
-            <div 
+            {/* Liste scrollable plein hauteur (zéro trou vide) */}
+            <div
               ref={chatScrollRef}
-              className="flex-1 overflow-y-auto p-3 space-y-2.5 max-h-[380px] min-h-[220px]"
+              className="flex-1 min-h-0 overflow-y-auto px-3.5 py-3 space-y-3 bg-white"
             >
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-                  <MessageCircle className="w-8 h-8 text-slate-300 mb-2 stroke-1" />
-                  <p className="text-xs font-medium">Le chat est calme pour l'instant.</p>
-                  <p className="text-[11px] text-slate-400 mt-1">Soyez le premier à poser une question ou envoyer un message !</p>
+              {visibleMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6 py-10">
+                  <div className="w-12 h-12 rounded-2xl bg-[#F5F7FB] border border-slate-200/80 flex items-center justify-center text-[#1D4ED8] mb-3">
+                    <MessageCircle className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700">
+                    {chatFilter === 'questions'
+                      ? 'Aucune question posée pour le moment'
+                      : 'Bienvenue dans la discussion en direct'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-[240px]">
+                    {chatFilter === 'questions'
+                      ? 'Cochez « Question » ci-dessous pour mettre votre question en avant.'
+                      : 'Échangez avec le formateur et les autres participants en temps réel.'}
+                  </p>
                 </div>
               ) : (
-                messages.map((msg) => {
+                visibleMessages.map((msg) => {
                   const isHostMsg = msg.senderRole === 'host';
+                  const initials = getInitials(msg.senderName);
+                  const avatarCls = getAvatarColor(msg.senderName, isHostMsg);
                   return (
-                    <div 
-                      key={msg.id}
-                      className={`p-2.5 rounded-xl transition-all ${
-                        msg.isQuestion
-                          ? 'bg-amber-50/90 border border-amber-200'
-                          : isHostMsg
-                          ? 'bg-blue-50/80 border border-blue-200'
-                          : 'bg-slate-50 border border-slate-100 hover:bg-slate-100/70'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-xs font-bold ${isHostMsg ? 'text-blue-700' : 'text-slate-800'}`}>
-                            {msg.senderName}
-                          </span>
-                          {isHostMsg && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-blue-600 text-white tracking-wider uppercase">
-                              Formateur
-                            </span>
-                          )}
-                          {msg.isQuestion && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-200 text-amber-800 flex items-center gap-0.5">
-                              <HelpCircle className="w-2.5 h-2.5" /> Question
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                    <div key={msg.id} className="group flex items-start gap-2.5">
+                      {/* Avatar Initiales */}
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 shadow-xs ${avatarCls}`}
+                      >
+                        {initials}
                       </div>
-                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.text}
-                      </p>
-                      {isHost && (
-                        <div className="mt-1 flex items-center justify-end gap-2 text-[10px]">
-                          <button
-                            onClick={() => pinLiveChatMessage(session.id, msg)}
-                            className="text-blue-600 hover:underline flex items-center gap-0.5"
-                          >
-                            <Pin className="w-2.5 h-2.5" /> Épingler
-                          </button>
+
+                      {/* Bulle Message */}
+                      <div
+                        className={`flex-1 min-w-0 rounded-2xl px-3 py-2 border transition-colors ${
+                          msg.isQuestion
+                            ? 'bg-amber-50/70 border-amber-200/80'
+                            : isHostMsg
+                            ? 'bg-blue-50/70 border-blue-200/80'
+                            : 'bg-[#F5F7FB] border-slate-200/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span
+                              className={`text-xs font-extrabold truncate ${
+                                isHostMsg ? 'text-[#1D4ED8]' : 'text-slate-900'
+                              }`}
+                            >
+                              {msg.senderName}
+                            </span>
+                            {isHostMsg && (
+                              <span className="px-1.5 py-0.2 rounded-md text-[9px] font-black bg-[#1D4ED8] text-white uppercase tracking-wider">
+                                Formateur
+                              </span>
+                            )}
+                            {msg.isQuestion && (
+                              <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-amber-200/80 text-amber-900 flex items-center gap-0.5">
+                                <HelpCircle className="w-2.5 h-2.5" /> Q&amp;A
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isHost && (
+                              <button
+                                type="button"
+                                onClick={() => pinLiveChatMessage(session.id, msg)}
+                                className="opacity-0 group-hover:opacity-100 text-[10px] font-bold text-[#1D4ED8] hover:underline flex items-center gap-0.5 transition cursor-pointer"
+                                title="Épingler ce message en haut du chat"
+                              >
+                                <Pin className="w-2.5 h-2.5" /> Épingler
+                              </button>
+                            )}
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {new Date(msg.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
                         </div>
-                      )}
+                        <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+                          {msg.text}
+                        </p>
+                      </div>
                     </div>
                   );
                 })
               )}
             </div>
 
-            {/* Formulaire d'envoi de message */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-200 bg-slate-50/80">
-              {/* Saisie Prénom participant (si non renseigné) */}
-              {!participantName && (
-                <div className="mb-2">
-                  <input
-                    type="text"
-                    value={participantName}
-                    onChange={(e) => setParticipantName(e.target.value)}
-                    placeholder="Votre prénom ou nom (ex: Moussa)..."
-                    className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 bg-white"
-                  />
-                </div>
+            {/* Zone de saisie moderne (avec édition prénom corrigée) */}
+            <form
+              onSubmit={(e) => {
+                if (isEditingName && nameDraft.trim()) {
+                  setParticipantName(nameDraft.trim());
+                  setIsEditingName(false);
+                }
+                handleSendMessage(e);
+              }}
+              className="p-3 border-t border-slate-200/80 bg-[#F5F7FB] shrink-0 space-y-2"
+            >
+              {/* Identité participant (ne disparaît PLUS à la 1ère lettre !) */}
+              {!isHost && (
+                isEditingName ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveNameDraft();
+                        }
+                      }}
+                      placeholder="Votre prénom ou nom (ex: Moussa)..."
+                      className="flex-1 text-xs px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:border-[#1D4ED8]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveNameDraft}
+                      disabled={!nameDraft.trim()}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] disabled:opacity-40 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>OK</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 px-0.5">
+                    <span className="truncate">
+                      Connecté en tant que{' '}
+                      <strong className="text-slate-800">{participantName || 'Participant'}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNameDraft(participantName);
+                        setIsEditingName(true);
+                      }}
+                      className="text-[#1D4ED8] hover:underline font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                      <span>Modifier</span>
+                    </button>
+                  </div>
+                )
               )}
 
-              <div className="flex items-center justify-between mb-1.5 px-0.5">
-                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-medium text-slate-600 hover:text-slate-900">
+              {/* Option Question Q&A */}
+              <div className="flex items-center justify-between px-0.5">
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-slate-600 hover:text-[#1D4ED8]">
                   <input
                     type="checkbox"
                     checked={isQuestionChecked}
                     onChange={(e) => setIsQuestionChecked(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    className="rounded text-[#1D4ED8] focus:ring-[#1D4ED8] w-3.5 h-3.5"
                   />
-                  <span>❓ C'est une question pour le formateur</span>
+                  <span>Marquer comme question (Q&amp;A)</span>
                 </label>
               </div>
 
+              {/* Champ message + bouton Bleu Royal */}
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Écrivez votre message en direct..."
-                  className="flex-1 text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 bg-white shadow-inner"
+                  placeholder={
+                    isQuestionChecked
+                      ? 'Posez votre question au formateur...'
+                      : 'Écrivez un message dans la salle...'
+                  }
+                  className="flex-1 text-xs px-3.5 py-2.5 rounded-2xl border border-slate-300/90 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-[#1D4ED8]"
                 />
                 <button
                   type="submit"
                   disabled={!inputMessage.trim()}
-                  className="p-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:hover:bg-blue-600 transition-colors shadow-sm"
+                  className="p-2.5 rounded-2xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white disabled:opacity-40 transition shadow-sm cursor-pointer shrink-0"
                   title="Envoyer"
                 >
                   <Send className="w-4 h-4" />

@@ -218,7 +218,7 @@ export function subscribeLiveSession(
           status: supaLive.status as any,
           sourceType: 'youtube',
           streamUrl: supaLive.stream_url || '',
-          viewerCount: supaLive.viewer_count || 42,
+          viewerCount: typeof supaLive.viewer_count === 'number' ? supaLive.viewer_count : 0,
           pinnedProductId: supaLive.pinned_product_id,
           pinnedProduct: supaLive.pinned_product_data,
           scheduledAt: new Date(supaLive.created_at).getTime(),
@@ -784,3 +784,164 @@ export async function updateCoachingRoom(sessionId: string, roomUrl: string): Pr
     console.warn('[liveSessionService] updateCoachingRoom warning:', err);
   }
 }
+
+export interface LiveRoomRuntimeConfig {
+  sessionMode?: LiveSession['sessionMode'];
+  isPaid?: boolean;
+  accessPrice?: number;
+  accessLabel?: string;
+}
+
+const ROOM_CFG_PREFIX = 'nana_live_room_cfg_';
+const ENROLL_PREFIX = 'nana_live_enrolled_';
+
+export function getSavedLiveRoomConfig(sessionId: string): LiveRoomRuntimeConfig {
+  if (typeof window === 'undefined' || !sessionId) return {};
+  try {
+    const raw = localStorage.getItem(`${ROOM_CFG_PREFIX}${sessionId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function updateLiveRoomConfig(
+  sessionId: string,
+  patch: LiveRoomRuntimeConfig
+): Promise<void> {
+  if (!sessionId) return;
+  const merged = { ...getSavedLiveRoomConfig(sessionId), ...patch };
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`${ROOM_CFG_PREFIX}${sessionId}`, JSON.stringify(merged));
+    }
+  } catch {
+    // ignore storage quota
+  }
+
+  try {
+    const channel = supabase.channel(`live_room_cfg_${sessionId}`);
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel
+          .send({
+            type: 'broadcast',
+            event: 'room_config_updated',
+            payload: merged,
+          })
+          .finally(() => {
+            setTimeout(() => supabase.removeChannel(channel), 600);
+          });
+      }
+    });
+  } catch {
+    // non-blocking
+  }
+}
+
+export function subscribeLiveRoomConfig(
+  sessionId: string,
+  onConfig: (cfg: LiveRoomRuntimeConfig) => void
+): () => void {
+  if (!sessionId) return () => {};
+  const channel = supabase
+    .channel(`live_room_cfg_${sessionId}`)
+    .on('broadcast', { event: 'room_config_updated' }, ({ payload }) => {
+      if (payload && typeof payload === 'object') {
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${ROOM_CFG_PREFIX}${sessionId}`, JSON.stringify(payload));
+          }
+        } catch {}
+        onConfig(payload as LiveRoomRuntimeConfig);
+      }
+    })
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function hasLocalLiveEnrollment(sessionId: string): boolean {
+  if (typeof window === 'undefined' || !sessionId) return false;
+  try {
+    return localStorage.getItem(`${ENROLL_PREFIX}${sessionId}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function recordStudentLiveEnrollment(params: {
+  sessionId: string;
+  studentName: string;
+  studentContact: string;
+  amountPaid: number;
+  transactionId?: string;
+  paymentMethod?: string;
+}): Promise<void> {
+  const cleanContact = params.studentContact.trim().toLowerCase();
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`${ENROLL_PREFIX}${params.sessionId}`, '1');
+      if (params.studentName) {
+        localStorage.setItem('nana_live_participant_name', params.studentName.trim());
+      }
+      if (cleanContact) {
+        localStorage.setItem('nana_live_participant_contact', cleanContact);
+      }
+    }
+  } catch {}
+
+  try {
+    await supabase.from('live_session_enrollments').insert({
+      session_id: params.sessionId,
+      student_name: params.studentName.trim() || 'Étudiant VIP',
+      student_contact: cleanContact || 'inconnu',
+      amount_paid: Number(params.amountPaid) || 0,
+      currency: 'XOF',
+      transaction_id: params.transactionId || `tx_${Date.now()}`,
+      payment_method: params.paymentMethod || 'MOBILE_MONEY',
+      status: 'paid',
+    });
+  } catch (err) {
+    console.warn('[liveSessionService] recordStudentLiveEnrollment warning:', err);
+  }
+}
+
+export async function verifyStudentLiveEnrollment(
+  sessionId: string,
+  contactInput: string
+): Promise<{ enrolled: boolean; studentName?: string }> {
+  const cleanContact = contactInput.trim().toLowerCase();
+  if (!sessionId || !cleanContact) return { enrolled: false };
+
+  try {
+    const { data, error } = await supabase
+      .from('live_session_enrollments')
+      .select('id, student_name, status')
+      .eq('session_id', sessionId)
+      .ilike('student_contact', cleanContact)
+      .eq('status', 'paid')
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`${ENROLL_PREFIX}${sessionId}`, '1');
+          if (data.student_name) {
+            localStorage.setItem('nana_live_participant_name', data.student_name);
+          }
+          localStorage.setItem('nana_live_participant_contact', cleanContact);
+        }
+      } catch {}
+      return { enrolled: true, studentName: data.student_name };
+    }
+  } catch (err) {
+    console.warn('[liveSessionService] verifyStudentLiveEnrollment warning:', err);
+  }
+
+  return { enrolled: false };
+}
+

@@ -138,4 +138,10 @@ export interface LiveSession {
   pinnedMessage?: LiveChatMessage | null;
   handRaisedUsers?: HandRaisedUser[];
   coachingRoomUrl?: string;
+
+  // Contrôle d'accès Cours Payant / Adhésion Membre VIP
+  isPaid?: boolean;
+  accessPrice?: number;
+  accessCurrency?: string;
+  accessLabel?: string;
 }

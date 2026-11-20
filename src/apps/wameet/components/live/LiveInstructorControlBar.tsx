@@ -1,59 +1,62 @@
 import React, { useState, useCallback } from 'react';
-import { 
-  Radio, 
-  HelpCircle, 
-  FileText, 
-  ShoppingBag, 
-  Hand, 
-  Video, 
-  Plus, 
-  Check, 
-  X, 
-  Sparkles, 
-  Clock, 
-  Upload, 
+import {
+  Radio,
+  HelpCircle,
+  FileText,
+  ShoppingBag,
+  Hand,
+  Video,
+  X,
+  GraduationCap,
+  Share2,
+  Calendar,
+  Lock,
+  Unlock,
+  Eye,
+  Check,
   ExternalLink,
-  Users,
-  Settings,
-  ChevronDown
 } from 'lucide-react';
-import { 
-  LiveSession, 
-  LiveQuizQuestion, 
-  LiveAssignment, 
-  HandRaisedUser 
+import {
+  LiveSession,
+  LiveQuizQuestion,
 } from '../../../../types/liveSession';
-import { StoreProductItem } from '../../../../components/storeBuilder/types';
-import { 
-  pinLiveQuiz, 
-  closeLiveQuiz, 
-  publishLiveAssignment, 
-  closeLiveAssignment, 
-  updatePinnedProduct, 
+import {
+  pinLiveQuiz,
+  publishLiveAssignment,
   lowerHandInSession,
-  updateCoachingRoom,
-  updateLiveSessionStatus 
 } from '../../../../services/liveSessionService';
-import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
+import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface LiveInstructorControlBarProps {
   session: LiveSession;
-  onOpenProductModal?: () => void;
+  roomMode: 'classroom' | 'live_shopping';
+  onChangeRoomMode: (mode: 'classroom' | 'live_shopping') => void;
+  isBroadcasterActive: boolean;
+  onToggleBroadcaster: () => void;
+  onOpenMultistream: () => void;
+  onOpenBookingModal: () => void;
+  onUpdateAccessGate: (cfg: { isPaid: boolean; accessPrice: number; accessLabel: string }) => void;
   onSelectTab?: (tab: 'chat' | 'quiz' | 'assignment' | 'offers') => void;
   className?: string;
 }
 
 export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> = ({
   session,
-  onOpenProductModal,
+  roomMode,
+  onChangeRoomMode,
+  isBroadcasterActive,
+  onToggleBroadcaster,
+  onOpenMultistream,
+  onOpenBookingModal,
+  onUpdateAccessGate,
   onSelectTab,
-  className = ''
+  className = '',
 }) => {
   // 1. DÉCLARATION STRICTE DE TOUS LES HOOKS AU SOMMET (ZÉRO ERREUR #310)
   const [isQuizModalOpen, setIsQuizModalOpen] = useState<boolean>(false);
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState<boolean>(false);
   const [isHandRaiseDrawerOpen, setIsHandRaiseDrawerOpen] = useState<boolean>(false);
-  const [isCoachingModalOpen, setIsCoachingModalOpen] = useState<boolean>(false);
+  const [isAccessModalOpen, setIsAccessModalOpen] = useState<boolean>(false);
 
   // Formulaire Quiz
   const [quizQuestion, setQuizQuestion] = useState<string>('');
@@ -70,213 +73,420 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
   const [assignPdfUrl, setAssignPdfUrl] = useState<string>('');
   const [assignDuration, setAssignDuration] = useState<number>(20);
 
-  // Formulaire Coaching 1-to-1 (Serveur Jitsi ouvert sans login Firebase/Google forcé)
-  const defaultJitsiDomain =
-    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
-  const [coachingRoomInput, setCoachingRoomInput] = useState<string>(
-    session.coachingRoomUrl || `https://${defaultJitsiDomain}/nanasore-coaching-${session.id}`
-  );
+  // Formulaire Accès Cours Payant / Adhésion VIP
+  const [gateIsPaid, setGateIsPaid] = useState<boolean>(Boolean(session.isPaid));
+  const [gatePrice, setGatePrice] = useState<string>(String(session.accessPrice || 10000));
+  const [gateLabel, setGateLabel] = useState<string>(session.accessLabel || 'Accès Cours & Salle VIP');
 
   // Lancement du Quiz
-  const handleLaunchQuiz = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quizQuestion.trim() || !quizOptA.trim() || !quizOptB.trim()) {
-      alert('Veuillez renseigner au moins la question et les options A et B.');
-      return;
-    }
+  const handleLaunchQuiz = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!quizQuestion.trim() || !quizOptA.trim() || !quizOptB.trim()) {
+        alert('Veuillez renseigner au moins la question et les options A et B.');
+        return;
+      }
 
-    playValidationBeep();
-    const newQuiz: LiveQuizQuestion = {
-      id: `quiz_${Date.now()}`,
-      question: quizQuestion.trim(),
-      options: [
-        { id: 'opt_A', label: 'A', text: quizOptA.trim() },
-        { id: 'opt_B', label: 'B', text: quizOptB.trim() },
-        ...(quizOptC.trim() ? [{ id: 'opt_C', label: 'C', text: quizOptC.trim() }] : []),
-        ...(quizOptD.trim() ? [{ id: 'opt_D', label: 'D', text: quizOptD.trim() }] : [])
-      ],
-      correctOptionId: correctOpt,
-      explanation: quizExplanation.trim() || undefined,
-      isActive: true
-    };
+      playValidationBeep();
+      const newQuiz: LiveQuizQuestion = {
+        id: `quiz_${Date.now()}`,
+        question: quizQuestion.trim(),
+        options: [
+          { id: 'opt_A', label: 'A', text: quizOptA.trim() },
+          { id: 'opt_B', label: 'B', text: quizOptB.trim() },
+          ...(quizOptC.trim() ? [{ id: 'opt_C', label: 'C', text: quizOptC.trim() }] : []),
+          ...(quizOptD.trim() ? [{ id: 'opt_D', label: 'D', text: quizOptD.trim() }] : []),
+        ],
+        correctOptionId: correctOpt,
+        explanation: quizExplanation.trim() || undefined,
+        isActive: true,
+      };
 
-    await pinLiveQuiz(session.id, newQuiz);
-    setIsQuizModalOpen(false);
-    if (onSelectTab) onSelectTab('quiz');
-  }, [quizQuestion, quizOptA, quizOptB, quizOptC, quizOptD, correctOpt, quizExplanation, session.id, onSelectTab]);
+      await pinLiveQuiz(session.id, newQuiz);
+      setIsQuizModalOpen(false);
+      onSelectTab?.('quiz');
+    },
+    [quizQuestion, quizOptA, quizOptB, quizOptC, quizOptD, correctOpt, quizExplanation, session.id, onSelectTab]
+  );
 
   // Lancement du Devoir
-  const handleLaunchAssignment = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assignTitle.trim() || !assignInstructions.trim()) {
-      alert('Veuillez renseigner le titre et les consignes du devoir.');
-      return;
-    }
+  const handleLaunchAssignment = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!assignTitle.trim() || !assignInstructions.trim()) {
+        alert('Veuillez renseigner le titre et les consignes du devoir.');
+        return;
+      }
 
+      playValidationBeep();
+      const deadline = Date.now() + assignDuration * 60 * 1000;
+      await publishLiveAssignment(session.id, {
+        id: `assign_${Date.now()}`,
+        title: assignTitle.trim(),
+        instructions: assignInstructions.trim(),
+        pdfUrl: assignPdfUrl.trim() || undefined,
+        durationMinutes: assignDuration,
+        deadline,
+      });
+
+      setIsAssignmentModalOpen(false);
+      onSelectTab?.('assignment');
+    },
+    [assignTitle, assignInstructions, assignPdfUrl, assignDuration, session.id, onSelectTab]
+  );
+
+  const handleSaveAccessGate = (e: React.FormEvent) => {
+    e.preventDefault();
     playValidationBeep();
-    const deadline = Date.now() + (assignDuration * 60 * 1000);
-    await publishLiveAssignment(session.id, {
-      id: `assign_${Date.now()}`,
-      title: assignTitle.trim(),
-      instructions: assignInstructions.trim(),
-      pdfUrl: assignPdfUrl.trim() || undefined,
-      durationMinutes: assignDuration,
-      deadline
+    const numericPrice = Math.max(0, Number(gatePrice) || 0);
+    onUpdateAccessGate({
+      isPaid: gateIsPaid && numericPrice > 0,
+      accessPrice: numericPrice,
+      accessLabel: gateLabel.trim() || 'Accès Cours & Salle VIP',
     });
-
-    setIsAssignmentModalOpen(false);
-    if (onSelectTab) onSelectTab('assignment');
-  }, [assignTitle, assignInstructions, assignPdfUrl, assignDuration, session.id, onSelectTab]);
-
-  // Sauvegarde Coaching Room URL
-  const handleSaveCoachingRoom = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    playValidationBeep();
-    await updateCoachingRoom(session.id, coachingRoomInput.trim());
-    setIsCoachingModalOpen(false);
-  }, [session.id, coachingRoomInput]);
+    setIsAccessModalOpen(false);
+  };
 
   const handRaisedList = session.handRaisedUsers || [];
 
   return (
-    <div className={`w-full bg-slate-900 border border-slate-800 text-white rounded-2xl p-3 shadow-2xl ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* Titre & Mode Formateur */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-            <Radio className="w-4 h-4 animate-pulse" />
+    <div
+      className={`w-full bg-white border border-slate-200/90 rounded-2xl px-3.5 py-2.5 shadow-sm shadow-blue-950/5 ${className}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        {/* 1. Bascule 1-Clic : Salle de Cours <-> Live Shopping Produits Physiques */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center p-1 rounded-xl bg-[#F5F7FB] border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                onChangeRoomMode('classroom');
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                roomMode === 'classroom'
+                  ? 'bg-[#1D4ED8] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Salle de Cours</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                onChangeRoomMode('live_shopping');
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                roomMode === 'live_shopping'
+                  ? 'bg-[#1D4ED8] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Live Shopping</span>
+            </button>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                Console Formateur & Vendeur
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600/30 text-blue-400 border border-blue-500/40">
-                DIRECT ACTIF
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Contrôlez vos quiz, devoirs, produits épinglés et appels en direct
-            </p>
-          </div>
+
+          {/* Bouton Accès Libre / Cours Payant */}
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              setGateIsPaid(Boolean(session.isPaid));
+              setGatePrice(String(session.accessPrice || 10000));
+              setGateLabel(session.accessLabel || 'Accès Cours & Salle VIP');
+              setIsAccessModalOpen(true);
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              session.isPaid && (session.accessPrice || 0) > 0
+                ? 'bg-blue-50 border-blue-300 text-[#1D4ED8]'
+                : 'bg-[#F5F7FB] hover:bg-blue-50 border-slate-200 text-slate-700'
+            }`}
+            title="Configurer l'accès gratuit ou payant (Cours / Adhésion VIP)"
+          >
+            {session.isPaid && (session.accessPrice || 0) > 0 ? (
+              <>
+                <Lock className="w-3.5 h-3.5 text-[#1D4ED8]" />
+                <span>Payant • {formatCFA(session.accessPrice || 0)}</span>
+              </>
+            ) : (
+              <>
+                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Accès Libre</span>
+              </>
+            )}
+          </button>
         </div>
 
-        {/* Boutons d'Action Rapide Formateur */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 1. Épingler un Quiz */}
+        {/* 2. Outils Studio Unifiés : Diffusion + Pédagogie */}
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
+            type="button"
             onClick={() => {
               playTapBeep();
               setIsQuizModalOpen(true);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
               session.activeQuiz?.isActive
-                ? 'bg-amber-500 text-white ring-2 ring-amber-300'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                : 'bg-[#F5F7FB] hover:bg-blue-50 text-slate-700 hover:text-[#1D4ED8] border-slate-200'
             }`}
           >
-            <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span>{session.activeQuiz?.isActive ? 'Quiz en Cours' : '📌 Lancer un Quiz'}</span>
+            <HelpCircle className={`w-3.5 h-3.5 ${session.activeQuiz?.isActive ? 'text-white' : 'text-amber-500'}`} />
+            <span>Quiz</span>
           </button>
 
-          {/* 2. Administrer un Devoir & PDF */}
           <button
+            type="button"
             onClick={() => {
               playTapBeep();
               setIsAssignmentModalOpen(true);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
               session.activeAssignment?.isActive
-                ? 'bg-blue-600 text-white ring-2 ring-blue-300'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                ? 'bg-[#1D4ED8] text-white border-[#1D4ED8] shadow-xs'
+                : 'bg-[#F5F7FB] hover:bg-blue-50 text-slate-700 hover:text-[#1D4ED8] border-slate-200'
             }`}
           >
-            <FileText className="w-3.5 h-3.5 text-blue-400" />
-            <span>{session.activeAssignment?.isActive ? 'Devoir Actif' : '📝 Administrer un Devoir'}</span>
+            <FileText className={`w-3.5 h-3.5 ${session.activeAssignment?.isActive ? 'text-white' : 'text-[#1D4ED8]'}`} />
+            <span>Devoir</span>
           </button>
 
-          {/* 3. Mains Levées */}
           <button
+            type="button"
             onClick={() => {
               playTapBeep();
               setIsHandRaiseDrawerOpen(!isHandRaiseDrawerOpen);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm relative ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition relative cursor-pointer ${
               handRaisedList.length > 0
-                ? 'bg-amber-500/20 border border-amber-500 text-amber-300 animate-pulse'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : 'bg-[#F5F7FB] hover:bg-blue-50 text-slate-700 hover:text-[#1D4ED8] border-slate-200'
             }`}
           >
-            <Hand className="w-3.5 h-3.5" />
-            <span>Mains Levées ({handRaisedList.length})</span>
+            <Hand className="w-3.5 h-3.5 text-amber-500" />
+            <span>Mains ({handRaisedList.length})</span>
             {handRaisedList.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute -top-1 -right-1" />
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping absolute -top-0.5 -right-0.5" />
             )}
           </button>
 
-          {/* 4. Coaching 1-to-1 WebRTC */}
           <button
+            type="button"
             onClick={() => {
               playTapBeep();
-              setIsCoachingModalOpen(true);
+              onOpenBookingModal();
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#F5F7FB] hover:bg-blue-50 text-slate-700 hover:text-[#1D4ED8] border border-slate-200 transition cursor-pointer"
+            title="Demandes & Salle Coaching 1-to-1"
           >
-            <Video className="w-3.5 h-3.5" />
-            <span>📹 Salon Coaching 1-to-1</span>
+            <Calendar className="w-3.5 h-3.5 text-[#1D4ED8]" />
+            <span>RDV 1-to-1</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              onOpenMultistream();
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#F5F7FB] hover:bg-blue-50 text-slate-700 hover:text-[#1D4ED8] border border-slate-200 transition cursor-pointer"
+            title="Clés RTMP, Multistreaming YouTube/Facebook/TikTok et liens de diffusion"
+          >
+            <Share2 className="w-3.5 h-3.5 text-[#1D4ED8]" />
+            <span>Clés &amp; Multistream</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              onToggleBroadcaster();
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition shadow-sm cursor-pointer ${
+              isBroadcasterActive
+                ? 'bg-slate-900 hover:bg-slate-800 text-white'
+                : 'bg-[#1D4ED8] hover:bg-[#1E40AF] text-white'
+            }`}
+          >
+            {isBroadcasterActive ? (
+              <>
+                <Eye className="w-3.5 h-3.5" />
+                <span>Retour Lecteur</span>
+              </>
+            ) : (
+              <>
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                <span>Caméra WHIP</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Tiroir / Liste déroulante des mains levées */}
+      {/* Tiroir des mains levées (100 % Natif, zéro Jitsi) */}
       {isHandRaiseDrawerOpen && (
-        <div className="mt-3 p-3 bg-slate-800 rounded-xl border border-slate-700 animate-fadeIn">
+        <div className="mt-2.5 p-3 bg-[#F5F7FB] rounded-xl border border-slate-200">
           <div className="flex items-center justify-between mb-2">
-            <h5 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-              <Hand className="w-3.5 h-3.5 text-amber-400" />
-              Élèves ayant levé la main pour intervenir :
+            <h5 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+              <Hand className="w-3.5 h-3.5 text-amber-500" />
+              Participants ayant levé la main :
             </h5>
             <button
+              type="button"
               onClick={() => setIsHandRaiseDrawerOpen(false)}
-              className="text-slate-400 hover:text-white"
+              className="text-slate-400 hover:text-slate-700 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {handRaisedList.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">Aucune main levée pour le moment.</p>
+            <p className="text-xs text-slate-500 italic">Aucune main levée pour le moment.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {handRaisedList.map((user) => (
-                <div 
+                <div
                   key={user.id}
-                  className="flex items-center justify-between bg-slate-900/80 px-3 py-2 rounded-lg border border-slate-700"
+                  className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                    <span className="text-xs font-bold text-white">{user.name}</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    <span className="text-xs font-bold text-slate-900">{user.name}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={session.coachingRoomUrl || `https://meet.jit.si/nanasore-${session.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-blue-400 hover:underline flex items-center gap-1"
-                    >
-                      <Video className="w-3 h-3" /> Donner la parole
-                    </a>
+                  <div className="flex items-center gap-3">
                     <button
-                      onClick={() => lowerHandInSession(session.id, user.id)}
-                      className="text-[11px] text-slate-400 hover:text-red-400"
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        onOpenBookingModal();
+                      }}
+                      className="text-[11px] font-bold text-[#1D4ED8] hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      Baisser la main
+                      <Video className="w-3 h-3" /> Inviter en Visio 1-to-1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => lowerHandInSession(session.id, user.id)}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 cursor-pointer"
+                    >
+                      Baisser
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL CONFIGURATION ACCÈS COURS PAYANT / ADHÉSION VIP */}
+      {isAccessModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white text-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    Contrôle d&apos;Accès à la Salle
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Activez le sas payant pour vos cours, masterclass ou adhésions VIP
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAccessModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAccessGate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGateIsPaid(false)}
+                  className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                    !gateIsPaid
+                      ? 'bg-blue-50 border-[#1D4ED8] text-[#1D4ED8]'
+                      : 'bg-[#F5F7FB] border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Unlock className="w-4 h-4 mb-1" />
+                  <div className="text-xs font-black">Accès Libre</div>
+                  <div className="text-[10px] opacity-80">Entrée directe par lien</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGateIsPaid(true)}
+                  className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                    gateIsPaid
+                      ? 'bg-blue-50 border-[#1D4ED8] text-[#1D4ED8]'
+                      : 'bg-[#F5F7FB] border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Lock className="w-4 h-4 mb-1" />
+                  <div className="text-xs font-black">Cours / VIP Payant</div>
+                  <div className="text-[10px] opacity-80">Sas Mobile Money &amp; Membres</div>
+                </button>
+              </div>
+
+              {gateIsPaid && (
+                <div className="space-y-3 bg-[#F5F7FB] p-3.5 rounded-2xl border border-slate-200">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Libellé de l&apos;accès
+                    </label>
+                    <input
+                      type="text"
+                      value={gateLabel}
+                      onChange={(e) => setGateLabel(e.target.value)}
+                      placeholder="Ex: Accès Cours VIP, Adhésion Mensuelle..."
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#1D4ED8]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Tarif d&apos;entrée (F CFA)
+                    </label>
+                    <input
+                      type="number"
+                      min={500}
+                      step={500}
+                      value={gatePrice}
+                      onChange={(e) => setGatePrice(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold focus:outline-none focus:border-[#1D4ED8]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAccessModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#1D4ED8] hover:bg-[#1E40AF] text-white text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Appliquer en direct</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -542,77 +752,6 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
                   className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-md transition-all"
                 >
                   🚀 Envoyer le Devoir aux Élèves
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL CONFIGURATION COACHING 1-TO-1 */}
-      {/* ========================================================================= */}
-      {isCoachingModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white text-slate-900 rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
-                  <Video className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    Salon de Coaching 1-to-1
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Visio privée directe intégrée entre coach et participant
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsCoachingModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCoachingRoom} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Lien de la salle visio WebRTC / Jitsi / Google Meet
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={coachingRoomInput}
-                  onChange={(e) => setCoachingRoomInput(e.target.value)}
-                  placeholder="https://meet.jit.si/nanasore-..."
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300"
-                />
-              </div>
-
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900">
-                <p className="font-semibold mb-1">💡 Appel Face-à-Face direct :</p>
-                <p className="leading-relaxed">
-                  L'élève peut rejoindre l'appel sans installation logicielle. Le son et l'image s'ouvrent dans la fenêtre du live.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <a
-                  href={coachingRoomInput}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-2 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" /> Tester la salle
-                </a>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 shadow-md"
-                >
-                  Enregistrer & Activer
                 </button>
               </div>
             </form>
