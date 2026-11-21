@@ -758,7 +758,19 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     }
   }, [showToast]);
 
-  // Synchronisation des Univers (Supabase app_registry + API /api/universes + KYC Submissions + cache local)
+  // Helper UUID v4 compatible avec les colonnes UUID (universes, merchants, organizations) et TEXT
+  const generateUniverseUuid = useCallback((): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }, []);
+
+  // Synchronisation multi-appareils des Univers (Supabase merchants + universes + API /api/universes + cache local)
   useEffect(() => {
     let isMounted = true;
 
@@ -805,29 +817,10 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           return;
         }
 
-        // Vérifier si le profil global de l'utilisateur a été validé par le Super Admin
-        let isUserKycVerified = false;
-        if (supabase && targetUid) {
-          try {
-            const { data: prof } = await supabase
-              .from('profiles')
-              .select('kyc_status, role')
-              .eq('id', targetUid)
-              .maybeSingle();
-            if (
-              prof?.kyc_status === 'full' ||
-              prof?.kyc_status === 'verified' ||
-              prof?.role === 'vendor' ||
-              prof?.role === 'super_admin'
-            ) {
-              isUserKycVerified = true;
-            }
-          } catch {}
-        }
-
         const rawUniversesList: any[] = [];
+        let remoteReachable = false;
 
-        // 2. SOURCE UNIQUE DE VÉRITÉ : public.merchants filtré strictement par owner_id (protégé par RLS)
+        // 2. SOURCES DISTANTES SUPABASE : public.merchants ET public.universes (filtrées par propriétaire)
         if (supabase) {
           try {
             const { data: merchantRows, error: merchErr } = await supabase
@@ -836,7 +829,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               .eq('owner_id', targetUid)
               .order('created_at', { ascending: false });
 
-            if (!merchErr && Array.isArray(merchantRows) && merchantRows.length > 0) {
+            if (!merchErr && Array.isArray(merchantRows)) {
+              remoteReachable = true;
               for (const row of merchantRows) {
                 rawUniversesList.push({
                   ...row,
@@ -845,46 +839,51 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   kyc: row.kyc_data || row.kyc || {}
                 });
               }
+            } else if (merchErr) {
+              console.warn('[NANASWITCH] Supabase merchants fetch error:', merchErr.message);
             }
           } catch (merchErr) {
             console.warn('[NANASWITCH] Supabase merchants fetch notice:', merchErr);
           }
 
-          // 3. Repli migration legacy (strictement filtré par .eq('tenant_id', targetUid) !)
-          if (rawUniversesList.length === 0) {
-            try {
-              const { data: regItems, error: regErr } = await supabase
-                .from('app_registry')
-                .select('*')
-                .eq('category', 'Univers Marchand')
-                .eq('tenant_id', targetUid);
+          try {
+            const { data: universeRows, error: univErr } = await supabase
+              .from('universes')
+              .select('*')
+              .eq('user_id', targetUid)
+              .order('created_at', { ascending: false });
 
-              if (!regErr && Array.isArray(regItems) && regItems.length > 0) {
-                for (const item of regItems) {
-                  const conf = item.config_json || {};
-                  const uId = conf.id || item.key?.replace('universe_', '') || item.id;
-                  rawUniversesList.push({
-                    ...conf,
-                    id: uId,
-                    owner_id: targetUid,
-                    name: conf.name || item.name || 'Univers Marchand',
-                    sector: conf.sector || conf.appellation || 'E-commerce & Services'
-                  });
-                }
+            if (!univErr && Array.isArray(universeRows)) {
+              remoteReachable = true;
+              for (const row of universeRows) {
+                rawUniversesList.push({
+                  ...row,
+                  owner_id: row.user_id || targetUid,
+                  ownerEmail: row.settings?.owner_email || targetEmail,
+                  sector: row.sector || row.appellation || 'E-commerce & Services',
+                  kyc: row.kyc_data || row.kyc || {},
+                  kyc_limits: row.settings?.kyc_limits || row.kyc_limits,
+                  api_credits_balance: row.settings?.api_credits_balance ?? row.api_credits_balance ?? 5000,
+                  api_pricing_config: row.settings?.api_pricing_config || row.api_pricing_config,
+                  monthly_usage: row.settings?.monthly_usage || row.monthly_usage
+                });
               }
-            } catch (supaErr) {
-              console.warn('[NANASWITCH] Supabase legacy app_registry fetch notice:', supaErr);
+            } else if (univErr) {
+              console.warn('[NANASWITCH] Supabase universes fetch error:', univErr.message);
             }
+          } catch (univErr) {
+            console.warn('[NANASWITCH] Supabase universes fetch notice:', univErr);
           }
         }
 
-        // 4. API Serveur /api/universes (authentifiée par JWT Bearer)
-        if (accessToken && rawUniversesList.length === 0) {
+        // 3. API Serveur /api/universes (authentifiée par JWT Bearer, fusionnée pour garantir la sync multi-appareils)
+        if (accessToken) {
           try {
             const res = await fetch('/api/universes', {
               headers: { Authorization: `Bearer ${accessToken}` }
             });
             if (res.ok) {
+              remoteReachable = true;
               const json = await res.json();
               if (json.success && Array.isArray(json.universes) && json.universes.length > 0) {
                 rawUniversesList.push(...json.universes);
@@ -895,8 +894,35 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           }
         }
 
-        // 5. Cache LocalStorage STRICTEMENT scopé par targetUid (plus aucune clé globale partagée)
-        if (typeof window !== 'undefined' && rawUniversesList.length === 0) {
+        // 4. Repli migration legacy (strictement filtré par .eq('tenant_id', targetUid) uniquement si 0 univers)
+        if (supabase && rawUniversesList.length === 0) {
+          try {
+            const { data: regItems, error: regErr } = await supabase
+              .from('app_registry')
+              .select('*')
+              .eq('category', 'Univers Marchand')
+              .eq('tenant_id', targetUid);
+
+            if (!regErr && Array.isArray(regItems) && regItems.length > 0) {
+              for (const item of regItems) {
+                const conf = item.config_json || {};
+                const uId = conf.id || item.key?.replace('universe_', '') || item.id;
+                rawUniversesList.push({
+                  ...conf,
+                  id: uId,
+                  owner_id: targetUid,
+                  name: conf.name || item.name || 'Univers Marchand',
+                  sector: conf.sector || conf.appellation || 'E-commerce & Services'
+                });
+              }
+            }
+          } catch (supaErr) {
+            console.warn('[NANASWITCH] Supabase legacy app_registry fetch notice:', supaErr);
+          }
+        }
+
+        // 5. Cache LocalStorage STRICTEMENT scopé par targetUid (repli hors-ligne uniquement si aucune donnée distante)
+        if (typeof window !== 'undefined' && rawUniversesList.length === 0 && !remoteReachable) {
           try {
             const scopedKey = `nana_merchant_universes_${targetUid}`;
             const raw = localStorage.getItem(scopedKey);
@@ -911,8 +937,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           } catch (_) {}
         }
 
-        // 6. Filtrage propriétaire strict + déduplication par ID d'univers (tenant_id)
-        const uniqueMap = new Map<string, NanaMerchantApp>();
+        // 6. Filtrage propriétaire strict + déduplication par ID d'univers (sans jamais auto-valider via le profil global)
+        const uniqueMap = new Map<string, { app: NanaMerchantApp; updatedTs: number }>();
         rawUniversesList.forEach(u => {
           if (!u || !(u.id || u.storeId)) return;
 
@@ -923,21 +949,20 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           }
 
           const id = String(u.id || u.storeId);
-          const isApproved =
-            u.status === 'ACTIVE' ||
-            u.status === 'VERIFIED' ||
-            u.status === 'verified' ||
-            u.status === 'approved' ||
-            isUserKycVerified;
+          const rawStatus = String(u.status || '').toUpperCase();
+          const normalizedStatus: 'VERIFIED' | 'PENDING_KYC' | 'REJECTED' =
+            rawStatus === 'ACTIVE' || rawStatus === 'VERIFIED' || rawStatus === 'APPROVED'
+              ? 'VERIFIED'
+              : rawStatus === 'REJECTED'
+                ? 'REJECTED'
+                : 'PENDING_KYC';
 
           const normalized: NanaMerchantApp = {
             id,
             name: u.name || u.storeName || u.companyName || 'Univers Marchand',
             sector: u.sector || u.appellation || u.activityDomain || 'E-commerce & Services',
             type: u.type === 'business' ? 'entreprise' : (u.type || 'entreprise'),
-            status: isApproved
-              ? 'VERIFIED'
-              : (u.status === 'REJECTED' || u.status === 'rejected' ? 'REJECTED' : 'PENDING_KYC'),
+            status: normalizedStatus,
             createdAt:
               u.createdAt ||
               (u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
@@ -979,12 +1004,22 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             },
             kyc: u.kyc || u.kyc_data || {}
           };
-          uniqueMap.set(id, normalized);
+
+          const updatedTs = Date.parse(u.updated_at || u.updatedAt || u.created_at || u.createdAt || '') || 0;
+          const prevEntry = uniqueMap.get(id);
+          if (!prevEntry || updatedTs >= prevEntry.updatedTs) {
+            uniqueMap.set(id, { app: normalized, updatedTs });
+          }
         });
 
-        const loaded = Array.from(uniqueMap.values());
+        const loaded = Array.from(uniqueMap.values()).map(entry => entry.app);
         if (isMounted) {
           setApps(loaded);
+          setSelectedApp(prev => {
+            if (!prev) return prev;
+            const refreshed = loaded.find(a => a.id === prev.id);
+            return refreshed || prev;
+          });
         }
 
         // Sauvegarde cache local UNIQUEMENT sous la partition stricte de l'utilisateur connecté
@@ -1076,7 +1111,29 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     // Écoute directe canal Supabase Realtime pour validation instantanée par le Super Admin
     let supaChannel: any = null;
     if (supabase) {
+      const applyRealtimeApproval = (orgId: string | undefined, toastMsg: string) => {
+        if (!orgId) return;
+        setSelectedApp(prev => (prev && prev.id === orgId) ? { ...prev, status: 'VERIFIED' } : prev);
+        setApps(prev => prev.map(a => (a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
+        saveLocalUserLicense({
+          ...getLocalUserLicense(),
+          kycStatus: 'full',
+          pricingModel: 'commission'
+        });
+        showToast(toastMsg, "success");
+      };
+
       supaChannel = supabase.channel('tenant-approval-realtime-sub')
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'merchants'
+        }, (payload: any) => {
+          const rec = payload?.new;
+          if (rec && (rec.status === 'VERIFIED' || rec.status === 'ACTIVE')) {
+            applyRealtimeApproval(rec.id, "🎉 Univers validé par le Super Admin !");
+          }
+        })
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
@@ -1084,15 +1141,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         }, (payload: any) => {
           const rec = payload?.new;
           if (rec && (rec.status === 'approved' || rec.status === 'verified')) {
-            const orgId = rec.organization_id;
-            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
-            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
-            saveLocalUserLicense({
-              ...getLocalUserLicense(),
-              kycStatus: 'full',
-              pricingModel: 'commission'
-            });
-            showToast("🎉 Compte approuvé en direct par le Super Admin !", "success");
+            applyRealtimeApproval(rec.organization_id, "🎉 Compte approuvé en direct par le Super Admin !");
           }
         })
         .on('postgres_changes', {
@@ -1102,15 +1151,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         }, (payload: any) => {
           const rec = payload?.new;
           if (rec && (rec.status === 'ACTIVE' || rec.status === 'APPROVED')) {
-            const orgId = rec.id;
-            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
-            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
-            saveLocalUserLicense({
-              ...getLocalUserLicense(),
-              kycStatus: 'full',
-              pricingModel: 'commission'
-            });
-            showToast("🎉 Tenant activé par le Super Admin !", "success");
+            applyRealtimeApproval(rec.id, "🎉 Tenant activé par le Super Admin !");
           }
         })
         .on('postgres_changes', {
@@ -1120,15 +1161,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         }, (payload: any) => {
           const rec = payload?.new;
           if (rec && (rec.status === 'VERIFIED' || rec.status === 'ACTIVE')) {
-            const orgId = rec.id;
-            setSelectedApp(prev => (prev && (!orgId || prev.id === orgId)) ? { ...prev, status: 'VERIFIED' } : prev);
-            setApps(prev => prev.map(a => (!orgId || a.id === orgId) ? { ...a, status: 'VERIFIED' } : a));
-            saveLocalUserLicense({
-              ...getLocalUserLicense(),
-              kycStatus: 'full',
-              pricingModel: 'commission'
-            });
-            showToast("🎉 Univers validé par le Super Admin !", "success");
+            applyRealtimeApproval(rec.id, "🎉 Univers validé par le Super Admin !");
           }
         })
         .subscribe();
@@ -1143,11 +1176,11 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     };
   }, [selectedApp?.id, currentUser?.id]);
 
-  // Soumission d'un nouvel Univers (avec persistance Super Admin Supabase & Firestore)
+  // Soumission d'un nouvel Univers (toujours en attente de validation Super Admin + sync multi-appareils)
   const handleKycSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const isByokMode = kycForm.integration_mode === 'BYOK';
-    const newId = `univ_nana_${Date.now().toString().slice(-4)}`;
+    const newId = generateUniverseUuid();
     const appDisplayName = kycForm.appName || (kycForm.type === 'entreprise' ? kycForm.companyName : kycForm.fullName) || 'Nouvel Univers';
     const sectorChosen = (kycForm.sector === 'Autres' && kycForm.customSector?.trim())
       ? kycForm.customSector.trim()
@@ -1176,7 +1209,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       name: appDisplayName,
       sector: sectorChosen,
       type: kycForm.type,
-      status: isByokMode ? 'VERIFIED' : 'PENDING_KYC',
+      status: 'PENDING_KYC',
       integration_mode: kycForm.integration_mode || 'AGREGATED',
       api_credits_balance: 5000,
       keys: generatedByokKeys,
@@ -1191,7 +1224,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         tier: kycForm.type === 'entreprise' ? 'ENTERPRISE' : 'INDIVIDUAL',
         max_monthly_volume_xof: kycForm.type === 'entreprise' ? 5000000 : 1000000,
         description: isByokMode
-          ? 'Mode BYOK Express (0.02 XOF/req - Aucune commission switch)'
+          ? 'Mode BYOK Express (0.02 XOF/req - En attente de validation Super Admin)'
           : (kycForm.type === 'entreprise' ? 'Compte Entreprise Enregistrée' : 'Compte Particulier / Indépendant')
       },
       kyc: { 
@@ -1218,7 +1251,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     saveLocalUserLicense({
       userId: currentUser?.id || newId,
       walletBalance: 0,
-      kycStatus: isByokMode ? 'full' : 'pending',
+      kycStatus: 'pending',
       accountType: kycForm.type === 'entreprise' ? 'entreprise' : 'particulier',
       monthlyLimit: kycForm.type === 'entreprise' ? 5000000 : 1000000,
       pricingModel: 'commission',
@@ -1254,23 +1287,25 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     }
     setIsKycModalOpen(false);
     showToast(
-      isByokMode
-        ? 'Univers BYOK Express créé et activé ! Clés API générées (0.02 XOF/req).'
-        : 'Dossier transmis avec succès ! En attente de validation par la conformité Super Admin.',
+      'Dossier transmis avec succès ! En attente de validation par le Super Admin.',
       'success'
     );
 
-    // 3. SOURCE UNIQUE DE VÉRITÉ : Persistance canonique dans public.merchants (protégée par RLS owner_id)
+    const nowIso = new Date().toISOString();
+    const universeSlug = `${(appDisplayName || 'univ').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'univ'}-${newId.slice(0, 8)}`;
+    let persistedRemotely = false;
+
+    // 3. PERSISTANCE SUPABASE MULTI-APPAREILS : public.merchants ET public.universes (protégées par RLS)
     if (supabase && targetUid) {
       try {
-        await supabase.from('merchants').upsert({
+        const { error: merchErr } = await supabase.from('merchants').upsert({
           id: newId,
           owner_id: targetUid,
           owner_email: userEmailVal || null,
           name: appDisplayName,
           sector: sectorChosen,
           type: kycForm.type === 'entreprise' ? 'entreprise' : 'particulier',
-          status: newApp.status,
+          status: 'PENDING_KYC',
           integration_mode: newApp.integration_mode || 'AGREGATED',
           integration_config: newApp.integration_config || {},
           balances: newApp.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
@@ -1283,17 +1318,57 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           monthly_usage: newApp.monthly_usage || {},
           company_email: (isBusiness ? kycForm.companyEmail : userEmailVal) || userEmailVal || null,
           phone: phoneVal || null,
-          updated_at: new Date().toISOString()
+          updated_at: nowIso
         }, { onConflict: 'id' });
+        if (merchErr) {
+          console.warn('[KYC SUBMIT] Supabase merchants upsert error:', merchErr.message);
+        } else {
+          persistedRemotely = true;
+        }
       } catch (merchErr) {
-        console.warn('[KYC SUBMIT] Supabase merchants upsert notice:', merchErr);
+        console.warn('[KYC SUBMIT] Supabase merchants upsert exception:', merchErr);
+      }
+
+      try {
+        const { error: univErr } = await supabase.from('universes').upsert({
+          id: newId,
+          user_id: targetUid,
+          name: appDisplayName,
+          slug: universeSlug,
+          appellation: sectorChosen,
+          sector: sectorChosen,
+          type: kycForm.type === 'entreprise' ? 'entreprise' : 'particulier',
+          status: 'PENDING_KYC',
+          balances: newApp.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+          keys: newApp.keys || {},
+          webhook_config: newApp.webhook_config || { url: null, secret_key: '', is_active: false },
+          kyc_data: newApp.kyc || {},
+          integration_mode: newApp.integration_mode || 'AGREGATED',
+          integration_config: newApp.integration_config || {},
+          settings: {
+            api_credits_balance: newApp.api_credits_balance ?? 5000,
+            api_pricing_config: newApp.api_pricing_config || {},
+            monthly_usage: newApp.monthly_usage || {},
+            kyc_limits: newApp.kyc_limits || {},
+            owner_email: userEmailVal || null,
+            phone: phoneVal || null
+          },
+          updated_at: nowIso
+        }, { onConflict: 'id' });
+        if (univErr) {
+          console.warn('[KYC SUBMIT] Supabase universes upsert error:', univErr.message);
+        } else {
+          persistedRemotely = true;
+        }
+      } catch (univErr) {
+        console.warn('[KYC SUBMIT] Supabase universes upsert exception:', univErr);
       }
     }
 
-    // 4. Persistance secondaire API Serveur (/api/universes) authentifiée par JWT Bearer
+    // 4. Persistance API Serveur (/api/universes) authentifiée par JWT Bearer (service-role fallback)
     if (accessToken) {
       try {
-        await fetch('/api/universes', {
+        const apiRes = await fetch('/api/universes', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1301,21 +1376,35 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           },
           body: JSON.stringify({
             ...newApp,
+            status: 'PENDING_KYC',
+            slug: universeSlug,
             owner_id: targetUid,
             userId: targetUid,
             userEmail: userEmailVal
           })
         });
+        if (apiRes.ok) {
+          persistedRemotely = true;
+        } else {
+          console.warn('[KYC SUBMIT] /api/universes HTTP error:', apiRes.status);
+        }
       } catch (univApiErr) {
         console.warn('[KYC SUBMIT] /api/universes notice:', univApiErr);
       }
+    }
+
+    if (!persistedRemotely) {
+      showToast(
+        "Attention : la synchronisation cloud a échoué temporairement. Vérifiez votre connexion pour retrouver cet univers sur vos autres appareils.",
+        "warning"
+      );
     }
 
     // 5. Soumission officielle au Super Admin (collection /kyc_submissions)
     try {
       const kycSub: KycSubmission & { userId: string } = {
         id: `kyc-sub-${newId}-${Date.now()}`,
-        userId: currentUser?.id || newId,
+        userId: targetUid || currentUser?.id || newId,
         storeId: newId,
         storeName: appDisplayName,
         companyName: isBusiness ? (kycForm.companyName || appDisplayName) : undefined,
@@ -1337,9 +1426,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         activityDescription: actDesc,
         monetizationModel: 'commission',
         pricingModel: 'commission',
-        status: isByokMode ? 'verified' : 'pending',
+        status: 'pending',
         type: isBusiness ? 'business' : 'individual',
-        submittedAt: new Date().toISOString(),
+        submittedAt: nowIso,
         businessData: isBusiness ? {
           companyName: kycForm.companyName || appDisplayName,
           rccmNumber: kycForm.rccm || '',
@@ -1374,8 +1463,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       try {
         await supabase.from('account_activations').upsert({
           organization_id: newId,
-          user_id: currentUser?.id || newId,
-          status: isByokMode ? 'approved' : 'pending',
+          user_id: targetUid || currentUser?.id || newId,
+          status: 'pending',
           pricing_model: 'commission',
           kyc_data: {
             ...kycForm,
@@ -1407,7 +1496,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             rccmNumber: isBusiness ? (kycForm.rccm || '') : '',
             ifuNumber: isBusiness ? (kycForm.ifuCompany || '') : ''
           },
-          submitted_at: new Date().toISOString()
+          submitted_at: nowIso
         });
       } catch (actErr) {
         console.warn('[SUPABASE account_activations notice]:', (actErr as Error).message);
@@ -1417,10 +1506,10 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         await supabase.from('organizations').upsert({
           id: newId,
           name: appDisplayName,
-          slug: `${(appDisplayName || 'univ').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
-          status: isByokMode ? 'ACTIVE' : 'PENDING_APPROVAL',
+          slug: universeSlug,
+          status: 'PENDING_APPROVAL',
           country: 'Zone UEMOA',
-          created_at: new Date().toISOString()
+          created_at: nowIso
         });
       } catch (orgErr) {
         console.warn('[SUPABASE organizations notice]:', (orgErr as Error).message);
@@ -1441,9 +1530,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           integration_mode: kycForm.integration_mode || 'AGREGATED',
           type: kycForm.type,
           sector: sectorChosen,
-          status: isByokMode ? 'ACTIVE' : 'PENDING_VERIFICATION',
-          storeApprovalStatus: isByokMode ? 'APPROVED' : 'PENDING',
-          created_at: new Date().toISOString(),
+          status: 'PENDING_VERIFICATION',
+          storeApprovalStatus: 'PENDING',
+          created_at: nowIso,
           ...(generatedByokKeys ? { api_keys: generatedByokKeys } : {}),
           kyc_payload: {
             ...kycForm,
@@ -1474,174 +1563,171 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       )}
 
       {/* TOP NAVBAR (Bleu Royal #1E40AF / #2563EB & Blanc Cassé) */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 py-3.5 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          
-          {/* Logo et Slug Label */}
-          <div 
-            className="flex items-center gap-2.5 cursor-pointer group" 
-            onClick={handleBackToUniverses}
-            title="Revenir à la sélection des Univers"
-          >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white shadow-lg shadow-blue-600/20 font-black text-xl transition group-hover:scale-105">
-              N
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 tracking-tight text-lg">Dashboard page</span>
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+        <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            
+            {/* Logo et Slug Label */}
+            <div 
+              className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group shrink-0" 
+              onClick={handleBackToUniverses}
+              title="Revenir à la sélection des Univers"
+            >
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white shadow-lg shadow-blue-600/20 font-black text-lg sm:text-xl transition group-hover:scale-105 shrink-0">
+                N
               </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">NANASORE</p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg whitespace-nowrap">Dashboard page</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider leading-tight">NANASORE</p>
+              </div>
             </div>
-          </div>
 
-          {/* Active Application & Back Navigation */}
-          {selectedApp && (
-            <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
-              {/* Bouton retour universel direct */}
-              <button 
-                type="button"
-                onClick={handleBackToUniverses}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-[#1E40AF] bg-slate-100 hover:bg-blue-50 border border-slate-200 transition cursor-pointer shadow-xs"
-                title="Retourner à tous les univers"
-              >
-                <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
-                <span>Tous les Univers</span>
-              </button>
-
-              <div className="flex items-center gap-2">
+            {/* Active Application & Back Navigation */}
+            {selectedApp && (
+              <div className="hidden md:flex items-center gap-2.5 pl-3 border-l border-slate-200">
+                {/* Bouton retour universel direct */}
                 <button 
                   type="button"
-                  onClick={handleBackToUniverses} 
-                  className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition border border-slate-200 shadow-xs cursor-pointer"
-                  title="Changer d'univers"
+                  onClick={handleBackToUniverses}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 hover:text-[#1E40AF] bg-slate-100 hover:bg-blue-50 border border-slate-200 transition cursor-pointer shadow-xs"
+                  title="Retourner à tous les univers"
                 >
-                  <div className={`w-2 h-2 rounded-full ${selectedApp.status === 'PENDING_KYC' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shrink-0`} />
-                  <span className="font-extrabold text-slate-900">{selectedApp.name}</span>
-                  <span className="font-mono text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-white rounded border border-slate-200">
-                    {selectedApp.id}
-                  </span>
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Tous les Univers</span>
                 </button>
 
-                {/* Badge Statut Validation au niveau de l'ID du compte */}
-                {selectedApp.status === 'PENDING_KYC' ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300 shadow-xs">
-                    <Loader2 className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
-                    <span>En cours de validation</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Compte approuvé</span>
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={handleBackToUniverses} 
+                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 transition border border-slate-200 shadow-xs cursor-pointer"
+                    title="Changer d'univers"
+                  >
+                    <div className={`w-2 h-2 rounded-full ${selectedApp.status === 'PENDING_KYC' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shrink-0`} />
+                    <span className="font-extrabold text-slate-900">{selectedApp.name}</span>
+                    <span className="font-mono text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-white rounded border border-slate-200">
+                      {selectedApp.id}
+                    </span>
+                  </button>
+
+                  {/* Badge Statut Validation au niveau de l'ID du compte */}
+                  {selectedApp.status === 'PENDING_KYC' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300 shadow-xs">
+                      <Loader2 className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
+                      <span>En cours de validation</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Compte approuvé</span>
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* CENTRAL OMNIBAR UNIVERSEL (Toujours visible au sommet : toutes sections & recherche universelle) */}
-        <div className="flex-1 max-w-xl mx-2 hidden md:block">
-          <CentralHubOmnibar 
-            placeholder="Rechercher un univers, module, outil, service ou commande (Ctrl+K)..."
-            className="w-full"
-            onNavigate={handleOpenRegistryModule}
-            onOpenApp={handleOpenRegistryModule}
-            onOpenCreateUniverse={(modInfo) => {
-              if (selectedApp?.status === 'PENDING_KYC') {
-                showToast("Votre dossier est en cours de validation par la conformité. Vos modules sous plan commission seront activés dès validation !", "warning");
-                return;
-              }
-              if (modInfo?.name) {
-                setKycForm((prev: any) => ({
-                  ...prev,
-                  sector: prev.sector || modInfo.name
-                }));
-              }
-              setIsKycModalOpen(true);
-            }}
-          />
-        </div>
+          {/* CENTRAL OMNIBAR UNIVERSEL (Toujours visible au sommet : toutes sections & recherche universelle) */}
+          <div className="flex-1 max-w-xl mx-2 hidden md:block">
+            <CentralHubOmnibar 
+              placeholder="Rechercher un univers, module, outil, service ou commande (Ctrl+K)..."
+              className="w-full"
+              onNavigate={handleOpenRegistryModule}
+              onOpenApp={handleOpenRegistryModule}
+              onOpenCreateUniverse={(modInfo) => {
+                if (selectedApp?.status === 'PENDING_KYC') {
+                  showToast("Votre dossier est en cours de validation par la conformité. Vos modules sous plan commission seront activés dès validation !", "warning");
+                  return;
+                }
+                if (modInfo?.name) {
+                  setKycForm((prev: any) => ({
+                    ...prev,
+                    sector: prev.sector || modInfo.name
+                  }));
+                }
+                setIsKycModalOpen(true);
+              }}
+            />
+          </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Mobile Universe Sidebar Drawer Toggle (only when inside a Universe) */}
-          {selectedApp && (
+          {/* Right Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Mobile Universe Sidebar Drawer Toggle (only when inside a Universe) */}
+            {selectedApp && (
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#1E40AF] text-white text-xs font-bold shadow-sm cursor-pointer"
+                title="Ouvrir le menu de l'univers"
+              >
+                <Menu className="w-4 h-4" />
+                <span>Menu</span>
+              </button>
+            )}
+
+            {/* Mobile Omnibar Search Button */}
             <button
               type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#1E40AF] text-white text-xs font-bold shadow-sm cursor-pointer"
-              title="Ouvrir le menu de l'univers"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+                }
+              }}
+              className="md:hidden p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 shadow-xs cursor-pointer"
+              title="Ouvrir l'Omnibar (Ctrl+K)"
             >
-              <Menu className="w-4 h-4" />
-              <span>Menu</span>
+              <Search className="w-4 h-4" />
             </button>
-          )}
+            
+            {/* Back button if embedded */}
+            {onBack && !selectedApp && (
+              <button 
+                onClick={onBack}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Retour</span>
+              </button>
+            )}
 
-          {/* Mobile Omnibar Search Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
-              }
-            }}
-            className="md:hidden p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 shadow-xs cursor-pointer"
-            title="Ouvrir l'Omnibar (Ctrl+K)"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-          
-          {/* Back button if embedded */}
-          {onBack && !selectedApp && (
+            {/* Bouton Catalogue AppRegistry & Omnibar Direct */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
+              title="Ouvrir le Catalogue AppRegistry des 27 Modules (Ctrl+K)"
+            >
+              <Layers className="w-4 h-4 text-indigo-600" />
+              <span className="hidden sm:inline">Modules ({activeOmnibarModules.length}/{CANONICAL_APP_REGISTRY.length})</span>
+            </button>
+
+            {/* Bouton Documentation Publique Intégré */}
             <button 
-              onClick={onBack}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              type="button"
+              onClick={() => setIsDocsOpen(true)}
+              className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+              title="Consulter la Documentation Officielle (Accès Libre)"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Retour</span>
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              <span className="hidden md:inline">Documentation</span>
             </button>
-          )}
 
-          {/* Bouton Catalogue AppRegistry & Omnibar Direct */}
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
-            title="Ouvrir le Catalogue AppRegistry des 27 Modules (Ctrl+K)"
-          >
-            <Layers className="w-4 h-4 text-indigo-600" />
-            <span className="hidden sm:inline">Modules ({activeOmnibarModules.length}/{CANONICAL_APP_REGISTRY.length})</span>
-          </button>
-
-          {/* Bouton Documentation Publique Intégré */}
-          <button 
-            type="button"
-            onClick={() => setIsDocsOpen(true)}
-            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-            title="Consulter la Documentation Officielle (Accès Libre)"
-          >
-            <BookOpen className="w-4 h-4 text-blue-600" />
-            <span className="hidden md:inline">Documentation</span>
-          </button>
-
-          {/* User Badge */}
-          <div className="hidden sm:flex w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm shrink-0">
-            OK
+            {/* User Badge */}
+            <div className="hidden sm:flex w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm shrink-0">
+              OK
+            </div>
           </div>
         </div>
-      </header>
 
-      {/* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */}
-      {selectedApp ? (
-        /* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */
-        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-65px)] w-full overflow-x-hidden">
-          
-          {/* MOBILE STICKY UNIVERSE BAR (< lg) */}
-          <div className="lg:hidden sticky top-[65px] z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2.5 flex items-center justify-between gap-2">
+        {/* MOBILE UNIVERSE SUB-BAR (< lg) intégrée au header sticky (aucun décalage ni chevauchement) */}
+        {selectedApp && (
+          <div className="lg:hidden border-t border-slate-100 bg-white/95 px-3 py-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
@@ -1667,6 +1753,13 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               <span>Navigation</span>
             </button>
           </div>
+        )}
+      </header>
+
+      {/* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */}
+      {selectedApp ? (
+        /* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-65px)] w-full overflow-x-clip">
 
           {/* MOBILE SLIDE-OVER DRAWER (< lg) */}
           {isMobileSidebarOpen && (

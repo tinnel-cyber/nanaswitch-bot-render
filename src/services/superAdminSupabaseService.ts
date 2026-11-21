@@ -371,7 +371,20 @@ export async function updateKycStatusInSupabase(
     const now = new Date().toISOString();
     const isUuid = (val: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
-    // 1. Mettre à jour la table public.universes (statut VERIFIED ou REJECTED)
+    // 1a. Mettre à jour la table public.merchants (statut VERIFIED ou REJECTED pour cet univers)
+    try {
+      await supabase
+        .from('merchants')
+        .update({
+          status: isVerified ? 'VERIFIED' : 'REJECTED',
+          updated_at: now
+        })
+        .eq('id', userIdOrStoreId);
+    } catch (merchErr) {
+      console.warn('[SUPABASE_SUPERADMIN] Notice update merchants status:', merchErr);
+    }
+
+    // 1b. Mettre à jour la table public.universes (statut VERIFIED ou REJECTED pour cet univers)
     try {
       await supabase
         .from('universes')
@@ -379,7 +392,7 @@ export async function updateKycStatusInSupabase(
           status: isVerified ? 'VERIFIED' : 'REJECTED',
           updated_at: now
         })
-        .or(`id.eq.${userIdOrStoreId},user_id.eq.${userIdOrStoreId}`);
+        .eq('id', userIdOrStoreId);
     } catch (univErr) {
       console.warn('[SUPABASE_SUPERADMIN] Notice update universes status:', univErr);
     }
