@@ -147,7 +147,7 @@ export function CampaignAnalyticsHub({ tenantId }: CampaignAnalyticsHubProps) {
 
   const openRate = totals.sent > 0 ? ((totals.opened / totals.sent) * 100).toFixed(1) : '0.0';
   const clickRate = totals.sent > 0 ? ((totals.clicked / totals.sent) * 100).toFixed(1) : '0.0';
-  const webhookUrl = 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/webhooks/brevo';
+  const webhookUrl = 'https://nanasore.com/api/webhooks/brevo';
 
   return (
     <div className="space-y-6">

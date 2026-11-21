@@ -496,6 +496,13 @@ export function attachCampaignsRoutes(app: Express): void {
   // =========================================================================
   // 3. WEBHOOK BREVO TEMPS RÉEL (DELIVERED / OPEN / CLICK / BOUNCE / SPAM)
   // =========================================================================
+  app.get('/api/webhooks/brevo', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok', service: 'nanasore-brevo-webhook' });
+  });
+  app.head('/api/webhooks/brevo', (_req: Request, res: Response) => {
+    res.status(200).end();
+  });
+
   app.post('/api/webhooks/brevo', async (req: Request, res: Response): Promise<void> => {
     try {
       const configuredSecret = process.env.BREVO_WEBHOOK_SECRET || '';
