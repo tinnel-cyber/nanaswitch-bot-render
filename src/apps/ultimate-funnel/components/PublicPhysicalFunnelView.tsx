@@ -66,7 +66,12 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isMiniMarketOpen, setIsMiniMarketOpen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
-      return search.get('minimarket') === 'true';
+      return (
+        search.get('minimarket') === 'true' ||
+        search.has('cart') ||
+        search.has('item') ||
+        search.has('lot')
+      );
     }
     return false;
   });
@@ -994,17 +999,24 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         </React.Suspense>
       )}
 
-      {/* Tiroir d'auto-composition latérale */}
+      {/* Tiroir d'auto-composition latérale (Live Lots + Panier Partageable + Affilié Co-Brandé) */}
       <MiniMarketDrawer
         products={marketProducts}
         isOpen={isMiniMarketOpen}
+        storeTitle={activeFunnel.title}
         onClose={() => setIsMiniMarketOpen(false)}
-        onCheckout={(cart) => {
+        onCheckout={(cart, meta) => {
           setMiniMarketCart(cart);
           setIsMiniMarketOpen(false);
           try {
             localStorage.setItem('nana_checkout_cart', JSON.stringify(cart));
-            window.dispatchEvent(new CustomEvent('nana_cart_updated', { detail: { cart } }));
+            if (meta) {
+              localStorage.setItem('nana_checkout_meta', JSON.stringify(meta));
+              if (meta.affiliateRef) {
+                localStorage.setItem('nana_active_affiliate_ref', meta.affiliateRef);
+              }
+            }
+            window.dispatchEvent(new CustomEvent('nana_cart_updated', { detail: { cart, meta } }));
           } catch (e) {}
           setIsCheckoutModalOpen(true);
         }}
