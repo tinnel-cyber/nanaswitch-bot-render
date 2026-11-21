@@ -24,7 +24,7 @@ import {
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
   TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2,
   LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical,
-  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket, Trash2
+  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket, Trash2, Menu, X
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
@@ -358,6 +358,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   });
   const [copiedKey, setCopiedKey] = useState('');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(() => {
     if (propCurrentUser) return propCurrentUser;
@@ -940,7 +941,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             createdAt:
               u.createdAt ||
               (u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
-            balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+            balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0, ...(u.balances || {}) },
             keys: u.keys?.pk
               ? u.keys
               : (u.keys?.publicKey
@@ -1562,7 +1563,20 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         </div>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Mobile Universe Sidebar Drawer Toggle (only when inside a Universe) */}
+          {selectedApp && (
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#1E40AF] text-white text-xs font-bold shadow-sm cursor-pointer"
+              title="Ouvrir le menu de l'univers"
+            >
+              <Menu className="w-4 h-4" />
+              <span>Menu</span>
+            </button>
+          )}
+
           {/* Mobile Omnibar Search Button */}
           <button
             type="button"
@@ -1578,10 +1592,10 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           </button>
           
           {/* Back button if embedded */}
-          {onBack && (
+          {onBack && !selectedApp && (
             <button 
               onClick={onBack}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Retour</span>
@@ -1596,7 +1610,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                 window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
               }
             }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
             title="Ouvrir le Catalogue AppRegistry des 27 Modules (Ctrl+K)"
           >
             <Layers className="w-4 h-4 text-indigo-600" />
@@ -1607,7 +1621,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           <button 
             type="button"
             onClick={() => setIsDocsOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
             title="Consulter la Documentation Officielle (Accès Libre)"
           >
             <BookOpen className="w-4 h-4 text-blue-600" />
@@ -1615,7 +1629,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           </button>
 
           {/* User Badge */}
-          <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm">
+          <div className="hidden sm:flex w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm shrink-0">
             OK
           </div>
         </div>
@@ -1624,10 +1638,117 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       {/* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */}
       {selectedApp ? (
         /* MAIN MERCHANT DASHBOARD VIEW (14+ MODULES) */
-        <div className="flex min-h-[calc(100vh-65px)]">
+        <div className="flex flex-col lg:flex-row min-h-[calc(100vh-65px)] w-full overflow-x-hidden">
           
-          {/* LEFT SIDEBAR (Royal Blue Highlights) */}
-          <aside className="w-[270px] bg-white border-r border-slate-200 flex flex-col justify-between p-4 shrink-0 shadow-sm">
+          {/* MOBILE STICKY UNIVERSE BAR (< lg) */}
+          <div className="lg:hidden sticky top-[65px] z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={handleBackToUniverses}
+                className="p-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0 cursor-pointer"
+                title="Retour à tous les univers"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-slate-900 truncate">{selectedApp.name}</p>
+                <p className="text-[10px] font-semibold text-slate-500 truncate">
+                  {selectedApp.sector || 'Univers Marchand'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-[#1E40AF] border border-blue-200 text-xs font-bold shrink-0 cursor-pointer"
+            >
+              <Menu className="w-3.5 h-3.5" />
+              <span>Navigation</span>
+            </button>
+          </div>
+
+          {/* MOBILE SLIDE-OVER DRAWER (< lg) */}
+          {isMobileSidebarOpen && (
+            <div className="fixed inset-0 z-50 lg:hidden flex">
+              <div
+                className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+                onClick={() => setIsMobileSidebarOpen(false)}
+              />
+              <div className="relative z-10 w-[85vw] max-w-[300px] bg-white h-full overflow-y-auto p-4 flex flex-col justify-between shadow-2xl">
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-slate-900 truncate">{selectedApp.name}</p>
+                      <p className="text-[10px] font-mono text-slate-500 truncate">{selectedApp.id}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileSidebarOpen(false)}
+                      className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileSidebarOpen(false);
+                      handleBackToUniverses();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:text-[#1E40AF] rounded-xl transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-[#1E40AF]" />
+                    <span>Tous les Univers</span>
+                  </button>
+
+                  <nav className="space-y-1">
+                    {[
+                      { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
+                      { id: 'wallet', label: 'Wallet & Solde', icon: Wallet },
+                      { id: 'transactions', label: 'Transactions', icon: CreditCard },
+                      { id: 'links', label: 'Liens de paiement', icon: Link2 },
+                      { id: 'checkout', label: 'Services et Applications', icon: LayoutGrid },
+                      { id: 'customers', label: 'Base Clients', icon: Users },
+                      { id: 'analytics', label: 'Statistiques & Ventes', icon: BarChart3 },
+                      { id: 'payouts', label: 'Retraits & Reversements', icon: ArrowUpRight },
+                      { id: 'developer', label: 'Intégrations', icon: Blocks },
+                      { id: 'webhooks', label: 'Configuration Webhooks', icon: Radio },
+                      { id: 'webhook_logs', label: 'Journal des Webhooks', icon: History },
+                      { id: 'disputes', label: 'Litiges & Remboursements', icon: AlertTriangle },
+                      { id: 'pricing', label: 'Tarification & Marges', icon: Percent },
+                      { id: 'support', label: 'Support & Tickets', icon: HelpCircle },
+                      { id: 'settings', label: 'Paramètres & KYC', icon: Settings },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                            isActive
+                              ? 'bg-[#1E40AF] text-white shadow-md'
+                              : 'text-slate-700 hover:bg-blue-50/60 hover:text-[#1E40AF]'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#1E40AF]'}`} />
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* LEFT SIDEBAR DESKTOP (lg+) */}
+          <aside className="hidden lg:flex w-[270px] bg-white border-r border-slate-200 flex-col justify-between p-4 shrink-0 shadow-sm">
             <div className="space-y-6">
               
               {/* Back to universes list button */}
@@ -1764,7 +1885,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
           </aside>
 
           {/* DASHBOARD CONTENT AREA */}
-          <main className="flex-1 p-8 overflow-y-auto max-w-7xl mx-auto">
+          <main className="flex-1 w-full min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto overflow-x-hidden max-w-7xl mx-auto">
             {/* Reassuring Banner for Pending KYC */}
             {selectedApp.status === 'PENDING_KYC' && (
               <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-50/70 to-yellow-50 border border-amber-300 shadow-xs flex items-start gap-3.5 animate-in fade-in duration-300">
@@ -1806,26 +1927,26 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
         </div>
       ) : (
         /* WELCOME / APP SELECTOR LANDING SCREEN */
-        <main className="max-w-6xl mx-auto px-6 py-12">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-12 pb-28">
           
           {/* Welcome Card Banner */}
-          <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-xl shadow-slate-200/50 mb-10 relative overflow-hidden">
+          <div className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-200/90 shadow-xl shadow-slate-200/50 mb-8 sm:mb-10 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-100/50 to-indigo-100/20 rounded-full blur-3xl pointer-events-none" />
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-blue-50 text-[#1E40AF] px-3.5 py-1.5 rounded-full text-xs font-bold mb-4 border border-blue-200">
                 <Sparkles className="w-4 h-4 text-blue-600" />
                 <span>Dashboard page</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
+              <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
                 Bonjour {merchantDisplayName || 'Marchand'}, bienvenue sur votre Dashboard 👋
               </h1>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed mb-6">
                 Votre hub de paiements et commerce unifié. Sélectionnez un univers existant ou créez un nouvel univers selon votre appellation commerciale pour démarrer vos encaissements.
               </p>
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                 <button 
                   onClick={() => setIsKycModalOpen(true)}
-                  className="bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold px-5 py-3 rounded-2xl text-sm shadow-lg shadow-blue-700/25 transition flex items-center gap-2"
+                  className="w-full sm:w-auto justify-center bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold px-5 py-3 rounded-2xl text-sm shadow-lg shadow-blue-700/25 transition flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
                   <span>Créer un univers</span>
@@ -1837,7 +1958,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                       window.dispatchEvent(new CustomEvent('nanasore_open_omnibar'));
                     }
                   }}
-                  className="bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer shadow-xs"
+                  className="w-full sm:w-auto justify-center bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer shadow-xs"
                   title="Ouvrir l'Omnibar universel (Ctrl+K)"
                 >
                   <Search className="w-4 h-4 text-[#1E40AF]" />
@@ -1847,7 +1968,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                 <button 
                   type="button"
                   onClick={() => setIsDocsOpen(true)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer"
+                  className="w-full sm:w-auto justify-center bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-5 py-3 rounded-2xl text-sm transition flex items-center gap-2 cursor-pointer"
                 >
                   <FileText className="w-4 h-4 text-slate-500" />
                   <span>Consulter la Documentation</span>
@@ -1858,7 +1979,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
           {/* APPLICATION / UNIVERS GRID SECTION */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <h2 className="text-lg font-bold text-slate-900">Vos Univers ({apps.length})</h2>
               <span className="text-xs text-slate-500 font-medium">Cliquez sur un univers vérifié pour ouvrir son tableau de bord</span>
             </div>
@@ -2202,7 +2323,7 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
           ].map((item) => (
             <div key={item.symbol} className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm">
               <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1">{item.symbol}</span>
-              <p className="text-xl font-black text-slate-900 tracking-tight">{item.amount.toLocaleString()} <span className="text-xs font-semibold text-slate-500">{item.symbol}</span></p>
+              <p className="text-xl font-black text-slate-900 tracking-tight">{Number(item.amount || 0).toLocaleString('fr-FR')} <span className="text-xs font-semibold text-slate-500">{item.symbol}</span></p>
               <p className="text-[10px] text-slate-400 mt-1 truncate">{item.label}</p>
             </div>
           ))}
@@ -3079,7 +3200,7 @@ function TabWallet({
                   )}
                 </div>
                 <p className={`text-2xl font-black mt-3 tracking-tight ${b.primary ? 'text-white' : 'text-slate-900'}`}>
-                  {b.val.toLocaleString('fr-FR')} <span className={`text-xs font-semibold ${b.primary ? 'text-blue-200' : 'text-slate-400'}`}>{b.code}</span>
+                  {Number(b.val || 0).toLocaleString('fr-FR')} <span className={`text-xs font-semibold ${b.primary ? 'text-blue-200' : 'text-slate-400'}`}>{b.code}</span>
                 </p>
               </div>
             ))}
