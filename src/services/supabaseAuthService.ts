@@ -398,23 +398,44 @@ export async function handleSupabaseAuthCallback(): Promise<{
         type: rawType,
       });
       if (error) {
-        return { success: false, error: error.message || 'Lien de confirmation invalide ou expiré.' };
+        // Si une session active existe déjà (ex. double appel ou déjà validé), on l'accepte
+        const { data: existingSess } = await supabase.auth.getSession();
+        if (existingSess?.session?.user) {
+          session = existingSess.session;
+          supaUser = existingSess.session.user;
+        } else {
+          return { success: false, error: error.message || 'Lien de confirmation invalide ou expiré.' };
+        }
+      } else {
+        session = data?.session || null;
+        supaUser = data?.user || data?.session?.user || null;
       }
-      session = data?.session || null;
-      supaUser = data?.user || data?.session?.user || null;
     } else if (code) {
-      // Flux PKCE
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) {
-        return {
-          success: false,
-          error: error.message?.includes('code verifier')
-            ? 'Ce lien a été ouvert sur un autre appareil. Veuillez demander un nouveau lien ou vous connecter avec votre mot de passe.'
-            : (error.message || 'Échec de validation du code de session.'),
-        };
+      // Vérifier d'abord si detectSessionInUrl a déjà échangé le code automatiquement
+      const { data: preSess } = await supabase.auth.getSession();
+      if (preSess?.session?.user) {
+        session = preSess.session;
+        supaUser = preSess.session.user;
+      } else {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          const { data: retrySess } = await supabase.auth.getSession();
+          if (retrySess?.session?.user) {
+            session = retrySess.session;
+            supaUser = retrySess.session.user;
+          } else {
+            return {
+              success: false,
+              error: error.message?.includes('code verifier')
+                ? 'Ce lien a été ouvert sur un autre appareil. Veuillez demander un nouveau lien ou vous connecter avec votre mot de passe.'
+                : (error.message || 'Échec de validation du code de session.'),
+            };
+          }
+        } else {
+          session = data?.session || null;
+          supaUser = data?.user || data?.session?.user || null;
+        }
       }
-      session = data?.session || null;
-      supaUser = data?.user || data?.session?.user || null;
     } else {
       // Flux implicite (#access_token=...) ou session déjà établie par detectSessionInUrl
       const { data, error } = await supabase.auth.getSession();

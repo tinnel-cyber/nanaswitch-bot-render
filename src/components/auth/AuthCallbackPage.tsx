@@ -13,13 +13,14 @@ export const AuthCallbackPage: React.FC<AuthCallbackPageProps> = ({
 }) => {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Validation sécurisée de votre compte Supabase en cours...');
+  const hasRunRef = React.useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
 
     const run = async () => {
       const result = await handleSupabaseAuthCallback();
-      if (cancelled) return;
 
       if (result.success && result.user) {
         setStatus('success');
@@ -43,9 +44,6 @@ export const AuthCallbackPage: React.FC<AuthCallbackPageProps> = ({
     };
 
     run();
-    return () => {
-      cancelled = true;
-    };
   }, [onSuccess]);
 
   return (

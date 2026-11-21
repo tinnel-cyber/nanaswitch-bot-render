@@ -117,15 +117,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           resolvedName = userCred.displayName;
         }
 
-        setInfoMessage("Compte créé avec succès ! Un e-mail de confirmation Brevo vous a été expédié.");
+        setInfoMessage("Compte créé avec succès ! Un e-mail de confirmation officiel vous a été expédié.");
         persistSellerModeLocally(sellerMode);
-
-        // Garantie d'expédition via Brevo
-        fetch('/api/auth/resend-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim() })
-        }).catch(() => {});
+        // Ne pas envoyer un 2e e-mail ici : registerWithEmail() envoie déjà l'unique lien officiel Supabase.
 
         if (userCred?.id) {
           try {

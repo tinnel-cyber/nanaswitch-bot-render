@@ -421,13 +421,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     try {
       const user = await registerWithEmail(emailInput.trim(), passwordInput, fullName.trim());
       playValidationBeep();
-
-      // Expédition de l'email de vérification officiel via Brevo & Server Action (contact@nanasore.com)
-      fetch('/api/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email || emailInput.trim() })
-      }).catch((e) => console.warn('[AUTH] Expédition email Brevo différée:', e));
+      // Ne pas renvoyer un 2e e-mail ici : registerWithEmail() envoie déjà l'unique lien officiel Supabase (un 2e envoi invaliderait le 1er jeton).
 
       // Persistance Neutre Immédiate dans Supabase :
       // kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
