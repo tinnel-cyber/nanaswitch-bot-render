@@ -413,6 +413,11 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [completedDetails, setCompletedDetails] = useState<PaymentSuccessDetails | null>(null);
   const affiliateRecordedTxRef = useRef<string | null>(null);
 
+  // Calculs financiers dynamiques (déclarés AVANT le useEffect qui dépend de finalTotal pour éviter toute TDZ)
+  const subtotal = resolvedProduct.price;
+  const discountAmount = appliedPromo ? appliedPromo.discountAmount : 0;
+  const finalTotal = Math.max(0, subtotal - discountAmount);
+
   useEffect(() => {
     if (!completedDetails) return;
     const txKey = completedDetails.transactionId || `${completedDetails.timestamp}`;
@@ -436,11 +441,6 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       }).catch(() => {});
     }
   }, [completedDetails, product, resolvedProduct, merchantId, storeConfig?.slug, orderDescription, finalTotal, customerName, paymentPhone]);
-
-  // Calculs financiers dynamiques
-  const subtotal = resolvedProduct.price;
-  const discountAmount = appliedPromo ? appliedPromo.discountAmount : 0;
-  const finalTotal = Math.max(0, subtotal - discountAmount);
 
   // Synchronisation du pays
   const handleSelectCountry = (country: CountryOption) => {
