@@ -10,11 +10,10 @@ import { triggerOpenFunnel } from '../../../themes/themeUtils';
 import { ThemeSelectorModal } from '../../../components/theme/ThemeSelectorModal';
 import { AddProductModal } from '../../../components/storeBuilder/AddProductModal';
 import { QuickCatalogDrawer } from '../../../components/storeBuilder/QuickCatalogDrawer';
-import { KycVerificationModal } from '../../../components/storeBuilder/KycVerificationModal';
 import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/StoreLegalAndTrackingModals';
 import { StoreConfig, StoreProductItem } from '../../../components/storeBuilder/types';
 import { FALLBACK_STUDIO_PRODUCTS, getDefaultCustomConfig } from '../../../components/storeBuilder/themeStudioConstants';
-import { InventoryProduct, StoreUser, StoreSubscription, KycStatus, ThemeCustomizationConfig } from '../../../types';
+import { InventoryProduct, StoreUser, StoreSubscription, ThemeCustomizationConfig } from '../../../types';
 import { supabase } from '@/lib/supabase';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { ensureMandatoryStoreSlug, ensureMandatoryProductSlug, getSafeStoreSlug } from '../../../utils/slugEngine';
@@ -127,7 +126,6 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
     return true;
   });
   const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
-  const [showKycModal, setShowKycModal] = useState<boolean>(false);
   const [isQuickCatalogOpen, setIsQuickCatalogOpen] = useState<boolean>(false);
   const [showPresetsModal, setShowPresetsModal] = useState<boolean>(false);
   const [blueprintSafetyToast, setBlueprintSafetyToast] = useState<{ message: string; previousConfig: ThemeCustomizationConfig } | null>(null);
@@ -139,17 +137,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<StoreProductItem | null>(null);
 
-  // 5. Statut KYC (Exemption totale Super Admin)
   const isSuperAdmin = isSuperAdminLocally(currentUser);
-  const [kycStatus, setKycStatus] = useState<KycStatus>(() => {
-    if (isSuperAdminLocally(currentUser)) return 'verified';
-    if (currentUser?.kycStatus) return currentUser.kycStatus;
-    try {
-      const local = localStorage.getItem(`nana_tenant_${targetStoreId}_kyc_status`) as KycStatus;
-      if (local) return local;
-    } catch {}
-    return 'verified';
-  });
 
   // 6. Configuration de la boutique chargée depuis Firestore ou cache local
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(() => {
@@ -915,10 +903,6 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         }}
         onOpenQuickCatalog={() => setIsQuickCatalogOpen(true)}
         productCount={allProducts.length}
-        onOpenKyc={() => {
-          if (!isSuperAdmin) setShowKycModal(true);
-        }}
-        kycStatus={isSuperAdmin ? 'verified' : kycStatus}
         onBack={handleBackToDashboard}
         onToast={showToast}
         hasUnsavedChanges={hasUnsavedChanges}
@@ -1328,21 +1312,6 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         onToast={showToast}
         storeId={targetStoreId}
       />
-
-      {showKycModal && !isSuperAdmin && (
-        <KycVerificationModal
-          isOpen={showKycModal}
-          onClose={() => setShowKycModal(false)}
-          storeId={targetStoreId}
-          storeName={storeConfig.storeName}
-          currentUser={currentUser}
-          onSubmitted={() => {
-            setShowKycModal(false);
-            setKycStatus('pending_approval');
-            showToast("🛡️ Dossier KYC transmis !");
-          }}
-        />
-      )}
 
       {/* 5. Modale Mes Thèmes & Variantes Sauvegardées (Theme Vault) */}
       {showPresetsModal && (

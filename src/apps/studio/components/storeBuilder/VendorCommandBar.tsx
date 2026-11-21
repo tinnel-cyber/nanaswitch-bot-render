@@ -34,7 +34,7 @@ export interface VendorCommandBarProps {
   onOpenAddProduct: () => void;
   onOpenQuickCatalog?: () => void;
   productCount?: number;
-  onOpenKyc: () => void;
+  onOpenKyc?: () => void;
   kycStatus?: string;
   onBack?: () => void;
   onToast?: (message: string) => void;
@@ -118,28 +118,6 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
 
   return (
     <header className="sticky top-0 z-[1000] bg-slate-950/95 backdrop-blur-xl text-white border-b border-slate-800/80 shadow-2xl transition-all">
-      {/* Niveau Supérieur Conditionnel (La Bannière KYC & Statut) */}
-      {kycStatus !== 'verified' && (
-        <div className="bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-b border-amber-500/30 px-6 py-1.5 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-amber-200">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-            <span className="truncate">
-              🛡️ Votre identité vendeur (KYC) n'est pas encore vérifiée. Vérifiez votre compte pour débloquer les retraits sans limite.
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              onOpenKyc();
-            }}
-            className="text-amber-300 hover:text-amber-100 font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 ml-4 hover:underline text-xs"
-          >
-            <span>Compléter mon KYC →</span>
-          </button>
-        </div>
-      )}
-
       {/* Niveau Principal (Hauteur 64px, px-6 flex items-center justify-between gap-4) */}
       <div className="h-16 px-6 flex items-center justify-between gap-4">
         {/* Zone Gauche (Identité & Sélecteur de Viewport Temps Réel) */}
