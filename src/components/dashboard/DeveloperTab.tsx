@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
+const UltimateCheckout = React.lazy<React.ComponentType<any>>(() =>
+  import('../payment/UltimateCheckout').then((m) => ({ default: (m as any).UltimateCheckout || m.default }))
+);
 import {
   KeyRound,
   ShieldCheck,
@@ -154,10 +157,24 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
     }
   };
 
-  // Handle Credits Recharge (Simulation + Backend / Firestore update)
-  const handleRechargeCredits = async () => {
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+
+  const RECHARGE_PACKS = [
+    { credits: 5000, amountXof: 100, price: '100 XOF', label: 'Starter' },
+    { credits: 50000, amountXof: 1000, price: '1 000 XOF', label: 'Pro Business (Recommandé)', popular: true },
+    { credits: 500000, amountXof: 10000, price: '10 000 XOF', label: 'Scale Enterprise' }
+  ];
+  const selectedPackObj = RECHARGE_PACKS.find(p => p.credits === rechargePack) || RECHARGE_PACKS[1];
+
+  // Ouvre le vrai tunnel de paiement UltimateCheckout avant tout crédit API (zéro crédit gratuit)
+  const handleStartPaidRecharge = () => {
+    setShowCheckoutModal(true);
+  };
+
+  // Crédit effectif UNIQUEMENT après confirmation de paiement réelle (onSuccess)
+  const handlePaymentConfirmed = async (paymentDetails?: any) => {
     setIsRecharging(true);
-    const addedCredits = rechargePack;
+    const addedCredits = selectedPackObj.credits;
     const newTotal = currentCredits + addedCredits;
 
     const updatedApp: NanaMerchantApp = {
@@ -175,26 +192,30 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
     }
 
     try {
-      // Backend recharge call
+      const authToken = typeof window !== 'undefined' ? (localStorage.getItem('nana_auth_token') || '') : '';
       try {
         await fetch(`${PAYMENT_API_BASE}/v1/switch/merchant/credits/recharge`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+          },
           body: JSON.stringify({
             merchantId: app.id,
-            creditsAmount: addedCredits
+            creditsAmount: addedCredits,
+            transactionId: paymentDetails?.transactionId || `tx_${Date.now()}`,
+            amountPaid: selectedPackObj.amountXof
           })
         });
       } catch (beErr) {
         console.warn('[RECHARGE BE NOTICE]', (beErr as Error).message);
       }
 
-      // Firestore direct client update
       if (db && app.id) {
         try {
           await updateDoc(doc(db, 'merchants', app.id), {
-            'api_pricing_config.api_credits_balance': newTotal,
             api_credits_balance: newTotal,
+            api_pricing_config: updatedApp.api_pricing_config,
             updated_at: serverTimestamp()
           });
         } catch (fsErr) {
@@ -202,10 +223,11 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
         }
       }
 
-      showToast(`+${addedCredits.toLocaleString()} crédits API ajoutés avec succès !`, 'success');
+      showToast(`Paiement confirmé ! +${addedCredits.toLocaleString()} crédits API ajoutés à votre compte.`, 'success');
+      setShowCheckoutModal(false);
       setIsRechargeModalOpen(false);
     } catch (err) {
-      showToast('Erreur lors de la recharge de crédits : ' + (err as Error).message, 'error');
+      showToast('Erreur lors de la mise à jour des crédits : ' + (err as Error).message, 'error');
     } finally {
       setIsRecharging(false);
     }
@@ -709,19 +731,19 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleRechargeCredits}
+                onClick={handleStartPaidRecharge}
                 disabled={isRecharging}
-                className="px-6 py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl text-xs transition shadow-md flex items-center gap-2"
+                className="px-6 py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl text-xs transition shadow-md flex items-center gap-2 cursor-pointer"
               >
                 {isRecharging ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    Recharge en cours...
+                    Validation en cours...
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4" />
-                    Valider la recharge
+                    Payer {selectedPackObj.price} & Recharger
                   </>
                 )}
               </button>
@@ -729,6 +751,23 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
 
           </div>
         </div>
+      )}
+
+      {showCheckoutModal && (
+        <Suspense fallback={null}>
+          <UltimateCheckout
+            isModal={true}
+            isOpen={showCheckoutModal}
+            onClose={() => setShowCheckoutModal(false)}
+            onCancel={() => setShowCheckoutModal(false)}
+            amount={selectedPackObj.amountXof}
+            currency="FCFA"
+            orderDescription={`Recharge ${selectedPackObj.credits.toLocaleString()} crédits API (${selectedPackObj.label})`}
+            storeName={app?.name || 'Nanasore API'}
+            merchantId={app?.id}
+            onSuccess={handlePaymentConfirmed}
+          />
+        </Suspense>
       )}
 
     </div>

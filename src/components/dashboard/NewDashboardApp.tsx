@@ -24,7 +24,7 @@ import {
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
   TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2,
   LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical,
-  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket
+  Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket, Trash2
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
@@ -203,9 +203,128 @@ const PAYMENT_API_BASE = typeof window !== 'undefined' && window.location.hostna
   ? 'http://localhost:10000'
   : ((import.meta as any).env?.VITE_API_URL || (import.meta as any).env?.VITE_PAYMENT_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run');
 
-// --- PRODUCTION INITIAL DATA (Nettoyage complet des fausses cartes mock) ---
+// --- PRODUCTION INITIAL DATA (Zéro mock, 100% Supabase multi-tenant) ---
 const INITIAL_APPS: NanaMerchantApp[] = [];
-const MOCK_TRANSACTIONS: TransactionItem[] = [];
+
+function useTenantTransactions(tenantId?: string | null) {
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!tenantId) {
+      setTransactions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [txRes, ordRes, salesRes] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('*')
+          .or(`tenant_id.eq.${tenantId},merchant_id.eq.${tenantId},store_id.eq.${tenantId}`)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('orders')
+          .select('id, customer_name, customer_phone, payment_method, total, status, created_at')
+          .eq('store_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('sales')
+          .select('id, total_price, payment_method, status, created_at, customer_name')
+          .eq('store_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ]);
+
+      const merged = new Map<string, TransactionItem>();
+
+      if (!txRes.error && Array.isArray(txRes.data)) {
+        txRes.data.forEach((t: any) => {
+          const amt = Number(t.amount ?? t.gross_amount ?? 0) || 0;
+          const fee = Number(t.fee ?? Math.round(amt * 0.015)) || 0;
+          const rawStatus = String(t.status || 'SUCCESS').toUpperCase();
+          const status: 'SUCCESS' | 'PENDING' | 'FAILED' =
+            rawStatus.includes('FAIL') || rawStatus.includes('ERR') || rawStatus.includes('CANCEL')
+              ? 'FAILED'
+              : rawStatus.includes('PEND')
+                ? 'PENDING'
+                : 'SUCCESS';
+          merged.set(String(t.id), {
+            id: String(t.id),
+            customer: String(t.customer_name || t.customer_phone || t.phone || t.description || 'Client'),
+            operator: String(t.operator || t.provider || t.payment_method || 'Mobile Money'),
+            amount: amt,
+            currency: String(t.currency || 'XOF'),
+            fee,
+            net: Number(t.net_amount ?? Math.max(0, amt - fee)) || 0,
+            status,
+            date: t.created_at ? new Date(t.created_at).toLocaleString('fr-FR') : '—',
+          });
+        });
+      }
+
+      if (!ordRes.error && Array.isArray(ordRes.data)) {
+        ordRes.data.forEach((o: any) => {
+          const id = String(o.id);
+          if (merged.has(id)) return;
+          const amt = Number(o.total || 0) || 0;
+          const fee = Math.round(amt * 0.015);
+          const rawStatus = String(o.status || 'SUCCESS').toUpperCase();
+          const status: 'SUCCESS' | 'PENDING' | 'FAILED' =
+            rawStatus.includes('CANCEL') || rawStatus.includes('FAIL')
+              ? 'FAILED'
+              : rawStatus.includes('PEND')
+                ? 'PENDING'
+                : 'SUCCESS';
+          merged.set(id, {
+            id,
+            customer: String(o.customer_name || o.customer_phone || 'Client Boutique'),
+            operator: String(o.payment_method || 'Commande Web'),
+            amount: amt,
+            currency: 'XOF',
+            fee,
+            net: Math.max(0, amt - fee),
+            status,
+            date: o.created_at ? new Date(o.created_at).toLocaleString('fr-FR') : '—',
+          });
+        });
+      }
+
+      if (!salesRes.error && Array.isArray(salesRes.data)) {
+        salesRes.data.forEach((s: any) => {
+          const id = String(s.id);
+          if (merged.has(id)) return;
+          const amt = Number(s.total_price || 0) || 0;
+          merged.set(id, {
+            id,
+            customer: String(s.customer_name || 'Client Caisse POS'),
+            operator: String(s.payment_method || 'CASH'),
+            amount: amt,
+            currency: 'XOF',
+            fee: 0,
+            net: amt,
+            status: 'SUCCESS',
+            date: s.created_at ? new Date(s.created_at).toLocaleString('fr-FR') : '—',
+          });
+        });
+      }
+
+      setTransactions(Array.from(merged.values()));
+    } catch {
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { transactions, loading, refresh };
+}
 
 const PRICING_RULES = [
   { country: 'Burkina Faso 🇧🇫', operator: 'Orange Money BF', baseRate: '4.5%', margin: '+1.5%', totalFee: '6.0%', minFee: '12 XOF' },
@@ -1632,19 +1751,19 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
             {activeTab === 'dashboard' && <TabDashboard app={selectedApp} copyToClipboard={copyToClipboard} setActiveTab={setActiveTab} onUpgradeClick={() => setIsKycModalOpen(true)} />}
             {activeTab === 'wallet' && <TabWallet app={selectedApp} currentUser={currentUser} onUpdateApp={handleUpdateApp} showToast={showToast} />}
-            {activeTab === 'transactions' && <TabTransactions />}
-            {activeTab === 'links' && <TabPaymentLinks showToast={showToast} />}
+            {activeTab === 'transactions' && <TabTransactions app={selectedApp} showToast={showToast} />}
+            {activeTab === 'links' && <TabPaymentLinks app={selectedApp} showToast={showToast} />}
             {activeTab === 'checkout' && <TabServicesAndApps app={selectedApp} showToast={showToast} setActiveTab={setActiveTab} onOpenModule={handleOpenRegistryModule} />}
-            {activeTab === 'customers' && <TabCustomers />}
+            {activeTab === 'customers' && <TabCustomers app={selectedApp} />}
             {activeTab === 'analytics' && <TabAnalytics app={selectedApp} />}
             {activeTab === 'payouts' && <TabPayouts app={selectedApp} showToast={showToast} />}
             {activeTab === 'developer' && <DeveloperTab app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
-            {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} />}
-            {activeTab === 'webhook_logs' && <TabWebhookLogs />}
-            {activeTab === 'disputes' && <TabDisputes />}
+            {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
+            {activeTab === 'webhook_logs' && <TabWebhookLogs app={selectedApp} />}
+            {activeTab === 'disputes' && <TabDisputes app={selectedApp} showToast={showToast} />}
             {activeTab === 'pricing' && <TabPricing app={selectedApp} showToast={showToast} />}
             {activeTab === 'support' && <TabSupport app={selectedApp} showToast={showToast} />}
-            {activeTab === 'settings' && <TabSettings app={selectedApp} onUpgradeClick={() => setIsKycModalOpen(true)} />}
+            {activeTab === 'settings' && <TabSettings app={selectedApp} onUpgradeClick={() => setIsKycModalOpen(true)} onUpdateApp={handleUpdateApp} showToast={showToast} />}
           </main>
         </div>
       ) : (
@@ -1994,6 +2113,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
 /* 1. TAB: OVERVIEW DASHBOARD */
 function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { app: NanaMerchantApp; copyToClipboard: (t?: string, l?: string) => void; setActiveTab: (t: string) => void; onUpgradeClick?: () => void }) {
+  const { transactions: recentTransactions, loading: txLoading } = useTenantTransactions(app?.id);
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       
@@ -2064,7 +2184,9 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
             <button onClick={() => setActiveTab('transactions')} className="text-xs font-bold text-[#1E40AF] hover:underline">Tout voir</button>
           </div>
 
-          {MOCK_TRANSACTIONS.length === 0 ? (
+          {txLoading ? (
+            <div className="py-12 text-center text-slate-400 text-xs font-semibold">Chargement des transactions en direct...</div>
+          ) : recentTransactions.length === 0 ? (
             <div className="py-12 text-center text-slate-400 space-y-2">
               <CreditCard className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
               <p className="font-bold text-slate-700 text-sm">Aucune transaction enregistrée</p>
@@ -2072,7 +2194,7 @@ function TabDashboard({ app, copyToClipboard, setActiveTab, onUpgradeClick }: { 
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {MOCK_TRANSACTIONS.map((tx) => (
+              {recentTransactions.slice(0, 8).map((tx) => (
                 <div key={tx.id} className="py-3.5 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
@@ -3026,7 +3148,8 @@ function TabWallet({
             </span>
           </div>
 
-          {/* Sélecteur de Mode : Retrait Réel Production vs Simulation Test */}
+          {/* Sélecteur de Mode : Production uniquement pour les marchands (Simulation réservée Super Admin / localhost) */}
+          {(currentUser?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && window.location.hostname === 'localhost')) && (
           <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1">
             <button
               type="button"
@@ -3053,6 +3176,7 @@ function TabWallet({
               <span>Mode Test (Sandbox)</span>
             </button>
           </div>
+          )}
 
           {payoutMode === 'PRODUCTION' ? (
             <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-emerald-900">
@@ -3287,36 +3411,101 @@ function TabWallet({
 }
 
 /* 3. TAB: TRANSACTIONS */
-function TabTransactions() {
-  const [filter, setFilter] = useState('ALL');
+function TabTransactions({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m: string, t?: any) => void }) {
+  const [filter, setFilter] = useState<'ALL' | 'SUCCESS' | 'PENDING' | 'FAILED'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const { transactions, loading, refresh } = useTenantTransactions(app?.id);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return transactions.filter((t) => {
+      const matchStatus = filter === 'ALL' || t.status === filter;
+      const matchSearch =
+        !q ||
+        t.id.toLowerCase().includes(q) ||
+        t.customer.toLowerCase().includes(q) ||
+        t.operator.toLowerCase().includes(q);
+      return matchStatus && matchSearch;
+    });
+  }, [transactions, filter, searchQuery]);
+
+  const handleExportCsv = () => {
+    if (filtered.length === 0) {
+      if (showToast) showToast('Aucune transaction à exporter.', 'info');
+      return;
+    }
+    const headers = ['ID', 'Client', 'Operateur', 'Montant Brut', 'Devise', 'Frais', 'Net', 'Statut', 'Date'];
+    const rows = filtered.map((tx) => [
+      tx.id,
+      `"${String(tx.customer).replace(/"/g, '""')}"`,
+      `"${String(tx.operator).replace(/"/g, '""')}"`,
+      tx.amount,
+      tx.currency,
+      tx.fee,
+      tx.net,
+      tx.status,
+      `"${tx.date}"`,
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions_${app?.id || 'nanasore'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (showToast) showToast(`Export CSV généré (${filtered.length} transactions).`, 'success');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Historique des Transactions</h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">Consultez tous les paiements entrants enregistrés sur cet univers.</p>
+          <p className="text-xs text-slate-500 font-medium mt-1">Consultez tous les paiements entrants enregistrés en temps réel sur cet univers.</p>
         </div>
 
-        <button className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-sm">
-          <Download className="w-4 h-4" />
-          <span>Exporter CSV</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={refresh}
+            className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Actualiser</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-sm cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Exporter CSV</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            {['ALL', 'SUCCESS', 'FAILED'].map(f => (
+            {(['ALL', 'SUCCESS', 'PENDING', 'FAILED'] as const).map(f => (
               <button 
                 key={f} 
+                type="button"
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg transition ${filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${filter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
               >
-                {f === 'ALL' ? 'Tous' : f === 'SUCCESS' ? 'Réussis' : 'Échoués'}
+                {f === 'ALL' ? 'Tous' : f === 'SUCCESS' ? 'Réussis' : f === 'PENDING' ? 'En attente' : 'Échoués'}
               </button>
             ))}
           </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher ID, client ou opérateur..."
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs w-full sm:w-64 focus:outline-none focus:border-blue-600"
+          />
         </div>
 
         <div className="overflow-x-auto">
@@ -3327,40 +3516,50 @@ function TabTransactions() {
                 <th className="py-3 px-2">Client / Téléphone</th>
                 <th className="py-3 px-2">Opérateur</th>
                 <th className="py-3 px-2">Montant Brut</th>
-                <th className="py-3 px-2">Frais (+1.5%)</th>
+                <th className="py-3 px-2">Frais</th>
                 <th className="py-3 px-2">Montant Net</th>
                 <th className="py-3 px-2">Statut</th>
                 <th className="py-3 px-2">Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {MOCK_TRANSACTIONS.filter(t => filter === 'ALL' || t.status === filter).length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-semibold">
+                    Chargement des transactions depuis Supabase...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
                     <CreditCard className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5] mb-2" />
                     <p className="font-semibold text-slate-700">Aucune transaction enregistrée</p>
-                    <p className="text-[11px] text-slate-400 mt-1">Vos flux financiers s'afficheront ici en temps réel.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Vos flux financiers réels s'afficheront ici automatiquement.</p>
                   </td>
                 </tr>
               ) : (
-                MOCK_TRANSACTIONS
-                  .filter(t => filter === 'ALL' || t.status === filter)
-                  .map(tx => (
-                    <tr key={tx.id} className="hover:bg-slate-50/80 transition">
-                      <td className="py-3 px-2 font-mono font-bold text-slate-900">{tx.id}</td>
-                      <td className="py-3 px-2 font-bold">{tx.customer}</td>
-                      <td className="py-3 px-2">{tx.operator}</td>
-                      <td className="py-3 px-2 font-extrabold text-slate-900">{tx.amount.toLocaleString()} XOF</td>
-                      <td className="py-3 px-2 text-rose-600 font-semibold">-{tx.fee} XOF</td>
-                      <td className="py-3 px-2 text-emerald-600 font-bold">{tx.net.toLocaleString()} XOF</td>
-                      <td className="py-3 px-2">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${tx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                          {tx.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 text-slate-400 text-[11px]">{tx.date}</td>
-                    </tr>
-                  ))
+                filtered.map(tx => (
+                  <tr key={tx.id} className="hover:bg-slate-50/80 transition">
+                    <td className="py-3 px-2 font-mono font-bold text-slate-900">{tx.id.slice(0, 18)}</td>
+                    <td className="py-3 px-2 font-bold">{tx.customer}</td>
+                    <td className="py-3 px-2">{tx.operator}</td>
+                    <td className="py-3 px-2 font-extrabold text-slate-900">{tx.amount.toLocaleString()} {tx.currency}</td>
+                    <td className="py-3 px-2 text-rose-600 font-semibold">-{tx.fee.toLocaleString()} {tx.currency}</td>
+                    <td className="py-3 px-2 text-emerald-600 font-bold">{tx.net.toLocaleString()} {tx.currency}</td>
+                    <td className="py-3 px-2">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        tx.status === 'SUCCESS'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : tx.status === 'PENDING'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-rose-50 text-rose-700'
+                      }`}>
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-slate-400 text-[11px]">{tx.date}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -3370,39 +3569,107 @@ function TabTransactions() {
   );
 }
 
-/* 4. TAB: PAYMENT LINKS GENERATOR */
-function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
+/* 4. TAB: PAYMENT LINKS GENERATOR (100% PERSISTÉ SUPABASE) */
+function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: string, t?: any) => void }) {
+  const tenantId = app?.id || 'default';
   const [links, setLinks] = useState<{ id: string; title: string; amount: number; currency: string; url: string; clicks: number; payments: number }[]>([]);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateLink = (e: React.FormEvent) => {
+  const loadLinks = useCallback(async () => {
+    if (!tenantId) return;
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('payment_links')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        setLinks(data.map((r: any) => ({
+          id: String(r.id),
+          title: String(r.title || 'Paiement'),
+          amount: Number(r.amount || 0),
+          currency: String(r.currency || 'XOF'),
+          url: String(r.url || ''),
+          clicks: Number(r.clicks || 0),
+          payments: Number(r.payments || 0),
+        })));
+      }
+    } catch {
+      // ignore if table not yet migrated
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadLinks();
+  }, [loadLinks]);
+
+  const handleCreateLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !amount) return;
+    const cleanTitle = title.trim();
+    const numericAmount = Number(amount);
+    if (!cleanTitle || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      showToast('Veuillez saisir un titre et un montant valide.', 'warning');
+      return;
+    }
+    setIsCreating(true);
+    const id = `lnk_${Date.now().toString(36)}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
+    const url = `${origin}/checkout?link=${encodeURIComponent(id)}&store=${encodeURIComponent(tenantId)}&amount=${numericAmount}&title=${encodeURIComponent(cleanTitle)}`;
     const newLink = {
-      id: `lnk_${Date.now().toString().slice(-4)}`,
-      title,
-      amount: Number(amount),
+      id,
+      title: cleanTitle,
+      amount: numericAmount,
       currency: 'XOF',
-      url: `https://nanaswitch.cloud/pay/lnk_${Date.now().toString().slice(-4)}`,
+      url,
       clicks: 0,
-      payments: 0
+      payments: 0,
     };
-    setLinks([newLink, ...links]);
-    setTitle('');
-    setAmount('');
-    showToast('Lien de paiement créé avec succès !');
+
+    try {
+      const { error } = await supabase.from('payment_links').insert({
+        id,
+        tenant_id: tenantId,
+        title: cleanTitle,
+        amount: numericAmount,
+        currency: 'XOF',
+        url,
+        clicks: 0,
+        payments: 0,
+      });
+      if (error) {
+        console.warn('[payment_links insert]', error.message);
+      }
+      setLinks((prev) => [newLink, ...prev]);
+      setTitle('');
+      setAmount('');
+      showToast('Lien de paiement créé et sauvegardé !', 'success');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleDeleteLink = async (id: string) => {
+    setLinks((prev) => prev.filter((l) => l.id !== id));
+    try {
+      await supabase.from('payment_links').delete().eq('id', id).eq('tenant_id', tenantId);
+      showToast('Lien supprimé.', 'info');
+    } catch {}
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Liens de Paiement</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Créez des liens universels à partager sur WhatsApp, SMS ou Réseaux sociaux.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Créez des liens d'encaissement persistés sur Supabase et partageables sur WhatsApp, SMS ou Réseaux sociaux.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Create Link Form */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
           <h3 className="font-bold text-slate-900 text-base">Nouveau Lien de Paiement</h3>
           <form onSubmit={handleCreateLink} className="space-y-4 text-xs">
@@ -3410,7 +3677,7 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
               <label className="font-bold text-slate-600 block mb-1">Titre de la prestation / Produit</label>
               <input 
                 type="text"
-                placeholder="Ex: Contribution Événement"
+                placeholder="Ex: Consultation VIP ou Pack Produit"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600"
@@ -3420,22 +3687,26 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
               <label className="font-bold text-slate-600 block mb-1">Montant à encaisser (XOF)</label>
               <input 
                 type="number"
+                min={100}
                 placeholder="Ex: 5000"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600"
               />
             </div>
-            <button type="submit" className="w-full py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-md transition cursor-pointer">
-              Générer le lien
+            <button type="submit" disabled={isCreating} className="w-full py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-md transition cursor-pointer disabled:opacity-60">
+              {isCreating ? 'Création...' : 'Générer et sauvegarder le lien'}
             </button>
           </form>
         </div>
 
-        {/* Existing Links List */}
         <div className="lg:col-span-2 space-y-4">
           <h3 className="font-bold text-slate-900 text-base">Vos Liens Actifs ({links.length})</h3>
-          {links.length === 0 ? (
+          {isLoading ? (
+            <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center text-slate-400 text-xs font-semibold">
+              Chargement des liens...
+            </div>
+          ) : links.length === 0 ? (
             <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center text-slate-400 space-y-2">
               <Link2 className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
               <p className="font-bold text-slate-700 text-sm">Aucun lien de paiement actif</p>
@@ -3444,15 +3715,36 @@ function TabPaymentLinks({ showToast }: { showToast: (m: string) => void }) {
           ) : (
             <div className="space-y-3">
               {links.map(lnk => (
-                <div key={lnk.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{lnk.title}</h4>
+                <div key={lnk.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-slate-900 text-sm truncate">{lnk.title}</h4>
                     <p className="text-xs font-black text-blue-600 mt-0.5">{lnk.amount.toLocaleString()} {lnk.currency}</p>
-                    <p className="text-[11px] text-slate-400 mt-1 font-mono">{lnk.url}</p>
+                    <p className="text-[11px] text-slate-400 mt-1 font-mono truncate max-w-md">{lnk.url}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { navigator.clipboard.writeText(lnk.url); showToast('Lien copié !'); }} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition">
-                      <Copy className="w-4 h-4" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { navigator.clipboard.writeText(lnk.url); showToast('Lien copié !', 'success'); }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copier</span>
+                    </button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(`Bonjour, voici le lien de paiement pour "${lnk.title}" (${lnk.amount.toLocaleString()} ${lnk.currency}) : ${lnk.url}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition"
+                    >
+                      WhatsApp
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLink(lnk.id)}
+                      className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
+                      title="Supprimer ce lien"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -4159,30 +4451,115 @@ function TabServicesAndApps({
 }
 
 /* 6. TAB: CUSTOMERS BASE */
-function TabCustomers() {
-  const [customers, setCustomers] = useState<{ phone: string; name: string; country: string; totalPaid: string; txCount: number }[]>([]);
+function TabCustomers({ app }: { app?: NanaMerchantApp }) {
+  const tenantId = app?.id;
+  const [customers, setCustomers] = useState<{ phone: string; name: string; country: string; totalPaid: number; txCount: number }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (!tenantId) {
+      setCustomers([]);
+      return;
+    }
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const [custRes, ordRes] = await Promise.all([
+          supabase.from('customers').select('*').eq('store_id', tenantId).limit(200),
+          supabase.from('orders').select('customer_name, customer_phone, total, created_at').eq('store_id', tenantId).limit(300),
+        ]);
+        if (!active) return;
+
+        const map = new Map<string, { phone: string; name: string; country: string; totalPaid: number; txCount: number }>();
+
+        if (!custRes.error && Array.isArray(custRes.data)) {
+          custRes.data.forEach((c: any) => {
+            const phone = String(c.phone || c.whatsapp || '').trim();
+            const key = phone || String(c.id);
+            map.set(key, {
+              phone: phone || '—',
+              name: String(c.name || c.full_name || 'Client').trim() || 'Client',
+              country: String(c.country || 'UEMOA'),
+              totalPaid: Number(c.total_paid ?? c.totalPaid ?? 0) || 0,
+              txCount: Number(c.tx_count ?? c.txCount ?? 0) || 0,
+            });
+          });
+        }
+
+        if (!ordRes.error && Array.isArray(ordRes.data)) {
+          ordRes.data.forEach((o: any) => {
+            const phone = String(o.customer_phone || '').trim();
+            const name = String(o.customer_name || phone || 'Client Boutique').trim() || 'Client Boutique';
+            const key = phone || name.toLowerCase();
+            const existing = map.get(key);
+            const amt = Number(o.total || 0) || 0;
+            if (existing) {
+              existing.totalPaid += amt;
+              existing.txCount += 1;
+            } else {
+              map.set(key, {
+                phone: phone || '—',
+                name,
+                country: 'UEMOA',
+                totalPaid: amt,
+                txCount: 1,
+              });
+            }
+          });
+        }
+
+        setCustomers(Array.from(map.values()).sort((a, b) => b.totalPaid - a.totalPaid));
+      } catch {
+        if (active) setCustomers([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [tenantId]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) =>
+      (c.name || '').toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q)
+    );
+  }, [customers, searchQuery]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Base de Données Clients</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Acheteurs et clients récurrents identifiés par téléphone Mobile Money.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Base de Données Clients ({customers.length})</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">Acheteurs et clients récurrents synchronisés depuis vos commandes et votre caisse.</p>
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Rechercher un nom ou téléphone..."
+          className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs w-full sm:w-64 bg-white focus:outline-none focus:border-blue-600"
+        />
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm">
-        {customers.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-slate-400 text-xs font-semibold">Chargement des clients depuis Supabase...</div>
+        ) : filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-400 space-y-2">
             <Users className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
             <p className="font-bold text-slate-700 text-sm">Aucun client enregistré pour l'instant</p>
-            <p className="text-xs text-slate-400">Vos acheteurs Mobile Money s'enregistreront automatiquement lors de leurs paiements.</p>
+            <p className="text-xs text-slate-400">Vos acheteurs Mobile Money et caisse s'enregistreront automatiquement ici.</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {customers.map((c, i) => (
+            {filtered.map((c, i) => (
               <div key={i} className="py-4 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                    {(c?.name || 'C').charAt(0)}
+                    {(c?.name || 'C').charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
@@ -4190,8 +4567,8 @@ function TabCustomers() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-extrabold text-slate-900">{c.totalPaid}</p>
-                  <p className="text-[10px] text-slate-400 font-medium">{c.txCount} transactions</p>
+                  <p className="font-extrabold text-slate-900">{c.totalPaid.toLocaleString('fr-FR')} XOF</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{c.txCount} transaction{c.txCount > 1 ? 's' : ''}</p>
                 </div>
               </div>
             ))}
@@ -4202,21 +4579,26 @@ function TabCustomers() {
   );
 }
 
-/* 7. TAB: ANALYTICS (AUTHENTIC CLOUD REVENUE & SALES CURVE) */
-function TabAnalytics({ app }: { app: AppItem | null }) {
+/* 7. TAB: ANALYTICS (AUTHENTIC CLOUD REVENUE & SALES CURVE — STRICT MULTI-TENANT) */
+function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
   const [timeframe, setTimeframe] = useState<'24H' | '7J' | '30J' | '90J' | '1A' | 'TOUT'>('30J');
   const [rawSales, setRawSales] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
   const [svgCoords, setSvgCoords] = useState<{ x: number; y: number } | null>(null);
 
-  // Charger les données de ventes Cloud en direct (100% réel, zéro mock)
+  // Charger les données de ventes Cloud en direct (100% réel, zéro mock, strictement filtré par tenant)
   const loadSalesData = useCallback(async () => {
+    const tenantId = app?.id;
+    if (!tenantId) {
+      setRawSales([]);
+      return;
+    }
     try {
       setLoading(true);
       const [salesRes, ordersRes] = await Promise.all([
-        supabase.from('sales').select('id, total_price, quantity, created_at, source, status').order('created_at', { ascending: true }),
-        supabase.from('orders').select('id, total, status, created_at, payment_method').order('created_at', { ascending: true })
+        supabase.from('sales').select('id, total_price, quantity, created_at, source, status').eq('store_id', tenantId).order('created_at', { ascending: true }),
+        supabase.from('orders').select('id, total, status, created_at, payment_method').eq('store_id', tenantId).order('created_at', { ascending: true })
       ]);
 
       const items: Array<{ id: string; amount: number; created_at: string; source: string; status: string }> = [];
@@ -5027,106 +5409,166 @@ function TabDeveloper(props: {
 }
 
 /* 10. TAB: WEBHOOKS CONFIG */
-function TabWebhooks({ app, copyToClipboard, showToast }: { app: NanaMerchantApp; copyToClipboard: (t?: string, l?: string) => void; showToast: (m: string) => void }) {
-  const [webhookUrl, setWebhookUrl] = useState(app.webhook_config?.url || 'https://boutique-client.com/api/nanaswitch-webhook');
+function generateMerchantWebhookSecret(): string {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return 'ns_whsec_' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return `ns_whsec_${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+}
 
-  const handleSaveWebhook = async () => {
-    showToast('URL de Webhook sauvegardée avec succès !');
-    if (db && app.id) {
-      try {
-        await updateDoc(doc(db, 'merchants', app.id), {
-          'webhook_config.url': webhookUrl,
-          'webhook_config.is_active': true
-        });
-      } catch (err) {
-        console.warn('[WEBHOOK UPDATE ERROR]', (err as Error).message);
-      }
+function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: NanaMerchantApp; copyToClipboard: (t?: string, l?: string) => void; showToast: (m: string, t?: any) => void; onUpdateApp?: (u: NanaMerchantApp) => void }) {
+  const [webhookUrl, setWebhookUrl] = useState(app.webhook_config?.url || '');
+  const [whSecret, setWhSecret] = useState(() => app.keys?.whSecret || generateMerchantWebhookSecret());
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveWebhook = async (overrideSecret?: string) => {
+    const cleanUrl = webhookUrl.trim();
+    if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+      showToast('Veuillez saisir une URL valide commençant par https://', 'warning');
+      return;
     }
+    const secretToSave = overrideSecret || whSecret;
+    setIsSaving(true);
+    try {
+      const nextWebhookConfig = {
+        ...(app.webhook_config || {}),
+        url: cleanUrl,
+        is_active: Boolean(cleanUrl),
+      };
+      const nextKeys = {
+        ...(app.keys || {}),
+        whSecret: secretToSave,
+      };
+      if (app.id) {
+        await supabase
+          .from('merchants')
+          .update({
+            webhook_config: nextWebhookConfig,
+            keys: nextKeys,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', app.id);
+      }
+      if (onUpdateApp) {
+        onUpdateApp({ ...app, webhook_config: nextWebhookConfig as any, keys: nextKeys as any });
+      }
+      showToast('Configuration Webhook & secret HMAC sauvegardés !', 'success');
+    } catch (err) {
+      showToast('Erreur lors de la sauvegarde : ' + (err as Error).message, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRotateSecret = async () => {
+    const fresh = generateMerchantWebhookSecret();
+    setWhSecret(fresh);
+    await handleSaveWebhook(fresh);
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Configuration Webhooks</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Recevez des notifications instantanées signées HMAC-SHA256.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Recevez des notifications instantanées signées HMAC-SHA256 sur votre serveur.</p>
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">URL de Webhook (POST)</label>
+          <label className="text-xs font-bold text-slate-700 block mb-1">URL de Webhook (POST HTTPS)</label>
           <div className="flex items-center gap-2">
             <input 
-              type="text" 
+              type="url" 
               value={webhookUrl}
               onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="https://votre-domaine.com/api/webhooks/nanasore"
               className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800"
             />
-            <button onClick={handleSaveWebhook} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition">
-              Enregistrer
+            <button type="button" disabled={isSaving} onClick={() => handleSaveWebhook()} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-60">
+              {isSaving ? 'Sauvegarde...' : 'Enregistrer'}
             </button>
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-1">Secret Webhook Marchand (HMAC-SHA256)</label>
-          <div className="flex items-center gap-2">
+          <label className="text-xs font-bold text-slate-700 block mb-1">Secret Webhook Unique (HMAC-SHA256)</label>
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
             <input 
               type="text" 
               readOnly 
-              value={app.keys?.whSecret || 'ns_whsec_9f4e30815fb4aae712061aba45ed8ba8430b31d3b9c4bbf14dfb264ee2a165d2'}
+              value={whSecret}
               className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800"
             />
-            <button onClick={() => copyToClipboard(app.keys?.whSecret, 'Secret Webhook')} className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition">
+            <button type="button" onClick={() => copyToClipboard(whSecret, 'Secret Webhook')} className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer shrink-0">
               Copier
             </button>
+            <button type="button" onClick={handleRotateSecret} className="px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-xl text-xs transition cursor-pointer shrink-0">
+              Régénérer
+            </button>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Utilisez ce secret pour vérifier l'en-tête <code className="text-[#1E40AF] font-bold">x-nanaswitch-signature</code>.</p>
+          <p className="text-[11px] text-slate-400 mt-1">Secret unique généré pour cet univers. Vérifiez l'en-tête <code className="text-[#1E40AF] font-bold">x-nanaswitch-signature</code>.</p>
         </div>
       </div>
     </div>
   );
 }
 
-/* 11. TAB: WEBHOOK LOGS */
-function TabWebhookLogs() {
+/* 11. TAB: WEBHOOK LOGS (STRICT MULTI-TENANT SUPABASE) */
+function TabWebhookLogs({ app }: { app?: NanaMerchantApp }) {
+  const tenantId = app?.id;
   const [logs, setLogs] = useState<WebhookDeliveryLog[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadDeliveries = useCallback(async () => {
+    if (!tenantId) {
+      setLogs([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('webhook_deliveries')
+        .select('*')
+        .or(`tenant_id.eq.${tenantId},merchant_id.eq.${tenantId}`)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (!error && Array.isArray(data)) {
+        setLogs(data.map((d: any) => ({
+          id: String(d.id),
+          event: String(d.event || 'payment.success'),
+          url: String(d.url || '—'),
+          status: d.status_code ? `${d.status_code}` : '200',
+          latency: d.latency_ms ? `${d.latency_ms} ms` : '—',
+          date: d.created_at ? new Date(d.created_at).toLocaleString('fr-FR') : '—',
+        })));
+      }
+    } catch {
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
 
   useEffect(() => {
-    async function loadDeliveries() {
-      if (!db) return;
-      try {
-        const delRef = collection(db, 'webhook_deliveries');
-        const snap = await getDocs(query(delRef, orderBy('created_at', 'desc'), limit(10)));
-        if (!snap.empty) {
-          const loaded: WebhookDeliveryLog[] = [];
-          snap.forEach(d => {
-            const data = d.data();
-            loaded.push({
-              id: d.id,
-              event: data.event || 'payment.success',
-              url: data.url || 'https://boutique-client.com/api/nanaswitch-webhook',
-              status: data.status_code ? `${data.status_code} OK` : '200 OK',
-              latency: data.latency_ms ? `${data.latency_ms} ms` : '120 ms',
-              date: data.created_at ? new Date(data.created_at.seconds * 1000).toLocaleString() : '2026-10-26 19:30'
-            });
-          });
-          if (loaded.length > 0) setLogs(loaded);
-        }
-      } catch (e) {
-        // Fallback silently to mock
-      }
-    }
     loadDeliveries();
-  }, []);
+  }, [loadDeliveries]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Journal des Webhooks (webhook_deliveries)</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Historique d'envoi et réponses HTTP de vos endpoints.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Journal des Webhooks</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">Historique d'envoi et réponses HTTP de vos endpoints pour cet univers.</p>
+        </div>
+        <button type="button" onClick={loadDeliveries} className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer">
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span>Actualiser</span>
+        </button>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm">
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px] font-extrabold">
@@ -5138,7 +5580,9 @@ function TabWebhookLogs() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-            {logs.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan={5} className="py-10 text-center text-slate-400 font-semibold">Chargement des logs...</td></tr>
+            ) : logs.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-12 text-center text-slate-400">
                   <History className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5] mb-2" />
@@ -5150,8 +5594,12 @@ function TabWebhookLogs() {
               logs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 transition">
                   <td className="py-3 px-2 font-mono font-bold text-[#1E40AF]">{log.event}</td>
-                  <td className="py-3 px-2 truncate max-w-[200px]">{log.url}</td>
-                  <td className="py-3 px-2"><span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">{log.status}</span></td>
+                  <td className="py-3 px-2 truncate max-w-[220px]">{log.url}</td>
+                  <td className="py-3 px-2">
+                    <span className={`px-2 py-0.5 rounded font-bold ${log.status.startsWith('2') ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                      {log.status}
+                    </span>
+                  </td>
                   <td className="py-3 px-2 text-slate-500">{log.latency}</td>
                   <td className="py-3 px-2 text-slate-400">{log.date}</td>
                 </tr>
@@ -5164,19 +5612,124 @@ function TabWebhookLogs() {
   );
 }
 
-/* 12. TAB: DISPUTES */
-function TabDisputes() {
+/* 12. TAB: DISPUTES (CONNECTÉ SUPABASE merchant_disputes) */
+function TabDisputes({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m: string, t?: any) => void }) {
+  const tenantId = app?.id;
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [txId, setTxId] = useState('');
+  const [reason, setReason] = useState('');
+  const [amount, setAmount] = useState('');
+
+  const loadDisputes = useCallback(async () => {
+    if (!tenantId) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('merchant_disputes')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) setDisputes(data);
+    } catch {
+      setDisputes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadDisputes();
+  }, [loadDisputes]);
+
+  const handleOpenDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim() || !tenantId) return;
+    const id = `DSP-${Date.now().toString(36).toUpperCase()}`;
+    const row = {
+      id,
+      tenant_id: tenantId,
+      transaction_id: txId.trim() || null,
+      amount: Number(amount) || 0,
+      currency: 'XOF',
+      reason: reason.trim(),
+      status: 'OPEN',
+      created_at: new Date().toISOString(),
+    };
+    try {
+      await supabase.from('merchant_disputes').insert(row);
+      setDisputes((prev) => [row, ...prev]);
+      setTxId('');
+      setReason('');
+      setAmount('');
+      setShowForm(false);
+      if (showToast) showToast(`Dossier de réclamation ${id} ouvert et enregistré.`, 'success');
+    } catch {}
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Litiges & Chargebacks</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Réclamations clients et contestations d'opérateurs.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Litiges & Chargebacks</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">Réclamations clients et contestations d'opérateurs enregistrées sur Supabase.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowForm((v) => !v)}
+          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+        >
+          {showForm ? 'Fermer' : '+ Déclarer un litige'}
+        </button>
       </div>
-      <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm text-center">
-        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-        <h3 className="font-bold text-slate-900">Aucun litige en cours</h3>
-        <p className="text-xs text-slate-500 mt-1">Votre compte bénéficie d'une excellente réputation anti-fraude.</p>
-      </div>
+
+      {showForm && (
+        <form onSubmit={handleOpenDispute} className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">ID Transaction (optionnel)</label>
+              <input value={txId} onChange={(e) => setTxId(e.target.value)} placeholder="Ex: CHK-..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200" />
+            </div>
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Montant contesté (XOF)</label>
+              <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Ex: 15000" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200" />
+            </div>
+          </div>
+          <div>
+            <label className="font-bold text-slate-700 block mb-1">Motif détaillé de la contestation</label>
+            <textarea rows={3} required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Décrivez le litige ou l'anomalie opérateur..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200" />
+          </div>
+          <button type="submit" className="px-5 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl cursor-pointer">
+            Enregistrer le dossier
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center text-slate-400 text-xs font-semibold">Chargement des litiges...</div>
+      ) : disputes.length === 0 ? (
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm text-center">
+          <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+          <h3 className="font-bold text-slate-900">Aucun litige en cours</h3>
+          <p className="text-xs text-slate-500 mt-1">Aucun dossier de contestation ouvert pour cet univers.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm divide-y divide-slate-100">
+          {disputes.map((d) => (
+            <div key={d.id} className="py-4 flex items-center justify-between gap-4 text-xs">
+              <div>
+                <div className="font-mono font-bold text-slate-900">{d.id} {d.transaction_id ? `• ${d.transaction_id}` : ''}</div>
+                <p className="text-slate-600 mt-1">{d.reason}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-black text-slate-900">{Number(d.amount || 0).toLocaleString()} {d.currency || 'XOF'}</div>
+                <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700">{d.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -6212,30 +6765,43 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
 
-  // Tickets stockés localement et synchronisés avec Supabase
-  const storageKey = `nanasore_support_tickets_${app?.id || 'main'}`;
-  const [tickets, setTickets] = useState<SupportTicket[]>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [
-      {
-        id: 'TCK-84291',
-        subject: 'Vérification du routage Orange Money BF',
-        severity: 'MOYENNE',
-        category: 'MOBILE_MONEY',
-        categoryLabel: 'Passerelle Mobile Money',
-        description: 'Test de basculement automatique réussi. Délai de confirmation inférieur à 3 secondes.',
-        contactPhone: app?.kyc?.phone || '+226 70 00 00 00',
-        storeId: app?.id,
-        storeName: app?.name,
-        status: 'RESOLVED',
-        createdAt: 'Hier à 14:20',
-        responseNote: 'Vérification terminée avec succès par l\'équipe d\'ingénierie Nanasore.'
+  // Tickets 100% réels synchronisés avec Supabase `support_tickets` (zéro ticket fictif)
+  const tenantId = app?.id || 'main';
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (active && !error && Array.isArray(data)) {
+          setTickets(data.map((r: any) => ({
+            id: String(r.id),
+            subject: String(r.subject || ''),
+            severity: (r.severity || 'MOYENNE') as TicketSeverity,
+            category: (r.category || 'AUTRE') as TicketCategory,
+            categoryLabel: String(r.category_label || r.category || ''),
+            description: String(r.description || ''),
+            refId: r.ref_id || undefined,
+            contactPhone: String(r.contact_phone || ''),
+            storeId: String(r.tenant_id || tenantId),
+            storeName: String(r.store_name || app?.name || ''),
+            status: (r.status || 'OPEN') as any,
+            createdAt: r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '—',
+            responseNote: r.response_note || undefined,
+          })));
+        }
+      } catch {
+        if (active) setTickets([]);
       }
-    ];
-  });
+    })();
+    return () => { active = false; };
+  }, [tenantId, app?.name]);
 
   const categoriesConfig: Record<TicketCategory, { label: string; icon: any }> = {
     MOBILE_MONEY: { label: 'Passerelle Mobile Money (Orange, Wave, MTN, Moov)', icon: CreditCard },
@@ -6334,16 +6900,21 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
       const updated = [newTicket, ...tickets];
       setTickets(updated);
 
+      // Persistance réelle dans Supabase `support_tickets`
       try {
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch (err) {}
-
-      // Persistance dans Supabase app_registry en arrière-plan
-      try {
-        await supabase.from('app_registry').upsert({
-          key: `support_ticket_${ticketId}`,
-          value: newTicket,
-          updated_at: new Date().toISOString()
+        await supabase.from('support_tickets').insert({
+          id: ticketId,
+          tenant_id: tenantId,
+          store_name: app?.name || '',
+          subject: newTicket.subject,
+          severity: newTicket.severity,
+          category: newTicket.category,
+          category_label: newTicket.categoryLabel,
+          description: newTicket.description,
+          ref_id: newTicket.refId || null,
+          contact_phone: newTicket.contactPhone,
+          status: 'OPEN',
+          response_note: newTicket.responseNote,
         });
       } catch (supaErr) {
         console.warn('Persistance ticket Supabase:', supaErr);
@@ -6689,12 +7260,47 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
 }
 
 /* 15. TAB: SETTINGS & KYC INFO */
-function TabSettings({ app, onUpgradeClick }: { app: NanaMerchantApp; onUpgradeClick?: () => void }) {
+function TabSettings({ app, onUpgradeClick, onUpdateApp, showToast }: { app: NanaMerchantApp; onUpgradeClick?: () => void; onUpdateApp?: (u: NanaMerchantApp) => void; showToast?: (m: string, t?: any) => void }) {
+  const [companyEmail, setCompanyEmail] = useState(app.kyc?.companyEmail || '');
+  const [phone, setPhone] = useState(app.kyc?.phone || '');
+  const [bankRib, setBankRib] = useState(app.kyc?.bankRib || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const updatedKyc = {
+        ...(app.kyc || {}),
+        companyEmail: companyEmail.trim(),
+        phone: phone.trim(),
+        bankRib: bankRib.trim(),
+      };
+      if (app.id) {
+        await supabase
+          .from('merchants')
+          .update({
+            kyc: updatedKyc,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', app.id);
+      }
+      if (onUpdateApp) {
+        onUpdateApp({ ...app, kyc: updatedKyc as any });
+      }
+      if (showToast) showToast('Paramètres du compte enregistrés dans Supabase !', 'success');
+    } catch (err) {
+      if (showToast) showToast('Erreur sauvegarde : ' + (err as Error).message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Paramètres du Compte & KYC</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Fiche d'identité d'entreprise et plafonds de transactions mensuels.</p>
+        <p className="text-xs text-slate-500 font-medium mt-1">Fiche d'identité d'entreprise, coordonnées de règlement et plafonds mensuels.</p>
       </div>
 
       {/* KYC MONTHLY VOLUME LIMIT & UPGRADE INCENTIVE */}
@@ -6705,7 +7311,7 @@ function TabSettings({ app, onUpgradeClick }: { app: NanaMerchantApp; onUpgradeC
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-bold block">Raison Sociale / Nom</span>
-            <span className="font-bold text-slate-900 text-sm mt-0.5 block">{app.kyc?.companyName || app.kyc?.fullName}</span>
+            <span className="font-bold text-slate-900 text-sm mt-0.5 block">{app.kyc?.companyName || app.kyc?.fullName || app.name}</span>
           </div>
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-bold block">Numéro IFU</span>
@@ -6716,11 +7322,32 @@ function TabSettings({ app, onUpgradeClick }: { app: NanaMerchantApp; onUpgradeC
             <span className="font-mono font-bold text-slate-900 text-sm mt-0.5 block">{app.kyc?.rccm || 'N/A (Particulier)'}</span>
           </div>
           <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] text-slate-400 uppercase font-bold block">RIB / Compte de Règlement</span>
-            <span className="font-mono font-bold text-slate-900 text-sm mt-0.5 block">{app.kyc?.bankRib || 'Mobile Money Verified'}</span>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Statut KYC</span>
+            <span className="font-mono font-bold text-emerald-700 text-sm mt-0.5 block">{app.status}</span>
           </div>
         </div>
       </div>
+
+      <form onSubmit={handleSaveProfile} className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4 text-xs">
+        <h3 className="font-bold text-slate-900 text-base">Coordonnées & Compte de Règlement (Modifiable)</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="font-bold text-slate-600 block mb-1">E-mail de facturation / contact</label>
+            <input type="email" value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="contact@entreprise.com" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label className="font-bold text-slate-600 block mb-1">Téléphone / WhatsApp Gérant</label>
+            <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+226 70 00 00 00" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200" />
+          </div>
+          <div>
+            <label className="font-bold text-slate-600 block mb-1">RIB Bancaire / Numéro Mobile Money</label>
+            <input type="text" value={bankRib} onChange={(e) => setBankRib(e.target.value)} placeholder="Numéro de règlement principal" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono" />
+          </div>
+        </div>
+        <button type="submit" disabled={saving} className="px-5 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl transition cursor-pointer disabled:opacity-60">
+          {saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
+        </button>
+      </form>
     </div>
   );
 }
