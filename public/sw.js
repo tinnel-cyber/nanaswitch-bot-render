@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v19-dashboard-prod';
+const CACHE_NAME = 'nanasore-v20-tenant-isolation';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

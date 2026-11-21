@@ -374,11 +374,22 @@ export async function logoutUser(): Promise<void> {
       localStorage.removeItem('nana_store_sub');
       localStorage.removeItem('nana_current_student');
       localStorage.removeItem('nana_merchant_universes');
+      localStorage.removeItem('nana_all_universes');
+      localStorage.removeItem('nana_merchant_universes_active');
+      localStorage.removeItem('nana_kyc_submissions');
+      localStorage.removeItem('nanaswitch_merchant_apps');
+      localStorage.removeItem('nanaswitch_selected_app_id');
       localStorage.removeItem('nana_current_app_id');
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && (k.startsWith('nana_merchant_universes') || k.startsWith('nana_id_chain_'))) {
+        if (
+          k &&
+          (k.startsWith('nana_merchant_universes') ||
+            k.startsWith('nana_id_chain_') ||
+            k.startsWith('nanasore_kyc_chain_') ||
+            k.startsWith('nanasore_payout_history_'))
+        ) {
           keysToRemove.push(k);
         }
       }

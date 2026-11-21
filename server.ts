@@ -899,29 +899,65 @@ async function startServer() {
     }
   });
 
-  // 2.bis Gestion des Univers Marchands (Persistance permanente des cartes univers)
+  // 2.bis Gestion des Univers Marchands (Isolation Multi-Tenant stricte par JWT Supabase)
+  const resolveVerifiedUniverseOwner = async (req: any): Promise<{ userId: string; email: string } | null> => {
+    try {
+      const authHeader = String(req.headers?.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      if (!token) return null;
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (!supabase) return null;
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data?.user?.id) return null;
+      return {
+        userId: data.user.id,
+        email: String(data.user.email || '').toLowerCase()
+      };
+    } catch {
+      return null;
+    }
+  };
+
   app.get('/api/universes', async (req, res) => {
     try {
-      const { userId, storeId, userEmail } = req.query || {};
-      let univs = getStoredUniverses();
-      if (storeId) {
-        univs = univs.filter(u => u.id === storeId || u.storeId === storeId);
-      } else if (userId || userEmail) {
-        const filtered = univs.filter(u => {
-          if (userId && (u.userId === userId || u.user_id === userId || u.id === userId || u.tenant_id === userId)) return true;
-          if (userEmail && (
-            u.email === userEmail ||
-            u.userEmail === userEmail ||
-            u.kyc?.userEmail === userEmail ||
-            u.kyc?.companyEmail === userEmail ||
-            u.kyc?.email === userEmail
-          )) return true;
-          return false;
-        });
-        if (filtered.length > 0) {
-          univs = filtered;
-        }
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification Supabase requise', universes: [] });
       }
+
+      const { storeId } = req.query || {};
+
+      // 1. Source unique de vérité : public.merchants filtré strictement par owner_id
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          let q = supabase
+            .from('merchants')
+            .select('*')
+            .eq('owner_id', owner.userId)
+            .order('created_at', { ascending: false });
+          if (storeId) {
+            q = q.eq('id', String(storeId));
+          }
+          const { data: rows, error } = await q;
+          if (!error && Array.isArray(rows) && rows.length > 0) {
+            return res.json({ success: true, universes: rows });
+          }
+        }
+      } catch (supaErr) {
+        console.warn('[SERVER UNIVERSES] Supabase merchants read notice:', supaErr);
+      }
+
+      // 2. Repli strict sur stockage serveur local — JAMAIS non filtré (renvoie [] si 0 correspondance)
+      let univs = getStoredUniverses().filter((u: any) => {
+        const uOwner = String(u.owner_id || u.ownerId || u.userId || u.user_id || '');
+        const uEmail = String(u.owner_email || u.ownerEmail || u.userEmail || u.email || u.kyc?.userEmail || '').toLowerCase();
+        const matchesOwner = uOwner === owner.userId || (owner.email && uEmail === owner.email);
+        if (!matchesOwner) return false;
+        if (storeId) return u.id === storeId || u.storeId === storeId;
+        return true;
+      });
+
       return res.json({ success: true, universes: univs });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message, universes: [] });
@@ -930,33 +966,62 @@ async function startServer() {
 
   app.post('/api/universes', async (req, res) => {
     try {
-      const universe = req.body || {};
-      if (!universe.id) {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification Supabase requise' });
+      }
+
+      const body = req.body || {};
+      if (!body.id) {
         return res.status(400).json({ success: false, error: 'Identifiant d\'univers manquant' });
       }
+
+      // Forcer l'appartenance au propriétaire vérifié par le JWT (impossible d'usurper un autre tenant)
+      const universe = {
+        ...body,
+        owner_id: owner.userId,
+        ownerId: owner.userId,
+        userId: owner.userId,
+        owner_email: owner.email || body.userEmail || body.ownerEmail || '',
+        userEmail: owner.email || body.userEmail || body.ownerEmail || ''
+      };
 
       const existing = getStoredUniverses();
       const updated = [universe, ...existing.filter((u: any) => u.id !== universe.id)];
       saveStoredUniverses(updated);
 
-      // Enregistrement miroir dans Supabase table app_registry (toujours disponible et permissive)
+      // Persistance canonique dans public.merchants (isolée par RLS owner_id)
       try {
         const { supabase } = await import('./app/utils/supabase.server');
         if (supabase) {
-          await supabase.from('app_registry').upsert({
-            key: `universe_${universe.id}`,
+          await supabase.from('merchants').upsert({
+            id: String(universe.id),
+            owner_id: owner.userId,
+            owner_email: universe.owner_email,
             name: universe.name || 'Univers Marchand',
-            category: 'Univers Marchand',
-            tenant_id: universe.userId || universe.id,
-            config_json: universe,
+            sector: universe.sector || 'E-commerce & Services',
+            type: universe.type || 'entreprise',
+            status: universe.status || 'PENDING_KYC',
+            integration_mode: universe.integration_mode || 'AGREGATED',
+            integration_config: universe.integration_config || {},
+            balances: universe.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+            keys: universe.keys || {},
+            webhook_config: universe.webhook_config || {},
+            kyc_data: universe.kyc || {},
+            kyc_limits: universe.kyc_limits || {},
+            api_credits_balance: universe.api_credits_balance ?? 5000,
+            api_pricing_config: universe.api_pricing_config || {},
+            monthly_usage: universe.monthly_usage || {},
+            company_email: universe.kyc?.companyEmail || universe.owner_email || null,
+            phone: universe.kyc?.phone || universe.kyc?.whatsappPhone || null,
             updated_at: new Date().toISOString()
-          }, { onConflict: 'key' });
+          }, { onConflict: 'id' });
         }
-      } catch (eReg) {
-        console.warn('[SERVER UNIVERSES] Supabase app_registry notice:', eReg);
+      } catch (eMerch) {
+        console.warn('[SERVER UNIVERSES] Supabase merchants upsert notice:', eMerch);
       }
 
-      console.log(`[SERVER UNIVERSES] Univers enregistré avec succès : ${universe.name} (${universe.id})`);
+      console.log(`[SERVER UNIVERSES] Univers enregistré avec succès : ${universe.name} (${universe.id}) pour owner=${owner.userId}`);
       return res.json({ success: true, universe });
     } catch (err: any) {
       console.error('[SERVER UNIVERSES] Erreur enregistrement:', err);

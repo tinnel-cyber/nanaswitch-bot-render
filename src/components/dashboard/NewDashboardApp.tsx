@@ -378,11 +378,15 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
   useEffect(() => {
     if (supabase) {
-      supabase.auth.getUser().then(({ data }) => {
-        if (data?.user) setCurrentUser((prev: any) => prev || data.user);
+      supabase.auth.getSession().then(({ data }) => {
+        if (data?.session?.user) setCurrentUser(data.session.user);
       });
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) setCurrentUser(session.user);
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+        } else if (session?.user) {
+          setCurrentUser(session.user);
+        }
       });
       return () => {
         authListener?.subscription?.unsubscribe?.();
@@ -756,40 +760,47 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     async function loadMerchantUniverses() {
       if (isMounted) setIsSyncing(true);
       try {
-        // Résolution de l'identifiant strict du compte connecté et de l'email
-        let targetUid = currentUser?.id || currentUser?.uid;
-        let targetEmail = currentUser?.email || '';
+        // 1. Résolution canonique de l'identité via Supabase Auth (prioritaire sur tout cache local)
+        let targetUid = '';
+        let targetEmail = '';
+        let accessToken = '';
 
-        if ((!targetUid || !targetEmail) && supabase) {
+        if (supabase) {
           try {
-            const { data } = await supabase.auth.getUser();
-            if (data?.user?.id && !targetUid) targetUid = data.user.id;
-            if (data?.user?.email && !targetEmail) targetEmail = data.user.email;
+            const { data: sessData } = await supabase.auth.getSession();
+            if (sessData?.session?.user?.id) {
+              targetUid = sessData.session.user.id;
+              targetEmail = String(sessData.session.user.email || '').toLowerCase();
+              accessToken = sessData.session.access_token || '';
+            }
           } catch {}
-          if (!targetUid || !targetEmail) {
+          if (!targetUid) {
             try {
-              const { data: sessData } = await supabase.auth.getSession();
-              if (sessData?.session?.user?.id && !targetUid) targetUid = sessData.session.user.id;
-              if (sessData?.session?.user?.email && !targetEmail) targetEmail = sessData.session.user.email;
+              const { data } = await supabase.auth.getUser();
+              if (data?.user?.id) {
+                targetUid = data.user.id;
+                targetEmail = String(data.user.email || '').toLowerCase();
+              }
             } catch {}
           }
         }
 
-        if ((!targetUid || !targetEmail) && typeof window !== 'undefined') {
-          try {
-            for (const key of ['nana_store_auth_user', 'nana_auth_user', 'supabase.auth.token']) {
-              const saved = localStorage.getItem(key);
-              if (saved) {
-                const parsed = JSON.parse(saved);
-                const u = parsed?.user || parsed;
-                if (!targetUid && (u?.id || u?.uid)) targetUid = u.id || u.uid;
-                if (!targetEmail && u?.email) targetEmail = u.email;
-              }
-            }
-          } catch {}
+        // Repli contrôlé uniquement si aucune session Supabase n'est disponible
+        if (!targetUid) {
+          targetUid = String(currentUser?.id || currentUser?.uid || '');
+          targetEmail = String(currentUser?.email || '').toLowerCase();
         }
 
-        // Vérifier si le profil global ou un KYC de l'utilisateur a été validé par le Super Admin
+        // Sans utilisateur authentifié, ne JAMAIS charger de cache global
+        if (!targetUid) {
+          if (isMounted) {
+            setApps([]);
+            setSelectedApp(null);
+          }
+          return;
+        }
+
+        // Vérifier si le profil global de l'utilisateur a été validé par le Super Admin
         let isUserKycVerified = false;
         if (supabase && targetUid) {
           try {
@@ -798,7 +809,12 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               .select('kyc_status, role')
               .eq('id', targetUid)
               .maybeSingle();
-            if (prof?.kyc_status === 'full' || prof?.kyc_status === 'verified' || prof?.role === 'vendor' || prof?.role === 'super_admin') {
+            if (
+              prof?.kyc_status === 'full' ||
+              prof?.kyc_status === 'verified' ||
+              prof?.role === 'vendor' ||
+              prof?.role === 'super_admin'
+            ) {
               isUserKycVerified = true;
             }
           } catch {}
@@ -806,194 +822,174 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
         const rawUniversesList: any[] = [];
 
-        // 1. Table Supabase : public.app_registry (Univers Marchands certifiés)
+        // 2. SOURCE UNIQUE DE VÉRITÉ : public.merchants filtré strictement par owner_id (protégé par RLS)
         if (supabase) {
           try {
-            const { data: regItems, error: regErr } = await supabase
-              .from('app_registry')
+            const { data: merchantRows, error: merchErr } = await supabase
+              .from('merchants')
               .select('*')
-              .eq('category', 'Univers Marchand');
+              .eq('owner_id', targetUid)
+              .order('created_at', { ascending: false });
 
-            if (!regErr && regItems && regItems.length > 0) {
-              for (const item of regItems) {
-                const conf = item.config_json || {};
-                const uId = conf.id || item.key?.replace('universe_', '') || item.id;
+            if (!merchErr && Array.isArray(merchantRows) && merchantRows.length > 0) {
+              for (const row of merchantRows) {
                 rawUniversesList.push({
-                  ...conf,
-                  id: uId,
-                  name: conf.name || item.name || 'Univers Marchand',
-                  sector: conf.sector || conf.appellation || 'E-commerce & Services',
-                  tenant_id: item.tenant_id || conf.tenant_id || conf.userId
+                  ...row,
+                  owner_id: row.owner_id || targetUid,
+                  ownerEmail: row.owner_email || targetEmail,
+                  kyc: row.kyc_data || row.kyc || {}
                 });
               }
             }
-          } catch (supaErr) {
-            console.warn('[NANASWITCH] Supabase app_registry fetch notice:', supaErr);
+          } catch (merchErr) {
+            console.warn('[NANASWITCH] Supabase merchants fetch notice:', merchErr);
           }
-        }
 
-        // 2. API Serveur persistante /api/universes
-        try {
-          const params = new URLSearchParams();
-          if (targetUid) params.append('userId', targetUid);
-          if (targetEmail) params.append('userEmail', targetEmail);
-          const res = await fetch(`/api/universes?${params.toString()}`);
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && Array.isArray(json.universes) && json.universes.length > 0) {
-              rawUniversesList.push(...json.universes);
-            }
-          }
-        } catch (apiErr) {
-          console.warn('[NANASWITCH] /api/universes notice:', apiErr);
-        }
-
-        // 3. API Serveur KYC Submissions (reconstitution si univers lié au dossier)
-        try {
-          const resKyc = await fetch('/api/kyc/submissions');
-          if (resKyc.ok) {
-            const jsonKyc = await resKyc.json();
-            if (jsonKyc.success && Array.isArray(jsonKyc.submissions)) {
-              for (const sub of jsonKyc.submissions) {
-                const matchUser = !targetUid && !targetEmail 
-                  ? true 
-                  : (sub.userId === targetUid || sub.userEmail === targetEmail || sub.id === targetUid || sub.storeId === targetUid);
-                if (matchUser) {
-                  const isApproved = sub.status === 'verified' || sub.status === 'approved' || isUserKycVerified;
-                  rawUniversesList.push({
-                    id: sub.storeId || sub.id,
-                    name: sub.storeName || sub.companyName || sub.managerFullName || sub.fullName || 'Univers Marchand',
-                    sector: sub.activityDomain || sub.sector || 'E-commerce & Services',
-                    type: sub.type === 'business' ? 'entreprise' : (sub.type || 'entreprise'),
-                    status: isApproved ? 'VERIFIED' : 'PENDING_KYC',
-                    createdAt: sub.submittedAt ? String(sub.submittedAt).slice(0, 10) : new Date().toISOString().slice(0, 10),
-                    balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-                    kyc: sub
-                  });
-                }
-              }
-            }
-          }
-        } catch (_) {}
-
-        // 4. Cache LocalStorage multi-partitions (sauvegarde de sécurité)
-        if (typeof window !== 'undefined') {
-          const localKeys = [
-            targetUid ? `nana_merchant_universes_${targetUid}` : null,
-            targetEmail ? `nana_merchant_universes_${targetEmail}` : null,
-            'nana_merchant_universes',
-            'nana_all_universes',
-            'nana_merchant_universes_active'
-          ].filter(Boolean) as string[];
-
-          Object.keys(localStorage).forEach(k => {
-            if (k.startsWith('nana_merchant_universes') && !localKeys.includes(k)) {
-              localKeys.push(k);
-            }
-          });
-
-          for (const k of localKeys) {
+          // 3. Repli migration legacy (strictement filtré par .eq('tenant_id', targetUid) !)
+          if (rawUniversesList.length === 0) {
             try {
-              const raw = localStorage.getItem(k);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                  rawUniversesList.push(...parsed);
-                } else if (parsed && typeof parsed === 'object' && parsed.id) {
-                  rawUniversesList.push(parsed);
+              const { data: regItems, error: regErr } = await supabase
+                .from('app_registry')
+                .select('*')
+                .eq('category', 'Univers Marchand')
+                .eq('tenant_id', targetUid);
+
+              if (!regErr && Array.isArray(regItems) && regItems.length > 0) {
+                for (const item of regItems) {
+                  const conf = item.config_json || {};
+                  const uId = conf.id || item.key?.replace('universe_', '') || item.id;
+                  rawUniversesList.push({
+                    ...conf,
+                    id: uId,
+                    owner_id: targetUid,
+                    name: conf.name || item.name || 'Univers Marchand',
+                    sector: conf.sector || conf.appellation || 'E-commerce & Services'
+                  });
                 }
               }
-            } catch (_) {}
+            } catch (supaErr) {
+              console.warn('[NANASWITCH] Supabase legacy app_registry fetch notice:', supaErr);
+            }
           }
+        }
 
-          // Vérifier aussi les dossiers kyc en cache local
+        // 4. API Serveur /api/universes (authentifiée par JWT Bearer)
+        if (accessToken && rawUniversesList.length === 0) {
           try {
-            const rawKyc = localStorage.getItem('nana_kyc_submissions');
-            if (rawKyc) {
-              const parsedKyc = JSON.parse(rawKyc);
-              if (Array.isArray(parsedKyc)) {
-                parsedKyc.forEach((sub: any) => {
-                  rawUniversesList.push({
-                    id: sub.storeId || sub.id,
-                    name: sub.storeName || sub.companyName || sub.managerFullName || sub.fullName || 'Univers Marchand',
-                    sector: sub.activityDomain || sub.sector || 'E-commerce & Services',
-                    type: sub.type === 'business' ? 'entreprise' : (sub.type || 'entreprise'),
-                    status: (sub.status === 'verified' || sub.status === 'approved' || isUserKycVerified) ? 'VERIFIED' : 'PENDING_KYC',
-                    createdAt: sub.submittedAt ? String(sub.submittedAt).slice(0, 10) : new Date().toISOString().slice(0, 10),
-                    balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-                    kyc: sub
-                  });
-                });
+            const res = await fetch('/api/universes', {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (res.ok) {
+              const json = await res.json();
+              if (json.success && Array.isArray(json.universes) && json.universes.length > 0) {
+                rawUniversesList.push(...json.universes);
+              }
+            }
+          } catch (apiErr) {
+            console.warn('[NANASWITCH] /api/universes notice:', apiErr);
+          }
+        }
+
+        // 5. Cache LocalStorage STRICTEMENT scopé par targetUid (plus aucune clé globale partagée)
+        if (typeof window !== 'undefined' && rawUniversesList.length === 0) {
+          try {
+            const scopedKey = `nana_merchant_universes_${targetUid}`;
+            const raw = localStorage.getItem(scopedKey);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                rawUniversesList.push(...parsed);
+              } else if (parsed && typeof parsed === 'object' && parsed.id) {
+                rawUniversesList.push(parsed);
               }
             }
           } catch (_) {}
         }
 
-        // 5. Déduplication par ID strict et normalisation standard
+        // 6. Filtrage propriétaire strict + déduplication par ID d'univers (tenant_id)
         const uniqueMap = new Map<string, NanaMerchantApp>();
         rawUniversesList.forEach(u => {
-          if (u && (u.id || u.storeId)) {
-            const id = String(u.id || u.storeId);
-            const isApproved = u.status === 'ACTIVE' || u.status === 'VERIFIED' || u.status === 'verified' || u.status === 'approved' || isUserKycVerified;
-            const normalized: NanaMerchantApp = {
-              id,
-              name: u.name || u.storeName || u.companyName || 'Univers Marchand',
-              sector: u.sector || u.appellation || u.activityDomain || 'E-commerce & Services',
-              type: u.type === 'business' ? 'entreprise' : (u.type || 'entreprise'),
-              status: isApproved ? 'VERIFIED' : (u.status === 'REJECTED' || u.status === 'rejected' ? 'REJECTED' : 'PENDING_KYC'),
-              createdAt: u.createdAt || (u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
-              balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
-              keys: u.keys?.pk ? u.keys : (u.keys?.publicKey ? { pk: u.keys.publicKey, skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined, whSecret: u.keys.webhookSecret } : undefined),
-              webhook_config: u.webhook_config,
-              integration_mode: u.integration_mode || 'AGREGATED',
-              integration_config: u.integration_config || {
-                mode: u.integration_mode || 'AGREGATED',
-                custom_credentials: {}
-              },
-              custom_credentials: u.integration_config?.custom_credentials || {},
-              api_credits_balance: u.api_credits_balance ?? u.settings?.api_credits_balance ?? 5000,
-              api_pricing_config: u.api_pricing_config || u.settings?.api_pricing_config || {
-                cost_per_request_xof: 0.02,
-                api_credits_balance: 5000,
-                low_balance_threshold: 500
-              },
-              monthly_usage: u.monthly_usage || u.settings?.monthly_usage || {
-                month: new Date().toISOString().slice(0, 7),
-                volume_xof: 0,
-                transaction_count: 0
-              },
-              kyc_limits: u.kyc_limits || {
-                tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
-                max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
-                description: u.type === 'particulier' ? 'Compte Particulier / Indépendant' : 'Compte Entreprise Enregistrée'
-              },
-              kyc: u.kyc || u.kyc_data || {}
-            };
-            uniqueMap.set(id, normalized);
+          if (!u || !(u.id || u.storeId)) return;
+
+          // Vérification anti-fuite : rejeter tout univers appartenant explicitement à un autre owner_id
+          const explicitOwner = u.owner_id || u.ownerId || u.userId || u.user_id;
+          if (explicitOwner && String(explicitOwner) !== String(targetUid)) {
+            return;
           }
+
+          const id = String(u.id || u.storeId);
+          const isApproved =
+            u.status === 'ACTIVE' ||
+            u.status === 'VERIFIED' ||
+            u.status === 'verified' ||
+            u.status === 'approved' ||
+            isUserKycVerified;
+
+          const normalized: NanaMerchantApp = {
+            id,
+            name: u.name || u.storeName || u.companyName || 'Univers Marchand',
+            sector: u.sector || u.appellation || u.activityDomain || 'E-commerce & Services',
+            type: u.type === 'business' ? 'entreprise' : (u.type || 'entreprise'),
+            status: isApproved
+              ? 'VERIFIED'
+              : (u.status === 'REJECTED' || u.status === 'rejected' ? 'REJECTED' : 'PENDING_KYC'),
+            createdAt:
+              u.createdAt ||
+              (u.created_at ? String(u.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+            balances: u.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+            keys: u.keys?.pk
+              ? u.keys
+              : (u.keys?.publicKey
+                  ? {
+                      pk: u.keys.publicKey,
+                      skHash: u.keys.secretKey ? '$2a$10$...hidden' : undefined,
+                      whSecret: u.keys.webhookSecret
+                    }
+                  : undefined),
+            webhook_config: u.webhook_config,
+            integration_mode: u.integration_mode || 'AGREGATED',
+            integration_config: u.integration_config || {
+              mode: u.integration_mode || 'AGREGATED',
+              custom_credentials: {}
+            },
+            custom_credentials: u.integration_config?.custom_credentials || {},
+            api_credits_balance: u.api_credits_balance ?? u.settings?.api_credits_balance ?? 5000,
+            api_pricing_config: u.api_pricing_config || u.settings?.api_pricing_config || {
+              cost_per_request_xof: 0.02,
+              api_credits_balance: 5000,
+              low_balance_threshold: 500
+            },
+            monthly_usage: u.monthly_usage || u.settings?.monthly_usage || {
+              month: new Date().toISOString().slice(0, 7),
+              volume_xof: 0,
+              transaction_count: 0
+            },
+            kyc_limits: u.kyc_limits || {
+              tier: u.type === 'particulier' ? 'INDIVIDUAL' : 'ENTERPRISE',
+              max_monthly_volume_xof: u.type === 'particulier' ? 1000000 : 5000000,
+              description:
+                u.type === 'particulier'
+                  ? 'Compte Particulier / Indépendant'
+                  : 'Compte Entreprise Enregistrée'
+            },
+            kyc: u.kyc || u.kyc_data || {}
+          };
+          uniqueMap.set(id, normalized);
         });
 
-        if (uniqueMap.size > 0 && isMounted) {
-          const loaded = Array.from(uniqueMap.values());
+        const loaded = Array.from(uniqueMap.values());
+        if (isMounted) {
           setApps(loaded);
-
-          // Sauvegarde hermétique globale et utilisateur
-          try {
-            localStorage.setItem('nana_merchant_universes', JSON.stringify(loaded));
-            localStorage.setItem('nana_all_universes', JSON.stringify(loaded));
-            if (targetUid) {
-              localStorage.setItem(`nana_merchant_universes_${targetUid}`, JSON.stringify(loaded));
-            }
-            if (targetEmail) {
-              localStorage.setItem(`nana_merchant_universes_${targetEmail}`, JSON.stringify(loaded));
-            }
-          } catch (_) {}
-          return;
         }
 
-        // Si aucun univers n'a été trouvé, ne pas vider si la liste en mémoire contient déjà des univers
-        if (uniqueMap.size === 0 && isMounted) {
-          setApps(prev => (prev.length > 0 ? prev : []));
+        // Sauvegarde cache local UNIQUEMENT sous la partition stricte de l'utilisateur connecté
+        if (typeof window !== 'undefined' && targetUid) {
+          try {
+            localStorage.setItem(
+              `nana_merchant_universes_${targetUid}`,
+              JSON.stringify(loaded.map(a => ({ ...a, owner_id: targetUid })))
+            );
+          } catch (_) {}
         }
       } catch (err) {
         console.warn('[LOAD_UNIVERSES] Exception :', err);
@@ -1004,6 +1000,18 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
     loadMerchantUniverses();
 
+    // Synchronisation temps réel lors d'un changement de compte ou déconnexion Supabase Auth
+    const authSub = supabase?.auth?.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        if (isMounted) {
+          setApps([]);
+          setSelectedApp(null);
+        }
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        loadMerchantUniverses();
+      }
+    });
+
     const handleSyncEvent = () => {
       loadMerchantUniverses();
     };
@@ -1012,17 +1020,16 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       window.addEventListener('nana_universes_updated', handleSyncEvent);
       window.addEventListener('superAdminUpdated', handleSyncEvent);
       window.addEventListener('nana_kyc_submission_created', handleSyncEvent);
-      window.addEventListener('storage', handleSyncEvent);
       window.addEventListener('focus', handleSyncEvent);
     }
 
     return () => {
       isMounted = false;
+      authSub?.data?.subscription?.unsubscribe();
       if (typeof window !== 'undefined') {
         window.removeEventListener('nana_universes_updated', handleSyncEvent);
         window.removeEventListener('superAdminUpdated', handleSyncEvent);
         window.removeEventListener('nana_kyc_submission_created', handleSyncEvent);
-        window.removeEventListener('storage', handleSyncEvent);
         window.removeEventListener('focus', handleSyncEvent);
       }
     };
@@ -1214,22 +1221,29 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       injectedCarteModules: []
     });
 
-    // 2. Mise à jour de l'état local et ouverture immédiate du dashboard
+    // 2. Résolution stricte de l'utilisateur Supabase authentifié + mise à jour état local
+    let targetUid = String(currentUser?.id || currentUser?.uid || '');
+    let accessToken = '';
+    if (supabase) {
+      try {
+        const { data: sessData } = await supabase.auth.getSession();
+        if (sessData?.session?.user?.id) {
+          targetUid = sessData.session.user.id;
+          accessToken = sessData.session.access_token || '';
+        }
+      } catch {}
+    }
+
     const updatedApps = [newApp, ...apps.filter(a => a.id !== newApp.id)];
     setApps(updatedApps);
     setSelectedApp(newApp);
 
-    const targetUid = currentUser?.id || currentUser?.uid;
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && targetUid) {
       try {
-        localStorage.setItem('nana_merchant_universes', JSON.stringify(updatedApps));
-        localStorage.setItem('nana_all_universes', JSON.stringify(updatedApps));
-        if (targetUid) {
-          localStorage.setItem(`nana_merchant_universes_${targetUid}`, JSON.stringify(updatedApps));
-        }
-        if (userEmailVal) {
-          localStorage.setItem(`nana_merchant_universes_${userEmailVal}`, JSON.stringify(updatedApps));
-        }
+        localStorage.setItem(
+          `nana_merchant_universes_${targetUid}`,
+          JSON.stringify(updatedApps.map(a => ({ ...a, owner_id: targetUid })))
+        );
         localStorage.setItem('nana_current_app_id', newApp.id);
       } catch {}
     }
@@ -1241,34 +1255,54 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       'success'
     );
 
-    // 3. Persistance dans l'API Serveur permanente (/api/universes)
-    try {
-      await fetch('/api/universes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newApp,
-          userId: targetUid || newId,
-          userEmail: userEmailVal
-        })
-      });
-    } catch (univApiErr) {
-      console.warn('[KYC SUBMIT] /api/universes notice:', univApiErr);
+    // 3. SOURCE UNIQUE DE VÉRITÉ : Persistance canonique dans public.merchants (protégée par RLS owner_id)
+    if (supabase && targetUid) {
+      try {
+        await supabase.from('merchants').upsert({
+          id: newId,
+          owner_id: targetUid,
+          owner_email: userEmailVal || null,
+          name: appDisplayName,
+          sector: sectorChosen,
+          type: kycForm.type === 'entreprise' ? 'entreprise' : 'particulier',
+          status: newApp.status,
+          integration_mode: newApp.integration_mode || 'AGREGATED',
+          integration_config: newApp.integration_config || {},
+          balances: newApp.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+          keys: newApp.keys || {},
+          webhook_config: newApp.webhook_config || {},
+          kyc_data: newApp.kyc || {},
+          kyc_limits: newApp.kyc_limits || {},
+          api_credits_balance: newApp.api_credits_balance ?? 5000,
+          api_pricing_config: newApp.api_pricing_config || {},
+          monthly_usage: newApp.monthly_usage || {},
+          company_email: (isBusiness ? kycForm.companyEmail : userEmailVal) || userEmailVal || null,
+          phone: phoneVal || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+      } catch (merchErr) {
+        console.warn('[KYC SUBMIT] Supabase merchants upsert notice:', merchErr);
+      }
     }
 
-    // 4. Persistance miroir dans Supabase table app_registry (toujours disponible et permissive)
-    if (supabase) {
+    // 4. Persistance secondaire API Serveur (/api/universes) authentifiée par JWT Bearer
+    if (accessToken) {
       try {
-        await supabase.from('app_registry').upsert({
-          key: `universe_${newId}`,
-          name: appDisplayName,
-          category: 'Univers Marchand',
-          tenant_id: targetUid || newId,
-          config_json: newApp,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'key' });
-      } catch (regErr) {
-        console.warn('[KYC SUBMIT] Supabase app_registry notice:', regErr);
+        await fetch('/api/universes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            ...newApp,
+            owner_id: targetUid,
+            userId: targetUid,
+            userEmail: userEmailVal
+          })
+        });
+      } catch (univApiErr) {
+        console.warn('[KYC SUBMIT] /api/universes notice:', univApiErr);
       }
     }
 
