@@ -70,7 +70,7 @@ export const DebtBookView: React.FC<DebtBookViewProps> = ({
   const totalDebtorsCount = customers.filter(c => c.totalDebt > 0).length;
 
   const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.shortName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.phone && c.phone.includes(searchTerm))
   );

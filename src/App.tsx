@@ -3840,7 +3840,21 @@ export default function App() {
       'sales',
       currentStoreId,
       (remoteSales) => {
-        setSalesHistory(remoteSales);
+        const normalizedSales = (Array.isArray(remoteSales) ? remoteSales : [])
+          .filter(Boolean)
+          .map((s: any) => ({
+            ...s,
+            total: Number(s.total ?? s.amount ?? 0) || 0,
+            items: Array.isArray(s.items)
+              ? s.items.filter(Boolean).map((it: any) => ({
+                  ...it,
+                  name: String(it.name || it.title || it.productName || 'Article'),
+                  price: Number(it.price ?? it.sellingPrice ?? 0) || 0,
+                  quantity: Number(it.quantity ?? 1) || 1,
+                }))
+              : [],
+          }));
+        setSalesHistory(normalizedSales);
       }
     );
 
@@ -3849,8 +3863,26 @@ export default function App() {
       'inventory',
       currentStoreId,
       (remoteInventory) => {
-        if (remoteInventory.length > 0) {
-          setInventory(remoteInventory);
+        const normalizedInventory = (Array.isArray(remoteInventory) ? remoteInventory : [])
+          .filter(Boolean)
+          .map((p: any, idx: number) => {
+            const safeName = String(p.name || p.title || p.product_name || p.label || `Produit ${idx + 1}`).trim() || `Produit ${idx + 1}`;
+            const safeCategory = String(p.category || p.type || 'Général').trim() || 'Général';
+            return {
+              ...p,
+              id: String(p.id || `prod-${idx}`),
+              storeId: p.storeId || p.store_id || currentStoreId,
+              name: safeName,
+              category: safeCategory,
+              sellingPrice: Number(p.sellingPrice ?? p.selling_price ?? p.price ?? 0) || 0,
+              costPrice: Number(p.costPrice ?? p.cost_price ?? 0) || 0,
+              stock: Number(p.stock ?? p.quantity ?? 0) || 0,
+              unit: String(p.unit || 'unité'),
+              keywords: Array.isArray(p.keywords) ? p.keywords.filter((k: any) => typeof k === 'string') : [safeName.toLowerCase()],
+            } as InventoryProduct;
+          });
+        if (normalizedInventory.length > 0) {
+          setInventory(normalizedInventory);
         } else {
           // Si nouvelle boutique vide, initialiser avec le catalogue
           const initialCatalog = INITIAL_INVENTORY.map((p) => ({
@@ -3868,7 +3900,16 @@ export default function App() {
       'customers',
       currentStoreId,
       (remoteCustomers) => {
-        setCustomers(remoteCustomers);
+        const normalizedCustomers = (Array.isArray(remoteCustomers) ? remoteCustomers : [])
+          .filter(Boolean)
+          .map((c: any, idx: number) => ({
+            ...c,
+            id: String(c.id || `cust-${idx}`),
+            name: String(c.name || c.full_name || c.customerName || 'Client').trim() || 'Client',
+            phone: String(c.phone || c.whatsapp || ''),
+            totalDebt: Number(c.totalDebt ?? c.total_debt ?? 0) || 0,
+          }));
+        setCustomers(normalizedCustomers);
       }
     );
 
@@ -3877,7 +3918,7 @@ export default function App() {
       'losses',
       currentStoreId,
       (remoteLosses) => {
-        setLosses(remoteLosses);
+        setLosses(Array.isArray(remoteLosses) ? remoteLosses.filter(Boolean) : []);
       }
     );
 
@@ -3886,7 +3927,7 @@ export default function App() {
       'stockMovements',
       currentStoreId,
       (remoteMovements) => {
-        setStockMovements(remoteMovements);
+        setStockMovements(Array.isArray(remoteMovements) ? remoteMovements.filter(Boolean) : []);
       }
     );
 
@@ -3895,7 +3936,7 @@ export default function App() {
       'orders',
       currentStoreId,
       (remoteOrders) => {
-        setCustomerOrders(remoteOrders);
+        setCustomerOrders(Array.isArray(remoteOrders) ? remoteOrders.filter(Boolean) : []);
       }
     );
 
@@ -3923,14 +3964,21 @@ export default function App() {
       'sellers',
       currentStoreId,
       (remoteSellers) => {
-        setSellers(remoteSellers);
+        const normalizedSellers = (Array.isArray(remoteSellers) ? remoteSellers : [])
+          .filter(Boolean)
+          .map((s: any, idx: number) => ({
+            ...s,
+            id: String(s.id || `seller-${idx}`),
+            name: String(s.name || s.full_name || s.displayName || 'Vendeur').trim() || 'Vendeur',
+          }));
+        setSellers(normalizedSellers);
         setActiveSeller((curr) => {
-          if (curr && remoteSellers.some((s) => s.id === curr.id)) {
-            return remoteSellers.find((s) => s.id === curr.id) || curr;
+          if (curr && normalizedSellers.some((s) => s.id === curr.id)) {
+            return normalizedSellers.find((s) => s.id === curr.id) || curr;
           }
           const savedSellerId = safeGetItem(`nana_tenant_${currentStoreId}_active_seller_id`);
           if (savedSellerId) {
-            const found = remoteSellers.find((s) => s.id === savedSellerId);
+            const found = normalizedSellers.find((s) => s.id === savedSellerId);
             if (found) return found;
           }
           return remoteSellers[0] || null;

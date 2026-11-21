@@ -191,7 +191,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       // Filter by search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesName = prod.name.toLowerCase().includes(q);
+        const matchesName = (prod?.name || '').toLowerCase().includes(q);
         const matchesCat = prod.category?.toLowerCase().includes(q);
         const matchesKw = prod.keywords?.some((k) => k.toLowerCase().includes(q));
         if (!matchesName && !matchesCat && !matchesKw) return false;
@@ -807,7 +807,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                                     </>
                                   ) : (
                                     <div className="text-xs font-black text-blue-400 bg-blue-950/40 w-full h-full flex items-center justify-center">
-                                      {prod.name.charAt(0).toUpperCase()}
+                                      {(prod?.name || '?').charAt(0).toUpperCase()}
                                     </div>
                                   )}
                                 </div>

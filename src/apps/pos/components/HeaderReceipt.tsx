@@ -394,7 +394,7 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
         >
           <Store className="w-3.5 h-3.5 text-blue-400 shrink-0" />
           <span className="text-[11px] font-bold leading-tight flex items-center gap-1">
-            <span>Caisse: {activeSeller ? activeSeller.name.split(' ')[0] : 'PIN'}</span>
+            <span>Caisse: {activeSeller ? (activeSeller.name || 'Vendeur').split(' ')[0] : 'PIN'}</span>
             {isFreeAccount && <ProCrownIcon size="xs" />}
           </span>
           <span
@@ -601,7 +601,7 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
                   />
                 ) : (
                   <div className="w-5 h-5 sm:w-4 sm:h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold flex items-center justify-center">
-                    {currentUser.name.charAt(0)}
+                    {(currentUser?.name || currentUser?.storeName || 'U').charAt(0)}
                   </div>
                 )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -974,7 +974,7 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
                       />
                     ) : (
                       <div className="text-[11px] font-black text-blue-400">
-                        {item.name.charAt(0).toUpperCase()}
+                        {(item?.name || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
                   </div>

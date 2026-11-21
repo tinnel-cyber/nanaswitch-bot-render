@@ -62,7 +62,7 @@ export const PosSearchBar: React.FC<PosSearchBarProps> = ({
     if (!q) return [];
 
     return inventory.filter((prod) => {
-      const matchName = prod.name.toLowerCase().includes(q);
+      const matchName = (prod?.name || '').toLowerCase().includes(q);
       const matchBarcode = prod.barcode ? prod.barcode.toLowerCase().includes(q) : false;
       const matchId = prod.id.toLowerCase().includes(q);
       const matchCat = prod.category?.toLowerCase().includes(q);
@@ -116,7 +116,7 @@ export const PosSearchBar: React.FC<PosSearchBarProps> = ({
                   (p) =>
                     (p.barcode && p.barcode.toLowerCase() === q) ||
                     p.id.toLowerCase() === q ||
-                    p.name.toLowerCase() === q
+                    (p?.name || '').toLowerCase() === q
                 );
                 const target = exactMatch || matches[0];
                 if (target) {

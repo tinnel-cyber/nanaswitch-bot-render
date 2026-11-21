@@ -1117,7 +1117,7 @@ export const CustomerOrdersView: React.FC<CustomerOrdersViewProps> = ({
                   {inventory
                     .filter((p) =>
                       inventorySearch
-                        ? p.name.toLowerCase().includes(inventorySearch.toLowerCase())
+                        ? (p?.name || '').toLowerCase().includes(inventorySearch.toLowerCase())
                         : true
                     )
                     .slice(0, 8)

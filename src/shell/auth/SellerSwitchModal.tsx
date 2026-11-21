@@ -258,7 +258,7 @@ export const SellerSwitchModal: React.FC<SellerSwitchModalProps> = ({
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-emerald-600/30 text-emerald-300 font-bold text-xs flex items-center justify-center border border-emerald-500/40">
-                      {activeSeller.name.charAt(0)}
+                      {(activeSeller?.name || 'V').charAt(0)}
                     </div>
                   )}
                   <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-950" />
@@ -338,7 +338,7 @@ export const SellerSwitchModal: React.FC<SellerSwitchModalProps> = ({
                   />
                 ) : (
                   <div className="w-14 h-14 rounded-full bg-blue-600 text-white font-bold text-lg flex items-center justify-center border-2 border-blue-400 shadow-lg mx-auto">
-                    {selectedSellerForPin.name.charAt(0)}
+                    {(selectedSellerForPin?.name || 'V').charAt(0)}
                   </div>
                 )}
                 <div className="absolute -bottom-1 -right-1 p-1 rounded-full bg-slate-900 border border-slate-700">
@@ -545,7 +545,7 @@ export const SellerSwitchModal: React.FC<SellerSwitchModalProps> = ({
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold text-sm flex items-center justify-center border border-blue-400">
-                            {seller.name.charAt(0)}
+                            {(seller?.name || 'V').charAt(0)}
                           </div>
                         )}
                         {isActive && (

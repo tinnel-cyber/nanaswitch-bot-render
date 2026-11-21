@@ -114,7 +114,7 @@ export const CashPaymentModal: React.FC<CashPaymentModalProps> = ({
             <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-6 h-6 rounded-full bg-emerald-600/30 text-emerald-300 font-bold text-[11px] flex items-center justify-center border border-emerald-500/40 shrink-0">
-                  {activeSeller.name.charAt(0)}
+                  {(activeSeller?.name || 'V').charAt(0)}
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-bold text-white truncate flex items-center gap-1.5">

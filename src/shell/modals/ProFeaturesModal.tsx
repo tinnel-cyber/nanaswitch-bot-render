@@ -778,7 +778,7 @@ export const ProFeaturesModal: React.FC<ProFeaturesModalProps> = ({
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center font-black text-xs text-emerald-400">
-                            {emp.name.substring(0, 2).toUpperCase()}
+                            {(emp?.name || 'EM').substring(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">

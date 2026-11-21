@@ -121,7 +121,7 @@ export const CreditModal: React.FC<CreditModalProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-200">
-                      {c.name.charAt(0)}
+                      {(c?.name || 'C').charAt(0)}
                     </div>
                     <div>
                       <div className="font-bold text-xs">{c.name}</div>

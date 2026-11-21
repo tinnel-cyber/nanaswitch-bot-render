@@ -628,9 +628,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         }`}
                       >
                         <span className="w-4 h-4 rounded-full bg-slate-700 text-white text-[9px] flex items-center justify-center font-bold">
-                          {s.name.charAt(0)}
+                          {(s?.name || 'V').charAt(0)}
                         </span>
-                        <span>{s.name.split(' ')[0]}</span>
+                        <span>{(s?.name || 'Vendeur').split(' ')[0]}</span>
                         <span
                           className={`text-[10px] px-1.5 rounded font-mono ${
                             isSelected ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-400'
@@ -660,7 +660,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 to-indigo-600 text-white text-xs font-bold flex items-center justify-center border border-indigo-400/40">
-                              {stat.seller.name.charAt(0)}
+                              {(stat?.seller?.name || 'V').charAt(0)}
                             </div>
                             <div>
                               <div className="flex items-center gap-1.5">

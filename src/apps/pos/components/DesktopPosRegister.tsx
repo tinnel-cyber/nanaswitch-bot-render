@@ -271,7 +271,7 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
                               }}
                             />
                             <div className="pos-img-fallback hidden text-2xl font-black text-blue-600/80 dark:text-blue-400/80">
-                              {prod.name.charAt(0).toUpperCase()}
+                              {(prod?.name || '?').charAt(0).toUpperCase()}
                             </div>
                             {/* Bouton Loupe / Agrandisseur interactif */}
                             <button
@@ -295,7 +295,7 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
                           </>
                         ) : (
                           <div className="text-2xl font-black text-blue-600/80 dark:text-blue-400/80">
-                            {prod.name.charAt(0).toUpperCase()}
+                            {(prod?.name || '?').charAt(0).toUpperCase()}
                           </div>
                         );
                       })()}
@@ -487,7 +487,7 @@ export const DesktopPosRegister: React.FC<DesktopPosRegisterProps> = ({
                           <img src={itemImg} alt={item.name} className="w-full h-full object-cover" crossOrigin="anonymous" />
                         ) : (
                           <span className="text-xs font-black text-blue-600 dark:text-blue-300">
-                            {item.name.charAt(0).toUpperCase()}
+                            {(item?.name || '?').charAt(0).toUpperCase()}
                           </span>
                         );
                       })()}

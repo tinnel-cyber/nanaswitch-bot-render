@@ -200,7 +200,7 @@ export function CampaignDispatcher({
       const matchType = filterType === 'all' || contact.type === filterType;
       const query = searchQuery.trim().toLowerCase();
       const matchQuery = !query || 
-        contact.name.toLowerCase().includes(query) ||
+        (contact?.name || '').toLowerCase().includes(query) ||
         contact.email.toLowerCase().includes(query) ||
         (contact.phone && contact.phone.includes(query)) ||
         (contact.city && contact.city.toLowerCase().includes(query));
@@ -385,8 +385,8 @@ export function CampaignDispatcher({
           recipientCount: requiredCredits,
           recipients: selectedContactsData.map(c => ({
             email: c.email,
-            first_name: c.name.split(' ')[0] || '',
-            last_name: c.name.split(' ').slice(1).join(' ') || ''
+            first_name: (c?.name || '').split(' ')[0] || '',
+            last_name: (c?.name || '').split(' ').slice(1).join(' ') || ''
           }))
         })
       });

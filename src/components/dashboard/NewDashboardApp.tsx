@@ -1751,7 +1751,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   >
                     <div className="flex items-start justify-between mb-6">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-blue-600/20 group-hover:scale-105 transition">
-                        {app.name.charAt(0)}
+                        {(app?.name || 'A').charAt(0)}
                       </div>
 
                       {/* Status Badge */}
@@ -4182,7 +4182,7 @@ function TabCustomers() {
               <div key={i} className="py-4 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                    {c.name.charAt(0)}
+                    {(c?.name || 'C').charAt(0)}
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
