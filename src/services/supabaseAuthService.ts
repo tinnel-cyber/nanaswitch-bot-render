@@ -25,9 +25,9 @@ export interface SupabaseAuthUser {
  */
 function getAuthRedirectUrl(): string {
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/dashboard`;
+    return `${window.location.origin}/auth/callback`;
   }
-  return 'https://nanasore.com/dashboard';
+  return 'https://nanasore.com/auth/callback';
 }
 
 /**
@@ -329,31 +329,154 @@ export async function resendVerificationEmail(emailTarget?: string): Promise<boo
     if (!email) return false;
 
     const cleanEmail = email.trim().toLowerCase();
+    const redirectUrl = getAuthRedirectUrl();
 
-    // 1. Déclenchement via Supabase Auth (acheminé via le SMTP Brevo configuré)
-    try {
-      await supabase.auth.resend({
-        type: 'signup',
-        email: cleanEmail,
-        options: {
-          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined
-        }
-      });
-    } catch {}
+    // 1. Envoi officiel unique via Supabase Auth (évite le double envoi qui invalide le premier jeton)
+    const { error: resendErr } = await supabase.auth.resend({
+      type: 'signup',
+      email: cleanEmail,
+      options: {
+        emailRedirectTo: redirectUrl,
+      },
+    });
 
-    // 2. Expédition template Brevo officiel via API
-    try {
-      const res = await fetch('/api/auth/resend-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-      return res.ok;
-    } catch {
+    if (!resendErr) {
       return true;
     }
+
+    console.warn('[SUPABASE AUTH] resend fallback vers /api/auth/resend-verification :', resendErr.message);
+
+    // 2. Repli serveur (Brevo + lien officiel token_hash cross-device) uniquement si Supabase Auth a refusé
+    const res = await fetch('/api/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    return res.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Traite le callback officiel Supabase (/auth/callback) sur N'IMPORTE QUEL appareil :
+ * 1. Flux cross-device par token_hash (?token_hash=...&type=signup|magiclink|email|recovery)
+ * 2. Flux PKCE par code (?code=...)
+ * 3. Flux implicite par hash (#access_token=...) via detectSessionInUrl
+ */
+export async function handleSupabaseAuthCallback(): Promise<{
+  success: boolean;
+  user?: SupabaseAuthUser;
+  type?: string;
+  error?: string;
+}> {
+  if (typeof window === 'undefined') {
+    return { success: false, error: 'Environnement navigateur requis.' };
+  }
+
+  try {
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+
+    const urlError = params.get('error_description') || params.get('error') || hashParams.get('error_description') || hashParams.get('error');
+    if (urlError) {
+      return { success: false, error: decodeURIComponent(urlError) };
+    }
+
+    const tokenHash = params.get('token_hash');
+    const rawType = (params.get('type') || 'signup') as 'signup' | 'magiclink' | 'recovery' | 'invite' | 'email_change' | 'email';
+    const code = params.get('code');
+
+    let session: any = null;
+    let supaUser: any = null;
+
+    if (tokenHash) {
+      // Flux cross-device officiel : fonctionne même si l'utilisateur ouvre le mail sur un autre appareil
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: rawType,
+      });
+      if (error) {
+        return { success: false, error: error.message || 'Lien de confirmation invalide ou expiré.' };
+      }
+      session = data?.session || null;
+      supaUser = data?.user || data?.session?.user || null;
+    } else if (code) {
+      // Flux PKCE
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        return {
+          success: false,
+          error: error.message?.includes('code verifier')
+            ? 'Ce lien a été ouvert sur un autre appareil. Veuillez demander un nouveau lien ou vous connecter avec votre mot de passe.'
+            : (error.message || 'Échec de validation du code de session.'),
+        };
+      }
+      session = data?.session || null;
+      supaUser = data?.user || data?.session?.user || null;
+    } else {
+      // Flux implicite (#access_token=...) ou session déjà établie par detectSessionInUrl
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      session = data?.session || null;
+      supaUser = data?.session?.user || null;
+    }
+
+    if (!supaUser) {
+      const { data: userData } = await supabase.auth.getUser();
+      supaUser = userData?.user || null;
+    }
+
+    if (!supaUser?.id) {
+      return { success: false, error: 'Aucune session active détectée. Veuillez vous connecter.' };
+    }
+
+    const displayName =
+      supaUser.user_metadata?.full_name ||
+      supaUser.user_metadata?.name ||
+      supaUser.email?.split('@')[0] ||
+      'Utilisateur';
+
+    const authUser: SupabaseAuthUser = {
+      id: supaUser.id,
+      uid: supaUser.id,
+      email: supaUser.email || '',
+      displayName,
+      name: displayName,
+      fullName: displayName,
+      emailVerified: Boolean(supaUser.confirmed_at || supaUser.email_confirmed_at || true),
+      providerData: [{ providerId: supaUser.app_metadata?.provider || 'email' }],
+      role: supaUser.user_metadata?.seller_mode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+      sellerMode: supaUser.user_metadata?.seller_mode || 'merchant_ecommerce',
+    };
+
+    try {
+      localStorage.setItem('nana_store_auth_user', JSON.stringify({
+        ...authUser,
+        plan: 'free',
+      }));
+      if (session?.access_token) {
+        localStorage.setItem('nana_auth_token', session.access_token);
+      }
+    } catch {}
+
+    // Synchroniser le profil Supabase avec le vrai UUID utilisateur
+    try {
+      await supabase.from('profiles').upsert({
+        id: supaUser.id,
+        email: authUser.email,
+        full_name: displayName,
+        role: authUser.role,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch {}
+
+    return { success: true, user: authUser, type: rawType };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur lors de la validation du lien de confirmation.' };
   }
 }
 

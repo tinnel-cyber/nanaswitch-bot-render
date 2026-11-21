@@ -41,6 +41,7 @@ export function getSupabaseClient(useServiceRole: boolean = false): SupabaseClie
     auth: {
       persistSession: isBrowser,
       autoRefreshToken: isBrowser,
+      detectSessionInUrl: isBrowser,
     },
     realtime: {
       params: {

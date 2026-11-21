@@ -137,6 +137,7 @@ const CashierConnectPage = React.lazy(() => import('./pages/CashierConnectPage')
 const AcademicUploadView = React.lazy(() => import('./components/upload/AcademicUploadView').then(m => ({ default: m.AcademicUploadView || m.default })));
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
+const AuthCallbackPage = React.lazy(() => import('./components/auth/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
 const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
@@ -5889,6 +5890,33 @@ export default function App() {
             setIsCatalogView(true);
             if (typeof window !== 'undefined') {
               window.history.pushState({}, '', '/catalog');
+            }
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
+  // 0.000 Callback Officiel Supabase Auth (/auth/callback ou ?token_hash=...) — 100% Multi-Appareils
+  const isAuthCallbackRoute =
+    typeof window !== 'undefined' &&
+    (window.location.pathname === '/auth/callback' ||
+      window.location.pathname.startsWith('/auth/callback/') ||
+      new URLSearchParams(window.location.search).has('token_hash'));
+
+  if (isAuthCallbackRoute) {
+    return (
+      <React.Suspense fallback={<LazyModuleFallback label="Validation sécurisée de votre session Supabase..." />}>
+        <AuthCallbackPage
+          onSuccess={(authUser) => {
+            setCurrentUser(authUser as any);
+            setIsWelcomeShowcaseOpen(false);
+            setIsEmailAuthScreenOpen(false);
+            setIsAuthLocked(false);
+          }}
+          onGoToLogin={() => {
+            if (typeof window !== 'undefined') {
+              window.location.replace('/');
             }
           }}
         />

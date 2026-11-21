@@ -1186,47 +1186,45 @@ async function startServer() {
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      let userId = `usr_${Date.now().toString(36)}`;
       const resolvedName = name || email.trim().split('@')[0];
-      const confirmationToken = crypto.randomBytes(32).toString('hex');
       const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
       const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
-      const appUrl = process.env.APP_URL || `${proto}://${host}`;
-      let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(email.trim())}`;
+      const appUrl = (process.env.APP_URL || `${proto}://${host}`).replace(/\/$/, '');
+      const callbackUrl = `${appUrl}/auth/callback`;
+      let confirmationUrl = '';
 
-      // 2. Création de l'utilisateur dans Supabase Auth (en attente de confirmation par email)
-      try {
-        if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-          // Tenter d'abord de générer le lien officiel de confirmation Supabase
-          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-            type: 'signup',
-            email: email.trim(),
-            password,
-            options: {
-              redirectTo: `${appUrl}/dashboard`,
-            },
-          });
-
-          if (!linkErr && linkData?.properties?.action_link) {
-            confirmationUrl = linkData.properties.action_link;
-            userId = linkData.user?.id || userId;
-            console.log(`[AUTH REGISTER] Lien officiel Supabase généré avec succès pour ${email.trim()}`);
-          } else {
-            // Création directe avec email_confirm: false : l'utilisateur doit obligatoirement valider par email
-            const { data: adminUser, error: adminErr } = await supabase.auth.admin.createUser({
-              email: email.trim(),
-              password,
-              email_confirm: false,
-              user_metadata: { full_name: resolvedName, seller_mode: sellerMode }
-            });
-            if (!adminErr && adminUser?.user) {
-              userId = adminUser.user.id;
-            }
-          }
-        }
-      } catch (adminE: any) {
-        console.warn('[SERVER AUTH] Admin create notice:', adminE?.message);
+      // 2. Création de l'utilisateur dans Supabase Auth & génération d'un VRAI lien cross-device (token_hash)
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(503).json({
+          success: false,
+          error: 'Configuration serveur incomplète (SUPABASE_SERVICE_ROLE_KEY manquante pour générer un lien de confirmation Supabase valide).',
+        });
       }
+
+      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+        type: 'signup',
+        email: email.trim(),
+        password,
+        options: {
+          redirectTo: callbackUrl,
+          data: { full_name: resolvedName, name: resolvedName, seller_mode: sellerMode },
+        },
+      });
+
+      if (linkErr || !linkData?.properties) {
+        console.error('[AUTH REGISTER] Erreur generateLink Supabase:', linkErr?.message);
+        return res.status(400).json({
+          success: false,
+          error: linkErr?.message || 'Impossible de générer le lien de confirmation Supabase.',
+        });
+      }
+
+      const hashedToken = linkData.properties.hashed_token;
+      confirmationUrl = hashedToken
+        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=signup`
+        : linkData.properties.action_link;
+      const userId = linkData.user?.id || '';
+      console.log(`[AUTH REGISTER] Lien cross-device Supabase (/auth/callback) généré pour ${email.trim()}`);
 
       // 3. Enregistrement / synchronisation du profil
       try {
@@ -1374,27 +1372,35 @@ async function startServer() {
 
       const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
       const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
-      const appUrl = process.env.APP_URL || `${proto}://${host}`;
-      const confirmationToken = crypto.randomBytes(32).toString('hex');
-      let confirmationUrl = `${appUrl}/api/auth/verify?token=${confirmationToken}&email=${encodeURIComponent(cleanEmail)}`;
+      const appUrl = (process.env.APP_URL || `${proto}://${host}`).replace(/\/$/, '');
+      const callbackUrl = `${appUrl}/auth/callback`;
 
-      // Si service role key disponible, tenter de générer le lien officiel Supabase
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        try {
-          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-            type: 'magiclink',
-            email: cleanEmail,
-            options: {
-              redirectTo: `${appUrl}/dashboard`,
-            },
-          });
-          if (!linkErr && linkData?.properties?.action_link) {
-            confirmationUrl = linkData.properties.action_link;
-          }
-        } catch (e: any) {
-          console.warn('[RESEND VERIFICATION] Admin link notice:', e?.message);
-        }
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(503).json({
+          success: false,
+          error: 'Configuration serveur incomplète (SUPABASE_SERVICE_ROLE_KEY manquante pour générer un lien de confirmation Supabase valide).',
+        });
       }
+
+      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: cleanEmail,
+        options: {
+          redirectTo: callbackUrl,
+        },
+      });
+
+      if (linkErr || !linkData?.properties) {
+        return res.status(400).json({
+          success: false,
+          error: linkErr?.message || 'Impossible de générer un lien de confirmation Supabase.',
+        });
+      }
+
+      const hashedToken = linkData.properties.hashed_token;
+      const confirmationUrl = hashedToken
+        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink`
+        : linkData.properties.action_link;
 
       try {
         const { sendConfirmationEmail } = await import('./app/utils/email.server');
@@ -1403,7 +1409,7 @@ async function startServer() {
           name: cleanEmail.split('@')[0],
           confirmationUrl,
         });
-        console.log(`[BREVO] Email de vérification officiel renvoyé à ${cleanEmail}`);
+        console.log(`[BREVO] Email de vérification cross-device (/auth/callback) renvoyé à ${cleanEmail}`);
       } catch (emailErr: any) {
         console.warn('[BREVO] Erreur renvoi confirmation:', emailErr?.message);
       }
@@ -1421,72 +1427,17 @@ async function startServer() {
     }
   });
 
-  // Route universelle de vérification d'email (appelée par le clic sur le lien Brevo)
+  // Route legacy /api/auth/verify : ne valide JAMAIS sans jeton Supabase — transfère vers /auth/callback
   const handleAuthVerify = async (req: any, res: any) => {
-    try {
-      const email = String(req.query.email || '').trim().toLowerCase();
-      const token = String(req.query.token || '').trim();
-      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
-      const appUrl = process.env.APP_URL || `${proto}://${host}`;
-
-      if (!email) {
-        return res.redirect(`${appUrl}/dashboard?verified=true`);
-      }
-
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      // Validation effective dans Supabase Auth via la clé d'administration
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        try {
-          let targetUserId: string | null = null;
-          try {
-            const { data: prof } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
-            if (prof?.id && !prof.id.startsWith('usr_')) {
-              targetUserId = prof.id;
-            }
-          } catch {}
-
-          if (!targetUserId) {
-            const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-            const targetUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email);
-            if (targetUser) targetUserId = targetUser.id;
-          }
-
-          if (targetUserId) {
-            await supabase.auth.admin.updateUserById(targetUserId, {
-              email_confirm: true,
-              user_metadata: { email_verified: true },
-            });
-            console.log(`[AUTH VERIFY] Compte Supabase ${email} (ID: ${targetUserId}) validé avec succès via admin.`);
-          }
-        } catch (adminErr: any) {
-          console.warn('[AUTH VERIFY] Admin confirmation notice:', adminErr?.message);
-        }
-      }
-
-      // Mettre à jour la table profiles
-      try {
-        await supabase
-          .from('profiles')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('email', email);
-      } catch (profErr: any) {
-        console.warn('[AUTH VERIFY] Profile update notice:', profErr?.message);
-      }
-
-      // Redirection transparente vers le dashboard avec statut vérifié
-      return res.redirect(`${appUrl}/dashboard?verified=true&email=${encodeURIComponent(email)}&auth_status=confirmed`);
-    } catch (err: any) {
-      console.error('[AUTH VERIFY] Erreur générale:', err);
-      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
-      const appUrl = process.env.APP_URL || `${proto}://${host}`;
-      return res.redirect(`${appUrl}/dashboard?verified=true`);
-    }
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+    const appUrl = (process.env.APP_URL || `${proto}://${host}`).replace(/\/$/, '');
+    const qs = new URLSearchParams();
+    if (req.query?.token_hash) qs.set('token_hash', String(req.query.token_hash));
+    if (req.query?.code) qs.set('code', String(req.query.code));
+    if (req.query?.type) qs.set('type', String(req.query.type));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return res.redirect(`${appUrl}/auth/callback${suffix}`);
   };
 
   app.get('/api/auth/verify', handleAuthVerify);
