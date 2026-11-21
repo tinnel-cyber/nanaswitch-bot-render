@@ -137,6 +137,7 @@ const CashierConnectPage = React.lazy(() => import('./pages/CashierConnectPage')
 const AcademicUploadView = React.lazy(() => import('./components/upload/AcademicUploadView').then(m => ({ default: m.AcademicUploadView || m.default })));
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
+const PublicPaymentLinkPage = React.lazy(() => import('./pages/PublicPaymentLinkPage').then(m => ({ default: m.PublicPaymentLinkPage || m.default })));
 const AuthCallbackPage = React.lazy(() => import('./components/auth/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage || m.default })));
 const ResetPasswordPage = React.lazy(() => import('./components/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
@@ -1183,18 +1184,39 @@ export default function App() {
     return null;
   });
 
+  // Détection URL publique Lien de Paiement Autonome (/pay/:linkId ou /checkout?link=...)
+  const [publicPaymentLinkId, setPublicPaymentLinkId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      if (pathname.startsWith('/pay/')) {
+        const seg = pathname.slice('/pay/'.length).split('/')[0].split('?')[0].trim();
+        if (seg && seg !== 'mobile-money' && seg !== 'return') {
+          return decodeURIComponent(seg);
+        }
+      }
+      const queryLink = params.get('link');
+      if (queryLink && (pathname === '/checkout' || pathname === '/pay' || pathname === '/caisse')) {
+        return queryLink.trim();
+      }
+    }
+    return null;
+  });
+
   // Détection URL publique Smart Checkout (/checkout/:productId ou /checkout ou /caisse ou ?checkout=...)
   const [publicCheckoutId, setPublicCheckoutId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
 
-      // Ne jamais intercepter sur les écrans d'inscription, connexion ou accueil
+      // Ne jamais intercepter les liens de paiement autonomes ni les écrans d'auth
       if (
         pathname === '/register' || 
         pathname === '/login' || 
         pathname.startsWith('/register') || 
-        pathname.startsWith('/auth')
+        pathname.startsWith('/auth') ||
+        (pathname.startsWith('/pay/') && !pathname.startsWith('/pay/mobile-money')) ||
+        params.has('link')
       ) {
         return null;
       }
@@ -5272,6 +5294,23 @@ export default function App() {
           onBackToStore={() => {
             if (typeof window !== 'undefined') {
               window.location.href = 'https://nanasore.com';
+            }
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
+  // 0.0000005 Vue Publique Lien de Paiement Autonome (/pay/:linkId ou /checkout?link=...) — zéro fusion abonnement
+  if (publicPaymentLinkId) {
+    return (
+      <React.Suspense fallback={<LazyModuleFallback label="Chargement du lien de paiement sécurisé..." />}>
+        <PublicPaymentLinkPage
+          linkId={publicPaymentLinkId}
+          onBack={() => {
+            setPublicPaymentLinkId(null);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/');
             }
           }}
         />

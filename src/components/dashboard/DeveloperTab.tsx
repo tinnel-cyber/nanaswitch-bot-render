@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { supabase } from '../../lib/supabase';
 import type { NanaMerchantApp } from '../nanaSwitch/NanaSwitchApp';
 
 export interface DeveloperTabProps {
@@ -47,8 +48,10 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
   const initialMode = app.integration_config?.mode || app.integration_mode || 'AGREGATED';
   const [mode, setMode] = useState<'AGREGATED' | 'BYOK'>(initialMode);
 
-  // NanaSwitch Cloud Keys visibility
+  // NanaSwitch Cloud Keys visibility & generation
   const [showSk, setShowSk] = useState(false);
+  const [isGeneratingKeys, setIsGeneratingKeys] = useState(false);
+  const [justGeneratedSk, setJustGeneratedSk] = useState<string>('');
 
   // BYOK Custom Credentials state
   const existingCredentials = app.integration_config?.custom_credentials || app.custom_credentials || {};
@@ -69,6 +72,58 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
   // API Credits balance
   const currentCredits = app.api_pricing_config?.api_credits_balance ?? app.api_credits_balance ?? 5000;
 
+  const getBearerToken = async (): Promise<string> => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data?.session?.access_token || '';
+    } catch {
+      return '';
+    }
+  };
+
+  // Génération / Rotation cryptographique réelle des clés API connectée au Routeur
+  const handleGenerateKeys = async () => {
+    if (!app.id) return;
+    setIsGeneratingKeys(true);
+    try {
+      const token = await getBearerToken();
+      if (!token) {
+        showToast('Session expirée : reconnectez-vous pour générer vos clés API.', 'error');
+        return;
+      }
+      const res = await fetch('/api/merchant/keys/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ merchantId: app.id, mode: 'live' })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        showToast(json.error || 'Échec de la génération des clés API.', 'error');
+        return;
+      }
+      setJustGeneratedSk(json.secretKey || '');
+      const updatedKeys = {
+        ...(app.keys || {}),
+        pk: json.publicKey,
+        publicKey: json.publicKey,
+        skHash: json.skHash,
+        rawSk: json.secretKey,
+        whSecret: json.webhookSecret
+      };
+      if (onUpdateApp) {
+        onUpdateApp({ ...app, keys: updatedKeys as any });
+      }
+      showToast('Nouvelle paire de clés API générée et synchronisée avec le routeur ! Copiez la clé secrète maintenant.', 'success');
+    } catch (err) {
+      showToast('Erreur réseau lors de la génération des clés : ' + (err as Error).message, 'error');
+    } finally {
+      setIsGeneratingKeys(false);
+    }
+  };
+
   // Handle Mode Change (Persist + reactive update)
   const handleModeSwitch = async (newMode: 'AGREGATED' | 'BYOK') => {
     setMode(newMode);
@@ -81,7 +136,7 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
     await persistModeAndCredentials(mode, saspayApiKey, sebpayPublicKey, sebpaySecretKey);
   };
 
-  // Common persistence logic: Firestore + Backend API + React State
+  // Common persistence logic: Backend Router API (Supabase merchants + universes + nanaswitch_merchants) + React State
   const persistModeAndCredentials = async (
     targetMode: 'AGREGATED' | 'BYOK',
     sasKey: string,
@@ -114,19 +169,24 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
     }
 
     try {
-      // 2. Synchronisation Backend Admin SDK (Prioritaire pour contourner toute restriction de règle client)
-      try {
-        await fetch(`${PAYMENT_API_BASE}/v1/switch/merchant/integration-mode`, {
+      // 2. Synchronisation Routeur authentifiée par JWT Bearer (merchants + universes + nanaswitch_merchants)
+      const token = await getBearerToken();
+      if (token && app.id) {
+        const routerRes = await fetch('/api/merchant/integration-mode', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
           body: JSON.stringify({
             merchantId: app.id,
             mode: targetMode,
             customCredentials: updatedCustomCreds
           })
         });
-      } catch (backendErr) {
-        console.warn('[BACKEND MODE SYNC SILENT NOTICE]', (backendErr as Error).message);
+        if (!routerRes.ok) {
+          console.warn('[ROUTER MODE SYNC HTTP]', routerRes.status);
+        }
       }
 
       // 3. Mise à jour directe Firestore côté client si disponible
@@ -146,8 +206,8 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
 
       showToast(
         targetMode === 'BYOK'
-          ? 'Mode BYOK activé et clés passerelles enregistrées avec succès !'
-          : 'Mode Simplifié (Agrégé) activé avec succès !',
+          ? 'Mode BYOK activé et synchronisé avec le routeur !'
+          : 'Mode Simplifié (Agrégé) activé et synchronisé avec le routeur !',
         'success'
       );
     } catch (err) {
@@ -354,6 +414,23 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
 
           {/* Master API Credentials Box */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">Clés API NanaSwitch connectées au Routeur</h3>
+                <p className="text-[11px] text-slate-500">
+                  Chaque paire de clés est enregistrée dans le routeur NanaSwitch pour l'univers <strong>{app.name}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isGeneratingKeys}
+                onClick={handleGenerateKeys}
+                className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-60 shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingKeys ? 'animate-spin' : ''}`} />
+                <span>{isGeneratingKeys ? 'Génération...' : (app.keys?.pk ? 'Régénérer les Clés API' : 'Générer mes Clés API')}</span>
+              </button>
+            </div>
             
             {/* Warning Alert Banner */}
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
@@ -376,16 +453,19 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                   <input 
                     type="text" 
                     readOnly 
-                    value={app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : '')}
+                    value={app.keys?.pk || 'Aucune clé générée — cliquez sur "Générer mes Clés API"'}
                     className="w-full bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs font-bold text-slate-800 select-all"
                   />
-                  <button 
-                    onClick={() => copyToClipboard(app.keys?.pk || (app.id ? `ns_live_pk_${app.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24)}` : ''), 'Clé Publique')} 
-                    className="px-5 py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    Copier
-                  </button>
+                  {app.keys?.pk && (
+                    <button 
+                      type="button"
+                      onClick={() => copyToClipboard(app.keys?.pk, 'Clé Publique')} 
+                      className="px-5 py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copier
+                    </button>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">Identifiant public utilisé pour initialiser le SDK ou le widget de paiement côté client.</p>
               </div>
@@ -398,28 +478,39 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
                     <span>Clé Secrète NanaSwitch (Secret Key)</span>
                   </label>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Chiffrée Zero-Trust (Bcrypt / SHA-256)
+                    Chiffrée Zero-Trust (SHA-256)
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <input 
-                      type="password" 
+                      type={showSk && (justGeneratedSk || app.keys?.rawSk) ? 'text' : 'password'}
                       readOnly 
-                      value={app.keys?.rawSk || app.keys?.skHash || 'ns_live_sk_••••••••••••••••••••••••••••••••'}
-                      className="w-full bg-slate-100/80 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-600 font-semibold select-none cursor-not-allowed"
+                      value={justGeneratedSk || app.keys?.rawSk || app.keys?.skHash || 'ns_live_sk_••••••••••••••••••••••••••••••••'}
+                      className="w-full bg-slate-100/80 px-4 py-3 rounded-xl border border-slate-200 font-mono text-xs text-slate-700 font-semibold"
                     />
                   </div>
-                  {app.keys?.rawSk && (
-                    <button 
-                      onClick={() => copyToClipboard(app.keys?.rawSk, 'Clé Secrète')} 
-                      className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
-                      title="Copier la clé secrète dans le presse-papier sans l'afficher en clair"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      Copier Clé
-                    </button>
+                  {(justGeneratedSk || app.keys?.rawSk) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowSk((v) => !v)}
+                        className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 cursor-pointer shrink-0"
+                        title={showSk ? 'Masquer' : 'Afficher temporairement'}
+                      >
+                        {showSk ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => copyToClipboard(justGeneratedSk || app.keys?.rawSk, 'Clé Secrète')} 
+                        className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
+                        title="Copier la clé secrète dans le presse-papier"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copier Clé
+                      </button>
+                    </>
                   )}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">

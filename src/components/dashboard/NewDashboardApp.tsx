@@ -3823,17 +3823,63 @@ function TabTransactions({ app, showToast }: { app?: NanaMerchantApp; showToast?
 
 /* 4. TAB: PAYMENT LINKS GENERATOR (100% PERSISTÉ SUPABASE) */
 function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: string, t?: any) => void }) {
-  const tenantId = app?.id || 'default';
-  const [links, setLinks] = useState<{ id: string; title: string; amount: number; currency: string; url: string; clicks: number; payments: number }[]>([]);
+  const tenantId = app?.id || '';
+  const merchantName = app?.name || 'Univers Marchand';
+  const [links, setLinks] = useState<{
+    id: string;
+    title: string;
+    description: string;
+    amount: number;
+    currency: string;
+    url: string;
+    merchant_name: string;
+    clicks: number;
+    payments: number;
+  }[]>([]);
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('XOF');
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  const getBearerToken = async (): Promise<string> => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data?.session?.access_token || '';
+    } catch {
+      return '';
+    }
+  };
 
   const loadLinks = useCallback(async () => {
     if (!tenantId) return;
     setIsLoading(true);
     try {
+      const token = await getBearerToken();
+      if (token) {
+        const res = await fetch(`/api/payment-links?tenantId=${encodeURIComponent(tenantId)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.links)) {
+            setLinks(json.links.map((r: any) => ({
+              id: String(r.id),
+              title: String(r.title || 'Paiement'),
+              description: String(r.description || ''),
+              amount: Number(r.amount || 0),
+              currency: String(r.currency || 'XOF'),
+              url: String(r.url || `${typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com'}/pay/${r.id}`),
+              merchant_name: String(r.merchant_name || merchantName),
+              clicks: Number(r.clicks || 0),
+              payments: Number(r.payments || 0),
+            })));
+            return;
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from('payment_links')
         .select('*')
@@ -3843,19 +3889,21 @@ function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast:
         setLinks(data.map((r: any) => ({
           id: String(r.id),
           title: String(r.title || 'Paiement'),
+          description: String(r.description || ''),
           amount: Number(r.amount || 0),
           currency: String(r.currency || 'XOF'),
-          url: String(r.url || ''),
+          url: String(r.url || `${typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com'}/pay/${r.id}`),
+          merchant_name: String(r.merchant_name || merchantName),
           clicks: Number(r.clicks || 0),
           payments: Number(r.payments || 0),
         })));
       }
     } catch {
-      // ignore if table not yet migrated
+      // ignore if offline
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, merchantName]);
 
   useEffect(() => {
     loadLinks();
@@ -3864,43 +3912,71 @@ function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast:
   const handleCreateLink = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanTitle = title.trim();
+    const cleanDescription = description.trim();
     const numericAmount = Number(amount);
-    if (!cleanTitle || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      showToast('Veuillez saisir un titre et un montant valide.', 'warning');
+
+    if (!tenantId) {
+      showToast('Veuillez sélectionner un univers marchand avant de créer un lien.', 'warning');
       return;
     }
+    if (!cleanTitle || !cleanDescription || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      showToast('Veuillez renseigner un libellé, une description claire et un montant valide.', 'warning');
+      return;
+    }
+
     setIsCreating(true);
-    const id = `lnk_${Date.now().toString(36)}`;
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
-    const url = `${origin}/checkout?link=${encodeURIComponent(id)}&store=${encodeURIComponent(tenantId)}&amount=${numericAmount}&title=${encodeURIComponent(cleanTitle)}`;
-    const newLink = {
-      id,
-      title: cleanTitle,
-      amount: numericAmount,
-      currency: 'XOF',
-      url,
-      clicks: 0,
-      payments: 0,
-    };
 
     try {
-      const { error } = await supabase.from('payment_links').insert({
-        id,
-        tenant_id: tenantId,
-        title: cleanTitle,
-        amount: numericAmount,
-        currency: 'XOF',
-        url,
-        clicks: 0,
-        payments: 0,
-      });
-      if (error) {
-        console.warn('[payment_links insert]', error.message);
+      const token = await getBearerToken();
+      if (!token) {
+        showToast('Session expirée : reconnectez-vous pour générer un lien de paiement.', 'error');
+        return;
       }
-      setLinks((prev) => [newLink, ...prev]);
+
+      const res = await fetch('/api/payment-links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          tenantId,
+          title: cleanTitle,
+          description: cleanDescription,
+          amount: numericAmount,
+          currency,
+          origin
+        })
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success || !json.link) {
+        showToast(json.error || 'Impossible de générer le lien de paiement.', 'error');
+        return;
+      }
+
+      const created = json.link;
+      setLinks((prev) => [
+        {
+          id: String(created.id),
+          title: String(created.title),
+          description: String(created.description || ''),
+          amount: Number(created.amount),
+          currency: String(created.currency || currency),
+          url: String(created.url),
+          merchant_name: String(created.merchant_name || merchantName),
+          clicks: 0,
+          payments: 0
+        },
+        ...prev
+      ]);
       setTitle('');
+      setDescription('');
       setAmount('');
-      showToast('Lien de paiement créé et sauvegardé !', 'success');
+      showToast('Lien de paiement autonome généré et connecté au routeur !', 'success');
+    } catch {
+      showToast('Erreur réseau lors de la création du lien de paiement.', 'error');
     } finally {
       setIsCreating(false);
     }
@@ -3909,45 +3985,101 @@ function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast:
   const handleDeleteLink = async (id: string) => {
     setLinks((prev) => prev.filter((l) => l.id !== id));
     try {
+      const token = await getBearerToken();
+      if (token) {
+        await fetch(`/api/payment-links/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
       await supabase.from('payment_links').delete().eq('id', id).eq('tenant_id', tenantId);
-      showToast('Lien supprimé.', 'info');
+      showToast('Lien de paiement supprimé.', 'info');
     } catch {}
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Liens de Paiement</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Créez des liens d'encaissement persistés sur Supabase et partageables sur WhatsApp, SMS ou Réseaux sociaux.</p>
+        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Liens de Paiement Autonomes</h1>
+        <p className="text-xs text-slate-500 font-medium mt-1">
+          Générez des liens d'encaissement indépendants (hors abonnements), avec libellé, description et affiliation directe à votre univers marchand.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
-          <h3 className="font-bold text-slate-900 text-base">Nouveau Lien de Paiement</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-bold text-slate-900 text-base">Nouveau Lien de Paiement</h3>
+            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#1E40AF] border border-blue-200 text-[10px] font-extrabold">
+              Routeur Direct
+            </span>
+          </div>
+
+          {/* Marchand propriétaire affilié obligatoirement */}
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 text-xs">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Marchand affilié (Propriétaire)</p>
+              <p className="font-extrabold text-slate-900 truncate">{merchantName}</p>
+            </div>
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-500 shrink-0">
+              {tenantId ? `${tenantId.slice(0, 8)}…` : 'Aucun'}
+            </span>
+          </div>
+
           <form onSubmit={handleCreateLink} className="space-y-4 text-xs">
             <div>
-              <label className="font-bold text-slate-600 block mb-1">Titre de la prestation / Produit</label>
+              <label className="font-bold text-slate-600 block mb-1">Libellé du paiement *</label>
               <input 
                 type="text"
-                placeholder="Ex: Consultation VIP ou Pack Produit"
+                required
+                placeholder="Ex: Facture #104 - Livraison Express"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-600"
               />
             </div>
             <div>
-              <label className="font-bold text-slate-600 block mb-1">Montant à encaisser (XOF)</label>
-              <input 
-                type="number"
-                min={100}
-                placeholder="Ex: 5000"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600"
+              <label className="font-bold text-slate-600 block mb-1">Description claire pour le client *</label>
+              <textarea
+                rows={3}
+                required
+                placeholder="Ex: Règlement de la commande de 2 paires livrées à Ouagadougou..."
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-600 resize-none"
               />
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="font-bold text-slate-600 block mb-1">Montant *</label>
+                <input 
+                  type="number"
+                  required
+                  min={100}
+                  placeholder="Ex: 5000"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-600 block mb-1">Devise</label>
+                <select
+                  value={currency}
+                  onChange={e => setCurrency(e.target.value)}
+                  className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold focus:outline-none focus:border-blue-600"
+                >
+                  <option value="XOF">XOF</option>
+                  <option value="XAF">XAF</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GHS">GHS</option>
+                  <option value="GNF">GNF</option>
+                </select>
+              </div>
+            </div>
             <button type="submit" disabled={isCreating} className="w-full py-3 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl shadow-md transition cursor-pointer disabled:opacity-60">
-              {isCreating ? 'Création...' : 'Générer et sauvegarder le lien'}
+              {isCreating ? 'Génération en cours...' : 'Générer le lien autonome'}
             </button>
           </form>
         </div>
@@ -3962,18 +4094,39 @@ function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast:
             <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center text-slate-400 space-y-2">
               <Link2 className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
               <p className="font-bold text-slate-700 text-sm">Aucun lien de paiement actif</p>
-              <p className="text-xs text-slate-400">Utilisez le formulaire ci-contre pour générer votre premier lien universel.</p>
+              <p className="text-xs text-slate-400">Utilisez le formulaire ci-contre pour générer votre premier lien autonome affilié à {merchantName}.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {links.map(lnk => (
                 <div key={lnk.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-slate-900 text-sm truncate">{lnk.title}</h4>
-                    <p className="text-xs font-black text-blue-600 mt-0.5">{lnk.amount.toLocaleString()} {lnk.currency}</p>
-                    <p className="text-[11px] text-slate-400 mt-1 font-mono truncate max-w-md">{lnk.url}</p>
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-slate-900 text-sm truncate">{lnk.title}</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        {lnk.merchant_name}
+                      </span>
+                    </div>
+                    {lnk.description && (
+                      <p className="text-xs text-slate-600 line-clamp-2">{lnk.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="font-black text-blue-600">{lnk.amount.toLocaleString('fr-FR')} {lnk.currency}</span>
+                      <span className="text-[11px] text-slate-400">{lnk.clicks} clic(s) · {lnk.payments} paiement(s)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono truncate max-w-md">{lnk.url}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <a
+                      href={lnk.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-[#1E40AF] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+                      title="Ouvrir le lien de paiement"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      <span>Ouvrir</span>
+                    </a>
                     <button
                       type="button"
                       onClick={() => { navigator.clipboard.writeText(lnk.url); showToast('Lien copié !', 'success'); }}
@@ -3983,7 +4136,7 @@ function TabPaymentLinks({ app, showToast }: { app?: NanaMerchantApp; showToast:
                       <span>Copier</span>
                     </button>
                     <a
-                      href={`https://wa.me/?text=${encodeURIComponent(`Bonjour, voici le lien de paiement pour "${lnk.title}" (${lnk.amount.toLocaleString()} ${lnk.currency}) : ${lnk.url}`)}`}
+                      href={`https://wa.me/?text=${encodeURIComponent(`Bonjour, voici le lien de paiement de ${lnk.merchant_name} pour "${lnk.title}"${lnk.description ? ` (${lnk.description})` : ''} — ${lnk.amount.toLocaleString('fr-FR')} ${lnk.currency} : ${lnk.url}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition"
@@ -5672,8 +5825,18 @@ function generateMerchantWebhookSecret(): string {
 
 function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: NanaMerchantApp; copyToClipboard: (t?: string, l?: string) => void; showToast: (m: string, t?: any) => void; onUpdateApp?: (u: NanaMerchantApp) => void }) {
   const [webhookUrl, setWebhookUrl] = useState(app.webhook_config?.url || '');
-  const [whSecret, setWhSecret] = useState(() => app.keys?.whSecret || generateMerchantWebhookSecret());
+  const [whSecret, setWhSecret] = useState(() => app.keys?.whSecret || (app.webhook_config as any)?.secret_key || generateMerchantWebhookSecret());
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+
+  const getBearerToken = async (): Promise<string> => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data?.session?.access_token || '';
+    } catch {
+      return '';
+    }
+  };
 
   const handleSaveWebhook = async (overrideSecret?: string) => {
     const cleanUrl = webhookUrl.trim();
@@ -5687,26 +5850,44 @@ function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: Na
       const nextWebhookConfig = {
         ...(app.webhook_config || {}),
         url: cleanUrl,
+        secret_key: secretToSave,
         is_active: Boolean(cleanUrl),
       };
       const nextKeys = {
         ...(app.keys || {}),
         whSecret: secretToSave,
       };
-      if (app.id) {
-        await supabase
-          .from('merchants')
-          .update({
-            webhook_config: nextWebhookConfig,
-            keys: nextKeys,
-            updated_at: new Date().toISOString(),
+
+      let syncedViaRouter = false;
+      const token = await getBearerToken();
+      if (token && app.id) {
+        const res = await fetch('/api/merchant/webhooks/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            merchantId: app.id,
+            url: cleanUrl,
+            whSecret: secretToSave
           })
-          .eq('id', app.id);
+        });
+        if (res.ok) {
+          syncedViaRouter = true;
+        }
       }
+
+      if (!syncedViaRouter && app.id) {
+        const nowIso = new Date().toISOString();
+        await supabase.from('merchants').update({ webhook_config: nextWebhookConfig, keys: nextKeys, updated_at: nowIso }).eq('id', app.id);
+        await supabase.from('universes').update({ webhook_config: nextWebhookConfig, keys: nextKeys, updated_at: nowIso }).eq('id', app.id);
+      }
+
       if (onUpdateApp) {
         onUpdateApp({ ...app, webhook_config: nextWebhookConfig as any, keys: nextKeys as any });
       }
-      showToast('Configuration Webhook & secret HMAC sauvegardés !', 'success');
+      showToast('Configuration Webhook & secret HMAC synchronisés avec le routeur !', 'success');
     } catch (err) {
       showToast('Erreur lors de la sauvegarde : ' + (err as Error).message, 'error');
     } finally {
@@ -5720,17 +5901,56 @@ function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: Na
     await handleSaveWebhook(fresh);
   };
 
+  const handleTestWebhook = async () => {
+    if (!webhookUrl.trim()) {
+      showToast('Enregistrez d’abord une URL Webhook HTTPS avant de lancer un test.', 'warning');
+      return;
+    }
+    setIsTesting(true);
+    try {
+      const token = await getBearerToken();
+      const res = await fetch('/api/merchant/webhooks/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ merchantId: app.id })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (json.delivered) {
+        showToast(`Webhook livré avec succès (HTTP ${json.statusCode} en ${json.latencyMs} ms) !`, 'success');
+      } else {
+        showToast(`Échec test Webhook (HTTP ${json.statusCode || '—'}${json.error ? ` — ${json.error}` : ''}). Vérifiez le Journal des Webhooks.`, 'warning');
+      }
+    } catch (err) {
+      showToast('Erreur lors du test Webhook : ' + (err as Error).message, 'error');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Configuration Webhooks</h1>
-        <p className="text-xs text-slate-500 font-medium mt-1">Recevez des notifications instantanées signées HMAC-SHA256 sur votre serveur.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Configuration Webhooks</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">Recevez des notifications instantanées signées HMAC-SHA256 depuis le routeur NanaSwitch.</p>
+        </div>
+        <button
+          type="button"
+          disabled={isTesting || !webhookUrl.trim()}
+          onClick={handleTestWebhook}
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-50 shrink-0"
+        >
+          {isTesting ? 'Envoi du test...' : 'Envoyer un Webhook de test'}
+        </button>
       </div>
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
         <div>
           <label className="text-xs font-bold text-slate-700 block mb-1">URL de Webhook (POST HTTPS)</label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
             <input 
               type="url" 
               value={webhookUrl}
@@ -5738,7 +5958,7 @@ function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: Na
               placeholder="https://votre-domaine.com/api/webhooks/nanasore"
               className="w-full bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-semibold text-slate-800"
             />
-            <button type="button" disabled={isSaving} onClick={() => handleSaveWebhook()} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-60">
+            <button type="button" disabled={isSaving} onClick={() => handleSaveWebhook()} className="px-4 py-2.5 bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold rounded-xl text-xs transition cursor-pointer disabled:opacity-60 shrink-0">
               {isSaving ? 'Sauvegarde...' : 'Enregistrer'}
             </button>
           </div>
@@ -5760,7 +5980,7 @@ function TabWebhooks({ app, copyToClipboard, showToast, onUpdateApp }: { app: Na
               Régénérer
             </button>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Secret unique généré pour cet univers. Vérifiez l'en-tête <code className="text-[#1E40AF] font-bold">x-nanaswitch-signature</code>.</p>
+          <p className="text-[11px] text-slate-400 mt-1">Secret unique synchronisé avec le routeur pour cet univers. Vérifiez l'en-tête <code className="text-[#1E40AF] font-bold">x-nanaswitch-signature</code>.</p>
         </div>
       </div>
     </div>

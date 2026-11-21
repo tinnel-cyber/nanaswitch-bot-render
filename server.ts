@@ -1145,6 +1145,773 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // 2B. LIENS DE PAIEMENT AUTONOMES + CONNEXION ROUTEUR (CLÉS API & WEBHOOKS)
+  // =========================================================================
+  const paymentLinksFile = path.join(dataDir, 'payment_links.json');
+  function getStoredPaymentLinks(): any[] {
+    try {
+      if (fs.existsSync(paymentLinksFile)) {
+        const parsed = JSON.parse(fs.readFileSync(paymentLinksFile, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch {}
+    return [];
+  }
+  function saveStoredPaymentLinks(list: any[]) {
+    try {
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(paymentLinksFile, JSON.stringify(list, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[PAYMENT LINKS] Local save notice:', (e as Error).message);
+    }
+  }
+
+  const verifyMerchantOwnership = async (merchantId: string, ownerUserId: string) => {
+    const cleanId = String(merchantId || '').trim();
+    if (!cleanId) return null;
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        const { data: m } = await supabase
+          .from('merchants')
+          .select('*')
+          .eq('id', cleanId)
+          .eq('owner_id', ownerUserId)
+          .maybeSingle();
+        if (m) return m;
+
+        const { data: u } = await supabase
+          .from('universes')
+          .select('*')
+          .eq('id', cleanId)
+          .eq('user_id', ownerUserId)
+          .maybeSingle();
+        if (u) {
+          return {
+            ...u,
+            owner_id: u.user_id,
+            sector: u.sector || u.appellation || 'E-commerce & Services'
+          };
+        }
+      }
+    } catch {}
+
+    const localMatch = getStoredUniverses().find(
+      (u: any) =>
+        String(u.id) === cleanId &&
+        String(u.owner_id || u.ownerId || u.userId || u.user_id || '') === ownerUserId
+    );
+    return localMatch || null;
+  };
+
+  const dispatchMerchantWebhook = async (
+    merchantId: string,
+    event: string,
+    payload: Record<string, any>
+  ): Promise<{ delivered: boolean; statusCode: number; latencyMs: number; url: string; error?: string }> => {
+    let targetUrl = '';
+    let secretKey = '';
+
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        const { data: m } = await supabase
+          .from('merchants')
+          .select('webhook_config, keys')
+          .eq('id', merchantId)
+          .maybeSingle();
+        if (m?.webhook_config?.url) targetUrl = String(m.webhook_config.url).trim();
+        if (m?.keys?.whSecret || m?.webhook_config?.secret_key) {
+          secretKey = String(m.keys?.whSecret || m.webhook_config?.secret_key);
+        }
+        if (!targetUrl) {
+          const { data: u } = await supabase
+            .from('universes')
+            .select('webhook_config, keys')
+            .eq('id', merchantId)
+            .maybeSingle();
+          if (u?.webhook_config?.url) targetUrl = String(u.webhook_config.url).trim();
+          if (!secretKey && (u?.keys?.whSecret || u?.webhook_config?.secret_key)) {
+            secretKey = String(u.keys?.whSecret || u.webhook_config?.secret_key);
+          }
+        }
+      }
+    } catch {}
+
+    if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+      return { delivered: false, statusCode: 0, latencyMs: 0, url: targetUrl, error: 'Aucune URL Webhook HTTPS configurée pour cet univers' };
+    }
+
+    const bodyString = JSON.stringify({
+      id: `evt_${crypto.randomBytes(8).toString('hex')}`,
+      event,
+      merchant_id: merchantId,
+      created_at: new Date().toISOString(),
+      data: payload
+    });
+    const signature = crypto
+      .createHmac('sha256', secretKey || 'nanaswitch_default_secret')
+      .update(bodyString)
+      .digest('hex');
+
+    const startedAt = Date.now();
+    let statusCode = 0;
+    let errorMsg: string | undefined;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const resp = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'NanaSwitch-Webhook-Router/2.0',
+          'x-nanaswitch-event': event,
+          'x-nanaswitch-signature': `sha256=${signature}`
+        },
+        body: bodyString,
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      statusCode = resp.status;
+    } catch (err: any) {
+      errorMsg = err?.name === 'AbortError' ? 'Timeout (8s)' : (err?.message || 'Erreur réseau');
+      statusCode = 504;
+    }
+    const latencyMs = Date.now() - startedAt;
+
+    try {
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        await supabase.from('webhook_deliveries').insert({
+          id: `whd_${crypto.randomBytes(8).toString('hex')}`,
+          tenant_id: merchantId,
+          merchant_id: merchantId,
+          event,
+          url: targetUrl,
+          status_code: statusCode,
+          latency_ms: latencyMs,
+          payload: { ...payload, error: errorMsg || null },
+          created_at: new Date().toISOString()
+        });
+      }
+    } catch (logErr) {
+      console.warn('[WEBHOOK DELIVERY LOG NOTICE]', (logErr as Error).message);
+    }
+
+    return {
+      delivered: statusCode >= 200 && statusCode < 300,
+      statusCode,
+      latencyMs,
+      url: targetUrl,
+      error: errorMsg
+    };
+  };
+
+  // GET /api/payment-links?tenantId=... (Authentifié — liste les liens d'un univers marchand)
+  app.get('/api/payment-links', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise', links: [] });
+      }
+      const tenantId = String(req.query.tenantId || '').trim();
+      if (!tenantId) {
+        return res.status(400).json({ success: false, error: 'tenantId requis', links: [] });
+      }
+      const merchant = await verifyMerchantOwnership(tenantId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé à cet univers', links: [] });
+      }
+
+      const merged = new Map<string, any>();
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('payment_links')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .order('created_at', { ascending: false });
+          if (!error && Array.isArray(data)) {
+            for (const row of data) {
+              merged.set(String(row.id), row);
+            }
+          }
+        }
+      } catch {}
+
+      for (const local of getStoredPaymentLinks()) {
+        if (String(local.tenant_id) === tenantId && !merged.has(String(local.id))) {
+          merged.set(String(local.id), local);
+        }
+      }
+
+      const links = Array.from(merged.values()).map((r: any) => ({
+        id: String(r.id),
+        tenant_id: String(r.tenant_id),
+        owner_id: r.owner_id || owner.userId,
+        merchant_name: r.merchant_name || merchant.name || 'Marchand Nanasore',
+        merchant_sector: r.merchant_sector || merchant.sector || 'Commerce & Services',
+        title: String(r.title || 'Paiement'),
+        description: String(r.description || ''),
+        amount: Number(r.amount || 0),
+        currency: String(r.currency || 'XOF'),
+        url: String(r.url || ''),
+        clicks: Number(r.clicks || 0),
+        payments: Number(r.payments || 0),
+        is_active: r.is_active !== false,
+        created_at: r.created_at || new Date().toISOString()
+      }));
+
+      return res.json({ success: true, links });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message, links: [] });
+    }
+  });
+
+  // POST /api/payment-links (Authentifié — génère un vrai lien autonome affilié à l'univers marchand)
+  app.post('/api/payment-links', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { tenantId, title, description = '', amount, currency = 'XOF', origin } = req.body || {};
+      const cleanTenantId = String(tenantId || '').trim();
+      const cleanTitle = String(title || '').trim();
+      const cleanDescription = String(description || '').trim();
+      const numericAmount = Number(amount);
+      const cleanCurrency = String(currency || 'XOF').toUpperCase().slice(0, 6);
+
+      if (!cleanTenantId) {
+        return res.status(400).json({ success: false, error: 'Univers marchand (tenantId) obligatoire' });
+      }
+      if (!cleanTitle || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ success: false, error: 'Libellé et montant valide requis' });
+      }
+
+      const merchant = await verifyMerchantOwnership(cleanTenantId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Vous devez être propriétaire de cet univers pour générer un lien de paiement' });
+      }
+
+      const id = `lnk_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
+      const baseOrigin =
+        typeof origin === 'string' && /^https?:\/\//i.test(origin)
+          ? origin.replace(/\/$/, '')
+          : `${req.protocol}://${req.get('host')}`;
+      const url = `${baseOrigin}/pay/${encodeURIComponent(id)}`;
+      const nowIso = new Date().toISOString();
+
+      const linkRecord = {
+        id,
+        tenant_id: cleanTenantId,
+        owner_id: owner.userId,
+        merchant_name: merchant.name || 'Marchand Nanasore',
+        merchant_sector: merchant.sector || merchant.appellation || 'Commerce & Services',
+        title: cleanTitle,
+        description: cleanDescription,
+        amount: numericAmount,
+        currency: cleanCurrency,
+        url,
+        clicks: 0,
+        payments: 0,
+        is_active: true,
+        created_at: nowIso,
+        updated_at: nowIso
+      };
+
+      const existingLocal = getStoredPaymentLinks();
+      saveStoredPaymentLinks([linkRecord, ...existingLocal.filter((l: any) => l.id !== id)]);
+
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { error: richErr } = await supabase.from('payment_links').upsert(linkRecord, { onConflict: 'id' });
+          if (richErr) {
+            // Repli sur colonnes minimales si migration description/merchant_name pas encore appliquée
+            const { error: baseErr } = await supabase.from('payment_links').upsert({
+              id,
+              tenant_id: cleanTenantId,
+              title: cleanTitle,
+              amount: numericAmount,
+              currency: cleanCurrency,
+              url,
+              clicks: 0,
+              payments: 0,
+              is_active: true,
+              created_at: nowIso,
+              updated_at: nowIso
+            }, { onConflict: 'id' });
+            if (baseErr) {
+              console.warn('[PAYMENT LINKS] Supabase upsert error:', baseErr.message);
+            }
+          }
+        }
+      } catch (eSupa) {
+        console.warn('[PAYMENT LINKS] Supabase upsert notice:', (eSupa as Error).message);
+      }
+
+      return res.status(201).json({ success: true, link: linkRecord });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // DELETE /api/payment-links/:id (Authentifié)
+  app.delete('/api/payment-links/:id', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const linkId = String(req.params.id || '').trim();
+      const tenantId = String(req.query.tenantId || '').trim();
+      if (!linkId) return res.status(400).json({ success: false, error: 'ID lien manquant' });
+      if (tenantId) {
+        const merchant = await verifyMerchantOwnership(tenantId, owner.userId);
+        if (!merchant) return res.status(403).json({ success: false, error: 'Accès refusé' });
+      }
+
+      saveStoredPaymentLinks(getStoredPaymentLinks().filter((l: any) => String(l.id) !== linkId));
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          let q = supabase.from('payment_links').delete().eq('id', linkId);
+          if (tenantId) q = q.eq('tenant_id', tenantId);
+          await q;
+        }
+      } catch {}
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // GET /api/payment-links/:id (PUBLIC — résout un lien de paiement autonome pour le client payeur)
+  app.get('/api/payment-links/:id', async (req, res) => {
+    try {
+      const linkId = String(req.params.id || '').trim();
+      if (!linkId) {
+        return res.status(404).json({ success: false, error: 'Lien de paiement introuvable' });
+      }
+
+      let found: any = null;
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data } = await supabase
+            .from('payment_links')
+            .select('*')
+            .eq('id', linkId)
+            .maybeSingle();
+          if (data) found = data;
+        }
+      } catch {}
+
+      const localFound = getStoredPaymentLinks().find((l: any) => String(l.id) === linkId);
+      if (!found && localFound) {
+        found = localFound;
+      } else if (found && localFound) {
+        found = {
+          ...localFound,
+          ...found,
+          description: found.description || localFound.description || '',
+          merchant_name: found.merchant_name || localFound.merchant_name || '',
+          merchant_sector: found.merchant_sector || localFound.merchant_sector || ''
+        };
+      }
+
+      if (!found || found.is_active === false) {
+        return res.status(404).json({ success: false, error: 'Ce lien de paiement est introuvable ou désactivé.' });
+      }
+
+      // Enrichissement obligatoire avec le marchand propriétaire de l'univers
+      let merchantName = found.merchant_name || '';
+      let merchantSector = found.merchant_sector || '';
+      let merchantStatus = 'VERIFIED';
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase && found.tenant_id) {
+          const { data: m } = await supabase
+            .from('merchants')
+            .select('name, sector, status')
+            .eq('id', found.tenant_id)
+            .maybeSingle();
+          if (m) {
+            merchantName = m.name || merchantName;
+            merchantSector = m.sector || merchantSector;
+            merchantStatus = m.status || merchantStatus;
+          } else {
+            const { data: u } = await supabase
+              .from('universes')
+              .select('name, sector, appellation, status')
+              .eq('id', found.tenant_id)
+              .maybeSingle();
+            if (u) {
+              merchantName = u.name || merchantName;
+              merchantSector = u.sector || u.appellation || merchantSector;
+              merchantStatus = u.status || merchantStatus;
+            }
+          }
+        }
+      } catch {}
+
+      // Incrémenter les clics de manière asynchrone
+      const nextClicks = Number(found.clicks || 0) + 1;
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          supabase.from('payment_links').update({ clicks: nextClicks }).eq('id', linkId).then(() => {});
+        }
+      } catch {}
+
+      return res.json({
+        success: true,
+        link: {
+          id: String(found.id),
+          merchant_id: String(found.tenant_id),
+          merchant_name: merchantName || 'Marchand Nanasore',
+          merchant_sector: merchantSector || 'Commerce & Services',
+          merchant_status: merchantStatus,
+          title: String(found.title || 'Paiement'),
+          description: String(found.description || ''),
+          amount: Number(found.amount || 0),
+          currency: String(found.currency || 'XOF'),
+          url: String(found.url || ''),
+          clicks: nextClicks,
+          payments: Number(found.payments || 0),
+          is_active: true
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/payment-links/:id/pay (PUBLIC — exécute le paiement via le Routeur NanaSwitch pour ce marchand)
+  app.post('/api/payment-links/:id/pay', async (req, res) => {
+    try {
+      const linkId = String(req.params.id || '').trim();
+      const { customerName, customerPhone, customerEmail = '', country = 'BF', paymentMethod = 'mobile_money' } = req.body || {};
+
+      if (!customerName || !customerPhone) {
+        return res.status(400).json({ success: false, error: 'Nom complet et numéro de téléphone requis.' });
+      }
+
+      let link: any = null;
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data } = await supabase.from('payment_links').select('*').eq('id', linkId).maybeSingle();
+          if (data) link = data;
+        }
+      } catch {}
+      if (!link) {
+        link = getStoredPaymentLinks().find((l: any) => String(l.id) === linkId) || null;
+      }
+      if (!link || link.is_active === false) {
+        return res.status(404).json({ success: false, error: 'Lien de paiement introuvable ou expiré.' });
+      }
+
+      const merchantId = String(link.tenant_id);
+      const txId = `tx_lnk_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
+      const routerBase =
+        process.env.PAYMENT_SERVICE_URL ||
+        process.env.VITE_PAYMENT_API_URL ||
+        'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run';
+
+      let checkoutUrl: string | null = null;
+      let providerUsed = 'NANASWITCH_ROUTER';
+      let routerReference = txId;
+
+      // Routage direct vers le Routeur de Paiement NanaSwitch
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 9000);
+        const routeRes = await fetch(`${routerBase.replace(/\/$/, '')}/v1/switch/route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchant_id: merchantId,
+            merchantId,
+            transaction_id: txId,
+            amount: Number(link.amount),
+            currency: String(link.currency || 'XOF'),
+            country: String(country || 'BF').toUpperCase(),
+            payment_method: paymentMethod,
+            customer_name: String(customerName).trim(),
+            customer_phone: String(customerPhone).trim(),
+            customer_email: String(customerEmail || '').trim(),
+            description: `${link.title}${link.description ? ` — ${link.description}` : ''}`,
+            metadata: {
+              source: 'standalone_payment_link',
+              payment_link_id: linkId,
+              merchant_id: merchantId
+            }
+          }),
+          signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (routeRes.ok) {
+          const routeJson: any = await routeRes.json().catch(() => ({}));
+          checkoutUrl = routeJson.checkout_url || routeJson.payment_url || routeJson.redirect_url || null;
+          providerUsed = routeJson.provider || routeJson.gateway || providerUsed;
+          routerReference = routeJson.transaction_id || routeJson.reference || txId;
+        }
+      } catch (routeErr) {
+        console.warn('[PAYMENT LINK ROUTER NOTICE]', (routeErr as Error).message);
+      }
+
+      // Enregistrement de la transaction affiliée au marchand & incrément compteur paiements
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          await supabase
+            .from('payment_links')
+            .update({ payments: Number(link.payments || 0) + 1, updated_at: new Date().toISOString() })
+            .eq('id', linkId);
+        }
+      } catch {}
+
+      // Notification Webhook signée HMAC-SHA256 au serveur du marchand (si configuré)
+      dispatchMerchantWebhook(merchantId, 'payment.link.initiated', {
+        transaction_id: routerReference,
+        payment_link_id: linkId,
+        title: link.title,
+        description: link.description || '',
+        amount: Number(link.amount),
+        currency: String(link.currency || 'XOF'),
+        customer_name: String(customerName).trim(),
+        customer_phone: String(customerPhone).trim(),
+        provider: providerUsed
+      }).catch(() => {});
+
+      return res.json({
+        success: true,
+        transactionId: routerReference,
+        provider: providerUsed,
+        checkoutUrl,
+        amount: Number(link.amount),
+        currency: String(link.currency || 'XOF'),
+        merchantId,
+        title: link.title
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/merchant/keys/generate (Authentifié — génère et synchronise les clés API avec le Routeur)
+  app.post('/api/merchant/keys/generate', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { merchantId, mode = 'live' } = req.body || {};
+      const cleanId = String(merchantId || '').trim();
+      const merchant = await verifyMerchantOwnership(cleanId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé à cet univers marchand' });
+      }
+
+      const prefix = mode === 'test' ? 'ns_test' : 'ns_live';
+      const publicKey = `${prefix}_pk_${crypto.randomBytes(16).toString('hex')}`;
+      const secretKey = `${prefix}_sk_${crypto.randomBytes(24).toString('hex')}`;
+      const skHash = crypto.createHash('sha256').update(secretKey).digest('hex');
+      const existingWhSecret = merchant.keys?.whSecret || merchant.webhook_config?.secret_key;
+      const webhookSecret = existingWhSecret || `ns_whsec_${crypto.randomBytes(20).toString('hex')}`;
+      const nowIso = new Date().toISOString();
+
+      const nextKeys = {
+        ...(merchant.keys || {}),
+        pk: publicKey,
+        publicKey,
+        skHash,
+        whSecret: webhookSecret,
+        generatedAt: nowIso
+      };
+
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        await supabase.from('merchants').update({ keys: nextKeys, updated_at: nowIso }).eq('id', cleanId);
+        await supabase.from('universes').update({ keys: nextKeys, updated_at: nowIso }).eq('id', cleanId);
+        try {
+          await supabase.from('nanaswitch_merchants').upsert({
+            merchant_id: cleanId,
+            owner_id: owner.userId,
+            business_name: merchant.name || 'Univers Marchand',
+            status: merchant.status === 'VERIFIED' ? 'ACTIVE' : 'PENDING_KYC',
+            public_key: publicKey,
+            secret_key_hash: skHash,
+            webhook_secret: webhookSecret,
+            updated_at: nowIso
+          }, { onConflict: 'merchant_id' });
+        } catch (routerSyncErr) {
+          console.warn('[KEYS ROUTER SYNC NOTICE]', (routerSyncErr as Error).message);
+        }
+      }
+
+      return res.status(201).json({
+        success: true,
+        merchantId: cleanId,
+        publicKey,
+        secretKey,
+        skHash,
+        webhookSecret,
+        keys: nextKeys
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/merchant/integration-mode (Authentifié — synchronise AGREGATED/BYOK avec le Routeur)
+  app.post('/api/merchant/integration-mode', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { merchantId, mode, customCredentials } = req.body || {};
+      const cleanId = String(merchantId || '').trim();
+      const merchant = await verifyMerchantOwnership(cleanId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé à cet univers marchand' });
+      }
+
+      const cleanMode = mode === 'BYOK' ? 'BYOK' : 'AGREGATED';
+      const sanitizedCreds = {
+        saspay: { api_key: String(customCredentials?.saspay?.api_key || '').replace(/\s+/g, '').trim() },
+        sebpay: {
+          public_key: String(customCredentials?.sebpay?.public_key || '').trim(),
+          secret_key: String(customCredentials?.sebpay?.secret_key || '').trim()
+        }
+      };
+      const integrationConfig = { mode: cleanMode, custom_credentials: sanitizedCreds };
+      const nowIso = new Date().toISOString();
+
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        await supabase.from('merchants').update({
+          integration_mode: cleanMode,
+          integration_config: integrationConfig,
+          updated_at: nowIso
+        }).eq('id', cleanId);
+        await supabase.from('universes').update({
+          integration_mode: cleanMode,
+          integration_config: integrationConfig,
+          updated_at: nowIso
+        }).eq('id', cleanId);
+        try {
+          await supabase.from('nanaswitch_merchants').upsert({
+            merchant_id: cleanId,
+            owner_id: owner.userId,
+            business_name: merchant.name || 'Univers Marchand',
+            integration_mode: cleanMode,
+            integration_config: integrationConfig,
+            updated_at: nowIso
+          }, { onConflict: 'merchant_id' });
+        } catch {}
+      }
+
+      return res.json({ success: true, mode: cleanMode, integration_config: integrationConfig });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/merchant/webhooks/config (Authentifié — sauvegarde URL & secret HMAC dans DB + Routeur)
+  app.post('/api/merchant/webhooks/config', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { merchantId, url = '', whSecret } = req.body || {};
+      const cleanId = String(merchantId || '').trim();
+      const cleanUrl = String(url || '').trim();
+      if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+        return res.status(400).json({ success: false, error: 'URL Webhook invalide (doit commencer par https://)' });
+      }
+      const merchant = await verifyMerchantOwnership(cleanId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé à cet univers marchand' });
+      }
+
+      const secretToSave = String(whSecret || '').trim() || `ns_whsec_${crypto.randomBytes(20).toString('hex')}`;
+      const nowIso = new Date().toISOString();
+      const nextWebhookConfig = {
+        ...(merchant.webhook_config || {}),
+        url: cleanUrl,
+        secret_key: secretToSave,
+        is_active: Boolean(cleanUrl)
+      };
+      const nextKeys = {
+        ...(merchant.keys || {}),
+        whSecret: secretToSave
+      };
+
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (supabase) {
+        await supabase.from('merchants').update({
+          webhook_config: nextWebhookConfig,
+          keys: nextKeys,
+          updated_at: nowIso
+        }).eq('id', cleanId);
+        await supabase.from('universes').update({
+          webhook_config: nextWebhookConfig,
+          keys: nextKeys,
+          updated_at: nowIso
+        }).eq('id', cleanId);
+        try {
+          await supabase.from('nanaswitch_merchants').upsert({
+            merchant_id: cleanId,
+            owner_id: owner.userId,
+            business_name: merchant.name || 'Univers Marchand',
+            webhook_url: cleanUrl || null,
+            webhook_secret: secretToSave,
+            webhook_config: nextWebhookConfig,
+            updated_at: nowIso
+          }, { onConflict: 'merchant_id' });
+        } catch {}
+      }
+
+      return res.json({ success: true, webhook_config: nextWebhookConfig, whSecret: secretToSave });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/merchant/webhooks/test (Authentifié — envoie un événement signé HMAC-SHA256 réel + journalise)
+  app.post('/api/merchant/webhooks/test', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { merchantId } = req.body || {};
+      const cleanId = String(merchantId || '').trim();
+      const merchant = await verifyMerchantOwnership(cleanId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé à cet univers marchand' });
+      }
+
+      const result = await dispatchMerchantWebhook(cleanId, 'webhook.test', {
+        message: 'Test de connexion Webhook NanaSwitch Router',
+        merchant_name: merchant.name || 'Univers Marchand',
+        timestamp: new Date().toISOString()
+      });
+
+      return res.json({ success: result.delivered, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
