@@ -2182,6 +2182,292 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // 2D. PONT PHYSIQUE -> RÉSEAUX SOCIAUX (META & TIKTOK CAPI) + ACHAT GROUPÉ
+  // =========================================================================
+  const capiEventsFile = path.join(dataDir, 'capi_retargeting_events.json');
+  const groupBuysFile = path.join(dataDir, 'minimarket_group_buys.json');
+
+  function getStoredGroupBuys(): any[] {
+    try {
+      if (fs.existsSync(groupBuysFile)) {
+        const parsed = JSON.parse(fs.readFileSync(groupBuysFile, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch {}
+    return [];
+  }
+  function saveStoredGroupBuys(list: any[]) {
+    try {
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(groupBuysFile, JSON.stringify(list.slice(0, 500), null, 2), 'utf8');
+    } catch {}
+  }
+
+  function sha256Normalized(value: string): string {
+    return crypto.createHash('sha256').update(String(value || '').trim().toLowerCase()).digest('hex');
+  }
+
+  // POST /api/tracking/capi-event (PUBLIC — pont NFC/QR Physique -> Meta CAPI & TikTok Events API)
+  app.post('/api/tracking/capi-event', async (req, res) => {
+    try {
+      const {
+        eventName = 'ViewContent',
+        source = 'physical_pos_qr',
+        merchantId = '',
+        nfcCode = '',
+        slug = '',
+        value = 0,
+        currency = 'XOF',
+        customerPhone = '',
+        customerEmail = '',
+        pageUrl = ''
+      } = req.body || {};
+
+      const eventId = `capi_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+      const eventTime = Math.floor(Date.now() / 1000);
+      const clientIp = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+      const userAgent = String(req.headers['user-agent'] || '');
+
+      const cleanPhone = String(customerPhone || '').replace(/[^0-9]/g, '');
+      const cleanEmail = String(customerEmail || '').trim().toLowerCase();
+      const hashedPhone = cleanPhone ? sha256Normalized(cleanPhone) : undefined;
+      const hashedEmail = cleanEmail ? sha256Normalized(cleanEmail) : undefined;
+
+      // Résoudre les Pixels/Tokens CAPI du marchand (ou globaux plateforme en repli)
+      let metaPixelId = process.env.META_PIXEL_ID || '';
+      let metaAccessToken = process.env.META_CAPI_ACCESS_TOKEN || '';
+      let tiktokPixelCode = process.env.TIKTOK_PIXEL_CODE || '';
+      let tiktokAccessToken = process.env.TIKTOK_ACCESS_TOKEN || '';
+
+      if (merchantId) {
+        try {
+          const { supabase } = await import('./app/utils/supabase.server');
+          if (supabase) {
+            const { data: m } = await supabase
+              .from('merchants')
+              .select('integration_config')
+              .eq('id', String(merchantId))
+              .maybeSingle();
+            const px = m?.integration_config?.pixels || m?.integration_config?.capi || {};
+            if (px.meta_pixel_id && px.meta_capi_token) {
+              metaPixelId = px.meta_pixel_id;
+              metaAccessToken = px.meta_capi_token;
+            }
+            if (px.tiktok_pixel_code && px.tiktok_access_token) {
+              tiktokPixelCode = px.tiktok_pixel_code;
+              tiktokAccessToken = px.tiktok_access_token;
+            }
+          }
+        } catch {}
+      }
+
+      const dispatched: string[] = [];
+
+      // 1. Meta Conversions API (CAPI)
+      if (metaPixelId && metaAccessToken) {
+        try {
+          const metaPayload = {
+            data: [
+              {
+                event_name: eventName,
+                event_time: eventTime,
+                event_id: eventId,
+                action_source: source === 'physical_pos_nfc' || source === 'physical_pos_qr' ? 'physical_store' : 'website',
+                event_source_url: pageUrl || undefined,
+                user_data: {
+                  client_ip_address: clientIp || undefined,
+                  client_user_agent: userAgent || undefined,
+                  ...(hashedPhone ? { ph: [hashedPhone] } : {}),
+                  ...(hashedEmail ? { em: [hashedEmail] } : {})
+                },
+                custom_data: {
+                  currency: String(currency || 'XOF').toUpperCase(),
+                  value: Number(value) || 0,
+                  content_name: slug || nfcCode || 'MiniMarket',
+                  source
+                }
+              }
+            ]
+          };
+          const mRes = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(metaPixelId)}/events?access_token=${encodeURIComponent(metaAccessToken)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(metaPayload)
+          });
+          if (mRes.ok) dispatched.push('meta_capi');
+        } catch (mErr) {
+          console.warn('[CAPI META NOTICE]', (mErr as Error).message);
+        }
+      }
+
+      // 2. TikTok Events API
+      if (tiktokPixelCode && tiktokAccessToken) {
+        try {
+          const ttPayload = {
+            pixel_code: tiktokPixelCode,
+            event: eventName === 'Lead' ? 'SubmitForm' : eventName,
+            event_id: eventId,
+            timestamp: new Date().toISOString(),
+            context: {
+              ip: clientIp || undefined,
+              user_agent: userAgent || undefined,
+              page: { url: pageUrl || undefined },
+              user: {
+                ...(hashedPhone ? { phone_number: hashedPhone } : {}),
+                ...(hashedEmail ? { email: hashedEmail } : {})
+              }
+            },
+            properties: {
+              currency: String(currency || 'XOF').toUpperCase(),
+              value: Number(value) || 0,
+              contents: [{ content_name: slug || nfcCode || 'MiniMarket' }]
+            }
+          };
+          const ttRes = await fetch('https://business-api.tiktok.com/open_api/v1.3/event/track/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Token': tiktokAccessToken
+            },
+            body: JSON.stringify(ttPayload)
+          });
+          if (ttRes.ok) dispatched.push('tiktok_capi');
+        } catch (ttErr) {
+          console.warn('[CAPI TIKTOK NOTICE]', (ttErr as Error).message);
+        }
+      }
+
+      // 3. Journalisation locale + Supabase (audience VIP physique -> digital)
+      const record = {
+        id: eventId,
+        event_name: eventName,
+        source,
+        merchant_id: merchantId || null,
+        nfc_code: nfcCode || null,
+        slug: slug || null,
+        value: Number(value) || 0,
+        currency: String(currency || 'XOF'),
+        customer_phone: cleanPhone || null,
+        dispatched,
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        let logs: any[] = [];
+        if (fs.existsSync(capiEventsFile)) {
+          logs = JSON.parse(fs.readFileSync(capiEventsFile, 'utf8')) || [];
+        }
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(capiEventsFile, JSON.stringify([record, ...logs.slice(0, 499)], null, 2), 'utf8');
+      } catch {}
+
+      return res.json({ success: true, eventId, dispatched });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/minimarket/group-buy (PUBLIC — crée un groupe d'achat viral -20% façon Pinduoduo)
+  app.post('/api/minimarket/group-buy', async (req, res) => {
+    try {
+      const { visitorId = '', storeSlug = '', cart = [], requiredFriends = 2, discountPercent = 20 } = req.body || {};
+      const cleanVisitor = String(visitorId || `v_${crypto.randomBytes(6).toString('hex')}`).trim();
+      const groupId = `grp_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
+      const requiredTotal = Math.max(2, Math.min(10, Number(requiredFriends) || 2)) + 1; // créateur + N amis
+      const pct = Math.max(5, Math.min(50, Number(discountPercent) || 20));
+      const now = Date.now();
+
+      const group = {
+        id: groupId,
+        storeSlug: String(storeSlug || ''),
+        creatorVisitorId: cleanVisitor,
+        members: [cleanVisitor],
+        requiredFriends: requiredTotal - 1,
+        requiredTotal,
+        discountPercent: pct,
+        cart: Array.isArray(cart) ? cart.slice(0, 20) : [],
+        unlocked: false,
+        expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date(now).toISOString()
+      };
+
+      const existing = getStoredGroupBuys();
+      saveStoredGroupBuys([group, ...existing]);
+
+      return res.status(201).json({
+        success: true,
+        group: {
+          id: group.id,
+          joinedCount: group.members.length,
+          requiredTotal: group.requiredTotal,
+          remaining: Math.max(0, group.requiredTotal - group.members.length),
+          discountPercent: group.discountPercent,
+          unlocked: group.unlocked,
+          expiresAt: group.expiresAt
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // GET /api/minimarket/group-buy/:id (PUBLIC — consulte l'avancement d'un groupe)
+  app.get('/api/minimarket/group-buy/:id', (req, res) => {
+    const id = String(req.params.id || '').trim();
+    const group = getStoredGroupBuys().find((g: any) => g.id === id);
+    if (!group) {
+      return res.status(404).json({ success: false, error: 'Groupe introuvable ou expiré' });
+    }
+    const joinedCount = Array.isArray(group.members) ? group.members.length : 1;
+    const unlocked = joinedCount >= (group.requiredTotal || 3);
+    return res.json({
+      success: true,
+      group: {
+        id: group.id,
+        joinedCount,
+        requiredTotal: group.requiredTotal || 3,
+        remaining: Math.max(0, (group.requiredTotal || 3) - joinedCount),
+        discountPercent: group.discountPercent || 20,
+        unlocked,
+        expiresAt: group.expiresAt
+      }
+    });
+  });
+
+  // POST /api/minimarket/group-buy/:id/join (PUBLIC — un ami rejoint le groupe via le lien WhatsApp)
+  app.post('/api/minimarket/group-buy/:id/join', (req, res) => {
+    const id = String(req.params.id || '').trim();
+    const visitorId = String(req.body?.visitorId || `v_${crypto.randomBytes(6).toString('hex')}`).trim();
+    const all = getStoredGroupBuys();
+    const idx = all.findIndex((g: any) => g.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Groupe introuvable ou expiré' });
+    }
+    const group = all[idx];
+    const members: string[] = Array.isArray(group.members) ? group.members : [];
+    if (!members.includes(visitorId)) {
+      members.push(visitorId);
+    }
+    const requiredTotal = group.requiredTotal || 3;
+    const unlocked = members.length >= requiredTotal;
+    all[idx] = { ...group, members, unlocked };
+    saveStoredGroupBuys(all);
+
+    return res.json({
+      success: true,
+      group: {
+        id: group.id,
+        joinedCount: members.length,
+        requiredTotal,
+        remaining: Math.max(0, requiredTotal - members.length),
+        discountPercent: group.discountPercent || 20,
+        unlocked,
+        expiresAt: group.expiresAt
+      }
+    });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

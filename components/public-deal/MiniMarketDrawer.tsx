@@ -14,7 +14,10 @@ import {
   Tag,
   Copy,
   UserCheck,
-  Hash
+  Hash,
+  Users,
+  RefreshCw,
+  MessageCircle
 } from 'lucide-react'
 
 export interface Product {
@@ -36,6 +39,7 @@ export interface MiniMarketCheckoutMeta {
   promoCode?: string
   discountPercent?: number
   discountedTotal?: number
+  groupBuyId?: string
 }
 
 export interface MiniMarketDrawerProps {
@@ -44,6 +48,19 @@ export interface MiniMarketDrawerProps {
   onClose: () => void
   onCheckout: (cart: CartItem[], meta?: MiniMarketCheckoutMeta) => void
   storeTitle?: string
+}
+
+function getOrCreateVisitorId(): string {
+  if (typeof window === 'undefined') return 'v_server'
+  try {
+    const existing = localStorage.getItem('nana_visitor_id')
+    if (existing) return existing
+    const fresh = `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    localStorage.setItem('nana_visitor_id', fresh)
+    return fresh
+  } catch {
+    return `v_${Date.now().toString(36)}`
+  }
 }
 
 function parseDiscountFromPromo(promoCode: string, explicitDiscount?: string | null): number {
@@ -68,7 +85,7 @@ export default function MiniMarketDrawer({
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous')
   const [cart, setCart] = useState<Record<string, CartItem>>({})
 
-  // Paramètres Social Commerce (Affilié / Influenceur + Promo + Partage Panier)
+  // Paramètres Social Commerce (Affilié / Influenceur + Promo + Partage Panier + Achat Groupé Viral)
   const [affiliateRef, setAffiliateRef] = useState<string>('')
   const [promoCode, setPromoCode] = useState<string>('')
   const [discountPercent, setDiscountPercent] = useState<number>(0)
@@ -78,6 +95,18 @@ export default function MiniMarketDrawer({
   const [copiedAffLink, setCopiedAffLink] = useState(false)
   const [hydratedFromUrl, setHydratedFromUrl] = useState(false)
 
+  // Achat Groupé Viral (Modèle Pinduoduo : -20% en invitant 2 amis sur WhatsApp)
+  const [groupBuy, setGroupBuy] = useState<{
+    id: string
+    joinedCount: number
+    requiredTotal: number
+    remaining: number
+    discountPercent: number
+    unlocked: boolean
+  } | null>(null)
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false)
+  const [isCheckingGroup, setIsCheckingGroup] = useState(false)
+
   // Attribution automatique des numéros de lot Live (#01, #02, #03...)
   const indexedProducts = useMemo(() => {
     return products.map((p, idx) => ({
@@ -86,7 +115,7 @@ export default function MiniMarketDrawer({
     }))
   }, [products])
 
-  // Hydratation automatique depuis l'URL (?ref=..., ?cart=id:qty, ?item=..., ?lot=02, ?promo=FLASH10)
+  // Hydratation automatique depuis l'URL (?ref=..., ?cart=id:qty, ?item=..., ?lot=02, ?promo=FLASH10, ?group=grp_...)
   useEffect(() => {
     if (typeof window === 'undefined' || indexedProducts.length === 0 || hydratedFromUrl) return
     const params = new URLSearchParams(window.location.search)
@@ -143,6 +172,29 @@ export default function MiniMarketDrawer({
     if (Object.keys(initialCart).length > 0) {
       setCart(initialCart)
     }
+
+    // 3. Rejoindre automatiquement un Achat Groupé Viral (?group=grp_...)
+    const groupParam = (params.get('group') || '').trim()
+    if (groupParam) {
+      const visitorId = getOrCreateVisitorId()
+      fetch(`/api/minimarket/group-buy/${encodeURIComponent(groupParam)}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId })
+      })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json?.success && json.group) {
+            setGroupBuy(json.group)
+            if (json.group.unlocked) {
+              setPromoCode(`GROUPE${json.group.discountPercent}`)
+              setDiscountPercent(json.group.discountPercent)
+            }
+          }
+        })
+        .catch(() => {})
+    }
+
     setHydratedFromUrl(true)
   }, [indexedProducts, hydratedFromUrl])
 
@@ -250,6 +302,84 @@ export default function MiniMarketDrawer({
     } catch {}
     setCopiedAffLink(true)
     setTimeout(() => setCopiedAffLink(false), 2200)
+  }
+
+  // --- POINT 7 : ACHAT GROUPÉ VIRAL (-20% en invitant 2 amis sur WhatsApp) ---
+  const buildGroupShareUrl = (groupId: string) => {
+    if (typeof window === 'undefined') return ''
+    const url = new URL(window.location.href)
+    url.searchParams.set('drawer', 'true')
+    url.searchParams.set('minimarket', 'true')
+    url.searchParams.set('group', groupId)
+    if (cartList.length > 0) {
+      const encoded = cartList
+        .map((c) => `${c.lotCode || c.id}:${c.quantity}`)
+        .join(',')
+      url.searchParams.set('cart', encoded)
+    }
+    if (affiliateRef) {
+      url.searchParams.set('ref', affiliateRef)
+    }
+    return url.toString()
+  }
+
+  const handleStartGroupBuy = async () => {
+    if (cartList.length === 0 || isCreatingGroup) return
+    setIsCreatingGroup(true)
+    try {
+      const visitorId = getOrCreateVisitorId()
+      const res = await fetch('/api/minimarket/group-buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorVisitorId: visitorId,
+          slug: typeof window !== 'undefined' ? window.location.pathname : '',
+          storeTitle: storeTitle || 'Mini-Market',
+          discountPercent: 20,
+          requiredFriends: 2,
+          cartSummary: cartList.map((c) => ({
+            id: c.id,
+            name: c.name,
+            qty: c.quantity,
+            price: c.price,
+          })),
+        }),
+      })
+      const json = await res.json()
+      if (json?.success && json.group) {
+        setGroupBuy(json.group)
+        if (typeof window !== 'undefined') {
+          const shareUrl = buildGroupShareUrl(json.group.id)
+          window.history.replaceState({}, '', shareUrl)
+        }
+      }
+    } catch {
+      // ignore network error
+    } finally {
+      setIsCreatingGroup(false)
+    }
+  }
+
+  const handleRefreshGroupBuy = async () => {
+    if (!groupBuy?.id || isCheckingGroup) return
+    setIsCheckingGroup(true)
+    try {
+      const res = await fetch(
+        `/api/minimarket/group-buy/${encodeURIComponent(groupBuy.id)}`
+      )
+      const json = await res.json()
+      if (json?.success && json.group) {
+        setGroupBuy(json.group)
+        if (json.group.unlocked) {
+          setPromoCode(`GROUPE${json.group.discountPercent}`)
+          setDiscountPercent(json.group.discountPercent)
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsCheckingGroup(false)
+    }
   }
 
   if (!isOpen) return null
@@ -509,8 +639,123 @@ export default function MiniMarketDrawer({
           )}
         </div>
 
-        {/* Footer de Validation, Promo & Partage Panier Pré-Rempli */}
+        {/* Footer de Validation, Achat Groupé (-20%), Promo & Partage Panier Pré-Rempli */}
         <div className="border-t p-3.5 bg-white space-y-2.5 shrink-0">
+          {/* Point 7 : Achat Groupé Viral (Modèle Pinduoduo -20% en invitant 2 amis WhatsApp) */}
+          {cartList.length > 0 && (
+            <div
+              className={`rounded-2xl border p-2.5 transition ${
+                groupBuy?.unlocked
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : 'bg-gradient-to-r from-violet-50 via-fuchsia-50 to-amber-50 border-violet-200 text-violet-950'
+              }`}
+            >
+              {!groupBuy ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="p-1.5 rounded-xl bg-violet-600 text-white shrink-0">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black leading-tight">
+                        Achat Groupé : -20% immédiat
+                      </p>
+                      <p className="text-[10px] text-violet-700 truncate">
+                        Invitez 2 amis WhatsApp à ouvrir votre lien
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStartGroupBuy}
+                    disabled={isCreatingGroup}
+                    className="px-2.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-extrabold shrink-0 transition cursor-pointer disabled:opacity-60"
+                  >
+                    {isCreatingGroup ? 'Création…' : 'Activer -20%'}
+                  </button>
+                </div>
+              ) : groupBuy.unlocked ? (
+                <div className="flex items-center justify-between gap-2 text-xs font-extrabold">
+                  <span className="flex items-center gap-1.5 text-emerald-800">
+                    <Users className="w-4 h-4 text-emerald-600" />
+                    Groupe complet ({groupBuy.joinedCount}/{groupBuy.requiredTotal}) • -{groupBuy.discountPercent}% débloqué !
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black">
+                    ACTIF
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-violet-950">
+                      <Users className="w-3.5 h-3.5 text-violet-600" />
+                      <span>
+                        Groupe : {groupBuy.joinedCount}/{groupBuy.requiredTotal} (plus que{' '}
+                        {groupBuy.remaining} ami{groupBuy.remaining > 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRefreshGroupBuy}
+                      disabled={isCheckingGroup}
+                      className="p-1 rounded-lg bg-white/80 hover:bg-white text-violet-700 border border-violet-200 transition cursor-pointer"
+                      title="Actualiser le statut du groupe"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isCheckingGroup ? 'animate-spin' : ''}`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Barre de progression */}
+                  <div className="w-full h-1.5 rounded-full bg-violet-200/80 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-violet-600 to-fuchsia-600 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((groupBuy.joinedCount / groupBuy.requiredTotal) * 100)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(
+                        `🔥 Clique vite sur mon lien pour qu'on débloque -${groupBuy.discountPercent}% ensemble sur ${
+                          storeTitle || 'le Mini-Market'
+                        } ! Il manque ${groupBuy.remaining} ami(s) : ${buildGroupShareUrl(
+                          groupBuy.id
+                        )}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-1.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Inviter 2 amis sur WhatsApp</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard
+                          ?.writeText(buildGroupShareUrl(groupBuy.id))
+                          .catch(() => {})
+                        setCopiedShare(true)
+                        setTimeout(() => setCopiedShare(false), 2000)
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-white border border-violet-200 hover:bg-violet-100 text-violet-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Lien</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {discountPercent > 0 && (
             <div className="flex items-center justify-between text-xs px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 font-bold">
               <span className="flex items-center gap-1.5">
@@ -560,6 +805,7 @@ export default function MiniMarketDrawer({
                   promoCode: promoCode || undefined,
                   discountPercent: discountPercent || undefined,
                   discountedTotal: totalAmount,
+                  groupBuyId: groupBuy?.id,
                 })
               }
               className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 cursor-pointer text-xs sm:text-sm"

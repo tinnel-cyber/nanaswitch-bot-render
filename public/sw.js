@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v30-minimarket-social-commerce';
+const CACHE_NAME = 'nanasore-v31-capi-retargeting-group-buy';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

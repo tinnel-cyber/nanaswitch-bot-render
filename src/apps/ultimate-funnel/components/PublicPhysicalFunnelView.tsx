@@ -70,7 +70,8 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         search.get('minimarket') === 'true' ||
         search.has('cart') ||
         search.has('item') ||
-        search.has('lot')
+        search.has('lot') ||
+        search.has('group')
       );
     }
     return false;
@@ -78,6 +79,64 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [miniMarketCart, setMiniMarketCart] = useState<any[]>([]);
+  // Point 6 : Retargeting Physique → Réseaux Sociaux (CAPI) + Opt-in Club VIP WhatsApp
+  const [vipWhatsapp, setVipWhatsapp] = useState('');
+  const [vipJoined, setVipJoined] = useState(false);
+  const [vipSubmitting, setVipSubmitting] = useState(false);
+
+  const fireServerCapiEvent = (
+    eventName: 'ViewContent' | 'Lead' | 'InitiateCheckout' | 'Purchase',
+    extra?: { value?: number; customerPhone?: string; source?: string }
+  ) => {
+    try {
+      const search = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const source =
+        extra?.source ||
+        search?.get('source') ||
+        (isFromPhysicalQr ? 'physical_pos_qr' : 'social_minimarket');
+      fetch('/api/tracking/capi-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          eventName,
+          source,
+          merchantId: funnel?.storeId || '',
+          slug: activeSlug,
+          value: extra?.value,
+          currency: 'XOF',
+          customerPhone: extra?.customerPhone,
+          pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+        }),
+      }).catch(() => {});
+    } catch {
+      // non-blocking
+    }
+  };
+
+  useEffect(() => {
+    if (!isFromPhysicalQr) return;
+    fireServerCapiEvent('ViewContent', { source: 'physical_pos_qr' });
+  }, [isFromPhysicalQr, activeSlug]);
+
+  const handleVipWhatsappSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = vipWhatsapp.trim();
+    if (!cleaned || vipSubmitting) return;
+    setVipSubmitting(true);
+    try {
+      fireServerCapiEvent('Lead', {
+        source: 'physical_pos_vip_optin',
+        customerPhone: cleaned,
+      });
+      try {
+        localStorage.setItem('nana_vip_whatsapp', cleaned);
+      } catch {}
+      setVipJoined(true);
+    } finally {
+      setVipSubmitting(false);
+    }
+  };
 
   const handleQrDetected = (decodedText: string) => {
     setIsQrScannerOpen(false);
@@ -356,6 +415,50 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
           )}
         </div>
       </header>
+
+      {/* Point 6 : Capture Club VIP Boutique (-15% prochain passage) → Retargeting CAPI Meta/TikTok */}
+      {isFromPhysicalQr && (
+        <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-indigo-950/90 border-b border-emerald-500/25 px-3 sm:px-4 py-2.5">
+          {vipJoined ? (
+            <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 text-xs text-emerald-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                Bienvenue au Club VIP ! Votre bon -15% est activé pour votre prochain passage.
+              </span>
+            </div>
+          ) : (
+            <form
+              onSubmit={handleVipWhatsappSubmit}
+              className="max-w-2xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-black shrink-0">
+                  CLUB VIP -15%
+                </span>
+                <p className="text-[11px] text-slate-200 font-semibold truncate">
+                  Recevez nos ventes privées & -15% sur votre prochain passage :
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <input
+                  type="tel"
+                  value={vipWhatsapp}
+                  onChange={(e) => setVipWhatsapp(e.target.value)}
+                  placeholder="N° WhatsApp (ex: 0700...)"
+                  className="w-40 sm:w-44 px-2.5 py-1.5 rounded-xl bg-slate-950/80 border border-slate-700 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!vipWhatsapp.trim() || vipSubmitting}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer disabled:opacity-50"
+                >
+                  {vipSubmitting ? '...' : 'Activer'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* 2. Conteneur Landing Page Caisse Express (60 FPS) */}
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-6 space-y-6 pb-24">
@@ -1008,6 +1111,10 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         onCheckout={(cart, meta) => {
           setMiniMarketCart(cart);
           setIsMiniMarketOpen(false);
+          const cartTotal =
+            meta?.discountedTotal ??
+            cart.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
+          fireServerCapiEvent('InitiateCheckout', { value: cartTotal });
           try {
             localStorage.setItem('nana_checkout_cart', JSON.stringify(cart));
             if (meta) {
@@ -1037,10 +1144,14 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         tenantId={activeFunnel.storeId}
         tenantName={activeFunnel.title}
         onPaymentSuccess={(orderRef) => {
+          const totalPaid =
+            (heroProps.price || 35000) +
+            miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0);
+          fireServerCapiEvent('Purchase', { value: totalPaid });
           setCompletedOrder({
             transactionId: orderRef,
             customerName: 'Client Nanasore',
-            totalAmount: (heroProps.price || 35000) + miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0),
+            totalAmount: totalPaid,
             provider: 'MOBILE MONEY'
           });
           playCashChime();

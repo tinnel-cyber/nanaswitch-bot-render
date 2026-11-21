@@ -64,9 +64,24 @@ export const PublicNfcTagPage: React.FC<PublicNfcTagPageProps> = ({ code }) => {
         const resolved: NfcTagInfo = json.tag;
         if (active) setTag(resolved);
 
-        // Si la plaque est déjà activée → redirection immédiate vers le Mini-Market / Boutique du marchand !
+        // Si la plaque est déjà activée → déclencher CAPI Retargeting Physique + redirection immédiate !
         if (resolved.status === 'ACTIVE' && resolved.target_url) {
           if (active) setRedirectingUrl(resolved.target_url);
+          try {
+            fetch('/api/tracking/capi-event', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              keepalive: true,
+              body: JSON.stringify({
+                eventName: 'ViewContent',
+                source: 'physical_pos_nfc',
+                merchantId: resolved.merchant_id || '',
+                nfcCode: resolved.code,
+                slug: resolved.target_slug || '',
+                pageUrl: typeof window !== 'undefined' ? window.location.href : ''
+              })
+            }).catch(() => {});
+          } catch {}
           if (typeof window !== 'undefined') {
             window.location.replace(resolved.target_url);
           }
