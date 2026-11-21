@@ -17,7 +17,10 @@ import {
   Hash,
   Users,
   RefreshCw,
-  MessageCircle
+  MessageCircle,
+  Zap,
+  ExternalLink,
+  Video
 } from 'lucide-react'
 
 export interface Product {
@@ -74,6 +77,27 @@ function parseDiscountFromPromo(promoCode: string, explicitDiscount?: string | n
   return promoCode ? 10 : 0
 }
 
+function detectSocialShopContext(): { label: string; isInAppBrowser: boolean } {
+  if (typeof window === 'undefined') {
+    return { label: 'Bio-Shop Mobile Money', isInAppBrowser: false }
+  }
+  const ua = navigator.userAgent || ''
+  const params = new URLSearchParams(window.location.search)
+  const src = (params.get('source') || params.get('shop') || '').toLowerCase()
+
+  const isTikTok = /TikTok|BytedanceWebview|musical_ly/i.test(ua) || src.includes('tiktok')
+  const isInsta = /Instagram/i.test(ua) || src.includes('insta')
+  const isFb = /FBAN|FBAV/i.test(ua) || src.includes('facebook')
+  const isCommentDm = src.includes('comment') || src.includes('dm')
+  const isInAppBrowser = /TikTok|BytedanceWebview|musical_ly|Instagram|FBAN|FBAV|Snapchat/i.test(ua)
+
+  if (isCommentDm) return { label: 'Accès Privé DM • Offre Vidéo', isInAppBrowser }
+  if (isTikTok) return { label: 'TikTok Shop Express • Mobile Money', isInAppBrowser }
+  if (isInsta) return { label: 'Instagram Shop Express • Mobile Money', isInAppBrowser }
+  if (isFb) return { label: 'Facebook Shop Express • Mobile Money', isInAppBrowser }
+  return { label: 'Bio-Shop Express • Mobile Money', isInAppBrowser }
+}
+
 export default function MiniMarketDrawer({
   products,
   isOpen,
@@ -85,7 +109,9 @@ export default function MiniMarketDrawer({
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous')
   const [cart, setCart] = useState<Record<string, CartItem>>({})
 
-  // Paramètres Social Commerce (Affilié / Influenceur + Promo + Partage Panier + Achat Groupé Viral)
+  // Paramètres Social Commerce (Bio-Shop TikTok/Insta + Comment-to-DM + Affilié + Promo + Groupe)
+  const [socialCtx] = useState(() => detectSocialShopContext())
+  const [featuredProductId, setFeaturedProductId] = useState<string | null>(null)
   const [affiliateRef, setAffiliateRef] = useState<string>('')
   const [promoCode, setPromoCode] = useState<string>('')
   const [discountPercent, setDiscountPercent] = useState<number>(0)
@@ -160,12 +186,15 @@ export default function MiniMarketDrawer({
       })
     }
 
-    // 2. Article ou Lot unique (?item=... ou ?lot=02)
+    // 2. Article ou Lot unique (?item=... ou ?lot=02 — Comment-to-MiniMarket / Vidéo)
     const itemParam = params.get('item') || params.get('lot')
     if (itemParam) {
       const found = findProduct(itemParam)
-      if (found && !initialCart[found.id]) {
-        initialCart[found.id] = { ...found, quantity: 1 }
+      if (found) {
+        setFeaturedProductId(found.id)
+        if (!initialCart[found.id]) {
+          initialCart[found.id] = { ...found, quantity: 1 }
+        }
       }
     }
 
@@ -382,6 +411,25 @@ export default function MiniMarketDrawer({
     }
   }
 
+  // Point 1 : Achat Express 2-Taps (TikTok/Instagram Shop → Paiement Mobile Money direct)
+  const featuredProduct = useMemo(
+    () => (featuredProductId ? indexedProducts.find((p) => p.id === featuredProductId) || null : null),
+    [featuredProductId, indexedProducts]
+  )
+
+  const handleQuickBuyProduct = (product: Product) => {
+    const qty = cart[product.id]?.quantity || 1
+    const raw = product.price * qty
+    const disc = discountPercent > 0 ? Math.round((raw * discountPercent) / 100) : 0
+    onCheckout([{ ...product, quantity: qty }], {
+      affiliateRef: affiliateRef || undefined,
+      promoCode: promoCode || undefined,
+      discountPercent: discountPercent || undefined,
+      discountedTotal: Math.max(0, raw - disc),
+      groupBuyId: groupBuy?.id,
+    })
+  }
+
   if (!isOpen) return null
 
   return (
@@ -393,6 +441,31 @@ export default function MiniMarketDrawer({
         className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[86vh] transform transition-all duration-300 animate-in zoom-in-95 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Point 1 : Barre TikTok / Instagram Shop Express • Compatible Wave, Orange Money, MTN, Moov */}
+        <div className="bg-slate-950 px-3.5 py-2 text-white flex items-center justify-between gap-2 text-[10.5px] font-bold shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="truncate">{socialCtx.label}</span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-black">Wave</span>
+            <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 text-[9px] font-black">OM</span>
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black">MTN</span>
+            {socialCtx.isInAppBrowser && typeof window !== 'undefined' && (
+              <a
+                href={window.location.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 px-1.5 py-0.5 rounded bg-white/15 hover:bg-white/25 text-white text-[9px] font-extrabold flex items-center gap-0.5"
+                title="Ouvrir dans Chrome/Safari pour les paiements app-to-app"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+                <span>Chrome</span>
+              </a>
+            )}
+          </div>
+        </div>
+
         {/* Bannière Co-Brandée Influenceur / Affilié (?ref=...) */}
         {affiliateRef && (
           <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-600 px-4 py-2 text-white flex items-center justify-between gap-2 text-[11px] font-bold shrink-0">
@@ -535,6 +608,42 @@ export default function MiniMarketDrawer({
 
         {/* Grille des Micro-Cartes Produits */}
         <div className="flex-1 overflow-y-auto p-3.5 space-y-2">
+          {/* Point 2 : Carte Vedette épinglée (Comment-to-MiniMarket ?item=... / Vu dans la vidéo) */}
+          {featuredProduct && (
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border border-emerald-400/50 text-white shadow-lg space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                  <Video className="w-3 h-3" />
+                  Vu dans la vidéo • Lot #{featuredProduct.lotCode}
+                </span>
+                <span className="text-[10px] text-emerald-300 font-bold">Prêt à payer</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <img
+                  src={featuredProduct.image || '/placeholder-product.png'}
+                  alt={featuredProduct.name}
+                  className="h-14 w-14 rounded-xl object-cover border border-white/20 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-extrabold text-white truncate">
+                    {featuredProduct.name}
+                  </p>
+                  <p className="text-sm font-black text-emerald-400">
+                    {featuredProduct.price.toLocaleString()} FCFA
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleQuickBuyProduct(featuredProduct)}
+                  className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-md transition active:scale-95 cursor-pointer shrink-0"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Payer</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {filteredProducts.length === 0 ? (
             <div className="text-center py-10 text-gray-400 text-sm">
               Aucun produit trouvé pour votre recherche.
@@ -608,8 +717,8 @@ export default function MiniMarketDrawer({
                     </div>
                   </div>
 
-                  {/* Contrôle des Quantités si Sélectionné */}
-                  {isSelected && (
+                  {/* Contrôle des Quantités si Sélectionné OU Achat 2-Taps Mobile Money */}
+                  {isSelected ? (
                     <div
                       className="flex items-center space-x-1 bg-white border border-emerald-200 rounded-lg p-0.5 ml-2 shrink-0"
                       onClick={(e) => e.stopPropagation()}
@@ -632,6 +741,19 @@ export default function MiniMarketDrawer({
                         <Plus className="h-3 w-3" />
                       </button>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleQuickBuyProduct(product)
+                      }}
+                      className="ml-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 font-extrabold text-[11px] flex items-center gap-1 transition shrink-0 cursor-pointer"
+                      title="Paiement Mobile Money direct en 1 tap"
+                    >
+                      <Zap className="w-3 h-3" />
+                      <span>Payer</span>
+                    </button>
                   )}
                 </div>
               )

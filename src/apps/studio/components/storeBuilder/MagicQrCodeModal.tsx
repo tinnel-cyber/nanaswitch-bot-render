@@ -16,7 +16,10 @@ import {
   Smartphone,
   Tag,
   ShoppingBag,
-  CreditCard
+  CreditCard,
+  MessageCircle,
+  Trash2,
+  Send
 } from 'lucide-react';
 import { PhysicalFunnelConfig } from '../../../../types/physicalFunnel';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
@@ -34,7 +37,7 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeTab, setActiveTab] = useState<'poster' | 'badge' | 'stickers'>('poster');
+  const [activeTab, setActiveTab] = useState<'poster' | 'badge' | 'stickers' | 'social'>('poster');
   const [posterTitle, setPosterTitle] = useState(funnel.title || 'Offre Spéciale En Boutique');
   const [includePricing, setIncludePricing] = useState(true);
   const [openMiniMarketOnScan, setOpenMiniMarketOnScan] = useState(true);
@@ -42,6 +45,16 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
   const [isWritingNfc, setIsWritingNfc] = useState(false);
   const [customCallToAction, setCustomCallToAction] = useState('Scannez pour commander en 1-Clic');
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Point 1 & 2 : Bio-Shop TikTok/Instagram & Comment-to-MiniMarket
+  const [commentRules, setCommentRules] = useState<any[]>([]);
+  const [newKeyword, setNewKeyword] = useState('PACK');
+  const [newItemId, setNewItemId] = useState('01');
+  const [newPromo, setNewPromo] = useState('');
+  const [isSavingRule, setIsSavingRule] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string>('');
+  const [testCommentInput, setTestCommentInput] = useState('Je veux le PACK svp !');
+  const [testMatchResult, setTestMatchResult] = useState<any | null>(null);
 
   const heroBlock = funnel.blocks.find(b =>
     b.type === 'HERO_PRODUCT' ||
@@ -55,7 +68,87 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
   const brandColor = funnel.brandColor || '#10b981';
 
   // URL souveraine dédiée au scan client qui déclenche directement le tiroir / popup Mini-Market
-  const magicScanUrl = `https://nsore.shop/c/${funnel.slug || 'offre-exclusive'}?drawer=true&source=physical_pos_qr${openMiniMarketOnScan ? '&minimarket=true' : ''}`;
+  const slugSafe = funnel.slug || 'offre-exclusive';
+  const magicScanUrl = `https://nsore.shop/c/${slugSafe}?drawer=true&source=physical_pos_qr${openMiniMarketOnScan ? '&minimarket=true' : ''}`;
+  const tiktokBioShopUrl = `https://nsore.shop/c/${slugSafe}?drawer=true&minimarket=true&shop=bio&source=tiktok_bio`;
+  const instaBioShopUrl = `https://nsore.shop/c/${slugSafe}?drawer=true&minimarket=true&shop=bio&source=instagram_bio`;
+  const commentWebhookUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/api/social/comment-webhook`
+      : 'https://nsore.shop/api/social/comment-webhook';
+
+  const copyText = (key: string, value: string) => {
+    navigator.clipboard?.writeText(value).catch(() => {});
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(''), 2000);
+  };
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'social') return;
+    fetch(`/api/social/comment-triggers?slug=${encodeURIComponent(slugSafe)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.success && Array.isArray(json.rules)) {
+          setCommentRules(json.rules);
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, activeTab, slugSafe]);
+
+  const handleCreateCommentRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKeyword.trim() || isSavingRule) return;
+    setIsSavingRule(true);
+    try {
+      const res = await fetch('/api/social/comment-triggers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: funnel.storeId || '',
+          slug: slugSafe,
+          keyword: newKeyword.trim(),
+          itemId: newItemId.trim(),
+          itemName: funnel.title || '',
+          promoCode: newPromo.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json?.success && json.rule) {
+        setCommentRules((prev) => [json.rule, ...prev]);
+        setNewKeyword('');
+        playValidationBeep();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSavingRule(false);
+    }
+  };
+
+  const handleDeleteCommentRule = async (id: string) => {
+    try {
+      await fetch(`/api/social/comment-triggers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      setCommentRules((prev) => prev.filter((r) => r.id !== id));
+    } catch {}
+  };
+
+  const handleSimulateComment = async () => {
+    if (!testCommentInput.trim()) return;
+    try {
+      const res = await fetch('/api/social/comment-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commentText: testCommentInput,
+          commenterName: 'ClientTest',
+          slug: slugSafe,
+          tenantId: funnel.storeId || '',
+        }),
+      });
+      const json = await res.json();
+      setTestMatchResult(json);
+    } catch {}
+  };
 
   const handleWriteNfcTag = async () => {
     playTapBeep();
@@ -212,6 +305,21 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
               <Tag className="w-3.5 h-3.5" />
               <span>Étiquette / Autocollant</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('social')}
+              style={{
+                backgroundColor: activeTab === 'social' ? brandColor : undefined,
+                color: activeTab === 'social' ? '#ffffff' : undefined
+              }}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'social' ? 'shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>Bio-Shop & Comment-to-DM</span>
+            </button>
           </div>
 
           {/* Boutons d'export rapide */}
@@ -246,7 +354,222 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
           </div>
         </div>
 
-        {/* 3. Corps & Prévisualisation de l'Affiche */}
+        {/* 3. Corps : Studio Bio-Shop & Comment-to-DM OU Prévisualisation Affiche QR/NFC */}
+        {activeTab === 'social' ? (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-xs">
+            {/* POINT 1 : TIKTOK SHOP / INSTAGRAM SHOP COMPATIBLE MOBILE MONEY */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-emerald-500/30 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-white text-sm">
+                      1. Lien Bio-Shop (TikTok Shop / Instagram Shop • Mobile Money)
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Collez ce lien dans votre bio : le Mini-Market glisse en &lt; 1 seconde avec paiement Wave, Orange Money, MTN & Moov en 2 taps.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-pink-400">Link-in-Bio TikTok</span>
+                    <button
+                      type="button"
+                      onClick={() => copyText('tiktok_bio', tiktokBioShopUrl)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKey === 'tiktok_bio' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'tiktok_bio' ? 'Copié !' : 'Copier'}</span>
+                    </button>
+                  </div>
+                  <p className="font-mono text-[10.5px] text-emerald-300 break-all">{tiktokBioShopUrl}</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-amber-400">Link-in-Bio Instagram</span>
+                    <button
+                      type="button"
+                      onClick={() => copyText('insta_bio', instaBioShopUrl)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKey === 'insta_bio' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedKey === 'insta_bio' ? 'Copié !' : 'Copier'}</span>
+                    </button>
+                  </div>
+                  <p className="font-mono text-[10.5px] text-emerald-300 break-all">{instaBioShopUrl}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* POINT 2 : ZÉRO LIEN DANS LE POST → COMMENT-TO-MINIMARKET */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-indigo-500/30 space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-black text-white text-sm">
+                    2. Stratégie « Zéro lien dans le post » → Comment-to-MiniMarket
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Dites en vidéo : « Commentez PACK pour recevoir l'offre ». Zéro pénalité d'algorithme, puis lien court <code className="text-indigo-300">/go/PACK-...</code> envoyé en DM.
+                  </p>
+                </div>
+              </div>
+
+              {/* Formulaire de création d'une règle Mot-Clé */}
+              <form onSubmit={handleCreateCommentRule} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                <input
+                  type="text"
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  placeholder="Mot-clé (ex: PACK)"
+                  className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold uppercase focus:outline-none focus:border-indigo-400"
+                />
+                <input
+                  type="text"
+                  value={newItemId}
+                  onChange={(e) => setNewItemId(e.target.value)}
+                  placeholder="Lot ou ID produit (ex: 01)"
+                  className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+                <input
+                  type="text"
+                  value={newPromo}
+                  onChange={(e) => setNewPromo(e.target.value)}
+                  placeholder="Code promo opt. (ex: PACK10)"
+                  className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white uppercase focus:outline-none focus:border-indigo-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!newKeyword.trim() || isSavingRule}
+                  className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black transition cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingRule ? 'Création…' : '+ Créer Mot-Clé'}
+                </button>
+              </form>
+
+              {/* Liste des règles actives */}
+              {commentRules.length === 0 ? (
+                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-center text-slate-400 text-[11px]">
+                  Aucune règle Comment-to-MiniMarket créée pour ce tunnel. Créez votre premier mot-clé (ex: <strong>PACK</strong>) ci-dessus.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {commentRules.map((rule) => (
+                    <div
+                      key={rule.id}
+                      className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-lg bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 font-mono font-black text-xs">
+                            {rule.keyword}
+                          </span>
+                          {rule.itemId && (
+                            <span className="text-[10.5px] text-slate-400">
+                              Produit/Lot : <strong className="text-white">#{rule.itemId}</strong>
+                            </span>
+                          )}
+                          {rule.promoCode && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                              {rule.promoCode}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10.5px] text-slate-400">
+                          <span>DM : <strong className="text-white">{rule.triggersCount || 0}</strong></span>
+                          <span>Clics : <strong className="text-emerald-400">{rule.clicks || 0}</strong></span>
+                          <button
+                            type="button"
+                            onClick={() => copyText(`url_${rule.id}`, rule.shortUrl)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedKey === `url_${rule.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>Lien court</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => copyText(`dm_${rule.id}`, rule.dmTemplate)}
+                            className="px-2 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedKey === `dm_${rule.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Send className="w-3 h-3" />}
+                            <span>Script DM</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCommentRule(rule.id)}
+                            className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                            title="Supprimer la règle"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10.5px] text-slate-300 bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                        {rule.dmTemplate}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Webhook Meta / ManyChat / Make / Zapier + Testeur de commentaire */}
+              <div className="pt-3 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-200">
+                      Webhook Auto-DM (ManyChat / Meta / Make / Zapier)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyText('webhook', commentWebhookUrl)}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold cursor-pointer"
+                    >
+                      {copiedKey === 'webhook' ? 'Copié !' : 'Copier POST'}
+                    </button>
+                  </div>
+                  <p className="font-mono text-[10px] text-indigo-300 break-all">POST {commentWebhookUrl}</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <span className="text-[11px] font-black text-slate-200">
+                    Tester un commentaire client en direct
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={testCommentInput}
+                      onChange={(e) => setTestCommentInput(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSimulateComment}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer shrink-0"
+                    >
+                      Simuler
+                    </button>
+                  </div>
+                  {testMatchResult && (
+                    <p className={`text-[10.5px] font-semibold ${testMatchResult.matched ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {testMatchResult.matched
+                        ? `✅ Mot-clé "${testMatchResult.keyword}" détecté → DM prêt : ${testMatchResult.shortUrl}`
+                        : 'Aucun mot-clé correspondant trouvé dans ce commentaire.'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Panneau de Personnalisation (Gauche) */}
@@ -432,6 +755,7 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* 4. Footer */}
         <div className="px-5 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">

@@ -66,8 +66,13 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isMiniMarketOpen, setIsMiniMarketOpen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
+      const src = (search.get('source') || '').toLowerCase();
       return (
         search.get('minimarket') === 'true' ||
+        search.get('shop') === 'bio' ||
+        src.includes('tiktok') ||
+        src.includes('insta') ||
+        src.includes('comment') ||
         search.has('cart') ||
         search.has('item') ||
         search.has('lot') ||

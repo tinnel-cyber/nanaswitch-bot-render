@@ -2468,6 +2468,212 @@ async function startServer() {
     });
   });
 
+  // ============================================================================
+  // 2E. POINT 1 & 2 : BIO-SHOP (TIKTOK/INSTA) & COMMENT-TO-MINIMARKET (/go/:code)
+  // ============================================================================
+  const COMMENT_TRIGGERS_FILE = path.join(DATA_DIR, 'comment_to_minimarket_rules.json');
+
+  const getStoredCommentTriggers = (): any[] => {
+    try {
+      if (fs.existsSync(COMMENT_TRIGGERS_FILE)) {
+        const raw = fs.readFileSync(COMMENT_TRIGGERS_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredCommentTriggers = (rules: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(COMMENT_TRIGGERS_FILE, JSON.stringify(rules.slice(0, 1000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[CommentTrigger] Erreur sauvegarde:', err);
+    }
+  };
+
+  const normalizeKeyword = (str: string) =>
+    String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '')
+      .trim();
+
+  // GET /api/social/comment-triggers — Liste les règles Comment-to-MiniMarket d'un marchand
+  app.get('/api/social/comment-triggers', (req, res) => {
+    const tenantId = String(req.query.tenantId || '').trim();
+    const slug = String(req.query.slug || '').trim().toLowerCase();
+    let rules = getStoredCommentTriggers();
+    if (tenantId) {
+      rules = rules.filter((r: any) => String(r.tenantId || '') === tenantId);
+    } else if (slug) {
+      rules = rules.filter((r: any) => String(r.slug || '').toLowerCase() === slug);
+    }
+    return res.json({ success: true, rules });
+  });
+
+  // POST /api/social/comment-triggers — Crée une règle Mot-Clé → Lien Court /go/:code + DM auto
+  app.post('/api/social/comment-triggers', (req, res) => {
+    const {
+      tenantId = '',
+      slug = 'vente',
+      keyword = '',
+      itemId = '',
+      itemName = '',
+      promoCode = '',
+      customDmMessage = '',
+      platform = 'all',
+    } = req.body || {};
+
+    const cleanKeyword = normalizeKeyword(keyword);
+    if (!cleanKeyword) {
+      return res.status(400).json({ success: false, error: 'Mot-clé requis (ex: PACK, PRIX, OFFRE)' });
+    }
+
+    const cleanSlug = String(slug || 'vente').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
+    const shortSuffix = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const shortCode = `${cleanKeyword.slice(0, 10)}-${shortSuffix}`;
+
+    const qs = new URLSearchParams();
+    qs.set('drawer', 'true');
+    qs.set('minimarket', 'true');
+    qs.set('source', 'comment_dm');
+    if (itemId) qs.set('item', String(itemId).trim());
+    if (promoCode) qs.set('promo', String(promoCode).trim().toUpperCase());
+
+    const targetPath = `/c/${cleanSlug}?${qs.toString()}`;
+    const hostBase = `${req.protocol || 'https'}://${req.get('host') || 'nsore.shop'}`;
+    const shortUrl = `${hostBase}/go/${shortCode}`;
+    const targetUrl = `${hostBase}${targetPath}`;
+
+    const dmTemplate =
+      String(customDmMessage || '').trim() ||
+      `Merci pour ton commentaire "${cleanKeyword}" ! 🔥 Voici ton accès direct${
+        itemName ? ` pour ${itemName}` : ''
+      } (paiement Wave / Orange Money en 2 taps) 👉 ${shortUrl}`;
+
+    const replyTemplate = `Je viens de t'envoyer l'offre ${cleanKeyword} en message privé (DM) ! 📩✨`;
+
+    const newRule = {
+      id: `trg_${crypto.randomBytes(5).toString('hex')}`,
+      tenantId: String(tenantId || '').trim(),
+      slug: cleanSlug,
+      keyword: cleanKeyword,
+      itemId: String(itemId || '').trim(),
+      itemName: String(itemName || '').trim(),
+      promoCode: String(promoCode || '').trim().toUpperCase(),
+      platform: String(platform || 'all'),
+      shortCode,
+      shortUrl,
+      targetPath,
+      targetUrl,
+      dmTemplate,
+      replyTemplate,
+      clicks: 0,
+      triggersCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    const all = getStoredCommentTriggers();
+    all.unshift(newRule);
+    saveStoredCommentTriggers(all);
+
+    return res.json({ success: true, rule: newRule });
+  });
+
+  // DELETE /api/social/comment-triggers/:id — Supprime une règle Comment-to-MiniMarket
+  app.delete('/api/social/comment-triggers/:id', (req, res) => {
+    const id = String(req.params.id || '').trim();
+    const all = getStoredCommentTriggers();
+    const filtered = all.filter((r: any) => r.id !== id);
+    saveStoredCommentTriggers(filtered);
+    return res.json({ success: true, deleted: all.length !== filtered.length });
+  });
+
+  // POST /api/social/comment-webhook — Webhook Meta / ManyChat / Make / Zapier / n8n
+  app.post('/api/social/comment-webhook', (req, res) => {
+    const body = req.body || {};
+    // Supporte le format direct { commentText, commenterName, slug, tenantId } ET le format Meta Webhook
+    const metaCommentText =
+      body?.entry?.[0]?.changes?.[0]?.value?.text ||
+      body?.entry?.[0]?.changes?.[0]?.value?.message ||
+      '';
+    const rawComment = String(body.commentText || body.text || body.message || metaCommentText || '').trim();
+    const commenterName = String(body.commenterName || body.username || 'Client').trim();
+    const tenantId = String(body.tenantId || '').trim();
+    const slug = String(body.slug || '').trim().toLowerCase();
+
+    if (!rawComment) {
+      return res.status(400).json({ success: false, matched: false, error: 'commentText requis' });
+    }
+
+    const normalizedComment = rawComment
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+
+    const all = getStoredCommentTriggers();
+    const idx = all.findIndex((r: any) => {
+      if (tenantId && r.tenantId && r.tenantId !== tenantId) return false;
+      if (slug && r.slug && r.slug !== slug) return false;
+      const kw = normalizeKeyword(r.keyword);
+      return kw.length > 0 && normalizedComment.includes(kw);
+    });
+
+    if (idx === -1) {
+      return res.json({ success: true, matched: false, commentText: rawComment });
+    }
+
+    const matchedRule = all[idx];
+    all[idx] = {
+      ...matchedRule,
+      triggersCount: (Number(matchedRule.triggersCount) || 0) + 1,
+      lastTriggeredAt: new Date().toISOString(),
+    };
+    saveStoredCommentTriggers(all);
+
+    const personalizedDm = String(matchedRule.dmTemplate || '').replace(/\{name\}/gi, commenterName);
+    return res.json({
+      success: true,
+      matched: true,
+      ruleId: matchedRule.id,
+      keyword: matchedRule.keyword,
+      shortCode: matchedRule.shortCode,
+      shortUrl: matchedRule.shortUrl,
+      targetUrl: matchedRule.targetUrl,
+      dmText: personalizedDm,
+      replyText: matchedRule.replyTemplate,
+      triggersCount: all[idx].triggersCount,
+    });
+  });
+
+  // GET /go/:code — Redirection ultra-rapide (<50ms) vers le Mini-Market pré-ouvert sur le produit exact
+  app.get('/go/:code', (req, res) => {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    const all = getStoredCommentTriggers();
+    const idx = all.findIndex(
+      (r: any) =>
+        String(r.shortCode || '').toUpperCase() === code ||
+        normalizeKeyword(r.keyword) === normalizeKeyword(code)
+    );
+
+    if (idx === -1) {
+      return res.redirect(302, '/');
+    }
+
+    const rule = all[idx];
+    all[idx] = {
+      ...rule,
+      clicks: (Number(rule.clicks) || 0) + 1,
+      lastClickedAt: new Date().toISOString(),
+    };
+    saveStoredCommentTriggers(all);
+
+    return res.redirect(302, rule.targetPath || `/c/${rule.slug}?drawer=true&minimarket=true&source=comment_dm`);
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
