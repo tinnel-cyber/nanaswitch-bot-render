@@ -37,6 +37,9 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
   const [activeTab, setActiveTab] = useState<'poster' | 'badge' | 'stickers'>('poster');
   const [posterTitle, setPosterTitle] = useState(funnel.title || 'Offre Spéciale En Boutique');
   const [includePricing, setIncludePricing] = useState(true);
+  const [openMiniMarketOnScan, setOpenMiniMarketOnScan] = useState(true);
+  const [nfcStatus, setNfcStatus] = useState<string>('');
+  const [isWritingNfc, setIsWritingNfc] = useState(false);
   const [customCallToAction, setCustomCallToAction] = useState('Scannez pour commander en 1-Clic');
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -51,8 +54,28 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
   const originalPrice = heroProps.originalPrice || Math.round(price * 1.35);
   const brandColor = funnel.brandColor || '#10b981';
 
-  // URL souveraine dédiée au scan client qui déclenche directement le funnel avec tiroir dépliable
-  const magicScanUrl = `https://nsore.shop/c/${funnel.slug || 'offre-exclusive'}?drawer=true&source=physical_pos_qr`;
+  // URL souveraine dédiée au scan client qui déclenche directement le tiroir / popup Mini-Market
+  const magicScanUrl = `https://nsore.shop/c/${funnel.slug || 'offre-exclusive'}?drawer=true&source=physical_pos_qr${openMiniMarketOnScan ? '&minimarket=true' : ''}`;
+
+  const handleWriteNfcTag = async () => {
+    playTapBeep();
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
+      setNfcStatus("Web NFC nécessite Chrome sur Android. Copiez l'URL ci-dessous dans l'app NFC Tools.");
+      return;
+    }
+    setIsWritingNfc(true);
+    setNfcStatus('Approchez un autocollant NFC vierge du dos de votre téléphone...');
+    try {
+      const ndef = new (window as any).NDEFReader();
+      await ndef.write({ records: [{ recordType: 'url', data: magicScanUrl }] });
+      playValidationBeep();
+      setNfcStatus('✅ Tag NFC programmé ! Un simple contact Android ouvrira directement le Mini-Market.');
+    } catch (err: any) {
+      setNfcStatus(`Impossible d'écrire le tag NFC : ${err?.message || 'Opération annulée'}`);
+    } finally {
+      setIsWritingNfc(false);
+    }
+  };
 
   // Génération du QR Code HD 1024x1024
   useEffect(() => {
@@ -263,6 +286,34 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
                 />
                 <span className="text-slate-300 font-bold">Afficher le tarif promo sur l'affiche</span>
               </label>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={openMiniMarketOnScan}
+                  onChange={(e) => setOpenMiniMarketOnScan(e.target.checked)}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-0"
+                />
+                <span className="text-slate-300 font-bold">Ouvrir le Mini-Market en popup direct au scan</span>
+              </label>
+
+              {/* Programmation Tag NFC Sans Contact (0 clic sur Android) */}
+              <div className="pt-2 border-t border-slate-800 space-y-1.5">
+                <button
+                  type="button"
+                  disabled={isWritingNfc}
+                  onClick={handleWriteNfcTag}
+                  className="w-full py-2.5 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>{isWritingNfc ? 'Approchez le Tag NFC...' : 'Écrire sur Tag NFC (Sans contact Android)'}</span>
+                </button>
+                {nfcStatus && (
+                  <p className="text-[10.5px] text-slate-300 leading-snug bg-slate-950 p-2 rounded-xl border border-slate-800">
+                    {nfcStatus}
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Infos techniques d'assurance */}

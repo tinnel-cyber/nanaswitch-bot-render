@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v27-architect-pdp-and-optional-tunnel';
+const CACHE_NAME = 'nanasore-v28-qr-popup-scanner-nfc';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

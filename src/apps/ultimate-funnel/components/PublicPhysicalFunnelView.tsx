@@ -25,11 +25,14 @@ import {
   Check,
   Crown,
   Play,
-  Zap
+  Zap,
+  Camera,
+  QrCode
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import MiniMarketDrawer from '../../../components/funnel/MiniMarketDrawer';
 import CheckoutModal from '@/components/public-deal/CheckoutModal';
+const QuickQrScannerModal = React.lazy(() => import('../../../components/funnel/QuickQrScannerModal'));
 
 interface PublicPhysicalFunnelViewProps {
   slug: string;
@@ -44,20 +47,64 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   },
   className = ''
 }) => {
-  const cleanSlug = (slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
+  const [activeSlug, setActiveSlug] = useState<string>(slug);
+  useEffect(() => {
+    setActiveSlug(slug);
+  }, [slug]);
+
+  const cleanSlug = (activeSlug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
   const [funnel, setFunnel] = useState<PhysicalFunnelConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFromPhysicalQr, setIsFromPhysicalQr] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
-      return search.get('source') === 'physical_pos_qr' || search.get('drawer') === 'true';
+      return search.get('source') === 'physical_pos_qr' || search.get('drawer') === 'true' || search.get('minimarket') === 'true';
     }
     return false;
   });
   const [completedOrder, setCompletedOrder] = useState<any | null>(null);
-  const [isMiniMarketOpen, setIsMiniMarketOpen] = useState(false);
+  const [isMiniMarketOpen, setIsMiniMarketOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const search = new URLSearchParams(window.location.search);
+      return search.get('minimarket') === 'true';
+    }
+    return false;
+  });
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [miniMarketCart, setMiniMarketCart] = useState<any[]>([]);
+
+  const handleQrDetected = (decodedText: string) => {
+    setIsQrScannerOpen(false);
+    const raw = String(decodedText || '').trim();
+    if (!raw) return;
+    try {
+      const parsed = new URL(raw.startsWith('http') ? raw : `https://nsore.shop${raw.startsWith('/') ? raw : `/${raw}`}`);
+      const cMatch = parsed.pathname.match(/^\/(?:c|deal|commande)\/([^/?#]+)/i);
+      if (cMatch && cMatch[1]) {
+        const nextSlug = decodeURIComponent(cMatch[1]);
+        setActiveSlug(nextSlug);
+        setIsFromPhysicalQr(true);
+        if (parsed.searchParams.get('minimarket') === 'true') {
+          setIsMiniMarketOpen(true);
+        } else {
+          setIsMiniMarketOpen(false);
+        }
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', `${parsed.pathname}${parsed.search}`);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
+      }
+      if (typeof window !== 'undefined' && /^https?:\/\//i.test(raw)) {
+        window.location.href = raw;
+      }
+    } catch {
+      if (typeof window !== 'undefined' && /^https?:\/\//i.test(raw)) {
+        window.location.href = raw;
+      }
+    }
+  };
   const [marketProducts, setMarketProducts] = useState<any[]>([
     {
       id: 'fb-1',
@@ -177,7 +224,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
     return () => {
       isCancelled = true;
     };
-  }, [slug]);
+  }, [activeSlug]);
 
   // Détection du bloc hero actif
   const isHeroBlock = (type: string) =>
@@ -245,16 +292,17 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const heroProps = heroBlock?.props || {};
 
   return (
-    <div className={`min-h-screen w-full bg-[#070b14] text-slate-100 flex flex-col font-sans overflow-x-hidden ${className}`}>
+    <div className={`${isFromPhysicalQr ? 'min-h-screen w-full bg-black/80 backdrop-blur-sm flex justify-center items-end sm:items-center sm:p-4' : 'min-h-screen w-full bg-[#070b14]'} text-slate-100 font-sans overflow-x-hidden ${className}`}>
+      <div className={`${isFromPhysicalQr ? 'w-full max-w-[650px] h-[98dvh] sm:h-[94dvh] bg-[#070b14] rounded-t-2xl sm:rounded-3xl border border-slate-800 shadow-2xl overflow-y-auto flex flex-col animate-in slide-in-from-bottom-4 duration-200' : 'w-full min-h-screen flex flex-col'}`}>
       
       {/* 1. Header d'assurance Express */}
-      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-slate-800 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 shadow-lg">
+        <div className="flex items-center gap-2 min-w-0">
           {onBackToStore && (
             <button
               type="button"
               onClick={onBackToStore}
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-xs font-bold flex items-center gap-1"
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-xs font-bold flex items-center gap-1 shrink-0"
               title="Retourner à la boutique"
             >
               <ArrowLeft style={{ color: brandColor }} className="w-4 h-4" />
@@ -262,34 +310,46 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
             </button>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <span
               style={{ backgroundColor: `${brandColor}20`, borderColor: `${brandColor}40`, color: brandColor }}
-              className="px-2.5 py-0.5 rounded-full text-[10.5px] font-black border"
+              className="px-2 py-0.5 rounded-full text-[10px] font-black border shrink-0"
             >
-              {isFromPhysicalQr ? 'SCAN MAGASIN • CAISSE CONNECTÉE' : 'CAISSE EXPRESS 1-CLIC'}
+              {isFromPhysicalQr ? 'SCAN & GO' : 'CAISSE EXPRESS'}
             </span>
-            <span className="text-xs font-black text-white truncate max-w-[160px] sm:max-w-xs">
+            <span className="text-xs font-black text-white truncate max-w-[130px] sm:max-w-xs">
               {activeFunnel.title}
             </span>
           </div>
         </div>
 
-        {activeFunnel.merchantWhatsapp && (
-          <a
-            href={`https://wa.me/${activeFunnel.merchantWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite commander : ${activeFunnel.title}`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              backgroundColor: brandColor,
-              boxShadow: `0 4px 15px -3px ${brandColor}50`
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white font-bold text-xs shadow-md transition hover:brightness-110 active:scale-95"
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsQrScannerOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition cursor-pointer active:scale-95"
+            title="Scanner un autre article sans quitter la page"
           >
-            <Phone className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Support WhatsApp</span>
-          </a>
-        )}
+            <Camera className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Scanner</span>
+          </button>
+
+          {activeFunnel.merchantWhatsapp && (
+            <a
+              href={`https://wa.me/${activeFunnel.merchantWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite commander : ${activeFunnel.title}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                backgroundColor: brandColor,
+                boxShadow: `0 4px 15px -3px ${brandColor}50`
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-white font-bold text-xs shadow-md transition hover:brightness-110 active:scale-95"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">WhatsApp</span>
+            </a>
+          )}
+        </div>
       </header>
 
       {/* 2. Conteneur Landing Page Caisse Express (60 FPS) */}
@@ -893,23 +953,46 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         })}
       </main>
 
-      {/* Bouton Flottant Latéral Mini-Market */}
-      <button
-        type="button"
-        onClick={() => setIsMiniMarketOpen(true)}
-        className="fixed right-3 bottom-8 sm:bottom-10 sm:right-6 z-40 flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-[0_12px_30px_-5px_rgba(16,185,129,0.55)] border border-emerald-400/40 backdrop-blur-md transition-all duration-200 active:scale-95 cursor-pointer text-xs"
-        title="Explorer le Mini-Market"
-      >
-        <div className="relative flex items-center justify-center">
-          <ShoppingBag className="w-4 h-4 text-white" />
-          {miniMarketCart.length > 0 && (
-            <span className="absolute -top-2.5 -right-2.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white animate-pulse">
-              {miniMarketCart.reduce((s, i) => s + (i.quantity || 1), 0)}
-            </span>
-          )}
-        </div>
-        <span className="font-bold hidden sm:inline">Mini-Market</span>
-      </button>
+      {/* Boutons Flottants Latéraux : Scanner un autre article + Mini-Market */}
+      <div className="fixed right-3 bottom-8 sm:bottom-10 sm:right-6 z-40 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIsQrScannerOpen(true)}
+          className="flex items-center gap-2 px-3.5 py-3 bg-slate-900/95 hover:bg-slate-800 text-emerald-400 font-bold rounded-2xl shadow-xl border border-emerald-500/40 backdrop-blur-md transition-all duration-200 active:scale-95 cursor-pointer text-xs"
+          title="Scanner un autre article en magasin (ouverture instantanée)"
+        >
+          <QrCode className="w-4 h-4 text-emerald-400" />
+          <span className="hidden sm:inline">Scanner</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsMiniMarketOpen(true)}
+          className="flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-[0_12px_30px_-5px_rgba(16,185,129,0.55)] border border-emerald-400/40 backdrop-blur-md transition-all duration-200 active:scale-95 cursor-pointer text-xs"
+          title="Explorer le Mini-Market"
+        >
+          <div className="relative flex items-center justify-center">
+            <ShoppingBag className="w-4 h-4 text-white" />
+            {miniMarketCart.length > 0 && (
+              <span className="absolute -top-2.5 -right-2.5 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white animate-pulse">
+                {miniMarketCart.reduce((s, i) => s + (i.quantity || 1), 0)}
+              </span>
+            )}
+          </div>
+          <span className="font-bold hidden sm:inline">Mini-Market</span>
+        </button>
+      </div>
+
+      {/* Scanner QR intégré au navigateur (sans app) pour enchaîner les articles en popup direct */}
+      {isQrScannerOpen && (
+        <React.Suspense fallback={null}>
+          <QuickQrScannerModal
+            isOpen={isQrScannerOpen}
+            onClose={() => setIsQrScannerOpen(false)}
+            onDetectedUrlOrSlug={handleQrDetected}
+          />
+        </React.Suspense>
+      )}
 
       {/* Tiroir d'auto-composition latérale */}
       <MiniMarketDrawer
@@ -954,7 +1037,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
 
       {/* 3. Toast FOMO social proof connecté à Firestore (Preuve Sociale Réelle TrustPulse) */}
       <SocialProofToast
-        funnelId={funnel?.id || slug}
+        funnelId={funnel?.id || activeSlug}
         storeId={funnel?.storeId}
         productNameFallback={funnel?.title || 'cet article'}
       />
@@ -1006,6 +1089,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
