@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
   Mail,
   Layout,
@@ -123,13 +122,13 @@ export default function TenantEmailingDashboardPage() {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href="/"
+            <a
+              href="/dashboard"
               className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors p-2 rounded-xl hover:bg-slate-50"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Tableau de Bord Marchand</span>
-            </Link>
+            </a>
 
             <div className="h-5 w-[1px] bg-slate-200 hidden sm:block" />
 
