@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS public.merchants (
 -- Colonnes additionnelles si la table merchants existait déjà partiellement
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS owner_id UUID;
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS owner_email TEXT;
+ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS sector TEXT DEFAULT 'E-commerce & Services';
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'entreprise';
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_KYC';
@@ -48,46 +49,51 @@ ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS monthly_usage JSONB DEFAUL
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS company_email TEXT;
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS bank_rib TEXT;
+ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_merchants_owner_id ON public.merchants (owner_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_merchants_owner_email ON public.merchants (owner_email);
 
--- Migration automatique des anciens univers présents dans app_registry (si UUID valide)
+-- Migration automatique des anciens univers présents dans app_registry (si UUID valide et type id compatible)
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'app_registry'
   ) THEN
-    INSERT INTO public.merchants (
-      id, owner_id, owner_email, name, sector, type, status,
-      integration_mode, integration_config, balances, keys,
-      webhook_config, kyc_data, kyc_limits, api_credits_balance,
-      created_at, updated_at
-    )
-    SELECT
-      COALESCE(config_json->>'id', REPLACE(key, 'universe_', ''), id::text) AS id,
-      tenant_id::uuid AS owner_id,
-      COALESCE(config_json->'kyc'->>'userEmail', config_json->'kyc'->>'companyEmail', config_json->>'ownerEmail') AS owner_email,
-      COALESCE(config_json->>'name', name, 'Univers Marchand') AS name,
-      COALESCE(config_json->>'sector', 'E-commerce & Services') AS sector,
-      COALESCE(config_json->>'type', 'entreprise') AS type,
-      COALESCE(config_json->>'status', 'PENDING_KYC') AS status,
-      COALESCE(config_json->>'integration_mode', 'AGREGATED') AS integration_mode,
-      COALESCE(config_json->'integration_config', '{}'::jsonb) AS integration_config,
-      COALESCE(config_json->'balances', '{"XOF":0,"USD":0,"XAF":0,"GNF":0,"GHS":0}'::jsonb) AS balances,
-      COALESCE(config_json->'keys', '{}'::jsonb) AS keys,
-      COALESCE(config_json->'webhook_config', '{}'::jsonb) AS webhook_config,
-      COALESCE(config_json->'kyc', '{}'::jsonb) AS kyc_data,
-      COALESCE(config_json->'kyc_limits', '{}'::jsonb) AS kyc_limits,
-      COALESCE((config_json->>'api_credits_balance')::integer, 5000) AS api_credits_balance,
-      NOW(),
-      NOW()
-    FROM public.app_registry
-    WHERE category = 'Univers Marchand'
-      AND tenant_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-    ON CONFLICT (id) DO NOTHING;
+    BEGIN
+      INSERT INTO public.merchants (
+        id, owner_id, owner_email, name, sector, type, status,
+        integration_mode, integration_config, balances, keys,
+        webhook_config, kyc_data, kyc_limits, api_credits_balance,
+        created_at, updated_at
+      )
+      SELECT
+        COALESCE(config_json->>'id', REPLACE(key, 'universe_', ''), id::text) AS id,
+        tenant_id::uuid AS owner_id,
+        COALESCE(config_json->'kyc'->>'userEmail', config_json->'kyc'->>'companyEmail', config_json->>'ownerEmail') AS owner_email,
+        COALESCE(config_json->>'name', name, 'Univers Marchand') AS name,
+        COALESCE(config_json->>'sector', 'E-commerce & Services') AS sector,
+        COALESCE(config_json->>'type', 'entreprise') AS type,
+        COALESCE(config_json->>'status', 'PENDING_KYC') AS status,
+        COALESCE(config_json->>'integration_mode', 'AGREGATED') AS integration_mode,
+        COALESCE(config_json->'integration_config', '{}'::jsonb) AS integration_config,
+        COALESCE(config_json->'balances', '{"XOF":0,"USD":0,"XAF":0,"GNF":0,"GHS":0}'::jsonb) AS balances,
+        COALESCE(config_json->'keys', '{}'::jsonb) AS keys,
+        COALESCE(config_json->'webhook_config', '{}'::jsonb) AS webhook_config,
+        COALESCE(config_json->'kyc', '{}'::jsonb) AS kyc_data,
+        COALESCE(config_json->'kyc_limits', '{}'::jsonb) AS kyc_limits,
+        COALESCE((config_json->>'api_credits_balance')::integer, 5000) AS api_credits_balance,
+        NOW(),
+        NOW()
+      FROM public.app_registry
+      WHERE category = 'Univers Marchand'
+        AND tenant_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      ON CONFLICT (id) DO NOTHING;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'Legacy app_registry migration skipped: %', SQLERRM;
+    END;
   END IF;
 END $$;
 
