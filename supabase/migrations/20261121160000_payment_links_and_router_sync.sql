@@ -42,6 +42,7 @@ BEGIN
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'universes'
   ) THEN
+    ALTER TABLE public.universes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_KYC';
     ALTER TABLE public.universes ALTER COLUMN status SET DEFAULT 'PENDING_KYC';
   END IF;
 
@@ -49,6 +50,7 @@ BEGIN
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'merchants'
   ) THEN
+    ALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_KYC';
     ALTER TABLE public.merchants ALTER COLUMN status SET DEFAULT 'PENDING_KYC';
   END IF;
 END $$;
