@@ -8,8 +8,11 @@
  * ==============================================================================
  */
 
-const PRIMARY_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
-const SECONDARY_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+const PRIMARY_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+const SECONDARY_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
+const PRIMARY_FAST_TIMEOUT_MS = 4500;
+const PRIMARY_MUTATION_TIMEOUT_MS = 12000;
+const SECONDARY_TIMEOUT_MS = 25000;
 
 // En-têtes "hop-by-hop" standard HTTP à ne pas relayer directement
 const HOP_BY_HOP_HEADERS = new Set([
@@ -45,6 +48,7 @@ export default {
         success: true,
         message: "Cache Cloudflare Worker purgé avec succès",
         primary: PRIMARY_ORIGIN,
+        secondary: SECONDARY_ORIGIN,
         timestamp: new Date().toISOString()
       }, null, 2), {
         status: 200,
@@ -56,19 +60,19 @@ export default {
       });
     }
 
-    // 1. Détermination du pool de backends (Render primaire en ligne + Northflank secondaire)
+    // 1. Détermination du pool de backends (Northflank primaire toujours éveillé + Render secours)
     let primaryOrigin = PRIMARY_ORIGIN;
     let fallbackOrigin = SECONDARY_ORIGIN;
 
-    const configuredBackend = env && (env.BACKEND_URL || env.RENDER_BACKEND_URL);
-    if (configuredBackend && !configuredBackend.includes("nanasore.onrender.com")) {
-      primaryOrigin = configuredBackend.startsWith("http")
-        ? configuredBackend
-        : `https://${configuredBackend}`;
+    const configuredPrimary = env && (env.PRIMARY_BACKEND_URL || env.NORTHFLANK_BACKEND_URL);
+    if (configuredPrimary) {
+      primaryOrigin = configuredPrimary.startsWith("http")
+        ? configuredPrimary
+        : `https://${configuredPrimary}`;
     }
 
-    const configuredSecondary = env && env.NORTHFLANK_BACKEND_URL;
-    if (configuredSecondary) {
+    const configuredSecondary = env && (env.SECONDARY_BACKEND_URL || env.RENDER_BACKEND_URL);
+    if (configuredSecondary && !configuredSecondary.includes("nanasore.onrender.com")) {
       fallbackOrigin = configuredSecondary.startsWith("http")
         ? configuredSecondary
         : `https://${configuredSecondary}`;
@@ -82,8 +86,8 @@ export default {
       requestBodyBuffer = await request.arrayBuffer();
     }
 
-    // 3. Helper d'acheminement vers un backend spécifique
-    const tryProxy = async (originUrl) => {
+    // 3. Helper d'acheminement avec timeout strict pour éviter les blocages de 40s (cold start)
+    const tryProxy = async (originUrl, timeoutMs) => {
       const targetUrl = new URL(url.pathname + url.search, originUrl);
       const proxyHeaders = new Headers();
 
@@ -110,6 +114,10 @@ export default {
         redirect: "manual",
       };
 
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" && timeoutMs) {
+        proxyInit.signal = AbortSignal.timeout(timeoutMs);
+      }
+
       if (hasRequestBody && requestBodyBuffer) {
         proxyInit.duplex = "half";
       }
@@ -119,40 +127,48 @@ export default {
     };
 
     try {
-      // 4. Tentative sur le backend principal (Render)
+      // 4. Tentative sur le backend principal avec timeout rapide (4.5s sur GET/HEAD, 12s sur POST)
+      const primaryTimeout = hasRequestBody ? PRIMARY_MUTATION_TIMEOUT_MS : PRIMARY_FAST_TIMEOUT_MS;
       let activeTargetUrl = null;
       let activeResponse = null;
+      let servedTier = "primary";
 
       try {
-        const result = await tryProxy(primaryOrigin);
+        const result = await tryProxy(primaryOrigin, primaryTimeout);
         activeResponse = result.backendResponse;
         activeTargetUrl = result.targetUrl;
 
-        // Si le backend principal retourne 502/503 (ex: "no healthy upstream"), tenter le secondaire
+        // Si le backend principal retourne 502/503/504, bascule immédiate vers le secondaire
         if (activeResponse.status >= 502 && fallbackOrigin && fallbackOrigin !== primaryOrigin) {
           console.warn(`[FAILOVER_TRIGGER] Statut ${activeResponse.status} sur ${primaryOrigin}, bascule vers ${fallbackOrigin}`);
           try {
-            const fallbackResult = await tryProxy(fallbackOrigin);
+            const fallbackResult = await tryProxy(fallbackOrigin, SECONDARY_TIMEOUT_MS);
             if (fallbackResult.backendResponse.status < 500) {
               activeResponse = fallbackResult.backendResponse;
               activeTargetUrl = fallbackResult.targetUrl;
+              servedTier = "secondary";
             }
           } catch (eFallback) {
             console.warn("[FAILOVER_FAILED]", eFallback);
           }
         }
       } catch (errPrimary) {
-        console.warn(`[PRIMARY_FAILED] ${errPrimary.message}, tentative sur le secours...`);
+        console.warn(`[PRIMARY_TIMEOUT_OR_FAIL] ${errPrimary.message}, bascule immédiate vers ${fallbackOrigin}...`);
+        // Réveil silencieux du primaire en arrière-plan sans bloquer l'utilisateur
+        if (ctx && typeof ctx.waitUntil === "function") {
+          ctx.waitUntil(fetch(`${primaryOrigin}/health`).catch(() => {}));
+        }
         if (fallbackOrigin && fallbackOrigin !== primaryOrigin) {
-          const fallbackResult = await tryProxy(fallbackOrigin);
+          const fallbackResult = await tryProxy(fallbackOrigin, SECONDARY_TIMEOUT_MS);
           activeResponse = fallbackResult.backendResponse;
           activeTargetUrl = fallbackResult.targetUrl;
+          servedTier = "secondary";
         } else {
           throw errPrimary;
         }
       }
 
-      // Si le backend renvoie toujours une erreur 503/502 (ex: cold start Render ou Northflank down)
+      // Si le backend renvoie toujours une erreur 503/502 (ex: cold start simultané)
       if (activeResponse.status >= 502) {
         const responseText = await activeResponse.clone().text();
         if (responseText.includes("no healthy upstream") || responseText.includes("upstream connect error") || activeResponse.status === 503) {
@@ -168,8 +184,9 @@ export default {
         }
       }
 
-      // Marqueur de diagnostic Edge
+      // Marqueurs de diagnostic Edge
       responseHeaders.set("X-Served-By", "nanasore-cloudflare-worker-proxy");
+      responseHeaders.set("X-Backend-Tier", servedTier);
 
       return new Response(activeResponse.body, {
         status: activeResponse.status,
@@ -283,5 +300,17 @@ export default {
         },
       });
     }
+  },
+
+  // Cron Trigger optionnel (toutes les 10 minutes) pour garder Northflank et Render réveillés 24/7
+  async scheduled(_event, env, ctx) {
+    const primary = (env && (env.PRIMARY_BACKEND_URL || env.NORTHFLANK_BACKEND_URL)) || PRIMARY_ORIGIN;
+    const secondary = (env && (env.SECONDARY_BACKEND_URL || env.RENDER_BACKEND_URL)) || SECONDARY_ORIGIN;
+    ctx.waitUntil(
+      Promise.allSettled([
+        fetch(`${primary}/health`, { method: "GET" }),
+        fetch(`${secondary}/health`, { method: "GET" }),
+      ])
+    );
   },
 };
