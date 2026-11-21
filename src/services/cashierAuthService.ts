@@ -1,5 +1,6 @@
 import { SellerUser } from '../types';
 import { getOrCreateTabCasierSession } from './casierSessionService';
+import { supabase } from '../lib/supabase';
 
 
 /**

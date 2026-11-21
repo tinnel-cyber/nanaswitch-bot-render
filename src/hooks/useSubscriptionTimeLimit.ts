@@ -89,11 +89,7 @@ export function useSubscriptionTimeLimit({
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-
-    const evaluatePlan = (sub: StoreSubscription) => {
+    function evaluatePlan(sub: StoreSubscription) {
       const plan = (sub.plan || '').toLowerCase();
       const isActive = sub.status === 'ACTIVE';
       const isPremiumPlan = 
@@ -111,9 +107,11 @@ export function useSubscriptionTimeLimit({
         setPlanName('Période d’Essai (20 minutes max)');
         setTotalLimitSeconds(DEFAULT_LIMIT_MINUTES * 60);
       }
-    };
+    }
 
-    checkSubscription();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [storeId, merchantId, DEFAULT_LIMIT_MINUTES]);
 
   // 2. Chronomètre actif du direct

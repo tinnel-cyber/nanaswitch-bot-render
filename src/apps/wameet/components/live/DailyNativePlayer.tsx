@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, Maximize2, Minimize2, 
-  Radio, Users, Camera
+  Radio, Users, Camera, ShieldCheck
 } from 'lucide-react';
 import { playTapBeep } from '../../../../utils/audio';
 

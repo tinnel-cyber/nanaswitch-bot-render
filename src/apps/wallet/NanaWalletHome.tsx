@@ -181,7 +181,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         }
       } catch {}
     }
-    return auth.currentUser?.displayName || 'Jean Kouassi';
+    return 'Utilisateur Nanasore';
   }, []);
 
   const userInitial = useMemo(() => {

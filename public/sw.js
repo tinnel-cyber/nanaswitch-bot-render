@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v16-docs-unified';
+const CACHE_NAME = 'nanasore-v17-crash-fix';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

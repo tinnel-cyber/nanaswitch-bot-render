@@ -58,8 +58,10 @@ import { NanaAcademyDrawer } from './components/NanaAcademyDrawer';
 import { MiniVideoPlayer } from './components/MiniVideoPlayer';
 import { TutorialItem, toggleTutorialCompleted, getCompletedTutorialIds } from './services/tutorialService';
 import { NanasoreAssistantBubble } from './components/assistant/NanasoreAssistantBubble';
+import { getOfficialModuleById, getModuleByRoute } from './appRegistry';
 
 // Modules Métiers Secondaires & Modales Lourdes (Chargement différé React.lazy pour alléger le bundle principal au démarrage)
+const ProFeaturesModal = React.lazy(() => import('./components/ProFeaturesModal').then(m => ({ default: (m as any).ProFeaturesModal || m.default })));
 const DebtBookView = React.lazy(() => import('./components/DebtBookView').then(m => ({ default: m.DebtBookView })));
 const ReportsView = React.lazy(() => import('./components/ReportsView').then(m => ({ default: m.ReportsView })));
 const VoiceTestComponent = React.lazy(() => import('./components/VoiceTestComponent').then(m => ({ default: m.VoiceTestComponent })));
@@ -1901,9 +1903,7 @@ export default function App() {
       }
 
       // Boutique / Shop / Vitrine / Fiche Produit propre (/{themePrefix}/:store, /s/:store/p/:product ou raccourci)
-      const routeParams = extractPublicStoreRouteParams(pathname);
-      storeIdFromPath = routeParams.storeIdFromPath;
-      productIdFromPath = routeParams.productIdFromPath;
+      const { storeIdFromPath, productIdFromPath } = extractPublicStoreRouteParams(pathname);
 
       const isBoutiquePath =
         pathname === '/s' ||

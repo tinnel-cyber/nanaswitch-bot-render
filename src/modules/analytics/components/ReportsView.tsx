@@ -63,9 +63,9 @@ const REASON_LABELS: Record<LossReason, { label: string; color: string; bg: stri
 };
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
-  sales,
-  inventory,
-  losses,
+  sales = [],
+  inventory = [],
+  losses = [],
   onBackToRegister,
   onRecordLoss,
   onPrintSaleReceipt,

@@ -9,7 +9,8 @@ import {
   Phone, 
   ExternalLink,
   CheckCircle2,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 

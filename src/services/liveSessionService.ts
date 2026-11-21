@@ -12,6 +12,21 @@ import {
 } from '../types/liveSession';
 import { StoreProductItem } from '../components/storeBuilder/types';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(val?: string | null): boolean {
+  return typeof val === 'string' && UUID_REGEX.test(val.trim());
+}
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // Produits de démonstration pour les sessions Live
 export const DEMO_LIVE_PRODUCTS: StoreProductItem[] = [
   {
@@ -758,7 +773,6 @@ export async function gradeLiveSubmission(
       target.grade = grade;
       target.feedback = feedback;
       target.status = 'graded';
-      updatedTarget = target;
     }
   }
 

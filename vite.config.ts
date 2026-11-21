@@ -79,13 +79,7 @@ export default defineConfig(() => {
             if (id.includes('node_modules/@ffmpeg')) {
               return 'ffmpeg-wasm';
             }
-            if (id.includes('node_modules/jspdf') || id.includes('node_modules/html2canvas')) {
-              return 'pdf-suite';
-            }
-            if (id.includes('node_modules/lucide-react')) {
-              return 'lucide-icons';
-            }
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
               return 'react-core';
             }
           },

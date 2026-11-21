@@ -36,7 +36,7 @@ const ReportsView = lazy(() => import('../ReportsView').then(m => ({ default: m.
 const AiAdvisorView = lazy(() => import('../AiAdvisorView').then(m => ({ default: m.AiAdvisorView })));
 const AffiliateDashboardModal = lazy(() => import('../AffiliateDashboardModal').then(m => ({ default: m.AffiliateDashboardModal })));
 const MarketDirectory = lazy(() => import('../directory/MarketDirectory'));
-const DocuSignHub = lazy(() => import('../DocuSignHub').then(m => ({ default: m.DocuSignHub })));
+const DocuSignHub = lazy(() => import('../DocuSignHub').then(m => ({ default: (m as any).DocuSignHub || m.default })));
 const SettingsExtensionsView = lazy(() => import('../SettingsExtensionsView').then(m => ({ default: m.SettingsExtensionsView })));
 const NanaSwitchApp = lazy(() => import('../nanaSwitch/NanaSwitchApp').then(m => ({ default: m.NanaSwitchApp || m.default })));
 const FunnelBuilder = lazy(() => import('../storeBuilder/FunnelBuilder').then(m => ({ default: (m as any).FunnelBuilder || m.default })));
@@ -270,7 +270,8 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <CustomerOrdersView
                     orders={customerOrders}
-                    onClose={() => onNavigate('NANA_SWITCH_APP')}
+                    inventory={inventory}
+                    onBackToRegister={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );
@@ -282,7 +283,11 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                 <div className="p-3 sm:p-6 max-w-7xl mx-auto">
                   <InventoryView
                     inventory={inventory}
-                    onClose={() => onNavigate('NANA_SWITCH_APP')}
+                    movements={[]}
+                    onBackToRegister={() => onNavigate('NANA_SWITCH_APP')}
+                    onRestockProduct={() => {}}
+                    onReconcileStock={() => {}}
+                    onAddNewProduct={() => {}}
                   />
                 </div>
               );
@@ -295,7 +300,8 @@ export const StandaloneAppHost: React.FC<StandaloneAppHostProps> = ({
                   <ReportsView
                     sales={sales}
                     inventory={inventory}
-                    onClose={() => onNavigate('NANA_SWITCH_APP')}
+                    losses={[]}
+                    onBackToRegister={() => onNavigate('NANA_SWITCH_APP')}
                   />
                 </div>
               );

@@ -112,8 +112,8 @@ export const NaNaSwitchAuthGuard: React.FC<NaNaSwitchAuthGuardProps> = ({
   }, []);
 
   const refreshSwitchAccount = useCallback(async () => {
-    const supaUser = await getSupabaseCurrentUser();
-    if (supaUser) {
+    const supaUser = auth?.currentUser;
+    if (supaUser?.uid) {
       await fetchSwitchAccount(supaUser.uid);
     }
   }, [fetchSwitchAccount]);
