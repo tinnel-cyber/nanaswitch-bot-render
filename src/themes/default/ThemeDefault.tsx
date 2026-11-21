@@ -1128,7 +1128,7 @@ export const ThemeDefault: React.FC<StoreThemeProps> = (props) => {
                       <ShoppingBag className="w-4 h-4" />
                     </button>
 
-                    {Boolean(prod.linkedFunnelId) && (
+                    {(prod.hasModularFunnel === true || prod.useUltimateFunnel === true || (typeof prod.linkedFunnelId === 'string' && prod.linkedFunnelId.trim().length > 0)) && (
                       <button
                         type="button"
                         onClick={(e) => {

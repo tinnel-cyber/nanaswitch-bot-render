@@ -3,6 +3,7 @@ import { Eye, Heart, Star, Check } from 'lucide-react';
 import { StoreProductItem } from '../../components/storeBuilder/types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
+import { hasExplicitProductFunnel } from '../themeUtils';
 
 export interface BeautyColorSwatch {
   id: string;
@@ -236,22 +237,24 @@ export const EmeraldProductCard: React.FC<EmeraldProductCardProps> = ({
           </div>
         )}
 
-        {/* Boutons d'Action Nanasore : Côte à Côte */}
-        <div className="emerald-card-actions">
-          {/* Bouton 1 : "Voir tunnel" (bordure 1px solid #0F4C3A, texte #0F4C3A, fond transparent) */}
-          <button
-            type="button"
-            onClick={handleTunnelClick}
-            className="emerald-card-btn-tunnel"
-          >
-            Voir tunnel
-          </button>
+        {/* Boutons d'Action Nanasore : Tunnel optionnel + Ajouter au panier */}
+        <div className={`emerald-card-actions ${hasExplicitProductFunnel(product) ? 'flex items-center gap-1.5' : 'flex'}`}>
+          {hasExplicitProductFunnel(product) && (
+            <button
+              type="button"
+              onClick={handleTunnelClick}
+              className="emerald-card-btn-tunnel flex-1 truncate"
+              title="Voir le tunnel de vente"
+            >
+              Voir tunnel
+            </button>
+          )}
 
-          {/* Bouton 2 : "Acheter" (fond plein #0F4C3A, texte blanc) */}
           <button
             type="button"
             onClick={handleBuyClick}
-            className="emerald-card-btn-buy"
+            className="emerald-card-btn-buy flex-1 truncate"
+            title="Ajouter au panier"
           >
             {isAddedRecently ? (
               <span className="flex items-center justify-center gap-1">
@@ -259,7 +262,7 @@ export const EmeraldProductCard: React.FC<EmeraldProductCardProps> = ({
                 Ajouté !
               </span>
             ) : (
-              'Acheter'
+              hasExplicitProductFunnel(product) ? 'Panier' : 'Ajouter au panier'
             )}
           </button>
         </div>

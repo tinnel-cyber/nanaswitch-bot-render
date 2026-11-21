@@ -3,6 +3,21 @@ import { extractPublicStoreRouteParams } from '../utils/themeRoutePrefix';
 import { resolveProductFunnelEngine } from '../services/omniFunnelService';
 
 /**
+ * Retourne true UNIQUEMENT si le marchand a expressément coché ou sélectionné un tunnel
+ * dans le constructeur de produits (hasModularFunnel === true, useUltimateFunnel === true,
+ * ou linkedFunnelId / funnelId / modularFunnelSlug renseigné explicitement).
+ */
+export function hasExplicitProductFunnel(product: any): boolean {
+  if (!product || typeof product !== 'object') return false;
+  if (product.hasModularFunnel === true) return true;
+  if (product.useUltimateFunnel === true) return true;
+  if (typeof product.linkedFunnelId === 'string' && product.linkedFunnelId.trim().length > 0) return true;
+  if (typeof product.funnelId === 'string' && product.funnelId.trim().length > 0) return true;
+  if (typeof product.modularFunnelSlug === 'string' && product.modularFunnelSlug.trim().length > 0) return true;
+  return false;
+}
+
+/**
  * Déclencheur universel d'ouverture de tunnel dans le tiroir dépliable.
  * Règle d'or de priorité (Priority Resolution Order) :
  * - Étape 1 (Priorité 1 - Obligatoire) : Funnel Builder Modulaire à 12 blocs ('t')

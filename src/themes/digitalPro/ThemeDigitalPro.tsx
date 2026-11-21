@@ -18,6 +18,7 @@ import { DigitalWideProductView } from '../../components/storeBuilder/DigitalWid
 import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/AdaptiveHeaderEngine';
 import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
 import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
+import { hasExplicitProductFunnel } from '../themeUtils';
 
 
 // =========================================================================
@@ -1301,30 +1302,34 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
                         </div>
                       </div>
 
-                      {/* 2 Boutons à Droite : Petit "Voir tunnel" (outline) et "Acheter" (plein bleu) */}
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenTunnel(prod);
-                          }}
-                          className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#0056D2] text-[#0056D2] hover:bg-[#F0F7FF] text-xs font-bold transition-colors cursor-pointer"
-                          title="Voir le tunnel de vente complet"
-                        >
-                          Voir tunnel
-                        </button>
+                      {/* Boutons d'Action : Tunnel optionnel + Ajouter au panier */}
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {hasExplicitProductFunnel(prod) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenTunnel(prod);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl border border-[#0056D2] text-[#0056D2] hover:bg-[#F0F7FF] text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap"
+                            title="Voir le tunnel de vente complet"
+                          >
+                            Voir tunnel
+                          </button>
+                        )}
 
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleExecuteBuyNow(prod, 1);
+                            playValidationBeep();
+                            props.onAddToCart?.(prod, 1);
                           }}
-                          className="px-3 sm:px-4 py-1.5 rounded-xl bg-[#0056D2] hover:bg-[#0046AB] text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer active:scale-95"
-                          title="Acheter immédiatement via Sebpay"
+                          className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#0056D2] hover:bg-[#0046AB] text-white text-[11px] sm:text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer active:scale-95 inline-flex items-center gap-1 whitespace-nowrap"
+                          title="Ajouter au panier"
                         >
-                          Acheter
+                          <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                          <span>{hasExplicitProductFunnel(prod) ? 'Panier' : 'Ajouter au panier'}</span>
                         </button>
                       </div>
                     </div>

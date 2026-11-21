@@ -30,7 +30,7 @@ import {
   AdaptiveProductRichText 
 } from './AdaptiveProductRichText';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { triggerOpenFunnel } from '../../../../themes/themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../../../../themes/themeUtils';
 import { addToSmartCart } from './SmartSlideOutCartDrawer';
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
@@ -778,15 +778,17 @@ export const DigitalWideProductView: React.FC<DigitalWideProductViewProps> = ({
                 <span>Acheter maintenant (Caisse Sebpay)</span>
               </button>
 
-              {/* Bouton Voir le Tunnel */}
-              <button
-                type="button"
-                onClick={handleOpenTunnelClick}
-                className="w-full bg-white hover:bg-blue-50 text-blue-600 border-2 border-blue-600 active:scale-98 font-bold text-sm py-3 px-6 rounded-xl shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer"
-                title="Ouvrir le tunnel de vente interactif"
-              >
-                <span>Voir le tunnel de vente</span>
-              </button>
+              {/* Bouton Voir le Tunnel (uniquement si expressément activé sur le produit) */}
+              {hasExplicitProductFunnel(product) && (
+                <button
+                  type="button"
+                  onClick={handleOpenTunnelClick}
+                  className="w-full bg-white hover:bg-blue-50 text-blue-600 border-2 border-blue-600 active:scale-98 font-bold text-sm py-3 px-6 rounded-xl shadow-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer"
+                  title="Ouvrir le tunnel de vente interactif"
+                >
+                  <span>Voir le tunnel de vente</span>
+                </button>
+              )}
 
               {/* Bouton 2 (Pleine Largeur) : 💬 Acheter / Réserver sur Wameet Direct */}
               <button

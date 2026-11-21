@@ -26,7 +26,7 @@ import {
   AdaptiveProductRichText 
 } from './AdaptiveProductRichText';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { triggerOpenFunnel } from '../../../../themes/themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../../../../themes/themeUtils';
 import { addToSmartCart } from './SmartSlideOutCartDrawer';
 import { BuyerLiveCallButton } from '../../../../components/live/BuyerLiveCallButton';
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
@@ -696,15 +696,17 @@ export const GlowingWideProductView: React.FC<GlowingWideProductViewProps> = ({
               </button>
             </div>
 
-            {/* BOUTON VOIR LE TUNNEL */}
-            <button
-              type="button"
-              onClick={handleBuyWithFunnel}
-              className="w-full h-11 mt-2 bg-white hover:bg-slate-50 text-slate-900 border border-slate-900 font-semibold text-xs uppercase tracking-wider transition-colors rounded-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
-              title="Voir le tunnel de vente 12 blocs"
-            >
-              <span>⚡ Voir le tunnel</span>
-            </button>
+            {/* BOUTON VOIR LE TUNNEL (uniquement si expressément activé sur le produit) */}
+            {hasExplicitProductFunnel(currentProduct) && (
+              <button
+                type="button"
+                onClick={handleBuyWithFunnel}
+                className="w-full h-11 mt-2 bg-white hover:bg-slate-50 text-slate-900 border border-slate-900 font-semibold text-xs uppercase tracking-wider transition-colors rounded-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
+                title="Voir le tunnel de vente 12 blocs"
+              >
+                <span>⚡ Voir le tunnel</span>
+              </button>
+            )}
           </div>
 
           {/* BOUTON 🛒 : Ajouter au Panier */}

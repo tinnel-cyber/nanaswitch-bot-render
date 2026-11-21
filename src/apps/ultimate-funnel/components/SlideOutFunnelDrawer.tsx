@@ -286,9 +286,9 @@ export const SlideOutFunnelDrawer: React.FC<SlideOutFunnelDrawerProps> = ({
       className="fixed inset-0 z-[9999] flex justify-end bg-black/70 backdrop-blur-sm transition-opacity"
       onClick={onClose}
     >
-      {/* Le Tiroir (Slide-Out sur Desktop max-w-[650px], Bottom-Sheet sur Mobile) */}
+      {/* Le Tiroir (Slide-Out sur Desktop max-w-[650px], quasi plein-écran fluide sur Mobile) */}
       <div
-        className="relative w-full max-w-[650px] bg-[#020617] text-white h-[94dvh] md:h-full mt-auto md:mt-0 rounded-t-2xl md:rounded-none shadow-2xl flex flex-col animate-slide-in overflow-hidden"
+        className="relative w-full max-w-[650px] bg-[#020617] text-white h-[98dvh] md:h-full mt-auto md:mt-0 rounded-t-xl md:rounded-none shadow-2xl flex flex-col animate-slide-in overflow-hidden"
         onClick={(e) => e.stopPropagation()} // Empêche la fermeture quand on interagit dans le tunnel
       >
         {/* 1. Fine jauge de progression 3px tout en haut (0% à 100%) */}

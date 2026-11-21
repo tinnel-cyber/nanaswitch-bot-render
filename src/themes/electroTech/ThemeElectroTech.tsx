@@ -14,7 +14,7 @@ import { AdaptiveHeaderEngine } from '../../components/storeBuilder/headers/Adap
 import { AdaptiveFooterEngine } from '../../components/storeBuilder/footers/AdaptiveFooterEngine';
 import { formatCFA, playTapBeep } from '../../utils/audio';
 import { sanitizeRichHtml } from '../../utils/security';
-import { triggerOpenFunnel } from '../themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../themeUtils';
 import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 import './electroTechTheme.css';
 import { 
@@ -844,8 +844,8 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                     <span>Acheter maintenant</span>
                   </button>
 
-                  {/* Bouton Voir tunnel (si disponible) */}
-                  {currentPdpProduct.linkedFunnelId && (
+                  {/* Bouton Voir tunnel (uniquement si expressément activé) */}
+                  {hasExplicitProductFunnel(currentPdpProduct) && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1503,32 +1503,38 @@ export const ThemeElectroTech: React.FC<StoreThemeProps> = (props) => {
                         </div>
                       </div>
 
-                      {/* Boutons d'Action Flexbox : "Voir tunnel" (Outline) & "Acheter" (Plein Bleu) */}
-                      <div className="flex items-center gap-2 pt-1">
+                      {/* Boutons d'Action Flexbox : Tunnel optionnel + Ajouter au panier */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {hasExplicitProductFunnel(product) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playTapBeep();
+                              if (onOpenFunnel) {
+                                onOpenFunnel(product, e);
+                              } else {
+                                triggerOpenFunnel(product.linkedFunnelId || product.id, product.name, product);
+                              }
+                            }}
+                            className="electro-btn-outline flex-1 py-2 text-[11px] truncate"
+                            title="Voir le tunnel de vente connecté"
+                          >
+                            Voir tunnel
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             playTapBeep();
-                            if (onOpenFunnel) {
-                              onOpenFunnel(product, e);
-                            } else {
-                              triggerOpenFunnel(product.linkedFunnelId || product.id, product.name, product);
-                            }
+                            onAddToCart?.(product, 1);
                           }}
-                          className="electro-btn-outline flex-1 py-2 text-xs"
-                          title="Voir le tunnel de vente connecté"
+                          className="electro-btn-solid flex-1 py-2 text-[11px] sm:text-xs truncate"
+                          title="Ajouter au panier"
                         >
-                          Voir tunnel
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleTriggerBuy(product, 1, e)}
-                          className="electro-btn-solid flex-1 py-2 text-xs"
-                          title="Acheter ce produit immédiatement"
-                        >
-                          Acheter
+                          {hasExplicitProductFunnel(product) ? 'Panier' : 'Ajouter au panier'}
                         </button>
                       </div>
                     </div>

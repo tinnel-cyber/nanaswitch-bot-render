@@ -98,9 +98,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [affiliateEnabled, setAffiliateEnabled] = useState(false);
   const [affiliateCommissionPercent, setAffiliateCommissionPercent] = useState<number>(10);
 
-  // CARTE 2 : Tunnel Dépliable (Hiérarchie : 12 Blocs Modulaire Priorité 1 par défaut vs Ultimate Funnel Priorité 2 conditionnelle)
+  // CARTE 2 : Tunnel Dépliable (Optionnel : désactivé par défaut, activé uniquement si coché/sélectionné par le marchand)
   const [linkedFunnelId, setLinkedFunnelId] = useState<string | null>(null);
-  const [hasModularFunnel, setHasModularFunnel] = useState<boolean>(true);
+  const [hasModularFunnel, setHasModularFunnel] = useState<boolean>(false);
   const [useUltimateFunnel, setUseUltimateFunnel] = useState<boolean>(false);
   const [funnelDisplayMode, setFunnelDisplayMode] = useState<'drawer' | 'page'>('drawer');
   const [vendorFunnels, setVendorFunnels] = useState<VendorFunnelSummary[]>([]);
@@ -186,8 +186,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setAffiliateEnabled(Boolean((productToEdit as any).affiliateEnabled));
         setAffiliateCommissionPercent(Number((productToEdit as any).affiliateCommissionPercent) || 10);
         setLinkedFunnelId(productToEdit.linkedFunnelId || null);
-        setHasModularFunnel(productToEdit.hasModularFunnel !== false);
-        setUseUltimateFunnel(productToEdit.hasModularFunnel === false && Boolean(productToEdit.useUltimateFunnel));
+        setHasModularFunnel(productToEdit.hasModularFunnel === true);
+        setUseUltimateFunnel(productToEdit.hasModularFunnel !== true && Boolean(productToEdit.useUltimateFunnel));
         setFunnelDisplayMode(productToEdit.funnelDisplayMode || 'drawer');
         setIsCustomCat(false);
         setCustomCategory('');
@@ -1218,12 +1218,12 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 <div>
                   <div className="font-extrabold text-xs text-body flex items-center gap-1.5">
                     <span className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      PRIORITÉ 1 • DÉFAUT
+                      OPTIONNEL • 12 BLOCS
                     </span>
                     <span>🧱 Funnel Builder Modulaire à 12 Blocs</span>
                   </div>
                   <p className="text-[10.5px] text-muted mt-0.5">
-                    Structure haute conversion à 12 blocs chargée en priorité sur la fiche produit et au clic sur Acheter.
+                    Cochez pour afficher le bouton « Voir tunnel » sur ce produit. Sinon, seul l&apos;achat direct / panier s&apos;affiche.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">

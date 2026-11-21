@@ -776,6 +776,9 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
           urlPreviewTheme || activeInitialTheme || storeConfig.active_theme_id || storeConfig.activeThemeId || ''
         ).toLowerCase();
         const hasNativeLargePDP =
+          rawTheme === '' ||
+          rawTheme.includes('blank') ||
+          rawTheme.includes('architect') ||
           rawTheme.includes('electro-orange') ||
           rawTheme.includes('orange') ||
           rawTheme.includes('beauty-emerald') ||

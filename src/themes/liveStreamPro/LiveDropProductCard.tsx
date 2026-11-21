@@ -4,6 +4,7 @@ import { LiveProductItem } from './liveStreamAssets';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
 import { StoreProductItem } from '../../components/storeBuilder/types';
+import { hasExplicitProductFunnel } from '../themeUtils';
 
 interface LiveDropProductCardProps {
   product: LiveProductItem;
@@ -184,33 +185,33 @@ export const LiveDropProductCard: React.FC<LiveDropProductCardProps> = ({
           )}
         </div>
 
-        {/* ================= DOUBLE BOUTON D'ACTION ================= */}
-        <div className="pt-2 grid grid-cols-2 gap-2">
+        {/* ================= BOUTONS D'ACTION (Tunnel optionnel + Panier) ================= */}
+        <div className={`pt-2 grid gap-2 ${hasExplicitProductFunnel(product) ? 'grid-cols-2' : 'grid-cols-1'}`}>
           
-          {/* Bouton 1 : Voir Tunnel (Glassmorphism) */}
-          <button
-            type="button"
-            onClick={handleOpenTunnel}
-            className="py-2.5 px-2 rounded-xl text-xs font-bold text-slate-200 hover:text-white live-btn-glass flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
-            title="Ouvrir le tunnel de vente dépliable"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-indigo-300" />
-            <span className="truncate">Voir Tunnel</span>
-          </button>
+          {hasExplicitProductFunnel(product) && (
+            <button
+              type="button"
+              onClick={handleOpenTunnel}
+              className="py-2.5 px-2 rounded-xl text-xs font-bold text-slate-200 hover:text-white live-btn-glass flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+              title="Ouvrir le tunnel de vente dépliable"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+              <span className="truncate">Voir Tunnel</span>
+            </button>
+          )}
 
-          {/* Bouton 2 : ⚡ Bloquer ma place (Dégradé Indigo/Violet) */}
           <button
             type="button"
             onClick={handleAddToCart}
             disabled={isLocked}
-            className={`py-2.5 px-2 rounded-xl text-xs font-extrabold text-white flex items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-md ${
+            className={`py-2.5 px-2 rounded-xl text-xs font-extrabold text-white flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md ${
               isLocked 
                 ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-60'
                 : 'live-btn-accent shadow-indigo-600/30'
             }`}
           >
-            <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300 shrink-0" />
-            <span className="truncate">Bloquer ma place</span>
+            <ShoppingBag className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            <span className="truncate">{hasExplicitProductFunnel(product) ? 'Panier' : 'Ajouter au panier'}</span>
           </button>
 
         </div>

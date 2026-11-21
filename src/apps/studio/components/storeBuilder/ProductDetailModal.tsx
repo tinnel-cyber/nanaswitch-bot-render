@@ -21,7 +21,7 @@ import {
   saveProductModularFunnelRTDB,
   saveProductUltimateFunnelRTDB
 } from '../../../../services/omniFunnelService';
-import { triggerOpenFunnel } from '../../../../themes/themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../../../../themes/themeUtils';
 import { buildPublicShopUrl } from '../../../../config/domains';
 
 interface ProductDetailModalProps {
@@ -558,8 +558,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
           )}
 
-          {/* Bouton Prominent : Voir le tunnel de vente interactif (Tiroir Dépliable - Priorité 1 : 12 Blocs Modulaire) */}
-          {Boolean(product.linkedFunnelId || product.hasModularFunnel !== false || product.useUltimateFunnel) && (
+          {/* Bouton Tunnel (uniquement si expressément activé sur le produit) */}
+          {hasExplicitProductFunnel(product) && (
             <button
               type="button"
               onClick={handleOpenLinkedTunnel}

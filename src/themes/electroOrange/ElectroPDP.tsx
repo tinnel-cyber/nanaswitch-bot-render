@@ -16,7 +16,7 @@ import {
   ELECTRO_SMARTPHONE_GOLD_SVG
 } from './electroOrangeAssets';
 import { ELECTRO_ADDITIONAL_PRODUCTS, ELECTRO_SHOWCASE_PRODUCTS } from './electroTechData';
-import { triggerOpenFunnel } from '../themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../themeUtils';
 
 interface ElectroPDPProps {
   product: StoreProductItem;
@@ -559,16 +559,18 @@ export const ElectroPDP: React.FC<ElectroPDPProps> = ({
                 <span>Acheter</span>
               </button>
 
-              {/* Bouton Voir Tunnel */}
-              <button
-                type="button"
-                onClick={handleOpenTunnelDirect}
-                className="px-5 h-12 rounded-[50px] border-2 border-[#FF6A00] text-[#FF6A00] hover:bg-orange-50 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer"
-                title="Voir le tunnel de vente 12 blocs"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Voir Tunnel</span>
-              </button>
+              {/* Bouton Voir Tunnel (uniquement si expressément activé sur le produit) */}
+              {hasExplicitProductFunnel(product) && (
+                <button
+                  type="button"
+                  onClick={handleOpenTunnelDirect}
+                  className="px-4 h-12 rounded-[50px] border-2 border-[#FF6A00] text-[#FF6A00] hover:bg-orange-50 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                  title="Voir le tunnel de vente 12 blocs"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>Voir Tunnel</span>
+                </button>
+              )}
 
               {/* Bouton secondaire Ajouter au Panier */}
               <button

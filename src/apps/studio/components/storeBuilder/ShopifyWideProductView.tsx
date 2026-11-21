@@ -30,7 +30,7 @@ import {
 import { StoreProductItem } from './types';
 import { BuyerLiveCallButton } from '../../../../components/live/BuyerLiveCallButton';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
-import { triggerOpenFunnel } from '../../../../themes/themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../../../../themes/themeUtils';
 import { addToSmartCart } from './SmartSlideOutCartDrawer';
 import { openStoreLegalModal } from './StoreLegalAndTrackingModals';
 import { triggerOrderConfirmationVault } from './OrderConfirmationVaultModal';
@@ -1159,20 +1159,20 @@ export const ShopifyWideProductView: React.FC<ShopifyWideProductViewProps> = ({
                 </button>
               </div>
 
-              {/* Ligne 2 : Deux Boutons Côte à Côte : Voir Tunnel & Ajouter au Panier */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                {/* Bouton Gauche : ⚡ Voir le Tunnel */}
-                <button
-                  type="button"
-                  onClick={handleOpenDirectTunnel}
-                  className="bg-white hover:bg-blue-50 text-[#0B4F9F] border-2 border-[#0B4F9F] font-bold text-sm py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
-                  title="Voir le tunnel de vente interactif"
-                >
-                  <Zap className="w-4 h-4 fill-amber-400 text-amber-500" />
-                  <span>Voir le tunnel</span>
-                </button>
+              {/* Ligne 2 : Tunnel optionnel + Ajouter au Panier */}
+              <div className={`grid gap-3 mt-3 ${hasExplicitProductFunnel(currentProduct) ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                {hasExplicitProductFunnel(currentProduct) && (
+                  <button
+                    type="button"
+                    onClick={handleOpenDirectTunnel}
+                    className="bg-white hover:bg-blue-50 text-[#0B4F9F] border-2 border-[#0B4F9F] font-bold text-sm py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+                    title="Voir le tunnel de vente interactif"
+                  >
+                    <Zap className="w-4 h-4 fill-amber-400 text-amber-500" />
+                    <span>Voir le tunnel</span>
+                  </button>
+                )}
 
-                {/* Bouton Droite : 🛒 Ajouter au panier */}
                 <button
                   type="button"
                   onClick={handleAddToCartAction}

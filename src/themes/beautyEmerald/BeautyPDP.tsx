@@ -23,7 +23,7 @@ import {
 import { EmeraldProductCard, BeautyColorSwatch } from './EmeraldProductCard';
 import { BeautyTestimonialsSection } from './BeautyTestimonialsSection';
 import { sanitizeRichHtml } from '../../utils/security';
-import { triggerOpenFunnel } from '../themeUtils';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../themeUtils';
 
 export interface BeautyPDPProps {
   product: StoreProductItem;
@@ -720,16 +720,18 @@ export const BeautyPDP: React.FC<BeautyPDPProps> = ({
                   <span>COMMANDER</span>
                 </button>
 
-                {/* Bouton Voir Tunnel */}
-                <button
-                  type="button"
-                  onClick={handleOpenTunnel}
-                  className="px-4 h-[52px] border-2 border-[#0F4C3A] text-[#0F4C3A] hover:bg-emerald-50 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  title="Voir le tunnel de vente 12 blocs"
-                >
-                  <Eye className="w-4 h-4" />
-                  <span>VOIR LE TUNNEL</span>
-                </button>
+                {/* Bouton Voir Tunnel (uniquement si expressément activé sur le produit) */}
+                {hasExplicitProductFunnel(product) && (
+                  <button
+                    type="button"
+                    onClick={handleOpenTunnel}
+                    className="px-4 h-[52px] border-2 border-[#0F4C3A] text-[#0F4C3A] hover:bg-emerald-50 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    title="Voir le tunnel de vente 12 blocs"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>VOIR LE TUNNEL</span>
+                  </button>
+                )}
               </div>
 
               {/* Message d'expédition dynamique */}

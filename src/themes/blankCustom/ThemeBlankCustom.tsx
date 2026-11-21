@@ -339,7 +339,7 @@ export const ThemeBlankCustom: React.FC<StoreThemeProps> = (props) => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    if (onSelectProduct) {
+    if (isAdminPreview && onSelectProduct) {
       onSelectProduct(product);
     }
   };

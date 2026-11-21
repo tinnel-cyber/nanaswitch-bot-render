@@ -353,18 +353,36 @@ export const GlowingCosmeticsGrid: React.FC<GlowingCosmeticsGridProps> = ({
             onClick={(e) => e.stopPropagation()}
             className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 sm:gap-2.5 opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-auto"
           >
-            {/* Bouton 1 : Voir le tunnel 🛍️ */}
-            <button
-              type="button"
-              onClick={(e) => handleTunnelClick(e, product)}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white text-slate-900 hover:bg-black hover:text-white shadow-md flex items-center justify-center relative group/btn transition-colors cursor-pointer"
-              aria-label="Voir le tunnel"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span className="absolute -top-9 px-2.5 py-1 bg-black text-white text-[11px] font-medium rounded whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none shadow-lg after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-black">
-                Voir le tunnel
-              </span>
-            </button>
+            {/* Bouton 1 : Voir le tunnel (si activé) sinon Ajouter au panier */}
+            {(product.hasModularFunnel === true || product.useUltimateFunnel === true || (typeof product.linkedFunnelId === 'string' && product.linkedFunnelId.trim().length > 0)) ? (
+              <button
+                type="button"
+                onClick={(e) => handleTunnelClick(e, product)}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white text-slate-900 hover:bg-black hover:text-white shadow-md flex items-center justify-center relative group/btn transition-colors cursor-pointer"
+                aria-label="Voir le tunnel"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span className="absolute -top-9 px-2.5 py-1 bg-black text-white text-[11px] font-medium rounded whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none shadow-lg after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-black">
+                  Voir le tunnel
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playTapBeep();
+                  onAddToCart?.(product, 1);
+                }}
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white text-slate-900 hover:bg-black hover:text-white shadow-md flex items-center justify-center relative group/btn transition-colors cursor-pointer"
+                aria-label="Ajouter au panier"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span className="absolute -top-9 px-2.5 py-1 bg-black text-white text-[11px] font-medium rounded whitespace-nowrap opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none shadow-lg after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:border-4 after:border-transparent after:border-t-black">
+                  Ajouter au panier
+                </span>
+              </button>
+            )}
 
             {/* Bouton 2 : Quick View 👁️ */}
             <button

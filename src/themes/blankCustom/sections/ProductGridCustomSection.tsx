@@ -4,8 +4,9 @@ import { CustomThemeSection } from '../../../types';
 import { StoreProductItem } from '../../../components/storeBuilder/types';
 import { MoodStyleConfig } from '../moodStyles';
 import { AdminProductQuickBar } from '../../../components/storeBuilder/AdminProductQuickBar';
-import { triggerOpenFunnel } from '../../themeUtils';
-import { playTapBeep } from '../../../utils/audio';
+import { triggerOpenFunnel, hasExplicitProductFunnel } from '../../themeUtils';
+import { playTapBeep, playValidationBeep } from '../../../utils/audio';
+import { addToSmartCart } from '../../../components/storeBuilder/SmartSlideOutCartDrawer';
 
 export interface ProductGridCustomSectionProps {
   section: CustomThemeSection;
@@ -284,23 +285,29 @@ export const ProductGridCustomSection: React.FC<ProductGridCustomSectionProps> =
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => handleTunnelClick(product, e)}
-                        className={`px-2.5 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 ${buttonRadiusClass} font-bold text-[11px] cursor-pointer`}
-                        title="Voir le tunnel de vente 12 blocs"
-                      >
-                        Tunnel
-                      </button>
+                      {hasExplicitProductFunnel(product) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleTunnelClick(product, e)}
+                          className={`px-2 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 ${buttonRadiusClass} font-bold text-[11px] cursor-pointer whitespace-nowrap`}
+                          title="Voir le tunnel de vente"
+                        >
+                          Tunnel
+                        </button>
+                      )}
 
                       <button
                         type="button"
-                        onClick={(e) => handleBuyClick(product, e)}
-                        className={`px-3 py-2 ${mood.accentButton} ${buttonRadiusClass} font-black text-xs cursor-pointer flex items-center gap-1 shadow-md`}
-                        title="Acheter maintenant via la caisse principale Sebpay"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playValidationBeep();
+                          addToSmartCart(product, 1);
+                        }}
+                        className={`px-2.5 sm:px-3 py-2 ${mood.accentButton} ${buttonRadiusClass} font-black text-[11px] sm:text-xs cursor-pointer flex items-center gap-1 shadow-md whitespace-nowrap`}
+                        title="Ajouter au panier"
                       >
-                        <ShoppingBag className="w-3.5 h-3.5" />
-                        <span>Acheter</span>
+                        <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                        <span>{hasExplicitProductFunnel(product) ? 'Panier' : 'Ajouter au panier'}</span>
                       </button>
                     </div>
                   </div>
