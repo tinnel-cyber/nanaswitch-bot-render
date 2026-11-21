@@ -10,6 +10,7 @@ import { triggerOpenFunnel } from '../../../themes/themeUtils';
 import { ThemeSelectorModal } from '../../../components/theme/ThemeSelectorModal';
 import { AddProductModal } from '../../../components/storeBuilder/AddProductModal';
 import { QuickCatalogDrawer } from '../../../components/storeBuilder/QuickCatalogDrawer';
+import { ThemeSiteSettingsModal } from '../components/storeBuilder/ThemeSiteSettingsModal';
 import { StoreLegalAndTrackingModals } from '../../../components/storeBuilder/StoreLegalAndTrackingModals';
 import { StoreConfig, StoreProductItem } from '../../../components/storeBuilder/types';
 import { FALLBACK_STUDIO_PRODUCTS, getDefaultCustomConfig } from '../../../components/storeBuilder/themeStudioConstants';
@@ -128,6 +129,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
   const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
   const [isQuickCatalogOpen, setIsQuickCatalogOpen] = useState<boolean>(false);
   const [showPresetsModal, setShowPresetsModal] = useState<boolean>(false);
+  const [showSiteSettingsModal, setShowSiteSettingsModal] = useState<boolean>(false);
   const [blueprintSafetyToast, setBlueprintSafetyToast] = useState<{ message: string; previousConfig: ThemeCustomizationConfig } | null>(null);
   const [productToEdit, setProductToEdit] = useState<any | null>(null);
   const [addProductInitialCard, setAddProductInitialCard] = useState<number | undefined>(undefined);
@@ -916,6 +918,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         canRedo={redoStack.length > 0}
         onOpenPresets={() => setShowPresetsModal(true)}
         savedPresetsCount={draftThemeConfig.savedPresets?.length || 3}
+        onOpenSiteSettings={() => setShowSiteSettingsModal(true)}
       />
 
       {/* 2.1 Ruban de Bascule / Slide Mobile (Modules & Personnalisation <--> Aperçu Vitrine en Direct) */}
@@ -1311,6 +1314,19 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         }}
         onToast={showToast}
         storeId={targetStoreId}
+      />
+
+      {/* 4.5 Modale Paramètres du Site Pro (SEO, Collecte Emailing, Pixels, Domaine, Légal) */}
+      <ThemeSiteSettingsModal
+        isOpen={showSiteSettingsModal}
+        onClose={() => setShowSiteSettingsModal(false)}
+        config={draftThemeConfig}
+        storeName={storeConfig.storeName}
+        storeSlug={effectiveStoreSlug}
+        onSave={(updatedConfig) => {
+          handleConfigChange(updatedConfig);
+          showToast('⚙️ Paramètres du site enregistrés dans le brouillon !');
+        }}
       />
 
       {/* 5. Modale Mes Thèmes & Variantes Sauvegardées (Theme Vault) */}

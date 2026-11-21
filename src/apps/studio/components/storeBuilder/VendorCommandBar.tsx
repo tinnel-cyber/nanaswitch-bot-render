@@ -14,7 +14,8 @@ import {
   Undo2, 
   Redo2,
   Sparkles,
-  Play
+  Play,
+  Settings
 } from 'lucide-react';
 import { buildPublicShopUrl } from '../../../../config/domains';
 import { getThemeRoutePrefix } from '../../../../utils/themeRoutePrefix';
@@ -49,6 +50,7 @@ export interface VendorCommandBarProps {
   canRedo?: boolean;
   onOpenPresets?: () => void;
   savedPresetsCount?: number;
+  onOpenSiteSettings?: () => void;
 }
 
 export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
@@ -74,7 +76,8 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
   canUndo = false,
   canRedo = false,
   onOpenPresets,
-  savedPresetsCount
+  savedPresetsCount,
+  onOpenSiteSettings
 }) => {
   const [copied, setCopied] = useState(false);
   const [showLocalToast, setShowLocalToast] = useState(false);
@@ -298,6 +301,22 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
             <span>🎨 Thèmes</span>
           </button>
 
+          {/* Bouton ⚙️ Paramètres du Site (SEO, Emailing, Pixels, Légal) */}
+          {onOpenSiteSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                onOpenSiteSettings();
+              }}
+              className="bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 px-3 sm:px-3.5 py-2 rounded-lg text-sm flex items-center gap-2 transition-all cursor-pointer shrink-0"
+              title="Paramètres du site : SEO Google, collecte emailing, pixels, domaine & légal"
+            >
+              <Settings className="w-4 h-4 text-emerald-400" />
+              <span>Paramètres</span>
+            </button>
+          )}
+
           {/* Bouton 📦 Mes Produits */}
           {onOpenQuickCatalog && (
             <button
@@ -439,6 +458,21 @@ export const VendorCommandBar: React.FC<VendorCommandBarProps> = ({
           <Palette className="w-3.5 h-3.5 text-blue-400" />
           <span>Thèmes</span>
         </button>
+
+        {/* Bouton Paramètres du Site */}
+        {onOpenSiteSettings && (
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              onOpenSiteSettings();
+            }}
+            className="bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Paramètres</span>
+          </button>
+        )}
 
         {/* Bouton Mes Produits */}
         {onOpenQuickCatalog && (

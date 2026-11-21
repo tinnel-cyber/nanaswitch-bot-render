@@ -2100,6 +2100,58 @@ export interface ThemeCustomizationConfig {
 
   // 10. Barre de Navigation Basse Mobile (iOS / Android 5 Onglets au Pouce)
   showMobileBottomBar?: boolean;
+
+  // 11. Paramètres Complets du Site Pro (SEO, Collecte Emailing, Tracking, Légal, Contact)
+  siteSettings?: ThemeSiteSettings;
+}
+
+export interface ThemeSiteSettings {
+  // Identité & Contact
+  tagline?: string;
+  faviconUrl?: string;
+  contactEmail?: string;
+  supportPhone?: string;
+  businessHours?: string;
+  currency?: string;
+  announcementEnabled?: boolean;
+  announcementText?: string;
+
+  // SEO & Référencement Google / Réseaux Sociaux
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+  ogImageUrl?: string;
+  siteLanguage?: 'fr' | 'en' | 'ar';
+  allowIndexing?: boolean;
+  googleSiteVerification?: string;
+
+  // Collecte Emailing & Newsletter
+  emailCollectionEnabled?: boolean;
+  emailCollectionTitle?: string;
+  emailCollectionSubtitle?: string;
+  emailCollectionButtonText?: string;
+  emailCollectionSuccessMsg?: string;
+  emailCollectionPromoCode?: string;
+  emailPopupEnabled?: boolean;
+  emailPopupDelaySeconds?: number;
+  emailTargetList?: string;
+
+  // Tracking & Scripts Avancés
+  gtmId?: string;
+  customHeadScripts?: string;
+
+  // Domaine & Réseaux Supplémentaires
+  customDomain?: string;
+  linkedinUrl?: string;
+  twitterUrl?: string;
+
+  // Mentions Légales & Politiques
+  companyLegalName?: string;
+  rccmOrTaxId?: string;
+  termsText?: string;
+  privacyPolicyText?: string;
+  shippingReturnPolicyText?: string;
+  cookieBannerEnabled?: boolean;
 }
 
 export interface SavedThemePreset {

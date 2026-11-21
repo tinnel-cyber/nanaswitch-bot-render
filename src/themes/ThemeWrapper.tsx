@@ -542,6 +542,108 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
   }, [dynamicAccentColor, resolvedThemeId, effectiveCustomConfig?.gradientStyle, effectiveCustomConfig?.headerBgColor]);
 
   // =========================================================================
+  // 1.9 PARAMÈTRES SITE PRO (SEO, FAVICON, PIXELS, ANNONCE, COLLECTE EMAILING)
+  // =========================================================================
+  const siteSettings = effectiveCustomConfig?.siteSettings;
+  const [showEmailCapturePopup, setShowEmailCapturePopup] = useState(false);
+  const [captureEmailInput, setCaptureEmailInput] = useState('');
+  const [captureSubmitting, setCaptureSubmitting] = useState(false);
+  const [captureDone, setCaptureDone] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || props.isAdminPreview) return;
+    if (!siteSettings) return;
+
+    if (siteSettings.seoTitle) {
+      document.title = siteSettings.seoTitle;
+    }
+    const upsertMeta = (attr: 'name' | 'property', key: string, content?: string) => {
+      if (!content) return;
+      let el = document.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute(attr, key);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+
+    upsertMeta('name', 'description', siteSettings.seoDescription);
+    upsertMeta('name', 'keywords', siteSettings.seoKeywords);
+    upsertMeta('name', 'robots', siteSettings.allowIndexing === false ? 'noindex, nofollow' : 'index, follow');
+    upsertMeta('name', 'google-site-verification', siteSettings.googleSiteVerification);
+    upsertMeta('property', 'og:title', siteSettings.seoTitle);
+    upsertMeta('property', 'og:description', siteSettings.seoDescription);
+    upsertMeta('property', 'og:image', siteSettings.ogImageUrl);
+
+    if (siteSettings.siteLanguage) {
+      document.documentElement.lang = siteSettings.siteLanguage;
+    }
+
+    if (siteSettings.faviconUrl) {
+      let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = siteSettings.faviconUrl;
+    }
+  }, [siteSettings, props.isAdminPreview]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || props.isAdminPreview) return;
+    if (!siteSettings?.emailCollectionEnabled || !siteSettings?.emailPopupEnabled) return;
+    const dismissKey = `nana_email_popup_seen_${storeSlug}`;
+    try {
+      if (localStorage.getItem(dismissKey)) return;
+    } catch {}
+    const delayMs = Math.max(2, Number(siteSettings.emailPopupDelaySeconds) || 8) * 1000;
+    const timer = window.setTimeout(() => {
+      setShowEmailCapturePopup(true);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [siteSettings?.emailCollectionEnabled, siteSettings?.emailPopupEnabled, siteSettings?.emailPopupDelaySeconds, storeSlug, props.isAdminPreview]);
+
+  const handleCloseEmailPopup = useCallback(() => {
+    setShowEmailCapturePopup(false);
+    try {
+      localStorage.setItem(`nana_email_popup_seen_${storeSlug}`, '1');
+    } catch {}
+  }, [storeSlug]);
+
+  const handleSubmitEmailCapture = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = captureEmailInput.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) return;
+    setCaptureSubmitting(true);
+    try {
+      const tenantId = storeData?.id || props.storeConfig?.storeId || (props as any).targetStoreId || storeSlug;
+      const { supabase } = await import('../lib/supabase');
+      await supabase.from('email_contacts').upsert(
+        {
+          tenant_id: String(tenantId),
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          type: 'newsletter',
+          tags: [siteSettings?.emailTargetList || 'Newsletter Site Web'],
+          subscribed: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'tenant_id,email' }
+      );
+      setCaptureDone(true);
+      try {
+        localStorage.setItem(`nana_email_popup_seen_${storeSlug}`, '1');
+      } catch {}
+    } catch {
+      setCaptureDone(true);
+    } finally {
+      setCaptureSubmitting(false);
+    }
+  }, [captureEmailInput, storeData?.id, props.storeConfig?.storeId, (props as any).targetStoreId, storeSlug, siteSettings?.emailTargetList]);
+
+  // =========================================================================
   // 2. VERROU DE RENDU : Tant que Supabase n'a pas répondu, affiche le Loader neutre.
   // STRICT RULES OF HOOKS : ABSOLUMENT TOUS LES HOOKS SONT EXÉCUTÉS AU-DESSUS !
   // AUCUN HOOK NE SE TROUVE EN DESSOUS DE CE RETURN !
@@ -576,6 +678,72 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
       {/* Injection temps-réel des règles CSS pour répercussion immédiate (0ms) des couleurs */}
       {dynamicThemeStyles && (
         <style dangerouslySetInnerHTML={{ __html: dynamicThemeStyles }} />
+      )}
+
+      {/* Barre d'annonce globale configurable dans Paramètres du Site */}
+      {siteSettings?.announcementEnabled && siteSettings?.announcementText && (
+        <div
+          className="w-full px-4 py-2 text-center text-xs sm:text-sm font-bold text-white"
+          style={{ backgroundColor: dynamicAccentColor }}
+        >
+          {siteSettings.announcementText}
+        </div>
+      )}
+
+      {/* Popup Collecte Emailing / Newsletter */}
+      {showEmailCapturePopup && !props.isAdminPreview && (
+        <div className="fixed inset-0 z-[9998] bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl p-6 relative border border-slate-200">
+            <button
+              type="button"
+              onClick={handleCloseEmailPopup}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-bold cursor-pointer"
+              aria-label="Fermer"
+            >
+              ✕
+            </button>
+            <div className="text-center space-y-2 mb-4">
+              <div className="text-2xl">✉️</div>
+              <h3 className="text-lg font-black text-slate-900">
+                {siteSettings?.emailCollectionTitle || 'Rejoignez notre Club VIP'}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600">
+                {siteSettings?.emailCollectionSubtitle || 'Recevez nos offres exclusives et nouveautés par e-mail.'}
+              </p>
+            </div>
+            {captureDone ? (
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
+                <p className="text-sm font-bold text-emerald-800">
+                  {siteSettings?.emailCollectionSuccessMsg || 'Merci ! Votre inscription est confirmée.'}
+                </p>
+                {siteSettings?.emailCollectionPromoCode && (
+                  <div className="inline-block px-3 py-1 rounded-lg bg-emerald-600 text-white font-mono text-xs font-black tracking-wider">
+                    CODE : {siteSettings.emailCollectionPromoCode}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitEmailCapture} className="space-y-3">
+                <input
+                  type="email"
+                  required
+                  value={captureEmailInput}
+                  onChange={(e) => setCaptureEmailInput(e.target.value)}
+                  placeholder="Votre adresse e-mail..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={captureSubmitting}
+                  className="w-full py-2.5 rounded-xl text-white font-bold text-sm shadow-lg transition cursor-pointer disabled:opacity-60"
+                  style={{ backgroundColor: dynamicAccentColor }}
+                >
+                  {captureSubmitting ? 'Inscription...' : (siteSettings?.emailCollectionButtonText || 'S’inscrire gratuitement')}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
       )}
       {/* Barre flottante d'indication Mode Prévisualisation (Shopify-Style) */}
       {previewThemeId && (
