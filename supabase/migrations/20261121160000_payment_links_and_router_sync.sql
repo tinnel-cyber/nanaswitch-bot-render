@@ -36,4 +36,19 @@ BEGIN
     ALTER TABLE public.nanaswitch_merchants ADD COLUMN IF NOT EXISTS webhook_config JSONB DEFAULT '{}'::jsonb;
     ALTER TABLE public.nanaswitch_merchants ADD COLUMN IF NOT EXISTS integration_mode TEXT DEFAULT 'AGREGATED';
   END IF;
+
+  -- 3. Sécurité validation Super Admin : statut par défaut strictement PENDING_KYC
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'universes'
+  ) THEN
+    ALTER TABLE public.universes ALTER COLUMN status SET DEFAULT 'PENDING_KYC';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'merchants'
+  ) THEN
+    ALTER TABLE public.merchants ALTER COLUMN status SET DEFAULT 'PENDING_KYC';
+  END IF;
 END $$;

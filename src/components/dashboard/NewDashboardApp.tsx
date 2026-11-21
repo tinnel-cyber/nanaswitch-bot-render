@@ -1093,9 +1093,9 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       const detail = e?.detail;
       const storeId = detail?.storeId || detail?.id;
       const newStatus = detail?.status;
-      if (newStatus === 'verified' || newStatus === 'approved' || newStatus === 'APPROVED' || newStatus === 'VERIFIED') {
-        setSelectedApp(prev => (prev && (!storeId || prev.id === storeId)) ? { ...prev, status: 'VERIFIED' } : prev);
-        setApps(prev => prev.map(a => (!storeId || a.id === storeId) ? { ...a, status: 'VERIFIED' } : a));
+      if (storeId && (newStatus === 'verified' || newStatus === 'approved' || newStatus === 'APPROVED' || newStatus === 'VERIFIED')) {
+        setSelectedApp(prev => (prev && prev.id === storeId) ? { ...prev, status: 'VERIFIED' } : prev);
+        setApps(prev => prev.map(a => (a.id === storeId) ? { ...a, status: 'VERIFIED' } : a));
         saveLocalUserLicense({
           ...getLocalUserLicense(),
           kycStatus: 'full',
@@ -1613,15 +1613,20 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   </button>
 
                   {/* Badge Statut Validation au niveau de l'ID du compte */}
-                  {selectedApp.status === 'PENDING_KYC' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300 shadow-xs">
-                      <Loader2 className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
-                      <span>En cours de validation</span>
-                    </span>
-                  ) : (
+                  {selectedApp.status === 'VERIFIED' ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>Compte approuvé</span>
+                    </span>
+                  ) : selectedApp.status === 'REJECTED' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-rose-50 text-rose-800 border border-rose-300 shadow-xs">
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Dossier refusé</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-50 text-amber-800 border border-amber-300 shadow-xs">
+                      <Loader2 className="w-3.5 h-3.5 text-amber-600 animate-spin shrink-0" />
+                      <span>En cours de validation</span>
                     </span>
                   )}
                 </div>
@@ -1961,15 +1966,20 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <p className="text-xs font-bold text-slate-900 truncate">
                     {selectedApp.kyc?.companyName || selectedApp.kyc?.fullName || merchantDisplayName || 'Compte Marchand'}
                   </p>
-                  {selectedApp.status === 'PENDING_KYC' ? (
-                    <p className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      En validation
-                    </p>
-                  ) : (
+                  {selectedApp.status === 'VERIFIED' ? (
                     <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Vérifié
+                    </p>
+                  ) : selectedApp.status === 'REJECTED' ? (
+                    <p className="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+                      <XCircle className="w-3 h-3" />
+                      Refusé
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      En validation
                     </p>
                   )}
                 </div>
