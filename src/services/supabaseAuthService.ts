@@ -271,28 +271,26 @@ export async function resetPasswordEmail(email: string): Promise<void> {
     ? `${window.location.origin}/auth/reset-password`
     : 'https://nanasore.com/auth/reset-password';
 
-  // 1. Déclenchement via Supabase Auth (qui achemine via le SMTP Brevo configuré dans Supabase)
-  try {
-    await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: redirectUrl,
-    });
-  } catch (supaErr) {
-    console.warn('[SUPABASE AUTH RESET] Notice:', supaErr);
+  // 1. Envoi officiel unique via Supabase Auth (évite un 2e envoi qui invaliderait le 1er lien)
+  const { error: resetErr } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: redirectUrl,
+  });
+
+  if (!resetErr) {
+    return;
   }
 
-  // 2. Déclenchement via API Brevo pour garantir l'envoi avec le template de marque officiel
-  try {
-    const res = await fetch('/api/auth/reset-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (data?.error) throw new Error(data.error);
-    }
-  } catch (apiErr: any) {
-    console.warn('[BREVO API RESET] Notice:', apiErr?.message);
+  console.warn('[SUPABASE AUTH RESET] Fallback vers /api/auth/reset-password :', resetErr.message);
+
+  // 2. Repli serveur (Brevo + lien cross-device token_hash) uniquement si Supabase Auth a refusé
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error || 'Impossible d\'envoyer le lien de réinitialisation.');
   }
 }
 

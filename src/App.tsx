@@ -138,6 +138,7 @@ const AcademicUploadView = React.lazy(() => import('./components/upload/Academic
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
 const AuthCallbackPage = React.lazy(() => import('./components/auth/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage || m.default })));
+const ResetPasswordPage = React.lazy(() => import('./components/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
 const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
@@ -405,6 +406,8 @@ export default function App() {
         pathname.startsWith('/dashboard') ||
         pathname === '/auth/callback' ||
         pathname.startsWith('/auth/callback') ||
+        pathname === '/auth/reset-password' ||
+        pathname.startsWith('/auth/reset-password') ||
         pathname === '/admin' ||
         pathname.startsWith('/admin')
       ) {
@@ -5890,6 +5893,28 @@ export default function App() {
             setIsCatalogView(true);
             if (typeof window !== 'undefined') {
               window.history.pushState({}, '', '/catalog');
+            }
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
+  // 0.0000 Page dédiée de réinitialisation de mot de passe (/auth/reset-password ou type=recovery)
+  const isResetPasswordRoute =
+    typeof window !== 'undefined' &&
+    (window.location.pathname === '/auth/reset-password' ||
+      window.location.pathname.startsWith('/auth/reset-password/') ||
+      new URLSearchParams(window.location.search).get('type') === 'recovery' ||
+      window.location.hash.includes('type=recovery'));
+
+  if (isResetPasswordRoute) {
+    return (
+      <React.Suspense fallback={<LazyModuleFallback label="Chargement de la réinitialisation du mot de passe..." />}>
+        <ResetPasswordPage
+          onGoToLogin={() => {
+            if (typeof window !== 'undefined') {
+              window.location.replace('/');
             }
           }}
         />

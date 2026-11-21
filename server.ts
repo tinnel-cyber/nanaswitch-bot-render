@@ -1300,35 +1300,38 @@ async function startServer() {
       const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      const appUrl = process.env.APP_URL || 'https://nanasore.com';
-      let resetLink = `${appUrl}/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`;
+      const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
+      const appUrl = (process.env.APP_URL || `${proto}://${host}`).replace(/\/$/, '');
+      const resetCallbackUrl = `${appUrl}/auth/reset-password`;
 
-      // 1. Tenter la génération d'un lien officiel avec jeton via Supabase Admin si clé service disponible
-      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        try {
-          const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-            type: 'recovery',
-            email: cleanEmail,
-            options: {
-              redirectTo: `${appUrl}/auth/reset-password`,
-            },
-          });
-          if (!linkErr && linkData?.properties?.action_link) {
-            resetLink = linkData.properties.action_link;
-          }
-        } catch (adminErr: any) {
-          console.warn('[SERVER RESET] Supabase admin generateLink notice:', adminErr?.message);
-        }
-      }
-
-      // 2. Déclencher la réinitialisation côté Supabase Auth
-      try {
-        await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: `${appUrl}/auth/reset-password`,
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(503).json({
+          success: false,
+          error: 'Configuration serveur incomplète (SUPABASE_SERVICE_ROLE_KEY manquante pour générer un lien de réinitialisation valide).',
         });
-      } catch (supaResetErr: any) {
-        console.warn('[SERVER RESET] Supabase resetPassword notice:', supaResetErr?.message);
       }
+
+      // 1. Générer un lien officiel cross-device (token_hash) via Supabase Admin (1 seul jeton, pas de double envoi)
+      const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+        type: 'recovery',
+        email: cleanEmail,
+        options: {
+          redirectTo: resetCallbackUrl,
+        },
+      });
+
+      if (linkErr || !linkData?.properties) {
+        return res.status(400).json({
+          success: false,
+          error: linkErr?.message || 'Impossible de générer un lien de réinitialisation.',
+        });
+      }
+
+      const hashedToken = linkData.properties.hashed_token;
+      const resetLink = hashedToken
+        ? `${resetCallbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=recovery`
+        : linkData.properties.action_link;
 
       // 3. Envoyer l'email officiel transactionnel via Brevo
       try {
