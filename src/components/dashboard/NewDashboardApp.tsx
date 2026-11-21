@@ -7885,11 +7885,11 @@ function KycModal({ onClose, kycForm, setKycForm, handleKycSubmit }: {
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Téléphone de contact</label>
                 <input 
-                  type="text" 
+                  type="tel" 
                   placeholder="+226 70 00 00 00"
                   value={kycForm.phone}
                   onChange={e => setKycForm({ ...kycForm, phone: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 font-semibold focus:outline-none focus:border-blue-600"
                 />
               </div>
 
