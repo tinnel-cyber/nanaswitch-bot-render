@@ -1912,6 +1912,276 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // 2C. PLAQUES & TAGS NFC DYNAMIQUES NANASORE (/nfc/:code)
+  // =========================================================================
+  const nfcTagsFile = path.join(dataDir, 'nfc_tags.json');
+  function getStoredNfcTags(): any[] {
+    try {
+      if (fs.existsSync(nfcTagsFile)) {
+        const parsed = JSON.parse(fs.readFileSync(nfcTagsFile, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch {}
+    return [];
+  }
+  function saveStoredNfcTags(list: any[]) {
+    try {
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(nfcTagsFile, JSON.stringify(list, null, 2), 'utf8');
+    } catch {}
+  }
+
+  // GET /api/nfc/tags (Authentifié — liste les plaques NFC)
+  app.get('/api/nfc/tags', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise', tags: [] });
+      }
+
+      const merged = new Map<string, any>();
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('nfc_tags')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(500);
+          if (!error && Array.isArray(data)) {
+            data.forEach((r: any) => merged.set(String(r.code), r));
+          }
+        }
+      } catch {}
+
+      getStoredNfcTags().forEach((local: any) => {
+        if (!merged.has(String(local.code))) {
+          merged.set(String(local.code), local);
+        }
+      });
+
+      return res.json({ success: true, tags: Array.from(merged.values()) });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message, tags: [] });
+    }
+  });
+
+  // POST /api/nfc/tags/batch (Authentifié — génère un lot de plaques NFC vierges NS-0001..NS-0100)
+  app.post('/api/nfc/tags/batch', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
+      }
+      const { prefix = 'NS', quantity = 10, batchName = 'Lot Standard' } = req.body || {};
+      const cleanPrefix = String(prefix || 'NS').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'NS';
+      const count = Math.min(200, Math.max(1, Number(quantity) || 10));
+      const cleanBatch = String(batchName || 'Lot Standard').trim().slice(0, 80);
+
+      // Déterminer le prochain numéro séquentiel pour ce préfixe
+      const existingCodes = new Set<string>();
+      let maxNum = 0;
+      const collectCode = (code: string) => {
+        const c = String(code || '').toUpperCase();
+        existingCodes.add(c);
+        const m = c.match(new RegExp(`^${cleanPrefix}-(\\d+)$`));
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxNum) maxNum = n;
+        }
+      };
+
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data } = await supabase.from('nfc_tags').select('code').ilike('code', `${cleanPrefix}-%`);
+          if (Array.isArray(data)) data.forEach((r: any) => collectCode(r.code));
+        }
+      } catch {}
+      getStoredNfcTags().forEach((r: any) => collectCode(r.code));
+
+      const nowIso = new Date().toISOString();
+      const created: any[] = [];
+      for (let i = 1; i <= count; i++) {
+        let num = maxNum + i;
+        let code = `${cleanPrefix}-${String(num).padStart(4, '0')}`;
+        while (existingCodes.has(code)) {
+          num += 1;
+          code = `${cleanPrefix}-${String(num).padStart(4, '0')}`;
+        }
+        existingCodes.add(code);
+        created.push({
+          code,
+          batch_name: cleanBatch,
+          status: 'UNCLAIMED',
+          owner_id: null,
+          merchant_id: null,
+          merchant_name: '',
+          target_type: 'minimarket',
+          target_slug: '',
+          target_url: '',
+          scan_count: 0,
+          created_at: nowIso,
+          updated_at: nowIso
+        });
+      }
+
+      const localAll = getStoredNfcTags();
+      saveStoredNfcTags([...created, ...localAll]);
+
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { error } = await supabase.from('nfc_tags').upsert(created, { onConflict: 'code' });
+          if (error) console.warn('[NFC BATCH] Supabase upsert notice:', error.message);
+        }
+      } catch {}
+
+      return res.status(201).json({ success: true, created });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // GET /api/nfc/:code (PUBLIC — résout une plaque NFC au scan client ou marchand)
+  app.get('/api/nfc/:code', async (req, res) => {
+    try {
+      const code = String(req.params.code || '').trim().toUpperCase();
+      if (!code) return res.status(404).json({ success: false, error: 'Code plaque manquant' });
+
+      let tag: any = null;
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data } = await supabase.from('nfc_tags').select('*').eq('code', code).maybeSingle();
+          if (data) tag = data;
+        }
+      } catch {}
+
+      if (!tag) {
+        tag = getStoredNfcTags().find((t: any) => String(t.code).toUpperCase() === code) || null;
+      }
+
+      if (!tag) {
+        return res.status(404).json({ success: false, error: `Plaque NFC ${code} introuvable.` });
+      }
+
+      if (tag.status === 'ACTIVE') {
+        const nextScans = Number(tag.scan_count || 0) + 1;
+        tag.scan_count = nextScans;
+        try {
+          const { supabase } = await import('./app/utils/supabase.server');
+          if (supabase) {
+            supabase.from('nfc_tags').update({ scan_count: nextScans }).eq('code', code).then(() => {});
+          }
+        } catch {}
+      }
+
+      return res.json({ success: true, tag });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/nfc/:code/claim (Authentifié — activation 1-clic de la plaque par un marchand)
+  app.post('/api/nfc/:code/claim', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Connectez-vous pour activer cette plaque NFC.' });
+      }
+      const code = String(req.params.code || '').trim().toUpperCase();
+      const { merchantId, merchantName = '', targetType = 'minimarket', targetSlug = '', customUrl = '' } = req.body || {};
+      const cleanMerchantId = String(merchantId || '').trim();
+      if (!cleanMerchantId) {
+        return res.status(400).json({ success: false, error: 'Univers marchand requis.' });
+      }
+
+      const merchant = await verifyMerchantOwnership(cleanMerchantId, owner.userId);
+      if (!merchant) {
+        return res.status(403).json({ success: false, error: 'Vous devez être propriétaire de cet univers.' });
+      }
+
+      let existingTag: any = null;
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          const { data } = await supabase.from('nfc_tags').select('*').eq('code', code).maybeSingle();
+          if (data) existingTag = data;
+        }
+      } catch {}
+      if (!existingTag) {
+        existingTag = getStoredNfcTags().find((t: any) => String(t.code).toUpperCase() === code) || null;
+      }
+      if (!existingTag) {
+        return res.status(404).json({ success: false, error: `Plaque NFC ${code} introuvable.` });
+      }
+      if (existingTag.status === 'ACTIVE' && existingTag.owner_id && String(existingTag.owner_id) !== owner.userId) {
+        return res.status(403).json({ success: false, error: 'Cette plaque NFC est déjà activée par un autre marchand.' });
+      }
+
+      const cleanSlug = String(targetSlug || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      let resolvedTargetUrl = '';
+      if (targetType === 'custom_url' && /^https?:\/\//i.test(String(customUrl).trim())) {
+        resolvedTargetUrl = String(customUrl).trim();
+      } else if (targetType === 'store') {
+        resolvedTargetUrl = `https://nsore.shop/${cleanSlug || cleanMerchantId}`;
+      } else {
+        const slugToUse = cleanSlug || String(merchant.slug || merchant.name || 'offre').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'vente';
+        resolvedTargetUrl = `https://nsore.shop/c/${encodeURIComponent(slugToUse)}?drawer=true&source=physical_pos_qr&minimarket=true`;
+      }
+
+      const nowIso = new Date().toISOString();
+      const updatedTag = {
+        ...existingTag,
+        code,
+        status: 'ACTIVE',
+        owner_id: owner.userId,
+        merchant_id: cleanMerchantId,
+        merchant_name: merchant.name || merchantName || 'Boutique Nanasore',
+        target_type: targetType,
+        target_slug: cleanSlug,
+        target_url: resolvedTargetUrl,
+        claimed_at: existingTag.claimed_at || nowIso,
+        updated_at: nowIso
+      };
+
+      const localAll = getStoredNfcTags();
+      saveStoredNfcTags([updatedTag, ...localAll.filter((t: any) => String(t.code).toUpperCase() !== code)]);
+
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          await supabase.from('nfc_tags').upsert(updatedTag, { onConflict: 'code' });
+        }
+      } catch {}
+
+      return res.json({ success: true, tag: updatedTag });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // DELETE /api/nfc/:code (Authentifié)
+  app.delete('/api/nfc/:code', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
+      const code = String(req.params.code || '').trim().toUpperCase();
+      saveStoredNfcTags(getStoredNfcTags().filter((t: any) => String(t.code).toUpperCase() !== code));
+      try {
+        const { supabase } = await import('./app/utils/supabase.server');
+        if (supabase) {
+          await supabase.from('nfc_tags').delete().eq('code', code);
+        }
+      } catch {}
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

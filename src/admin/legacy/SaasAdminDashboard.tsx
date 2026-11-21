@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+const NfcBatchManagerPanel = React.lazy(() => import('../../components/nfc/NfcBatchManagerPanel'));
 import { 
   SaasStore, 
   SaasActionTask, 
@@ -204,7 +205,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
   // Navigation Tabs for SaaS Admin
   const [adminActiveTab, setAdminActiveTab] = useState<
-    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS'
+    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS' | 'NFC_FACTORY'
   >('NETWORK');
 
   // Médiation Projets & Escrow State
@@ -2025,6 +2026,22 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             type="button"
             onClick={() => {
               playTapBeep();
+              setAdminActiveTab('NFC_FACTORY');
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shrink-0 ${
+              adminActiveTab === 'NFC_FACTORY'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Plaques NFC</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
               setAdminActiveTab('UPSELL');
             }}
             className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shrink-0 ${
@@ -3149,6 +3166,15 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
           )}
         </section>
       </>
+    )}
+
+    {/* ========================================================================= */}
+    {/* TAB NFC FACTORY : GÉNÉRATION DE LOTS & GRAVURE PLAQUES NFC NANASORE      */}
+    {/* ========================================================================= */}
+    {adminActiveTab === 'NFC_FACTORY' && (
+      <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Chargement de l&apos;Usine à Plaques NFC...</div>}>
+        <NfcBatchManagerPanel />
+      </React.Suspense>
     )}
 
     {/* ========================================================================= */}

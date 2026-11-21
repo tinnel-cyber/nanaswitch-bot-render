@@ -138,6 +138,7 @@ const AcademicUploadView = React.lazy(() => import('./components/upload/Academic
 const StandaloneAppHost = React.lazy(() => import('./components/apps/StandaloneAppHost').then(m => ({ default: m.StandaloneAppHost })));
 const CheckoutReturnView = React.lazy(() => import('./components/payment/CheckoutReturnView').then(m => ({ default: m.CheckoutReturnView || m.default })));
 const PublicPaymentLinkPage = React.lazy(() => import('./pages/PublicPaymentLinkPage').then(m => ({ default: m.PublicPaymentLinkPage || m.default })));
+const PublicNfcTagPage = React.lazy(() => import('./pages/PublicNfcTagPage').then(m => ({ default: m.PublicNfcTagPage || m.default })));
 const AuthCallbackPage = React.lazy(() => import('./components/auth/AuthCallbackPage').then(m => ({ default: m.AuthCallbackPage || m.default })));
 const ResetPasswordPage = React.lazy(() => import('./components/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
@@ -1180,6 +1181,18 @@ export default function App() {
       }
       const params = new URLSearchParams(window.location.search);
       return params.get('promo') || params.get('campaign');
+    }
+    return null;
+  });
+
+  // Détection URL publique Plaque NFC Dynamique (/nfc/:code)
+  const [publicNfcCode, setPublicNfcCode] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith('/nfc/')) {
+        const seg = pathname.slice('/nfc/'.length).split('/')[0].split('?')[0].trim();
+        if (seg) return decodeURIComponent(seg);
+      }
     }
     return null;
   });
@@ -5294,6 +5307,23 @@ export default function App() {
           onBackToStore={() => {
             if (typeof window !== 'undefined') {
               window.location.href = 'https://nanasore.com';
+            }
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
+  // 0.0000004 Vue Publique Plaque NFC Dynamique (/nfc/:code) — redirection instantanée ou activation marchand 1-clic
+  if (publicNfcCode) {
+    return (
+      <React.Suspense fallback={<LazyModuleFallback label={`Lecture de la plaque NFC ${publicNfcCode}...`} />}>
+        <PublicNfcTagPage
+          code={publicNfcCode}
+          onBack={() => {
+            setPublicNfcCode(null);
+            if (typeof window !== 'undefined') {
+              window.history.pushState({}, '', '/');
             }
           }}
         />
