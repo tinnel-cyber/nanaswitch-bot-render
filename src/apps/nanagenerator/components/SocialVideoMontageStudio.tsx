@@ -27,7 +27,10 @@ import {
   Volume2,
   AudioWaveform,
   Layers,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Subtitles,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -42,6 +45,16 @@ import {
   renderChromaKeyFrame,
   BackdropKeyMode
 } from '../../../services/chromaKeyStudioService';
+import {
+  SubtitleCue,
+  SubtitleTemplateId,
+  SUBTITLE_TEXT_TEMPLATES,
+  generateTimedSubtitlesFromScript,
+  exportSubtitlesToSrt,
+  exportSubtitlesToVtt,
+  downloadSubtitleFile,
+  autoTranscribeBlobToSubtitles
+} from '../../../services/subtitleStudioService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -55,7 +68,9 @@ export interface SocialVideoMontageStudioProps {
 }
 
 type SocialFormatId = '9:16' | '1:1' | '16:9';
-type StudioPanelTab = 'EDIT' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
+type ExportResolutionId = '480p' | '720p' | '1080p';
+type ExportContainerId = 'mp4' | 'webm';
+type StudioPanelTab = 'EDIT' | 'SUBTITLES' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
 type SocialNetworkId = 'tiktok_reels' | 'whatsapp_status' | 'facebook_youtube';
 type MotionDesignId =
   | 'classic'
@@ -290,6 +305,79 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   // Kit Publication Réseaux Sociaux
   const [targetNetwork, setTargetNetwork] = useState<SocialNetworkId>('tiktok_reels');
   const [copiedPost, setCopiedPost] = useState<boolean>(false);
+
+  // Paramètres d'Export Vidéo Complets (Résolutions 480p/720p/1080p + MP4/WebM)
+  const [exportResolution, setExportResolution] = useState<ExportResolutionId>('720p');
+  const [exportContainer, setExportContainer] = useState<ExportContainerId>('mp4');
+
+  // Émetteur de Sous-Titres Automatique & Modèles de Textes Viraux
+  const [subtitleScript, setSubtitleScript] = useState<string>(
+    initialHeadline ? `${initialHeadline}. Commandez maintenant avec livraison rapide !` : ''
+  );
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [subtitleTemplateId, setSubtitleTemplateId] = useState<SubtitleTemplateId>('hormozi_viral');
+  const [currentVideoTime, setCurrentVideoTime] = useState<number>(0);
+  const [isAutoTranscribing, setIsAutoTranscribing] = useState<boolean>(false);
+  const [subtitleStatusMsg, setSubtitleStatusMsg] = useState<string | null>(null);
+
+  const activeSubtitleTemplate = useMemo(
+    () => SUBTITLE_TEXT_TEMPLATES.find(t => t.id === subtitleTemplateId) || SUBTITLE_TEXT_TEMPLATES[0],
+    [subtitleTemplateId]
+  );
+
+  const activeSubtitleCue = useMemo(() => {
+    if (subtitleCues.length === 0) return null;
+    const matched = subtitleCues.find(c => currentVideoTime >= c.startSec && currentVideoTime <= c.endSec);
+    return matched || subtitleCues[0];
+  }, [subtitleCues, currentVideoTime]);
+
+  const resolvedExportDimensions = useMemo(() => {
+    const baseShort = exportResolution === '480p' ? 480 : exportResolution === '720p' ? 720 : 1080;
+    if (socialFormat === '9:16') {
+      return { width: baseShort, height: Math.round((baseShort * 16) / 9 / 2) * 2 };
+    }
+    if (socialFormat === '1:1') {
+      return { width: baseShort, height: baseShort };
+    }
+    // 16:9
+    return { width: Math.round((baseShort * 16) / 9 / 2) * 2, height: baseShort };
+  }, [exportResolution, socialFormat]);
+
+  const handleGenerateSubtitlesFromScript = () => {
+    const textSource = subtitleScript.trim() || [overlayHeadline, overlayPrice, overlayContact].filter(Boolean).join('. ');
+    if (!textSource) {
+      setEncodeError('Saisissez un script ou texte pour générer automatiquement les sous-titres horodatés.');
+      return;
+    }
+    playValidationBeep();
+    const cues = generateTimedSubtitlesFromScript(textSource, maxDurationSec || videoDuration || 30);
+    setSubtitleCues(cues);
+    setSubtitleStatusMsg(`✅ ${cues.length} sous-titres générés et synchronisés (${maxDurationSec}s) !`);
+  };
+
+  const handleAutoTranscribeVoice = async () => {
+    const blobToTranscribe = rawVoiceBlob || sourceFile;
+    if (!blobToTranscribe) {
+      setEncodeError('Enregistrez une voix off (onglet Voix DSP) ou importez une vidéo/audio pour la transcription automatique.');
+      return;
+    }
+    setIsAutoTranscribing(true);
+    setEncodeError(null);
+    setSubtitleStatusMsg('Transcription automatique IA en cours...');
+    try {
+      const result = await autoTranscribeBlobToSubtitles(blobToTranscribe, maxDurationSec || videoDuration || 30);
+      setSubtitleScript(result.text);
+      setSubtitleCues(result.cues);
+      playValidationBeep();
+      setSubtitleStatusMsg(`✅ ${result.cues.length} sous-titres transcrits automatiquement depuis votre audio !`);
+    } catch (err: any) {
+      playCancelSound();
+      setSubtitleStatusMsg(null);
+      setEncodeError(err?.message || 'Erreur lors de la transcription automatique.');
+    } finally {
+      setIsAutoTranscribing(false);
+    }
+  };
 
   const activeBackdropUrl = useMemo(() => {
     if (customBackdropUrl) return customBackdropUrl;
@@ -577,16 +665,20 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     }
 
     try {
+      const overlayTextForExport =
+        combinedOverlayText ||
+        (activeSubtitleCue?.text ? activeSubtitleCue.text : undefined);
+
       const result = await encodeVideo(inputBlob, {
-        preset: 'reel',
-        targetWidth: fmt.width,
-        targetHeight: fmt.height,
+        preset: exportResolution === '480p' ? 'chat' : 'reel',
+        targetWidth: resolvedExportDimensions.width,
+        targetHeight: resolvedExportDimensions.height,
         maxDurationSec,
         overlay: {
           filterCss: activeFilterCss || undefined,
-          text: combinedOverlayText || undefined,
+          text: overlayTextForExport,
           textPosition,
-          textColor
+          textColor: activeSubtitleCue && !combinedOverlayText ? activeSubtitleTemplate.textColor : textColor
         },
         onProgress: (pct) => setEncodeProgress(Math.min(99, Math.max(10, Math.round(pct))))
       });
@@ -595,10 +687,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       setEncodeResult(result);
       playValidationBeep();
 
+      const ext = exportContainer === 'webm' ? 'webm' : 'mp4';
       const dlUrl = URL.createObjectURL(result.file);
       const a = document.createElement('a');
       a.href = dlUrl;
-      a.download = `nana-montage-${socialFormat.replace(':', 'x')}-${Date.now()}.mp4`;
+      a.download = `nana-montage-${socialFormat.replace(':', 'x')}-${exportResolution}-${Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -846,6 +939,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       setVideoDuration(d);
                       setMaxDurationSec(Math.min(d, SOCIAL_FORMATS[socialFormat].maxRecommendedSec));
                     }}
+                    onTimeUpdate={(e) => setCurrentVideoTime(e.currentTarget.currentTime)}
                     style={{ filter: chromaConfig.mode === 'none' ? activeFilterCss : undefined }}
                     className={`w-full h-full object-cover ${chromaConfig.mode !== 'none' ? 'opacity-0' : ''}`}
                   />
@@ -861,6 +955,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       className="absolute inset-0 w-full h-full object-cover cursor-pointer"
                       title="Cliquez pour Lecture / Pause (Fond Vert YCbCr + Anti-Spill actif)"
                     />
+                  )}
+
+                  {/* Sous-Titres Live Synchronisés (Modèle Viral sélectionné) */}
+                  {activeSubtitleCue && (
+                    <div className="pointer-events-none absolute inset-x-4 bottom-24 flex justify-center text-center z-20">
+                      <span className={`inline-block max-w-full ${activeSubtitleTemplate.previewClass}`}>
+                        {activeSubtitleCue.text}
+                      </span>
+                    </div>
                   )}
 
                   {/* Motion Design & Animation Live Overlay */}
@@ -932,31 +1035,122 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handleCompileAndDownload}
-              disabled={isEncoding || !previewUrl}
-              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs sm:text-sm font-black shadow-xl flex items-center justify-center gap-2 cursor-pointer transition"
-            >
-              {isEncoding ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Encodage vidéo optimisé... ({encodeProgress}%)</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Compiler &amp; Télécharger ({socialFormat})</span>
-                </>
-              )}
-            </button>
+            {/* CONTRÔLES D'EXPORT MULTI-QUALITÉ & MULTI-FORMATS */}
+            <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-black text-slate-300 uppercase tracking-wider">Qualité &amp; Format d'Export</span>
+                <span className="text-[10px] font-mono text-indigo-300 font-bold">
+                  {resolvedExportDimensions.width}×{resolvedExportDimensions.height}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  { id: '480p', label: '480p Éco', sub: 'WhatsApp' },
+                  { id: '720p', label: '720p HD', sub: 'TikTok/Reels' },
+                  { id: '1080p', label: '1080p Full HD', sub: 'YouTube Pro' }
+                ] as Array<{ id: ExportResolutionId; label: string; sub: string }>).map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setExportResolution(r.id);
+                    }}
+                    className={`py-1.5 px-2 rounded-xl border text-center cursor-pointer transition ${
+                      exportResolution === r.id
+                        ? 'bg-indigo-600/25 border-indigo-400 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span className="block text-[11px] font-black">{r.label}</span>
+                    <span className="block text-[9px] opacity-75">{r.sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { id: 'mp4', label: 'MP4 (H.264 Universel)' },
+                  { id: 'webm', label: 'WebM (VP9 / Web HD)' }
+                ] as Array<{ id: ExportContainerId; label: string }>).map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setExportContainer(c.id)}
+                    className={`py-1.5 px-2.5 rounded-xl border text-[11px] font-bold cursor-pointer transition ${
+                      exportContainer === c.id
+                        ? 'bg-emerald-600/20 border-emerald-400 text-emerald-200'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCompileAndDownload}
+                disabled={isEncoding || !previewUrl}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs sm:text-sm font-black shadow-xl flex items-center justify-center gap-2 cursor-pointer transition"
+              >
+                {isEncoding ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Encodage vidéo optimisé... ({encodeProgress}%)</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>Exporter {exportContainer.toUpperCase()} ({socialFormat} • {exportResolution})</span>
+                  </>
+                )}
+              </button>
+
+              {/* Exports Annexes Rapides : .SRT, .VTT, .WAV */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <button
+                  type="button"
+                  disabled={subtitleCues.length === 0}
+                  onClick={() => {
+                    downloadSubtitleFile(exportSubtitlesToSrt(subtitleCues), `sous-titres-${Date.now()}.srt`);
+                    playValidationBeep();
+                  }}
+                  className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 disabled:opacity-40 border border-slate-800 text-[10.5px] font-bold text-slate-200 cursor-pointer"
+                >
+                  📝 Export .SRT
+                </button>
+                <button
+                  type="button"
+                  disabled={subtitleCues.length === 0}
+                  onClick={() => {
+                    downloadSubtitleFile(exportSubtitlesToVtt(subtitleCues), `sous-titres-${Date.now()}.vtt`, 'text/vtt;charset=utf-8');
+                    playValidationBeep();
+                  }}
+                  className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-950 hover:bg-slate-800 disabled:opacity-40 border border-slate-800 text-[10.5px] font-bold text-slate-200 cursor-pointer"
+                >
+                  🌐 Export .VTT
+                </button>
+                {enhancedVoiceUrl && (
+                  <a
+                    href={enhancedVoiceUrl}
+                    download={`voix-studio-${Date.now()}.wav`}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/40 text-[10.5px] font-bold text-emerald-300 text-center"
+                  >
+                    🎙️ Audio .WAV
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* COLONNE DROITE : 6 ONGLETS COMPLETS */}
+          {/* COLONNE DROITE : 7 ONGLETS COMPLETS */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
               {[
                 { id: 'EDIT' as StudioPanelTab, label: 'Montage', icon: Scissors },
+                { id: 'SUBTITLES' as StudioPanelTab, label: 'Sous-titres', icon: Subtitles },
                 { id: 'MOTION' as StudioPanelTab, label: 'Motion', icon: Layers },
                 { id: 'BACKDROP' as StudioPanelTab, label: 'Fond / IA', icon: ImageIcon },
                 { id: 'AUDIO' as StudioPanelTab, label: 'Voix DSP', icon: AudioWaveform },
@@ -973,7 +1167,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       playTapBeep();
                       setActivePanel(t.id);
                     }}
-                    className={`py-2 px-1.5 rounded-xl text-[10.5px] font-black flex items-center justify-center gap-1 transition cursor-pointer ${
+                    className={`py-2 px-1 rounded-xl text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer ${
                       active ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                     }`}
                   >
@@ -983,6 +1177,171 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                 );
               })}
             </div>
+
+            {/* PANNEAU ÉMETTEUR DE SOUS-TITRES AUTOMATIQUE & TOP 8 MODÈLES DE TEXTES VIRAUX */}
+            {activePanel === 'SUBTITLES' && (
+              <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                {/* 1. Émetteur Automatique (Transcription IA ou Script) */}
+                <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/35 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                        <Subtitles className="w-4 h-4 text-amber-400" />
+                        <span>Émetteur de Sous-Titres Automatique (Auto-Captions)</span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Transcrivez automatiquement votre voix off par IA ou découpez votre script en sous-titres synchronisés (.SRT / .VTT + incrustation live).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoTranscribeVoice}
+                      disabled={isAutoTranscribing}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 disabled:opacity-60 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {isAutoTranscribing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
+                      <span>{isAutoTranscribing ? 'Transcription...' : 'Auto-Transcrire Audio'}</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={subtitleScript}
+                    onChange={(e) => setSubtitleScript(e.target.value)}
+                    placeholder="Collez votre texte parlé ici (ex: Découvrez notre offre exceptionnelle aujourd'hui seulement à 15 000 FCFA avec livraison rapide partout...)"
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateSubtitlesFromScript}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Générer &amp; Synchroniser les Sous-Titres</span>
+                    </button>
+                    {subtitleCues.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadSubtitleFile(exportSubtitlesToSrt(subtitleCues), `sous-titres-${Date.now()}.srt`);
+                            playValidationBeep();
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold cursor-pointer"
+                        >
+                          Télécharger .SRT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadSubtitleFile(exportSubtitlesToVtt(subtitleCues), `sous-titres-${Date.now()}.vtt`, 'text/vtt;charset=utf-8');
+                            playValidationBeep();
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 text-[11px] font-bold cursor-pointer"
+                        >
+                          Télécharger .VTT
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {subtitleStatusMsg && (
+                    <p className="text-[11px] text-emerald-300 font-semibold">{subtitleStatusMsg}</p>
+                  )}
+                </div>
+
+                {/* 2. Top 8 Modèles de Textes & Sous-Titres les Plus Utilisés */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                    <Type className="w-4 h-4 text-indigo-400" />
+                    <span>Modèles de Textes &amp; Sous-Titres les Plus Utilisés (Top 8 Viral)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {SUBTITLE_TEXT_TEMPLATES.map((tpl) => {
+                      const active = subtitleTemplateId === tpl.id;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            setSubtitleTemplateId(tpl.id);
+                          }}
+                          className={`text-left p-3 rounded-2xl border transition cursor-pointer space-y-1.5 ${
+                            active
+                              ? 'bg-indigo-950/60 border-indigo-400 shadow-lg'
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-black text-white">{tpl.name}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-white/10 text-[9.5px] font-bold text-amber-300">
+                              {tpl.badge}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-400">{tpl.desc}</p>
+                          <div className="pt-1">
+                            <span className={`inline-block text-[11px] ${tpl.previewClass}`}>
+                              EXEMPLE VIRAL
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Éditeur de segments horodatés */}
+                {subtitleCues.length > 0 && (
+                  <div className="space-y-2 pt-3 border-t border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-white">Timeline des Sous-Titres ({subtitleCues.length})</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const lastEnd = subtitleCues[subtitleCues.length - 1]?.endSec || 0;
+                          setSubtitleCues(prev => [
+                            ...prev,
+                            { id: `cue_${Date.now()}`, startSec: lastEnd, endSec: lastEnd + 3, text: 'Nouveau sous-titre' }
+                          ]);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-indigo-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Ajouter</span>
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                      {subtitleCues.map((cue, idx) => (
+                        <div key={cue.id} className="flex items-center gap-2 p-2 rounded-xl bg-slate-950 border border-slate-800">
+                          <span className="text-[10px] font-mono text-indigo-300 shrink-0 w-20">
+                            {cue.startSec.toFixed(1)}s–{cue.endSec.toFixed(1)}s
+                          </span>
+                          <input
+                            type="text"
+                            value={cue.text}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSubtitleCues(prev => prev.map((c, i) => (i === idx ? { ...c, text: val } : c)));
+                            }}
+                            className="flex-1 bg-transparent text-xs text-white focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setSubtitleCues(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* PANNEAU FOND VERT / FOND BLEU YCbCr + DÉCOR IA GEMINI (SECRET YOUTUBEURS) */}
             {activePanel === 'BACKDROP' && (
