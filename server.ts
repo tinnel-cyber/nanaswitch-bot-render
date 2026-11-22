@@ -4177,6 +4177,64 @@ async function startServer() {
     return res.json({ success: true, enrollment: enrollments[idx], expiresAt: nextExpiresAt });
   });
 
+  // POST /api/student/enrollments/progress — Persistance Cloud & SQL réelle de la progression des leçons
+  app.post('/api/student/enrollments/progress', async (req, res) => {
+    const session = extractStudentSession(req);
+    const { courseId, completedLessons = [], progressPercentage = 0 } = req.body || {};
+    const cleanCourseId = String(courseId || '').trim();
+    if (!session || !cleanCourseId) {
+      return res.status(401).json({ success: false, error: 'Session étudiant et courseId requis.' });
+    }
+
+    const cleanLessons = Array.isArray(completedLessons)
+      ? Array.from(new Set(completedLessons.map((x: any) => String(x)).filter(Boolean)))
+      : [];
+    const cleanPct = Math.min(100, Math.max(0, Math.round(Number(progressPercentage) || 0)));
+    const nowIso = new Date().toISOString();
+
+    const phoneDigits = normalizePhoneKey(session.phone);
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE);
+    const idx = enrollments.findIndex(
+      (e: any) =>
+        e.courseId === cleanCourseId &&
+        (e.studentId === session.studentId ||
+          (session.email && e.studentEmail === session.email) ||
+          (phoneDigits.length >= 6 && normalizePhoneKey(e.studentPhone) === phoneDigits))
+    );
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Inscription introuvable pour ce cours.' });
+    }
+
+    enrollments[idx] = {
+      ...enrollments[idx],
+      completedLessons: cleanLessons,
+      progressPercentage: cleanPct,
+      lastAccessedAt: nowIso,
+    };
+    writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('enrollments')
+          .update({
+            completed_lessons: cleanLessons,
+            progress_percentage: cleanPct,
+          })
+          .eq('course_id', cleanCourseId)
+          .eq('student_id', enrollments[idx].studentId);
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      completedLessons: cleanLessons,
+      progressPercentage: cleanPct,
+      enrollment: enrollments[idx],
+    });
+  });
+
   // GET /api/student/enrollments/verify?courseId=... — Contrôle d'accès & expiration expires_at strict côté serveur
   app.get('/api/student/enrollments/verify', async (req, res) => {
     const courseId = String(req.query.courseId || '').trim();

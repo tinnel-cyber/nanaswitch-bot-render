@@ -53,6 +53,7 @@ import { SEED_MARKETPLACE_COURSES } from '../../../../../services/marketplaceSer
 import { supabase } from '../../../../../lib/supabase';
 import { playTapBeep } from '../../../../../utils/audio';
 import { CourseCommunityFeed } from '../community/CourseCommunityFeed';
+import { UltimateCheckout } from '../../../../../services/nana-switch/payment/UltimateCheckout';
 
 export type StudentDashboardTab = 
   | 'HUB'
@@ -456,6 +457,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
+  const [renewTargetCourse, setRenewTargetCourse] = useState<{ id: string; title: string; price: number } | null>(null);
   const [quizFilter, setQuizFilter] = useState<'ALL' | 'PASSED' | 'PENDING'>('ALL');
 
   // Dropdown states
@@ -638,12 +640,20 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
         const completedCount = (enr.completed_lessons || []).length;
         const progress = Math.min(100, Math.round((completedCount / Math.max(1, totalLessons)) * 100)) || Number(enr.progress_percent) || 0;
 
+        const expiresAt = enr.expiresAt || enr.expires_at || null;
+        const pricingModel = enr.pricingModel || enr.pricing_model || 'lifetime';
+        const billingInterval = enr.billingInterval || enr.billing_interval || null;
+        const isExpired = Boolean(
+          enr.status === 'EXPIRED' ||
+          (expiresAt && !Number.isNaN(new Date(expiresAt).getTime()) && new Date(expiresAt).getTime() <= Date.now())
+        );
+
         return {
-          id: enr.course_id,
+          id: enr.course_id || enr.courseId,
           campusName: s.campusName || `Campus : ${cData.title || 'Formation Professionnelle'}`,
           instructorName: s.instructor?.name || s.instructorName || 'Formateur Agréé NaNa',
           instructorAvatar: s.instructor?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-          title: cData.title || s.title || `Formation ${enr.course_id}`,
+          title: cData.title || s.title || enr.courseTitle || `Formation ${enr.course_id || enr.courseId}`,
           tagline: cData.description || s.description || 'Formation certifiante NaNa Academy.',
           progress: progress,
           completedLessons: completedCount,
@@ -655,7 +665,12 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           coverImage: cData.thumbnail_url || s.thumbnailUrl || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
           trailerVideoUrl: s.trailerVideoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
           status: progress >= 100 ? ('completed' as const) : ('in_progress' as const),
-          certificateId: progress >= 100 ? `CERT-${enr.id?.slice(0, 8)?.toUpperCase()}` : undefined
+          certificateId: progress >= 100 ? `CERT-${enr.id?.slice(0, 8)?.toUpperCase()}` : undefined,
+          expiresAt,
+          pricingModel,
+          billingInterval,
+          isExpired,
+          price: Number(cData.price ?? enr.amount ?? 15000)
         };
       });
     }
@@ -1921,8 +1936,46 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                             </div>
                           </div>
 
-                          {/* e. Bouton d'action épuré : "Accéder au Campus Privé →" */}
-                          <div className="pt-2">
+                          {/* Badge Expiration / Statut Abonnement */}
+                          {(course as any).expiresAt && (
+                            <div
+                              className={`px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between ${
+                                (course as any).isExpired
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                              }`}
+                            >
+                              <span>
+                                {(course as any).isExpired
+                                  ? ((course as any).pricingModel === 'live_event' ? '🔴 Session Live terminée le' : '⏳ Expiré le')
+                                  : ((course as any).pricingModel === 'live_event' ? '🔴 Fin du Live le' : '📅 Expire le')}{' '}
+                                {new Date((course as any).expiresAt).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* e. Bouton d'action : "Renouveler mon abonnement" si expiré, sinon "Accéder au Campus Privé →" */}
+                          <div className="pt-2 space-y-2">
+                            {(course as any).pricingModel === 'subscription' && ((course as any).isExpired || (course as any).expiresAt) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRenewTargetCourse({
+                                    id: course.id,
+                                    title: course.title,
+                                    price: Number((course as any).price) || 15000
+                                  })
+                                }
+                                className="w-full py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                              >
+                                <span>🔄 {(course as any).isExpired ? 'Renouveler mon abonnement' : 'Prolonger mon abonnement'}</span>
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => handleOpenCourseCampus(course.id)}
@@ -1931,6 +1984,40 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                               <span>Accéder au Campus Privé →</span>
                             </button>
                           </div>
+
+                          {renewTargetCourse && renewTargetCourse.id === course.id && (
+                            <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                              <div className="w-full max-w-2xl">
+                                <UltimateCheckout
+                                  isOpen={true}
+                                  onClose={() => setRenewTargetCourse(null)}
+                                  product={{
+                                    id: `sub_renew_${renewTargetCourse.id}`,
+                                    name: `Renouvellement : ${renewTargetCourse.title}`,
+                                    price: renewTargetCourse.price,
+                                    category: 'Abonnement Formation',
+                                    isDigital: true
+                                  } as any}
+                                  storeName="Campus Privé NaNa"
+                                  onSuccess={async (details) => {
+                                    const { renewCourseSubscription } = await import('../../../../../services/studentAuthService');
+                                    const res = await renewCourseSubscription({
+                                      courseId: renewTargetCourse.id,
+                                      paymentMethod: details?.paymentMethod || 'MOBILE_MONEY',
+                                      transactionId: details?.transactionId || details?.orderId,
+                                      amount: details?.amount || renewTargetCourse.price
+                                    });
+                                    setRenewTargetCourse(null);
+                                    if (res.success) {
+                                      setToastMessage('✅ Abonnement renouvelé avec succès ! Votre accès est prolongé.');
+                                      setTimeout(() => setToastMessage(null), 4500);
+                                      window.location.reload();
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -22,6 +22,7 @@ import { CourseCommunityFeed } from './community/CourseCommunityFeed';
 import { LearnerProfileModal } from './community/LearnerProfileModal';
 import { DirectMessagingDrawer } from './community/DirectMessagingDrawer';
 import { VoiceSimulationArena } from './arena/VoiceSimulationArena';
+import { UltimateCheckout } from '../../../../services/nana-switch/payment/UltimateCheckout';
 import { VoiceSimulationReportModal } from './arena/VoiceSimulationReportModal';
 import { LiquidSyllabusSidebar } from './LiquidSyllabusSidebar';
 import { PersonalizedRemediationView } from './PersonalizedRemediationView';
@@ -81,24 +82,48 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
     currentUser && ['admin', 'superadmin', 'instructor', 'owner', 'merchant'].includes(String((currentUser as any)?.role || '').toLowerCase())
   );
   const [isEnrolled, setIsEnrolled] = useState<boolean>(isStaffPreview);
-  useEffect(() => {
+  const [accessMeta, setAccessMeta] = useState<{
+    expired?: boolean;
+    reason?: string;
+    expiresAt?: string | null;
+    pricingModel?: string;
+    billingInterval?: string | null;
+    canRenew?: boolean;
+  }>({});
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+
+  const refreshServerAccess = useCallback(() => {
     if (isStaffPreview) {
       setIsEnrolled(true);
       return;
     }
-    let cancelled = false;
     import('../../../../services/studentAuthService')
-      .then(({ verifyStudentCourseAccess }) => verifyStudentCourseAccess(courseId))
-      .then((hasAccess) => {
-        if (!cancelled) setIsEnrolled(hasAccess);
+      .then(({ verifyStudentCourseAccessDetails }) => verifyStudentCourseAccessDetails(courseId))
+      .then((details) => {
+        setIsEnrolled(details.hasAccess);
+        setAccessMeta({
+          expired: details.expired,
+          reason: details.reason,
+          expiresAt: details.expiresAt,
+          pricingModel: details.pricingModel,
+          billingInterval: details.billingInterval,
+          canRenew: details.canRenew,
+        });
+        if (Array.isArray(details.completedLessons) && details.completedLessons.length > 0) {
+          setEnrollment((prev) => ({
+            ...prev,
+            completedLessonIds: Array.from(new Set([...(prev.completedLessonIds || []), ...details.completedLessons!])),
+          }));
+        }
       })
       .catch(() => {
-        if (!cancelled) setIsEnrolled(false);
+        setIsEnrolled(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [courseId, isStaffPreview]);
+
+  useEffect(() => {
+    refreshServerAccess();
+  }, [refreshServerAccess]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<StudentEnrollment>(() => 
     getInitialStudentEnrollment(courseId, currentUser?.name || currentUser?.email?.split('@')[0] || 'Étudiant')
@@ -455,9 +480,13 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
     };
     setEnrollment(updated);
 
-    // Persistance automatique dans Firestore et local
-    const studentUid = currentUser?.id || (currentUser as any)?.uid || 'student-demo';
-    saveStudentEnrollmentProgress(courseId, studentUid, updated);
+    // Persistance Cloud & SQL réelle de la progression (POST /api/student/enrollments/progress)
+    const progressPct = Math.min(100, Math.round((nextIds.length / Math.max(1, allLessons.length)) * 100));
+    import('../../../../services/studentAuthService')
+      .then(({ saveStudentProgressCloud }) => {
+        saveStudentProgressCloud(courseId, nextIds, progressPct);
+      })
+      .catch(() => {});
 
     // Si tout le cours est validé, déclencher la fête et les confettis !
     if (nextIds.length === allLessons.length && !isAlready) {
@@ -766,6 +795,89 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
         <React.Suspense fallback={null}>
           <ConfettiCelebration durationMs={4500} onComplete={() => setShowConfetti(false)} />
         </React.Suspense>
+      )}
+
+      {/* Bandeau d'expiration / renouvellement d'abonnement ou fin de Live */}
+      {accessMeta.expired && !isStaffPreview && (
+        <div className="px-4 py-3 bg-gradient-to-r from-rose-950 via-red-950 to-amber-950 border-b border-rose-500/40 flex flex-wrap items-center justify-between gap-3 z-50">
+          <div className="text-xs text-rose-100">
+            {accessMeta.reason === 'LIVE_ENDED' ? (
+              <span>
+                🔴 <strong>Session Live terminée</strong>
+                {accessMeta.expiresAt
+                  ? ` le ${new Date(accessMeta.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : ''}. L&apos;accès à ce cours Live a été clôturé.
+              </span>
+            ) : (
+              <span>
+                ⏳ <strong>Votre abonnement a expiré</strong>
+                {accessMeta.expiresAt
+                  ? ` le ${new Date(accessMeta.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : ''}. Renouvelez pour retrouver l&apos;accès immédiat à vos leçons.
+              </span>
+            )}
+          </div>
+          {accessMeta.canRenew && (
+            <button
+              type="button"
+              onClick={() => setIsRenewModalOpen(true)}
+              className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg cursor-pointer transition"
+            >
+              🔄 Renouveler mon abonnement
+            </button>
+          )}
+        </div>
+      )}
+
+      {!accessMeta.expired && accessMeta.expiresAt && !isStaffPreview && (
+        <div className="px-4 py-1.5 bg-indigo-950/70 border-b border-indigo-500/30 flex items-center justify-between text-[11px] text-indigo-200">
+          <span>
+            📅 {accessMeta.pricingModel === 'live_event' ? 'Fin de la session Live' : 'Votre abonnement expire le'}{' '}
+            <strong>
+              {new Date(accessMeta.expiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </strong>
+          </span>
+          {accessMeta.pricingModel === 'subscription' && (
+            <button
+              type="button"
+              onClick={() => setIsRenewModalOpen(true)}
+              className="text-amber-300 hover:text-amber-200 font-black underline cursor-pointer"
+            >
+              🔄 Prolonger maintenant
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Modale de Renouvellement d'Abonnement via UltimateCheckout */}
+      {isRenewModalOpen && (
+        <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl">
+            <UltimateCheckout
+              isOpen={true}
+              onClose={() => setIsRenewModalOpen(false)}
+              product={{
+                id: `sub_renew_${courseId}`,
+                name: `Renouvellement : ${course?.title || 'Formation'}`,
+                price: Number((course as any)?.price) || 15000,
+                category: 'Abonnement Formation',
+                isDigital: true
+              } as any}
+              storeName="Campus Privé NaNa"
+              onSuccess={async (details) => {
+                const { renewCourseSubscription } = await import('../../../../services/studentAuthService');
+                await renewCourseSubscription({
+                  courseId,
+                  paymentMethod: details?.paymentMethod || 'MOBILE_MONEY',
+                  transactionId: details?.transactionId || details?.orderId,
+                  amount: details?.amount || Number((course as any)?.price) || 15000
+                });
+                setIsRenewModalOpen(false);
+                refreshServerAccess();
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {/* 1. Header du Campus Virtuel */}

@@ -303,9 +303,21 @@ export async function loginStudentAccount(
   }
 }
 
-export async function verifyStudentCourseAccess(courseId: string): Promise<boolean> {
+export interface CourseAccessVerificationResult {
+  hasAccess: boolean;
+  expired?: boolean;
+  reason?: string;
+  expiresAt?: string | null;
+  pricingModel?: string;
+  billingInterval?: string | null;
+  canRenew?: boolean;
+  completedLessons?: string[];
+  progressPercentage?: number;
+}
+
+export async function verifyStudentCourseAccessDetails(courseId: string): Promise<CourseAccessVerificationResult> {
   const token = getStudentToken();
-  if (!token || !courseId) return false;
+  if (!token || !courseId) return { hasAccess: false, reason: 'UNAUTHENTICATED' };
   try {
     const res = await fetch(
       `/api/student/enrollments/verify?courseId=${encodeURIComponent(courseId)}`,
@@ -314,7 +326,50 @@ export async function verifyStudentCourseAccess(courseId: string): Promise<boole
       }
     );
     const json = await res.json().catch(() => null);
-    return Boolean(res.ok && json?.success && json?.hasAccess === true);
+    if (!res.ok || !json?.success) return { hasAccess: false };
+    const enr = json?.enrollment || {};
+    return {
+      hasAccess: Boolean(json?.hasAccess === true),
+      expired: Boolean(json?.expired),
+      reason: json?.reason,
+      expiresAt: json?.expiresAt ?? enr.expiresAt ?? enr.expires_at ?? null,
+      pricingModel: json?.pricingModel ?? enr.pricingModel ?? enr.pricing_model ?? 'lifetime',
+      billingInterval: json?.billingInterval ?? enr.billingInterval ?? enr.billing_interval ?? null,
+      canRenew: Boolean(json?.canRenew),
+      completedLessons: Array.isArray(enr.completedLessons)
+        ? enr.completedLessons
+        : Array.isArray(enr.completed_lessons)
+          ? enr.completed_lessons
+          : [],
+      progressPercentage: Number(enr.progressPercentage ?? enr.progress_percentage ?? 0),
+    };
+  } catch {
+    return { hasAccess: false };
+  }
+}
+
+export async function verifyStudentCourseAccess(courseId: string): Promise<boolean> {
+  const details = await verifyStudentCourseAccessDetails(courseId);
+  return details.hasAccess;
+}
+
+export async function saveStudentProgressCloud(
+  courseId: string,
+  completedLessons: string[],
+  progressPercentage: number
+): Promise<boolean> {
+  const token = getStudentToken();
+  if (!token || !courseId) return false;
+  try {
+    const res = await fetch('/api/student/enrollments/progress', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ courseId, completedLessons, progressPercentage }),
+    });
+    return res.ok;
   } catch {
     return false;
   }
