@@ -1039,6 +1039,12 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       sendDigitalReceiptViaApi(digitalReceiptPayload).catch(() => {});
 
       if (completedDetails?.paymentMethod !== 'CASH_ON_DELIVERY') {
+        import('../../studentAuthService')
+          .then(({ trackDestinationConversion }) => {
+            trackDestinationConversion(finalTotal, orderId);
+          })
+          .catch(() => {});
+
         if (digitalDeliveryProfile.isCampusOrVip) {
           import('../../studentAuthService')
             .then(({ recordCourseEnrollment }) => {

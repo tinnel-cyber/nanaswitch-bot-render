@@ -136,12 +136,18 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
         amount: effectivePrice
       });
 
-      // Enregistrement du profil élève pour connexion ultérieure automatique
+      // Enregistrement du profil élève + attribution conversion ?trk=TRK-XXXX
       recordCourseEnrollment({
         courseId: course.id,
+        courseTitle: course.title,
         fullName: activeName,
-        phoneNumber: activePhone
+        phoneNumber: activePhone,
+        amount: effectivePrice,
+        source: 'marketplace'
       });
+      import('../../../../../services/studentAuthService')
+        .then(({ trackDestinationConversion }) => trackDestinationConversion(effectivePrice, `${course.id}:${Date.now().toString().slice(0, -4)}`))
+        .catch(() => {});
 
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);
@@ -151,9 +157,15 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
       // Le paiement a réussi sur la passerelle : inscription locale préservée
       recordCourseEnrollment({
         courseId: course.id,
+        courseTitle: course.title,
         fullName: activeName,
-        phoneNumber: activePhone
+        phoneNumber: activePhone,
+        amount: effectivePrice,
+        source: 'marketplace'
       });
+      import('../../../../../services/studentAuthService')
+        .then(({ trackDestinationConversion }) => trackDestinationConversion(effectivePrice, `${course.id}:fallback`))
+        .catch(() => {});
       setIsNanasoreGatewayOpen(false);
       setIsSuccess(true);
       playCashChime();
@@ -234,7 +246,7 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
                   <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 flex items-center justify-between">
                     <div>
                       <span className="text-xs text-slate-400">Montant Total à Régler :</span>
-                      <div className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                      <div className="text-xl sm:text-2xl font-black text-white flex items-baseline gap-2 flex-wrap">
                         {discountPercentage && discountPercentage > 0 ? (
                           <>
                             <span className="text-sm text-slate-500 line-through font-normal">
@@ -247,6 +259,32 @@ export const FrictionlessAfricanCheckoutBottomSheet: React.FC<FrictionlessAfrica
                         ) : (
                           <span>{formatCFA(effectivePrice)}</span>
                         )}
+                        {(() => {
+                          const pModel = (course as any)?.pricingModel || (course as any)?.pricing_model || 'lifetime';
+                          const pInt = String((course as any)?.billingInterval || (course as any)?.billing_interval || 'month');
+                          const intMap: Record<string, string> = { day: '/jour', week: '/semaine', month: '/mois', year: '/an' };
+                          const suffix = pModel === 'subscription' ? (intMap[pInt] || '/mois') : pModel === 'live_event' ? ' • Live' : '';
+                          return suffix ? <span className="text-xs font-extrabold text-indigo-300">{suffix}</span> : null;
+                        })()}
+                      </div>
+                      <div className="mt-1">
+                        {(() => {
+                          const pModel = (course as any)?.pricingModel || (course as any)?.pricing_model || 'lifetime';
+                          const pInt = String((course as any)?.billingInterval || (course as any)?.billing_interval || 'month');
+                          const liveEnd = (course as any)?.liveEndsAt || (course as any)?.live_ends_at;
+                          const intMap: Record<string, string> = { day: '/jour', week: '/semaine', month: '/mois', year: '/an' };
+                          const label =
+                            pModel === 'subscription'
+                              ? `🔄 Abonnement renouvelable ${intMap[pInt] || '/mois'}`
+                              : pModel === 'live_event'
+                                ? `🔴 Cours Live Direct${liveEnd ? ` • Fin le ${new Date(liveEnd).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}` : ''}`
+                                : '💎 Paiement unique • Accès à vie';
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
+                              {label}
+                            </span>
+                          );
+                        })()}
                       </div>
                       {discountPercentage && discountPercentage > 0 && (
                         <div className="mt-1">

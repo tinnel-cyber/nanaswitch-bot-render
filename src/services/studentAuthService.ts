@@ -601,3 +601,116 @@ export function logoutStudent(): void {
   localStorage.removeItem('nana_student_id');
   localStorage.removeItem(STORAGE_KEY_ENROLLED);
 }
+
+// ============================================================================
+// TRAÇABILITÉ ?trk=TRK-XXXX & ATTRIBUTION AUTOMATIQUE DES CONVERSIONS
+// ============================================================================
+const STORAGE_KEY_TRK = 'nana_course_trk_v1';
+const STORAGE_KEY_TRK_SENT = 'nana_course_trk_sent_v1';
+
+export function captureTrackingCodeFromUrl(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const trk = (params.get('trk') || '').trim().toUpperCase();
+    if (trk && trk.startsWith('TRK-')) {
+      sessionStorage.setItem(STORAGE_KEY_TRK, trk);
+      localStorage.setItem(STORAGE_KEY_TRK, trk);
+      return trk;
+    }
+    return sessionStorage.getItem(STORAGE_KEY_TRK) || localStorage.getItem(STORAGE_KEY_TRK) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function getActiveTrackingCode(): string {
+  return captureTrackingCodeFromUrl();
+}
+
+export async function trackDestinationConversion(amountFcfa: number, dedupKey?: string): Promise<boolean> {
+  const trackingCode = getActiveTrackingCode();
+  if (!trackingCode) return false;
+  if (typeof window !== 'undefined' && dedupKey) {
+    try {
+      const sentKey = `${trackingCode}:${dedupKey}`;
+      const raw = sessionStorage.getItem(STORAGE_KEY_TRK_SENT) || '';
+      if (raw.split(',').includes(sentKey)) return true;
+      sessionStorage.setItem(STORAGE_KEY_TRK_SENT, raw ? `${raw},${sentKey}` : sentKey);
+    } catch {}
+  }
+  try {
+    const res = await fetch('/api/lms/destinations/track-conversion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ trackingCode, amountFcfa: Math.max(0, Number(amountFcfa) || 0) }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  captureTrackingCodeFromUrl();
+}
+
+export function formatCoursePricingDisplay(course: any): {
+  pricingModel: 'lifetime' | 'subscription' | 'live_event';
+  billingInterval?: string;
+  suffix: string;
+  badge: string;
+  detail: string;
+} {
+  const model = (
+    course?.pricingModel ||
+    course?.pricing_model ||
+    course?.metadata?.pricing_model ||
+    'lifetime'
+  ) as 'lifetime' | 'subscription' | 'live_event';
+  const interval = String(
+    course?.billingInterval ||
+    course?.billing_interval ||
+    course?.metadata?.billing_interval ||
+    'month'
+  ).toLowerCase();
+  const liveEndsAt = course?.liveEndsAt || course?.live_ends_at || course?.metadata?.live_ends_at || null;
+
+  if (model === 'subscription') {
+    const map: Record<string, { suffix: string; detail: string }> = {
+      day: { suffix: '/jour', detail: 'Abonnement renouvelable par jour' },
+      week: { suffix: '/semaine', detail: 'Abonnement renouvelable par semaine' },
+      month: { suffix: '/mois', detail: 'Abonnement renouvelable par mois' },
+      year: { suffix: '/an', detail: 'Abonnement renouvelable par an' },
+    };
+    const chosen = map[interval] || map.month;
+    return {
+      pricingModel: 'subscription',
+      billingInterval: interval,
+      suffix: chosen.suffix,
+      badge: `🔄 Abonnement ${chosen.suffix}`,
+      detail: chosen.detail,
+    };
+  }
+
+  if (model === 'live_event') {
+    const endLabel =
+      liveEndsAt && !Number.isNaN(new Date(liveEndsAt).getTime())
+        ? `Fin le ${new Date(liveEndsAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+        : 'Accès valable pendant la session Live';
+    return {
+      pricingModel: 'live_event',
+      suffix: ' • Live',
+      badge: '🔴 Cours Live Direct',
+      detail: endLabel,
+    };
+  }
+
+  return {
+    pricingModel: 'lifetime',
+    suffix: '',
+    badge: '💎 Paiement unique • Accès à vie',
+    detail: 'Accès illimité à vie',
+  };
+}

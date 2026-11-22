@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v50-lms-progress-and-renewal-ui';
+const CACHE_NAME = 'nanasore-v51-trk-attribution-and-pricing-labels';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

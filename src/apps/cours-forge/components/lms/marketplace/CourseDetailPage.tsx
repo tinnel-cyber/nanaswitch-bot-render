@@ -440,16 +440,42 @@ export const CourseDetailPage: React.FC<CourseDetailPageProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
                   Tarif Spécial UEMOA
                 </span>
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-2 flex-wrap">
                   <span className="text-3xl font-black text-white">
                     {formatCFA(effectivePrice)}
                   </span>
+                  {(() => {
+                    const pModel = (course as any)?.pricingModel || (course as any)?.pricing_model || 'lifetime';
+                    const pInt = String((course as any)?.billingInterval || (course as any)?.billing_interval || 'month');
+                    const intMap: Record<string, string> = { day: '/jour', week: '/semaine', month: '/mois', year: '/an' };
+                    const suffix = pModel === 'subscription' ? (intMap[pInt] || '/mois') : pModel === 'live_event' ? ' • Live' : '';
+                    return suffix ? <span className="text-sm font-black text-indigo-300">{suffix}</span> : null;
+                  })()}
                   {(appliedDiscount || course.originalPrice) && (
                     <span className="text-sm text-slate-500 line-through">
                       {formatCFA(appliedDiscount ? basePrice : course.originalPrice!)}
                     </span>
                   )}
                 </div>
+                {(() => {
+                  const pModel = (course as any)?.pricingModel || (course as any)?.pricing_model || 'lifetime';
+                  const pInt = String((course as any)?.billingInterval || (course as any)?.billing_interval || 'month');
+                  const liveEnd = (course as any)?.liveEndsAt || (course as any)?.live_ends_at;
+                  const intMap: Record<string, string> = { day: '/jour', week: '/semaine', month: '/mois', year: '/an' };
+                  const label =
+                    pModel === 'subscription'
+                      ? `🔄 Abonnement renouvelable ${intMap[pInt] || '/mois'}`
+                      : pModel === 'live_event'
+                        ? `🔴 Cours Direct en Live${liveEnd ? ` • Fin le ${new Date(liveEnd).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}` : ''}`
+                        : '💎 Paiement direct • Accès à vie';
+                  return (
+                    <div className="pt-1">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {appliedDiscount ? (
                   <div className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
