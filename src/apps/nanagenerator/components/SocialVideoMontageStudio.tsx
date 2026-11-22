@@ -36,7 +36,9 @@ import {
   VolumeX,
   ChevronLeft,
   ChevronRight,
-  Hand
+  Hand,
+  Camera,
+  Circle
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -73,6 +75,16 @@ import {
   updateClipInTimeline,
   exportTimelineToVideoBlob
 } from '../../../services/videoTimelineService';
+import {
+  ProScreenRecorderSession,
+  captureOneShotScreenPng,
+  isScreenCaptureSupported,
+  triggerDirectDownload,
+  type RecorderMode,
+  type RecorderQuality,
+  type CamBubbleConfig,
+  type RecordedMediaResult
+} from '../../../services/screenRecorderService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -88,7 +100,7 @@ export interface SocialVideoMontageStudioProps {
 type SocialFormatId = '9:16' | '1:1' | '16:9';
 type ExportResolutionId = '480p' | '720p' | '1080p';
 type ExportContainerId = 'mp4' | 'webm';
-type StudioPanelTab = 'EDIT' | 'SUBTITLES' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
+type StudioPanelTab = 'RECORD' | 'EDIT' | 'SUBTITLES' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
 type SocialNetworkId = 'tiktok_reels' | 'whatsapp_status' | 'facebook_youtube';
 type MotionDesignId =
   | 'classic'
@@ -988,6 +1000,164 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     }
   };
 
+  // =========================================================================
+  // ENREGISTREUR D'ÉCRAN & CAPTURE IMAGE PRO (BULLE CAMÉRA ROND/CARRÉ, 0 CLOUD)
+  // =========================================================================
+  const screenCaptureAvailable = useMemo(() => isScreenCaptureSupported(), []);
+  const [recorderMode, setRecorderMode] = useState<RecorderMode>(() =>
+    isScreenCaptureSupported() ? 'screen' : 'camera'
+  );
+  const [recorderQuality, setRecorderQuality] = useState<RecorderQuality>('720p');
+  const [recIncludeMic, setRecIncludeMic] = useState<boolean>(true);
+  const [recIncludeSystemAudio, setRecIncludeSystemAudio] = useState<boolean>(true);
+  const [recFacingMode, setRecFacingMode] = useState<'user' | 'environment'>('user');
+  const [camBubble, setCamBubble] = useState<CamBubbleConfig>({
+    enabled: true,
+    shape: 'circle',
+    corner: 'bottom-right',
+    sizePct: 20,
+    mirror: true
+  });
+  const [isScreenRecording, setIsScreenRecording] = useState<boolean>(false);
+  const [isScreenRecPaused, setIsScreenRecPaused] = useState<boolean>(false);
+  const [recElapsedSec, setRecElapsedSec] = useState<number>(0);
+  const [recStatusMsg, setRecStatusMsg] = useState<string | null>(null);
+  const [recErrorMsg, setRecErrorMsg] = useState<string | null>(null);
+  const [lastRecordedMedia, setLastRecordedMedia] = useState<RecordedMediaResult | null>(null);
+  const [lastScreenshot, setLastScreenshot] = useState<{ filename: string; dataUrl: string } | null>(null);
+  const recorderSessionRef = useRef<ProScreenRecorderSession | null>(null);
+  const recorderPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Mise à jour live de la bulle caméra (rond/carré, coin, taille, ON/OFF) même pendant l'enregistrement
+  useEffect(() => {
+    recorderSessionRef.current?.updateBubbleConfig(camBubble);
+  }, [camBubble]);
+
+  // Chronomètre REC
+  useEffect(() => {
+    if (!isScreenRecording || isScreenRecPaused) return;
+    const id = window.setInterval(() => setRecElapsedSec((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [isScreenRecording, isScreenRecPaused]);
+
+  // Nettoyage strict des flux caméra/écran si le studio est fermé
+  useEffect(() => {
+    return () => {
+      recorderSessionRef.current?.stop();
+      recorderSessionRef.current = null;
+    };
+  }, []);
+
+  const formatRecTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const handleStartScreenRecording = async () => {
+    setRecErrorMsg(null);
+    setRecStatusMsg(null);
+    playTapBeep();
+    try {
+      const session = new ProScreenRecorderSession({
+        mode: recorderMode,
+        quality: recorderQuality,
+        includeMic: recIncludeMic,
+        includeSystemAudio: recIncludeSystemAudio,
+        facingMode: recFacingMode,
+        bubble: camBubble,
+        previewCanvas: recorderPreviewCanvasRef.current,
+        onStop: (result) => {
+          setIsScreenRecording(false);
+          setIsScreenRecPaused(false);
+          setLastRecordedMedia(result);
+          recorderSessionRef.current = null;
+          playValidationBeep();
+          setRecStatusMsg(
+            `✅ Enregistrement terminé (${result.durationSec}s) et téléchargé directement sur votre appareil !`
+          );
+        },
+        onError: (msg) => {
+          setRecErrorMsg(msg);
+          setIsScreenRecording(false);
+          setIsScreenRecPaused(false);
+          recorderSessionRef.current = null;
+        }
+      });
+      recorderSessionRef.current = session;
+      await session.start({
+        includeMic: recIncludeMic,
+        includeSystemAudio: recIncludeSystemAudio,
+        facingMode: recFacingMode
+      });
+      setRecElapsedSec(0);
+      setIsScreenRecording(true);
+      setIsScreenRecPaused(false);
+      setRecStatusMsg('🔴 Enregistrement en cours... Vous pouvez activer/désactiver la bulle caméra en direct.');
+    } catch (err: any) {
+      recorderSessionRef.current?.stop();
+      recorderSessionRef.current = null;
+      setIsScreenRecording(false);
+      setRecErrorMsg(err?.message || 'Partage d\'écran annulé ou autorisation caméra/micro refusée.');
+      playCancelSound();
+    }
+  };
+
+  const handlePauseResumeScreenRecording = () => {
+    const s = recorderSessionRef.current;
+    if (!s || !isScreenRecording) return;
+    playTapBeep();
+    if (isScreenRecPaused) {
+      s.resume();
+      setIsScreenRecPaused(false);
+      setRecStatusMsg('🔴 Enregistrement repris.');
+    } else {
+      s.pause();
+      setIsScreenRecPaused(true);
+      setRecStatusMsg('⏸️ Enregistrement en pause.');
+    }
+  };
+
+  const handleStopScreenRecording = () => {
+    playValidationBeep();
+    recorderSessionRef.current?.stop();
+  };
+
+  const handleTakeScreenScreenshot = async () => {
+    setRecErrorMsg(null);
+    playTapBeep();
+    try {
+      if (recorderSessionRef.current && isScreenRecording) {
+        const filename = await recorderSessionRef.current.takeScreenshotPng();
+        playValidationBeep();
+        setRecStatusMsg(`📸 Capture d'image téléchargée : ${filename}`);
+      } else {
+        const shot = await captureOneShotScreenPng(camBubble);
+        setLastScreenshot(shot);
+        playValidationBeep();
+        setRecStatusMsg(`📸 Capture d'écran téléchargée directement : ${shot.filename}`);
+      }
+    } catch (err: any) {
+      playCancelSound();
+      setRecErrorMsg(err?.message || 'Capture d\'image annulée ou non supportée sur cet appareil.');
+    }
+  };
+
+  const handleLoadRecordedIntoTimeline = () => {
+    if (!lastRecordedMedia) return;
+    playValidationBeep();
+    setSourceFile(lastRecordedMedia.file);
+    setEncodeResult(null);
+    setEncodeError(null);
+    setTimelineClips([]);
+    setSelectedClipId('');
+    setHistoryPast([]);
+    setHistoryFuture([]);
+    setCurrentVideoTime(0);
+    setPreviewUrl(lastRecordedMedia.url);
+    setActivePanel('EDIT');
+  };
+
   const handleAddExtraClip = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1670,6 +1840,26 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={() => {
+              playTapBeep();
+              setActivePanel('RECORD');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer border transition ${
+              isScreenRecording
+                ? 'bg-rose-600 text-white border-rose-400 animate-pulse shadow-lg shadow-rose-900/50'
+                : activePanel === 'RECORD'
+                  ? 'bg-rose-600/25 text-rose-200 border-rose-400'
+                  : 'bg-slate-800 hover:bg-slate-700 text-rose-300 border-rose-500/40'
+            }`}
+            title="Enregistreur d'écran & Capture d'image avec bulle caméra (téléchargement direct)"
+          >
+            <Circle className="w-3 h-3 fill-current" />
+            <span className="hidden sm:inline">
+              {isScreenRecording ? `REC ${formatRecTimer(recElapsedSec)}` : 'Enregistrer Écran'}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
           >
@@ -2097,8 +2287,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
 
           {/* COLONNE DROITE : 7 ONGLETS COMPLETS */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
               {[
+                { id: 'RECORD' as StudioPanelTab, label: 'Enreg.', icon: Camera },
                 { id: 'EDIT' as StudioPanelTab, label: 'Montage', icon: Scissors },
                 { id: 'SUBTITLES' as StudioPanelTab, label: 'Sous-titres', icon: Subtitles },
                 { id: 'MOTION' as StudioPanelTab, label: 'Motion', icon: Layers },
@@ -2118,7 +2309,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       setActivePanel(t.id);
                     }}
                     className={`py-2 px-1 rounded-xl text-[10px] font-black flex items-center justify-center gap-1 transition cursor-pointer ${
-                      active ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                      active
+                        ? t.id === 'RECORD'
+                          ? 'bg-rose-600 text-white shadow-md'
+                          : 'bg-indigo-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -2127,6 +2322,374 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                 );
               })}
             </div>
+
+            {/* PANNEAU 0 : ENREGISTREUR D'ÉCRAN & CAPTURE IMAGE PRO (BULLE CAMÉRA ROND/CARRÉ, 0 CLOUD) */}
+            {activePanel === 'RECORD' && (
+              <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-rose-400" />
+                      <span>Enregistreur d&apos;Écran &amp; Capture Image Pro</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Enregistrez vos cours et tutoriels avec bulle caméra (rond/carré) ou capturez une image `.PNG` — téléchargement direct sur votre appareil (0 stockage Cloud).
+                    </p>
+                  </div>
+                  {isScreenRecording && (
+                    <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-xs font-mono font-black flex items-center gap-1.5 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                      {isScreenRecPaused ? 'PAUSE' : 'REC'} {formatRecTimer(recElapsedSec)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Aperçu Live de l'Enregistrement */}
+                <div className="relative rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden aspect-video flex items-center justify-center">
+                  <canvas
+                    ref={recorderPreviewCanvasRef}
+                    width={640}
+                    height={360}
+                    className={`w-full h-full object-contain ${isScreenRecording ? 'block' : 'hidden'}`}
+                  />
+                  {!isScreenRecording && (
+                    <div className="p-6 text-center space-y-2.5">
+                      <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+                        <Monitor className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-white">
+                        Prêt à enregistrer ({recorderMode === 'screen' ? 'Écran + Bulle Caméra' : 'Caméra directe'})
+                      </p>
+                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                        {screenCaptureAvailable
+                          ? 'Cliquez sur « Démarrer » pour choisir votre écran, fenêtre ou onglet, ou prenez une capture image instantanée.'
+                          : 'Sur navigateur mobile, le mode Caméra directe + Micro est activé automatiquement (la capture d\'écran complète est disponible sur ordinateur).'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Boutons principaux : Démarrer / Pause / Stop / Capture Image PNG */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isScreenRecording ? (
+                    <button
+                      type="button"
+                      onClick={handleStartScreenRecording}
+                      className="flex-1 min-w-[180px] py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-950/50 cursor-pointer"
+                    >
+                      <Circle className="w-4 h-4 fill-current" />
+                      <span>Démarrer l&apos;Enregistrement</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePauseResumeScreenRecording}
+                        className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {isScreenRecPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                        <span>{isScreenRecPaused ? 'Reprendre' : 'Pause'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStopScreenRecording}
+                        className="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg"
+                      >
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        <span>Arrêter &amp; Télécharger</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleTakeScreenScreenshot}
+                    className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-200 border border-cyan-500/40 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Capturer une image haute définition (.PNG) et la télécharger immédiatement"
+                  >
+                    <Camera className="w-4 h-4 text-cyan-400" />
+                    <span>Capture Image (.PNG)</span>
+                  </button>
+                </div>
+
+                {recErrorMsg && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                    <span>{recErrorMsg}</span>
+                  </div>
+                )}
+
+                {recStatusMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                    {recStatusMsg}
+                  </div>
+                )}
+
+                {/* Paramètres Source, Qualité & Audio */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                  <div className="space-y-2">
+                    <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400">Source &amp; Qualité</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isScreenRecording}
+                        onClick={() => setRecorderMode('screen')}
+                        className={`py-2 px-2 rounded-xl border text-[11px] font-bold cursor-pointer disabled:opacity-50 ${
+                          recorderMode === 'screen'
+                            ? 'bg-indigo-600/25 border-indigo-400 text-white'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🖥️ Écran (PC)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isScreenRecording}
+                        onClick={() => setRecorderMode('camera')}
+                        className={`py-2 px-2 rounded-xl border text-[11px] font-bold cursor-pointer disabled:opacity-50 ${
+                          recorderMode === 'camera'
+                            ? 'bg-indigo-600/25 border-indigo-400 text-white'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        📷 Caméra directe
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {(['720p', '1080p'] as RecorderQuality[]).map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          disabled={isScreenRecording}
+                          onClick={() => setRecorderQuality(q)}
+                          className={`flex-1 py-1.5 rounded-lg border text-[10.5px] font-black cursor-pointer disabled:opacity-50 ${
+                            recorderQuality === q
+                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {q === '720p' ? '720p HD (Léger)' : '1080p Full HD'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400">Audio &amp; Caméra</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isScreenRecording}
+                        onClick={() => setRecIncludeMic((v) => !v)}
+                        className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer disabled:opacity-50 ${
+                          recIncludeMic
+                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                            : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {recIncludeMic ? '🎙️ Micro ON' : '🔇 Micro OFF'}
+                      </button>
+                      {recorderMode === 'screen' && (
+                        <button
+                          type="button"
+                          disabled={isScreenRecording}
+                          onClick={() => setRecIncludeSystemAudio((v) => !v)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer disabled:opacity-50 ${
+                            recIncludeSystemAudio
+                              ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {recIncludeSystemAudio ? '🔊 Son écran ON' : '🔇 Son écran OFF'}
+                        </button>
+                      )}
+                      {recorderMode === 'camera' && (
+                        <button
+                          type="button"
+                          disabled={isScreenRecording}
+                          onClick={() => setRecFacingMode((m) => (m === 'user' ? 'environment' : 'user'))}
+                          className="px-2.5 py-1.5 rounded-lg border bg-slate-900 border-slate-700 text-slate-200 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                        >
+                          {recFacingMode === 'user' ? '🤳 Caméra Face' : '📸 Caméra Arrière'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* BULLE CAMÉRA INCRUSTÉE (ROND / CARRÉ, ACTIVABLE EN DIRECT) */}
+                {recorderMode === 'screen' && (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-indigo-500/30 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-black text-white">Bulle Caméra Formateur (Incrustation PiP)</span>
+                        <p className="text-[10.5px] text-slate-400">
+                          Activable ou désactivable à tout moment, même pendant l&apos;enregistrement.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          setCamBubble((b) => ({ ...b, enabled: !b.enabled }));
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer border transition ${
+                          camBubble.enabled
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-300'
+                            : 'bg-slate-900 text-slate-400 border-slate-700'
+                        }`}
+                      >
+                        {camBubble.enabled ? '✓ Caméra ON' : 'Caméra OFF'}
+                      </button>
+                    </div>
+
+                    {camBubble.enabled && (
+                      <div className="space-y-3 pt-2 border-t border-slate-800">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <span className="text-[10.5px] font-bold text-slate-400">Forme de la vue :</span>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setCamBubble((b) => ({ ...b, shape: 'circle' }))}
+                                className={`py-1.5 px-2.5 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                                  camBubble.shape === 'circle'
+                                    ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                ⚪ Rond
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCamBubble((b) => ({ ...b, shape: 'square' }))}
+                                className={`py-1.5 px-2.5 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                                  camBubble.shape === 'square'
+                                    ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                🟦 Carré arrondi
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <span className="text-[10.5px] font-bold text-slate-400">Coin d&apos;affichage :</span>
+                            <div className="grid grid-cols-2 gap-1">
+                              {([
+                                { id: 'top-left', label: '↖ Haut-G' },
+                                { id: 'top-right', label: '↗ Haut-D' },
+                                { id: 'bottom-left', label: '↙ Bas-G' },
+                                { id: 'bottom-right', label: '↘ Bas-D' }
+                              ] as const).map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => setCamBubble((b) => ({ ...b, corner: c.id }))}
+                                  className={`py-1 px-2 rounded-lg border text-[10.5px] font-bold cursor-pointer ${
+                                    camBubble.corner === c.id
+                                      ? 'bg-amber-500/25 border-amber-400 text-amber-200'
+                                      : 'bg-slate-900 border-slate-800 text-slate-400'
+                                  }`}
+                                >
+                                  {c.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex-1 min-w-[160px] space-y-1">
+                            <div className="flex justify-between text-[10.5px]">
+                              <span className="text-slate-400">Taille de la bulle</span>
+                              <span className="font-mono font-bold text-indigo-300">{camBubble.sizePct}%</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={14}
+                              max={34}
+                              step={1}
+                              value={camBubble.sizePct}
+                              onChange={(e) => setCamBubble((b) => ({ ...b, sizePct: Number(e.target.value) }))}
+                              className="w-full accent-indigo-500 cursor-pointer"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCamBubble((b) => ({ ...b, mirror: !b.mirror }))}
+                            className={`px-2.5 py-1.5 rounded-lg border text-[10.5px] font-bold cursor-pointer ${
+                              camBubble.mirror
+                                ? 'bg-slate-800 border-indigo-400/50 text-indigo-200'
+                                : 'bg-slate-900 border-slate-800 text-slate-400'
+                            }`}
+                          >
+                            🪞 Effet Miroir : {camBubble.mirror ? 'ON' : 'OFF'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dernier Enregistrement Vidéo -> Télécharger ou Charger dans la Timeline */}
+                {lastRecordedMedia && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-emerald-300 truncate">
+                        🎬 {lastRecordedMedia.file.name}
+                      </div>
+                      <div className="text-[11px] text-emerald-200/80">
+                        Durée : {lastRecordedMedia.durationSec}s • Taille : {formatBytes(lastRecordedMedia.sizeBytes)} • Téléchargé localement
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => triggerDirectDownload(lastRecordedMedia.blob, lastRecordedMedia.file.name)}
+                        className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Télécharger</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLoadRecordedIntoTimeline}
+                        className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-md"
+                      >
+                        <Scissors className="w-3.5 h-3.5" />
+                        <span>Monter dans la Timeline</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dernière Capture Image (.PNG) */}
+                {lastScreenshot && (
+                  <div className="p-3 rounded-2xl bg-slate-950 border border-cyan-500/30 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={lastScreenshot.dataUrl}
+                        alt="Capture"
+                        className="w-16 h-10 object-cover rounded-lg border border-slate-700 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-cyan-200 truncate">{lastScreenshot.filename}</div>
+                        <div className="text-[10.5px] text-slate-400">Capture .PNG enregistrée sur votre appareil</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => triggerDirectDownload(lastScreenshot.dataUrl, lastScreenshot.filename)}
+                      className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-400/40 text-[11px] font-bold shrink-0 cursor-pointer"
+                    >
+                      Télécharger
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* PANNEAU ÉMETTEUR DE SOUS-TITRES AUTOMATIQUE & TOP 8 MODÈLES DE TEXTES VIRAUX */}
             {activePanel === 'SUBTITLES' && (
