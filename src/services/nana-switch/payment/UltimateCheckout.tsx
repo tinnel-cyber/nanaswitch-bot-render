@@ -299,7 +299,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [product, items, amount, orderDescription]);
 
-  // Détection souveraine d'abonnement / licence SaaS pour affichage visuel dédié
+  // Détection souveraine d'abonnement / licence SaaS / recharge Pay-as-you-go (Mobile Money uniquement)
   const isSubscriptionProduct = useMemo(() => {
     const id = (resolvedProduct.id || '').toLowerCase();
     const name = (resolvedProduct.name || '').toLowerCase();
@@ -307,6 +307,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     return (
       id.includes('sub') ||
       id.includes('plan') ||
+      id.includes('recharge') ||
+      id.includes('pay_as_you_go') ||
       id.includes('nanasore_') ||
       id.includes('caisse') ||
       id.includes('elite') ||
@@ -317,8 +319,12 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       name.includes('abonnement') ||
       name.includes('licence') ||
       name.includes('plan ') ||
+      name.includes('recharge') ||
+      name.includes('pay-as-you-go') ||
       desc.includes('licence') ||
       desc.includes('abonnement') ||
+      desc.includes('recharge') ||
+      desc.includes('pay-as-you-go') ||
       Boolean((resolvedProduct as any).itemType === 'subscription')
     );
   }, [resolvedProduct]);
@@ -364,15 +370,26 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number; discountAmount: number } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
 
-  // Option Caisse Physique STRICTEMENT réservée au Mini-Market (jamais pour abonnements ou produits numériques)
-  const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isDigitalProduct);
+  // Paiement 100% digital obligatoire pour abonnements, recharges et produits numériques (JAMAIS de paiement à la livraison)
+  const isCashlessOnly = Boolean(isSubscriptionProduct || isDigitalProduct);
+
+  // Option Caisse Physique STRICTEMENT réservée au Mini-Market (jamais pour abonnements, recharges ou produits numériques)
+  const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isCashlessOnly);
   const [copiedPosToken, setCopiedPosToken] = useState(false);
 
   // Le Choix Crucial : Option A (Paiement à la livraison), Option B (Mobile Money), Option C (Ticket Caisse Physique si Mini-Market)
   const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO' | 'POS_TOKEN'>(() => {
+    if (isCashlessOnly) return 'MOMO';
     const savedMethod = typeof window !== 'undefined' ? localStorage.getItem('nana_customer_payment_method') : '';
     return savedMethod === 'cod' ? 'COD' : 'MOMO';
   });
+
+  // Verrou sécurité : si abonnement / recharge / digital, on force toujours MOMO
+  useEffect(() => {
+    if (isCashlessOnly && paymentChoice !== 'MOMO') {
+      setPaymentChoice('MOMO');
+    }
+  }, [isCashlessOnly, paymentChoice]);
 
   // Synchronisation automatique si de nouvelles coordonnées sont injectées depuis le mini-checkout du Funnel
   useEffect(() => {
@@ -385,12 +402,14 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       setCity(defaultAddress);
       setDeliveryAddress(defaultAddress);
     }
-    if (typeof window !== 'undefined') {
+    if (isCashlessOnly) {
+      setPaymentChoice('MOMO');
+    } else if (typeof window !== 'undefined') {
       const savedMethod = localStorage.getItem('nana_customer_payment_method');
       if (savedMethod === 'cod') setPaymentChoice('COD');
       else if (savedMethod) setPaymentChoice('MOMO');
     }
-  }, [defaultCustomerName, defaultPhone, defaultAddress, isOpen]);
+  }, [defaultCustomerName, defaultPhone, defaultAddress, isOpen, isCashlessOnly]);
 
   // 5. États Étape 2B : L'Expérience Mobile Money Premium
   const [selectedOperator, setSelectedOperator] = useState<OperatorOption>(() => selectedCountry.operators[0]);
@@ -523,7 +542,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     if (!deliveryPhone.trim() || deliveryPhone.trim().length < 6) {
       errors.phone = 'Veuillez saisir un numéro de téléphone valide';
     }
-    if (paymentChoice !== 'POS_TOKEN' && !deliveryAddress.trim()) {
+    if (!isCashlessOnly && paymentChoice !== 'POS_TOKEN' && !deliveryAddress.trim()) {
       errors.address = 'Veuillez renseigner votre adresse ou quartier';
     }
 
@@ -1343,7 +1362,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   
-                  {/* OPTION A : Paiement à la livraison */}
+                  {/* OPTION A : Paiement à la livraison (MASQUÉ pour abonnements, recharges et produits numériques) */}
+                  {!isCashlessOnly && (
                   <div
                     onClick={() => {
                       playTapBeep();
@@ -1390,6 +1410,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       <span>Idéal si vous préférez payer au livreur</span>
                     </div>
                   </div>
+                  )}
 
                   {/* OPTION B : Paiement Cash (Mobile Money) */}
                   <div
@@ -1397,7 +1418,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       playTapBeep();
                       setPaymentChoice('MOMO');
                     }}
-                    className={`p-4.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative hover:scale-[1.01] active:scale-[0.99] ${
+                    className={`${isCashlessOnly ? 'sm:col-span-2' : ''} p-4.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative hover:scale-[1.01] active:scale-[0.99] ${
                       paymentChoice === 'MOMO'
                         ? 'border-blue-600 bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
                         : 'border-slate-300 hover:border-blue-400 bg-white'
@@ -1514,7 +1535,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       </>
                     )}
                   </button>
-                ) : paymentChoice === 'COD' ? (
+                ) : paymentChoice === 'COD' && !isCashlessOnly ? (
                   /* SI PAIEMENT À LA LIVRAISON : LE PARCOURS S'ARRÊTE ICI AVEC CE GRAND CTA */
                   <button
                     type="button"

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v36-dashboard-100-prod';
+const CACHE_NAME = 'nanasore-v37-cashless-sub-recharge-guard';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

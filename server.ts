@@ -3101,6 +3101,9 @@ async function startServer() {
     if (!universeId || !planId) {
       return res.status(400).json({ success: false, error: 'universeId et planId requis' });
     }
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY' || String(paymentMethod).toUpperCase() === 'PHYSICAL_POS_TOKEN') {
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les abonnements.' });
+    }
 
     const now = new Date();
     const expiresAt = new Date(
@@ -3155,7 +3158,7 @@ async function startServer() {
     return res.json({ success: true, subscription: record });
   });
 
-  // 2H.2 Recharge Pay-as-you-go réelle (après paiement confirmé via UltimateCheckout)
+  // 2H.2 Recharge Pay-as-you-go réelle (après paiement confirmé via UltimateCheckout — Mobile Money uniquement)
   app.post('/api/merchant/wallet/recharge', async (req, res) => {
     const {
       universeId,
@@ -3169,10 +3172,13 @@ async function startServer() {
     if (!universeId || cleanAmount < 1000) {
       return res.status(400).json({ success: false, error: 'universeId et montant >= 1000 XOF requis' });
     }
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY' || String(paymentMethod).toUpperCase() === 'PHYSICAL_POS_TOKEN') {
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les recharges wallet.' });
+    }
 
     const nowIso = new Date().toISOString();
     const txId = String(transactionId || `RCH-${Date.now().toString(36).toUpperCase()}`);
-    const newBalanceXof = Math.max(0, Number(currentBalanceXof) || 0) + cleanAmount;
+    let newBalanceXof = Math.max(0, Number(currentBalanceXof) || 0) + cleanAmount;
 
     if (supabaseAdmin) {
       try {
@@ -3199,10 +3205,11 @@ async function startServer() {
           .maybeSingle();
         const prevBal = (uRow?.balances && typeof uRow.balances === 'object') ? uRow.balances : { XOF: Number(currentBalanceXof) || 0 };
         const updatedBalances = { ...prevBal, XOF: (Number(prevBal.XOF) || 0) + cleanAmount };
-        await supabaseAdmin
-          .from('universes')
-          .update({ balances: updatedBalances, updated_at: nowIso })
-          .eq('id', String(universeId));
+        newBalanceXof = updatedBalances.XOF;
+        await Promise.allSettled([
+          supabaseAdmin.from('universes').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', String(universeId)),
+          supabaseAdmin.from('merchants').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', String(universeId)),
+        ]);
       } catch {}
     }
 
