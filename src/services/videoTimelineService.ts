@@ -16,6 +16,21 @@ export interface TimelineClip {
   muted: boolean;
 }
 
+export interface VisualOverlayLayer {
+  id: string;
+  kind: 'image' | 'badge';
+  label: string;
+  imageUrl?: string;
+  badgeText?: string;
+  badgeBg?: string;
+  xPct: number;       // 0..100 (% centre X)
+  yPct: number;       // 0..100 (% centre Y)
+  sizePct: number;    // 8..65 (% de la largeur vidéo)
+  opacity: number;    // 0.2..1
+  shape: 'square' | 'rounded' | 'circle';
+  rotationDeg: number; // -45..45
+}
+
 export interface TimelineExportOptions {
   width: number;
   height: number;
@@ -25,7 +40,84 @@ export interface TimelineExportOptions {
   overlayColor?: string;
   subtitles?: Array<{ startSec: number; endSec: number; text: string }>;
   subtitleColor?: string;
+  visualLayers?: VisualOverlayLayer[];
   onProgress?: (pct: number) => void;
+}
+
+export function drawVisualLayersOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  layers: VisualOverlayLayer[],
+  loadedImages: Map<string, HTMLImageElement>
+): void {
+  for (const layer of layers) {
+    const cx = (layer.xPct / 100) * width;
+    const cy = (layer.yPct / 100) * height;
+    const boxW = Math.max(24, (layer.sizePct / 100) * width);
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.1, Math.min(1, layer.opacity ?? 1));
+    ctx.translate(cx, cy);
+    if (layer.rotationDeg) {
+      ctx.rotate((layer.rotationDeg * Math.PI) / 180);
+    }
+
+    if (layer.kind === 'image' && layer.imageUrl) {
+      const img = loadedImages.get(layer.id);
+      if (img && img.complete && img.naturalWidth > 0) {
+        const aspect = img.naturalHeight / img.naturalWidth;
+        const boxH = layer.shape === 'circle' ? boxW : boxW * aspect;
+        const halfW = boxW / 2;
+        const halfH = boxH / 2;
+
+        if (layer.shape === 'circle') {
+          ctx.beginPath();
+          ctx.arc(0, 0, halfW, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+        } else if (layer.shape === 'rounded') {
+          const r = Math.min(18, boxW * 0.14);
+          ctx.beginPath();
+          ctx.moveTo(-halfW + r, -halfH);
+          ctx.arcTo(halfW, -halfH, halfW, halfH, r);
+          ctx.arcTo(halfW, halfH, -halfW, halfH, r);
+          ctx.arcTo(-halfW, halfH, -halfW, -halfH, r);
+          ctx.arcTo(-halfW, -halfH, halfW, -halfH, r);
+          ctx.closePath();
+          ctx.clip();
+        }
+
+        ctx.drawImage(img, -halfW, -halfH, boxW, boxH);
+      }
+    } else if (layer.kind === 'badge' && layer.badgeText) {
+      const fontSize = Math.max(12, Math.round(boxW * 0.16));
+      ctx.font = `900 ${fontSize}px sans-serif`;
+      const padX = Math.round(fontSize * 0.7);
+      const padY = Math.round(fontSize * 0.45);
+      const textW = ctx.measureText(layer.badgeText).width;
+      const rectW = textW + padX * 2;
+      const rectH = fontSize + padY * 2;
+      const r = layer.shape === 'square' ? 4 : rectH / 2;
+
+      ctx.fillStyle = layer.badgeBg || '#EF4444';
+      ctx.beginPath();
+      ctx.moveTo(-rectW / 2 + r, -rectH / 2);
+      ctx.arcTo(rectW / 2, -rectH / 2, rectW / 2, rectH / 2, r);
+      ctx.arcTo(rectW / 2, rectH / 2, -rectW / 2, rectH / 2, r);
+      ctx.arcTo(-rectW / 2, rectH / 2, -rectW / 2, -rectH / 2, r);
+      ctx.arcTo(-rectW / 2, -rectH / 2, rectW / 2, -rectH / 2, r);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(layer.badgeText, 0, 1);
+    }
+
+    ctx.restore();
+  }
 }
 
 export function getClipOutputDuration(clip: TimelineClip): number {
@@ -172,6 +264,28 @@ export async function exportTimelineToVideoBlob(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Contexte graphique Canvas indisponible.');
 
+  // Préchargement des logos / images superposés (calques visuels)
+  const loadedLayerImages = new Map<string, HTMLImageElement>();
+  if (options.visualLayers && options.visualLayers.length > 0) {
+    await Promise.all(
+      options.visualLayers
+        .filter(l => l.kind === 'image' && l.imageUrl)
+        .map(
+          l =>
+            new Promise<void>((resolve) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => {
+                loadedLayerImages.set(l.id, img);
+                resolve();
+              };
+              img.onerror = () => resolve();
+              img.src = l.imageUrl!;
+            })
+        )
+    );
+  }
+
   const totalDuration = Math.max(0.5, getTotalTimelineDuration(clips));
   const canvasStream = canvas.captureStream(24);
 
@@ -269,6 +383,11 @@ export async function exportTimelineToVideoBlob(
           if (options.filterCss) ctx.filter = options.filterCss;
           ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, width, height);
           ctx.restore();
+
+          // Incrustation des éléments visuels superposés (Logos, Images PiP, Badges)
+          if (options.visualLayers && options.visualLayers.length > 0) {
+            drawVisualLayersOnCanvas(ctx, width, height, options.visualLayers, loadedLayerImages);
+          }
 
           // Incrustation sous-titres synchronisés
           const activeSub = options.subtitles?.find(

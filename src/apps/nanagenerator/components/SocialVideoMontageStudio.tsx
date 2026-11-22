@@ -62,6 +62,7 @@ import {
 } from '../../../services/subtitleStudioService';
 import {
   TimelineClip,
+  VisualOverlayLayer,
   getClipOutputDuration,
   getTotalTimelineDuration,
   splitClipAtTime,
@@ -562,6 +563,76 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     }
   }, [previewUrl, sourceFile, videoDuration, timelineClips.length]);
 
+  // =========================================================================
+  // CALQUES VISUELS SUPERPOSÉS (LOGOS, IMAGES PiP, STICKERS REDIMENSIONNABLES)
+  // =========================================================================
+  const [visualLayers, setVisualLayers] = useState<VisualOverlayLayer[]>([]);
+  const [selectedLayerId, setSelectedLayerId] = useState<string>('');
+  const overlayImageInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedVisualLayer = useMemo(
+    () => visualLayers.find(l => l.id === selectedLayerId) || visualLayers[0] || null,
+    [visualLayers, selectedLayerId]
+  );
+
+  const handleImportOverlayImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    playValidationBeep();
+    const url = URL.createObjectURL(file);
+    const id = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+    const newLayer: VisualOverlayLayer = {
+      id,
+      kind: 'image',
+      label: file.name.replace(/\.[^/.]+$/, '').slice(0, 18) || 'Logo / Image',
+      imageUrl: url,
+      xPct: 82, // Coin Haut-Droite par défaut (style logo YouTubeur / TV)
+      yPct: 14,
+      sizePct: 24,
+      opacity: 1,
+      shape: 'rounded',
+      rotationDeg: 0
+    };
+    setVisualLayers(prev => [...prev, newLayer]);
+    setSelectedLayerId(id);
+    e.target.value = '';
+  };
+
+  const handleAddPresetSticker = (badgeText: string, badgeBg: string) => {
+    playTapBeep();
+    const id = `badge_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+    const newLayer: VisualOverlayLayer = {
+      id,
+      kind: 'badge',
+      label: badgeText,
+      badgeText,
+      badgeBg,
+      xPct: 24, // Coin Haut-Gauche par défaut
+      yPct: 14,
+      sizePct: 32,
+      opacity: 1,
+      shape: 'rounded',
+      rotationDeg: 0
+    };
+    setVisualLayers(prev => [...prev, newLayer]);
+    setSelectedLayerId(id);
+  };
+
+  const handleUpdateVisualLayer = (layerId: string, patch: Partial<VisualOverlayLayer>) => {
+    setVisualLayers(prev => prev.map(l => (l.id === layerId ? { ...l, ...patch } : l)));
+  };
+
+  const handleDeleteVisualLayer = (layerId: string) => {
+    playTapBeep();
+    setVisualLayers(prev => {
+      const next = prev.filter(l => l.id !== layerId);
+      if (selectedLayerId === layerId) {
+        setSelectedLayerId(next[0]?.id || '');
+      }
+      return next;
+    });
+  };
+
   const activeBackdropUrl = useMemo(() => {
     if (customBackdropUrl) return customBackdropUrl;
     const preset = STUDIO_BACKDROP_PRESETS.find(p => p.id === selectedBackdropId);
@@ -847,8 +918,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       }
     }
 
-    // Si la timeline a été montée (multi-clips, Cut, suppression, vitesse, mute ou trim In/Out) -> assemblage complet
+    // Si la timeline a été montée (multi-clips, Cut, suppression, vitesse, mute, trim ou calques visuels) -> assemblage complet
     const isTimelineEdited =
+      visualLayers.length > 0 ||
       timelineClips.length > 1 ||
       (timelineClips.length === 1 &&
         (timelineClips[0].startSec > 0.1 ||
@@ -867,6 +939,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           overlayColor: textColor,
           subtitles: subtitleCues,
           subtitleColor: resolvedSubtitleColor,
+          visualLayers,
           onProgress: (pct) => setEncodeProgress(pct)
         });
 
@@ -1220,6 +1293,55 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       title="Cliquez pour Lecture / Pause (Fond Vert YCbCr + Anti-Spill actif)"
                     />
                   )}
+
+                  {/* Calques Visuels Superposés Live (Logos, Images PiP, Stickers redimensionnables) */}
+                  {visualLayers.map((layer) => {
+                    const isSelectedLayer = selectedVisualLayer?.id === layer.id;
+                    const shapeClass =
+                      layer.shape === 'circle'
+                        ? 'rounded-full aspect-square object-cover'
+                        : layer.shape === 'rounded'
+                          ? 'rounded-xl object-contain'
+                          : 'rounded-none object-contain';
+                    return (
+                      <div
+                        key={layer.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLayerId(layer.id);
+                          setActivePanel('MOTION');
+                        }}
+                        style={{
+                          left: `${layer.xPct}%`,
+                          top: `${layer.yPct}%`,
+                          width: `${layer.sizePct}%`,
+                          opacity: layer.opacity,
+                          transform: `translate(-50%, -50%) rotate(${layer.rotationDeg}deg)`
+                        }}
+                        className={`absolute z-20 cursor-pointer transition-shadow ${
+                          isSelectedLayer ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-black/40 rounded-xl' : ''
+                        }`}
+                        title="Cliquez pour repositionner ou redimensionner dans l'onglet Motion"
+                      >
+                        {layer.kind === 'image' && layer.imageUrl ? (
+                          <img
+                            src={layer.imageUrl}
+                            alt={layer.label}
+                            className={`w-full h-auto shadow-lg pointer-events-none ${shapeClass}`}
+                          />
+                        ) : (
+                          <div
+                            style={{ backgroundColor: layer.badgeBg || '#EF4444' }}
+                            className={`w-full px-2.5 py-1 text-center text-[10px] sm:text-xs font-black text-white shadow-lg whitespace-nowrap overflow-hidden text-ellipsis ${
+                              layer.shape === 'square' ? 'rounded-sm' : 'rounded-full'
+                            }`}
+                          >
+                            {layer.badgeText}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Sous-Titres Live Synchronisés (Modèle Viral sélectionné + Couleur personnalisée) */}
                   {activeSubtitleCue && (
@@ -2210,9 +2332,220 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               </div>
             )}
 
-            {/* PANNEAU 2 : PACK MOTION DESIGN MODERNE & PACK ANIMATIONS MODERNES */}
+            {/* PANNEAU 2 : SUPERPOSITION LOGO/IMAGES + PACK MOTION DESIGN + ANIMATIONS */}
             {activePanel === 'MOTION' && (
               <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                {/* SUPERPOSITION D'ÉLÉMENTS VISUELS (LOGO, IMAGES PiP, STICKERS REDIMENSIONNABLES) */}
+                <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/35 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-emerald-400" />
+                        <span>Superposition Logo, Images &amp; Badges ({visualLayers.length})</span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Ajoutez votre logo, une photo produit ou un QR Code dans un coin et redimensionnez-le librement.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => overlayImageInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shrink-0 shadow-md"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>+ Logo / Image</span>
+                    </button>
+                    <input
+                      ref={overlayImageInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImportOverlayImage}
+                      className="hidden"
+                    />
+                  </div>
+
+                  {/* Stickers / Badges Rapides */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { text: '🔥 PROMO', bg: '#DC2626' },
+                      { text: '✅ LIVRAISON RAPIDE', bg: '#059669' },
+                      { text: '⭐ NOUVEAU', bg: '#D97706' },
+                      { text: '💎 AUTHENTIQUE', bg: '#4F46E5' },
+                      { text: '📲 COMMANDEZ ICI', bg: '#0284C7' }
+                    ].map(st => (
+                      <button
+                        key={st.text}
+                        type="button"
+                        onClick={() => handleAddPresetSticker(st.text, st.bg)}
+                        className="px-2.5 py-1 rounded-full text-[10px] font-black text-white border border-white/15 cursor-pointer hover:scale-105 transition"
+                        style={{ backgroundColor: st.bg }}
+                      >
+                        + {st.text}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Liste des calques actifs */}
+                  {visualLayers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {visualLayers.map(layer => {
+                        const isSel = selectedVisualLayer?.id === layer.id;
+                        return (
+                          <div
+                            key={layer.id}
+                            onClick={() => setSelectedLayerId(layer.id)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                              isSel
+                                ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                                : 'bg-slate-950 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            <span className="truncate max-w-[110px]">{layer.label}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteVisualLayer(layer.id);
+                              }}
+                              className="text-slate-400 hover:text-rose-400 cursor-pointer"
+                              title="Supprimer cet élément"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Contrôles Position, 4 Coins, Taille, Opacité, Forme & Rotation du calque sélectionné */}
+                  {selectedVisualLayer && (
+                    <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-black text-indigo-300">
+                          Réglages : {selectedVisualLayer.label}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { label: '↖ Haut-G', x: 18, y: 14 },
+                            { label: '↗ Haut-D', x: 82, y: 14 },
+                            { label: '↙ Bas-G', x: 18, y: 78 },
+                            { label: '↘ Bas-D', x: 82, y: 78 },
+                            { label: '◎ Centre', x: 50, y: 50 }
+                          ].map(pos => (
+                            <button
+                              key={pos.label}
+                              type="button"
+                              onClick={() => {
+                                playTapBeep();
+                                handleUpdateVisualLayer(selectedVisualLayer.id, { xPct: pos.x, yPct: pos.y });
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-indigo-600 text-[10px] font-bold text-slate-200 border border-slate-700 cursor-pointer"
+                            >
+                              {pos.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Taille (Redimensionner)</span>
+                            <span className="font-mono font-bold text-emerald-300">{selectedVisualLayer.sizePct}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={8}
+                            max={65}
+                            value={selectedVisualLayer.sizePct}
+                            onChange={(e) => handleUpdateVisualLayer(selectedVisualLayer.id, { sizePct: Number(e.target.value) })}
+                            className="w-full accent-emerald-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Opacité</span>
+                            <span className="font-mono font-bold text-sky-300">{Math.round(selectedVisualLayer.opacity * 100)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0.2}
+                            max={1}
+                            step={0.05}
+                            value={selectedVisualLayer.opacity}
+                            onChange={(e) => handleUpdateVisualLayer(selectedVisualLayer.id, { opacity: Number(e.target.value) })}
+                            className="w-full accent-sky-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Position Horizontale (X)</span>
+                            <span className="font-mono font-bold text-indigo-300">{selectedVisualLayer.xPct}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={5}
+                            max={95}
+                            value={selectedVisualLayer.xPct}
+                            onChange={(e) => handleUpdateVisualLayer(selectedVisualLayer.id, { xPct: Number(e.target.value) })}
+                            className="w-full accent-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Position Verticale (Y)</span>
+                            <span className="font-mono font-bold text-amber-300">{selectedVisualLayer.yPct}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={5}
+                            max={92}
+                            value={selectedVisualLayer.yPct}
+                            onChange={(e) => handleUpdateVisualLayer(selectedVisualLayer.id, { yPct: Number(e.target.value) })}
+                            className="w-full accent-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10.5px] text-slate-400">Forme :</span>
+                          {([
+                            { id: 'square', label: 'Carré' },
+                            { id: 'rounded', label: 'Arrondi' },
+                            { id: 'circle', label: 'Cercle' }
+                          ] as const).map(sh => (
+                            <button
+                              key={sh.id}
+                              type="button"
+                              onClick={() => handleUpdateVisualLayer(selectedVisualLayer.id, { shape: sh.id })}
+                              className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold cursor-pointer ${
+                                selectedVisualLayer.shape === sh.id
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-slate-900 text-slate-400 border border-slate-800'
+                              }`}
+                            >
+                              {sh.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10.5px] text-slate-400">Rotation : {selectedVisualLayer.rotationDeg}°</span>
+                          <input
+                            type="range"
+                            min={-45}
+                            max={45}
+                            value={selectedVisualLayer.rotationDeg}
+                            onChange={(e) => handleUpdateVisualLayer(selectedVisualLayer.id, { rotationDeg: Number(e.target.value) })}
+                            className="w-24 accent-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Pack Motion Design */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
