@@ -278,9 +278,10 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   const [motionAnimId, setMotionAnimId] = useState<MotionAnimId>('slide_up_spring');
   const [animReplayKey, setAnimReplayKey] = useState<number>(0);
 
-  const [overlayHeadline, setOverlayHeadline] = useState<string>(initialHeadline || `🔥 ${storeName}`);
+  // Zéro élément superposé par défaut : l'utilisateur choisit librement quoi ajouter et retirer
+  const [overlayHeadline, setOverlayHeadline] = useState<string>('');
   const [overlayPrice, setOverlayPrice] = useState<string>('');
-  const [overlayContact, setOverlayContact] = useState<string>(whatsappPhone ? `📲 ${whatsappPhone}` : '');
+  const [overlayContact, setOverlayContact] = useState<string>('');
   const [textPosition, setTextPosition] = useState<'top' | 'center' | 'bottom'>('bottom');
   const [textColor, setTextColor] = useState<string>('#FFFFFF');
 
@@ -1472,11 +1473,22 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           opacity: layer.opacity,
                           transform: `translate(-50%, -50%) rotate(${layer.rotationDeg}deg)`
                         }}
-                        className={`absolute z-20 cursor-pointer transition-shadow ${
+                        className={`group absolute z-20 cursor-pointer transition-shadow ${
                           isSelectedLayer ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-black/40 rounded-xl' : ''
                         }`}
-                        title="Cliquez pour repositionner ou redimensionner dans l'onglet Motion"
+                        title="Cliquez pour modifier ou utilisez × pour retirer"
                       >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteVisualLayer(layer.id);
+                          }}
+                          className="absolute -top-2 -right-2 z-30 w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-md flex items-center justify-center border border-white/40 cursor-pointer transition-transform active:scale-90"
+                          title={`Retirer "${layer.label}" de la vidéo`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                         {layer.kind === 'image' && layer.imageUrl ? (
                           <img
                             src={layer.imageUrl}
@@ -1500,12 +1512,27 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                   {/* Sous-Titres Live Synchronisés (Modèle Viral sélectionné + Couleur personnalisée) */}
                   {activeSubtitleCue && (
                     <div className="pointer-events-none absolute inset-x-4 bottom-24 flex justify-center text-center z-20">
-                      <span
-                        className={`inline-block max-w-full ${activeSubtitleTemplate.previewClass}`}
-                        style={{ color: resolvedSubtitleColor }}
-                      >
-                        {activeSubtitleCue.text}
-                      </span>
+                      <div className="pointer-events-auto relative inline-flex items-center">
+                        <span
+                          className={`inline-block max-w-full ${activeSubtitleTemplate.previewClass}`}
+                          style={{ color: resolvedSubtitleColor }}
+                        >
+                          {activeSubtitleCue.text}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playTapBeep();
+                            setSubtitleCues([]);
+                            setSubtitleStatusMsg('Sous-titres retirés de la vidéo.');
+                          }}
+                          className="ml-1.5 w-5 h-5 rounded-full bg-rose-600/90 hover:bg-rose-500 text-white flex items-center justify-center shadow-md border border-white/30 cursor-pointer shrink-0"
+                          title="Retirer les sous-titres de la vidéo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1513,11 +1540,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                   {(overlayHeadline.trim() || overlayPrice.trim() || overlayContact.trim()) && (
                     <div
                       key={`${motionDesignId}_${motionAnimId}_${animReplayKey}`}
-                      className={`pointer-events-none absolute inset-x-3 ${
+                      className={`pointer-events-none absolute inset-x-3 z-20 ${
                         textPosition === 'top' ? 'top-3' : textPosition === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-12'
                       }`}
                     >
-                      <div className={`${activeMotionPack.wrapperClass} ${activeAnimationPack.animClass} flex items-center gap-2.5`}>
+                      <div className={`pointer-events-auto relative ${activeMotionPack.wrapperClass} ${activeAnimationPack.animClass} flex items-center gap-2.5`}>
                         {activeMotionPack.accentBar && (
                           <span className="w-1 self-stretch rounded-full bg-gradient-to-b from-amber-400 via-emerald-400 to-indigo-400 shrink-0" />
                         )}
@@ -1540,6 +1567,20 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                             </p>
                           )}
                         </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playTapBeep();
+                            setOverlayHeadline('');
+                            setOverlayPrice('');
+                            setOverlayContact('');
+                          }}
+                          className="w-5 h-5 rounded-full bg-rose-600/90 hover:bg-rose-500 text-white flex items-center justify-center shadow-md border border-white/30 cursor-pointer shrink-0"
+                          title="Retirer ce bandeau texte de la vidéo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   )}
