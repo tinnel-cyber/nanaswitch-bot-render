@@ -35,7 +35,8 @@ import {
   Redo2,
   VolumeX,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Hand
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -903,6 +904,90 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setTimelineNotice('🗑️ Piste audio détachée supprimée de la timeline.');
   };
 
+  // =========================================================================
+  // OUTIL MAIN (DÉPLACER CLIPS V1 & CALQUES SUR L'ÉCRAN) + IMPORT AUDIO A1
+  // =========================================================================
+  const [isHandToolActive, setIsHandToolActive] = useState<boolean>(false);
+  const [draggedClipId, setDraggedClipId] = useState<string | null>(null);
+  const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
+  const videoStageRef = useRef<HTMLDivElement | null>(null);
+  const timelineAudioInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleImportTimelineAudio = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    playTapBeep();
+    setIsExtractingAudio(true);
+    try {
+      const url = URL.createObjectURL(file);
+      let peaks: number[] = Array(44).fill(0.45);
+      let duration = 15;
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const arrBuf = await file.arrayBuffer();
+          const ctx = new AudioCtx();
+          const decoded = await ctx.decodeAudioData(arrBuf.slice(0));
+          ctx.close().catch(() => {});
+          duration = Number(decoded.duration.toFixed(1));
+          const ch0 = decoded.getChannelData(0);
+          const barsCount = 44;
+          const step = Math.max(1, Math.floor(ch0.length / barsCount));
+          peaks = [];
+          for (let b = 0; b < barsCount; b++) {
+            let maxAmp = 0;
+            const start = b * step;
+            const end = Math.min(ch0.length, start + step);
+            for (let i = start; i < end; i += Math.max(1, Math.floor(step / 120))) {
+              const abs = Math.abs(ch0[i]);
+              if (abs > maxAmp) maxAmp = abs;
+            }
+            peaks.push(Math.max(0.14, Math.min(1, maxAmp)));
+          }
+        }
+      } catch {}
+
+      setExtractedAudioBlob(file);
+      setExtractedAudioUrl(url);
+      setExtractedAudioDuration(duration);
+      setExtractedAudioPeaks(peaks);
+      setExtractedAudioMuted(false);
+      setExtractedAudioVolume(1);
+      playValidationBeep();
+      setTimelineNotice(`🎵 Audio "${file.name}" inséré sur la piste A1 (${duration}s).`);
+    } finally {
+      setIsExtractingAudio(false);
+    }
+  };
+
+  const handleDropClipReorder = (fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return;
+    const fromIdx = timelineClips.findIndex(c => c.id === fromId);
+    const toIdx = timelineClips.findIndex(c => c.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const reordered = [...timelineClips];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    playValidationBeep();
+    pushTimelineState(reordered, moved.id, `✋ "${moved.label}" déplacé en position #${toIdx + 1}.`);
+  };
+
+  const handleStagePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingLayerId || !videoStageRef.current) return;
+    const rect = videoStageRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const xPct = Math.max(5, Math.min(95, Math.round(((e.clientX - rect.left) / rect.width) * 100)));
+    const yPct = Math.max(5, Math.min(95, Math.round(((e.clientY - rect.top) / rect.height) * 100)));
+    handleUpdateVisualLayer(draggingLayerId, { xPct, yPct });
+  };
+
+  const handleStagePointerUp = () => {
+    if (draggingLayerId) {
+      setDraggingLayerId(null);
+    }
+  };
+
   const handleAddExtraClip = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1592,6 +1677,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
             <span className="hidden sm:inline">Importer Vidéo</span>
           </button>
           <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileImport} className="hidden" />
+          <input ref={overlayImageInputRef} type="file" accept="image/*" onChange={handleImportOverlayImage} className="hidden" />
           <button
             type="button"
             onClick={onClose}
@@ -1641,7 +1727,13 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
             {/* Écran de Prévisualisation Live avec Motion Design & Animation */}
             <div className="rounded-3xl bg-slate-900 border border-slate-800 p-4 flex flex-col items-center justify-center min-h-[330px] relative">
               {previewUrl ? (
-                <div className={`relative w-full ${SOCIAL_FORMATS[socialFormat].aspectClass} bg-black rounded-2xl overflow-hidden border border-slate-700 shadow-2xl mx-auto flex items-center justify-center`}>
+                <div
+                  ref={videoStageRef}
+                  onPointerMove={handleStagePointerMove}
+                  onPointerUp={handleStagePointerUp}
+                  onPointerLeave={handleStagePointerUp}
+                  className={`relative w-full ${SOCIAL_FORMATS[socialFormat].aspectClass} bg-black rounded-2xl overflow-hidden border border-slate-700 shadow-2xl mx-auto flex items-center justify-center touch-none`}
+                >
                   <video
                     ref={videoPreviewRef}
                     src={previewUrl}
@@ -1726,10 +1818,17 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     return (
                       <div
                         key={layer.id}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setSelectedLayerId(layer.id);
+                          setDraggingLayerId(layer.id);
+                          try {
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                          } catch {}
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedLayerId(layer.id);
-                          setActivePanel('MOTION');
                         }}
                         style={{
                           left: `${layer.xPct}%`,
@@ -1738,10 +1837,12 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           opacity: layer.opacity,
                           transform: `translate(-50%, -50%) rotate(${layer.rotationDeg}deg)`
                         }}
-                        className={`group absolute z-20 cursor-pointer transition-shadow ${
+                        className={`group absolute z-20 transition-shadow select-none ${
+                          draggingLayerId === layer.id ? 'cursor-grabbing scale-[1.03]' : 'cursor-grab'
+                        } ${
                           isSelectedLayer ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-black/40 rounded-xl' : ''
                         }`}
-                        title="Cliquez pour modifier ou utilisez × pour retirer"
+                        title="Glissez à la main pour déplacer sur la vidéo • × pour retirer"
                       >
                         <button
                           type="button"
@@ -2511,10 +2612,29 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       <button
                         type="button"
                         onClick={() => addClipInputRef.current?.click()}
-                        className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                        className="px-2 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
+                        title="Insérer un morceau de vidéo sur la piste V1"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Clip</span>
+                        <Plus className="w-3 h-3" />
+                        <span>Vidéo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => timelineAudioInputRef.current?.click()}
+                        className="px-2 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
+                        title="Insérer un fichier audio (MP3, WAV, M4A) sur la piste A1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Audio</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => overlayImageInputRef.current?.click()}
+                        className="px-2 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
+                        title="Insérer un logo ou une image en calque sur la vidéo (piste T1)"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Calque</span>
                       </button>
                       <input
                         ref={addClipInputRef}
@@ -2523,11 +2643,17 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         onChange={handleAddExtraClip}
                         className="hidden"
                       />
+                      <input
+                        ref={timelineAudioInputRef}
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleImportTimelineAudio}
+                        className="hidden"
+                      />
                     </div>
                   </div>
 
-                  {/* Curseur Tête de lecture (Playhead) intégré pour positionner précisément le Cut */}
-                  {/* Barre d'actions principales : Lire montage, Cut, Supprimer, Dupliquer, Extraire l'audio, Déplacer */}
+                  {/* Barre d'actions principales : Lire, Main (Déplacer), Cut, Supprimer, Dupliquer, Extraire l'audio, Déplacer */}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
@@ -2538,6 +2664,26 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     >
                       {isVideoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       <span>{isVideoPlaying ? 'Pause' : 'Lire'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        const next = !isHandToolActive;
+                        setIsHandToolActive(next);
+                        if (next) {
+                          setTimelineNotice('✋ Mode Main actif : glissez les segments V1 pour les réordonner ou glissez vos logos directement sur la vidéo.');
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer border transition ${
+                        isHandToolActive
+                          ? 'bg-sky-500 text-slate-950 border-sky-300 shadow-sm'
+                          : 'bg-slate-900 hover:bg-slate-800 text-sky-300 border-sky-500/40'
+                      }`}
+                      title="Activer l'outil Main pour déplacer librement les clips V1 et les calques sur la vidéo"
+                    >
+                      <Hand className="w-3.5 h-3.5" />
+                      <span>Main</span>
                     </button>
                     <button
                       type="button"
@@ -2708,6 +2854,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                                   return (
                                     <div
                                       key={clip.id}
+                                      draggable
+                                      onDragStart={() => setDraggedClipId(clip.id)}
+                                      onDragOver={(e) => e.preventDefault()}
+                                      onDrop={(e) => {
+                                        e.preventDefault();
+                                        if (draggedClipId) handleDropClipReorder(draggedClipId, clip.id);
+                                        setDraggedClipId(null);
+                                      }}
+                                      onDragEnd={() => setDraggedClipId(null)}
                                       onClick={() => handleSelectClip(clip)}
                                       role="button"
                                       tabIndex={0}
@@ -2715,12 +2870,16 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                                         if (e.key === 'Enter' || e.key === ' ') handleSelectClip(clip);
                                       }}
                                       style={{ width: `${widthPct}%` }}
-                                      className={`h-full rounded-[3px] px-2 flex items-center justify-between gap-1 cursor-pointer transition-colors overflow-hidden border-y border-x ${
+                                      className={`h-full rounded-[3px] px-2 flex items-center justify-between gap-1 transition-colors overflow-hidden border-y border-x ${
+                                        isHandToolActive ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                                      } ${
+                                        draggedClipId === clip.id ? 'opacity-50 ring-2 ring-sky-400' : ''
+                                      } ${
                                         isSel
                                           ? 'bg-indigo-600/80 border-amber-300 text-white shadow-sm'
                                           : 'bg-indigo-950/80 border-indigo-500/40 text-indigo-100 hover:bg-indigo-900/70'
                                       }`}
-                                      title={`${clip.label} (${clip.startSec.toFixed(1)}s → ${clip.endSec.toFixed(1)}s)`}
+                                      title={`${clip.label} (${clip.startSec.toFixed(1)}s → ${clip.endSec.toFixed(1)}s) — Glissez pour déplacer`}
                                     >
                                       <div className="min-w-0 flex items-center gap-1.5">
                                         <span className="text-[10px] font-black truncate">
@@ -3169,13 +3328,6 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       <Upload className="w-3.5 h-3.5" />
                       <span>+ Logo / Image</span>
                     </button>
-                    <input
-                      ref={overlayImageInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImportOverlayImage}
-                      className="hidden"
-                    />
                   </div>
 
                   {/* Stickers / Badges Rapides */}
