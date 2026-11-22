@@ -338,60 +338,93 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
         }
       }
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
       let rawText = '';
       let modelUsed = '';
-      let lastModelError = '';
+      const modelErrors: string[] = [];
+
+      const tryCallGeminiModel = async (model: string): Promise<string> => {
+        const cleanModel = model.replace(/^models\//, '');
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const apiRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: dynamicSystemInstruction }] },
+            contents,
+            generationConfig: {
+              temperature: 0.55,
+              maxOutputTokens: 2048
+            }
+          })
+        });
+
+        if (!apiRes.ok) {
+          const errJson: any = await apiRes.json().catch(() => ({}));
+          const errMsg = errJson?.error?.status || errJson?.error?.message || `HTTP ${apiRes.status}`;
+          const info = `${cleanModel}: ${apiRes.status} ${String(errMsg).slice(0, 65)}`;
+          modelErrors.push(info);
+          console.warn(`[GROWTH_ADVISOR] ${info}`);
+          return '';
+        }
+
+        const data: any = await apiRes.json();
+        const parts = data?.candidates?.[0]?.content?.parts;
+        const extracted = Array.isArray(parts)
+          ? parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('')
+          : '';
+
+        if (extracted && extracted.trim()) {
+          return extracted.trim();
+        }
+        modelErrors.push(`${cleanModel}: EMPTY (${data?.candidates?.[0]?.finishReason || 'UNKNOWN'})`);
+        return '';
+      };
 
       for (const model of candidateModels) {
         try {
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-          const apiRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: dynamicSystemInstruction }] },
-              contents,
-              generationConfig: {
-                temperature: 0.55,
-                maxOutputTokens: 2048
-              }
-            })
-          });
-
-          if (!apiRes.ok) {
-            const errJson: any = await apiRes.json().catch(() => ({}));
-            const errMsg = errJson?.error?.status || errJson?.error?.message || `HTTP ${apiRes.status}`;
-            lastModelError = `${model}: ${apiRes.status} ${String(errMsg).slice(0, 60)}`;
-            console.warn(`[GROWTH_ADVISOR] ${lastModelError}`);
-            continue;
-          }
-
-          const data: any = await apiRes.json();
-          const parts = data?.candidates?.[0]?.content?.parts;
-          const extracted = Array.isArray(parts)
-            ? parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('')
-            : '';
-
-          if (extracted && extracted.trim()) {
-            rawText = extracted.trim();
+          const text = await tryCallGeminiModel(model);
+          if (text) {
+            rawText = text;
             modelUsed = model;
             break;
-          } else {
-            lastModelError = `${model}: EMPTY_CANDIDATE (${data?.candidates?.[0]?.finishReason || 'UNKNOWN'})`;
           }
         } catch (modelErr: any) {
-          lastModelError = `${model}: ${String(modelErr?.message || 'NETWORK_ERR').slice(0, 60)}`;
-          console.warn(`[GROWTH_ADVISOR] Erreur réseau ${lastModelError}`);
+          const info = `${model}: ${String(modelErr?.message || 'NETWORK_ERR').slice(0, 60)}`;
+          modelErrors.push(info);
+          console.warn(`[GROWTH_ADVISOR] Erreur réseau ${info}`);
         }
+      }
+
+      // Auto-découverte dynamique si aucun modèle standard n'a répondu (ex: nouveau nom de modèle Google)
+      if (!rawText && modelErrors.some((e) => e.includes('404'))) {
+        try {
+          const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+          if (listRes.ok) {
+            const listJson: any = await listRes.json();
+            const available: string[] = (listJson?.models || [])
+              .filter((m: any) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+              .map((m: any) => String(m.name || '').replace(/^models\//, ''))
+              .filter((n: string) => n && !candidateModels.includes(n));
+            const preferred = available.find((n) => n.includes('flash')) || available[0];
+            if (preferred) {
+              const text = await tryCallGeminiModel(preferred);
+              if (text) {
+                rawText = text;
+                modelUsed = preferred;
+              }
+            }
+          }
+        } catch {}
       }
 
       if (!rawText) {
         const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false, messages);
+        const primaryErr = modelErrors[0] || 'UNKNOWN';
         res.json({
           reply: sanitizeSensitiveContent(fallback.reply),
           internalThought: fallback.thought,
-          source: lastModelError ? `nsore-fallback (${lastModelError})` : 'nsore-strategic-engine'
+          source: `nsore-fallback (${primaryErr})`
         });
         return;
       }
