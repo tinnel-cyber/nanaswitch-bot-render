@@ -550,7 +550,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     }
   ];
 
-  // 1. Récupération réactive des inscriptions réelles depuis Supabase
+  // 1. Récupération réactive des inscriptions, achats, quiz & certificats réels depuis le Cloud (/api/student/me)
   const [realEnrollments, setRealEnrollments] = useState<any[]>([]);
   const [realCoursesMap, setRealCoursesMap] = useState<Record<string, any>>({});
 
@@ -558,20 +558,56 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     let isMounted = true;
     const fetchStudentCourses = async () => {
       try {
-        const studentId = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || 'student-demo';
-        const studentEmail = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') : null) || '';
-        const studentPhone = (typeof window !== 'undefined' ? localStorage.getItem('nana_student_phone') : null) || '';
+        const { fetchStudentDashboardCloud } = await import('../../../../../services/studentAuthService');
+        const cloudData = await fetchStudentDashboardCloud();
 
-        // Requête enrollments sur Supabase
-        let query = supabase.from('enrollments').select('*');
-        if (studentEmail || studentPhone) {
-          query = query.or(`user_email.eq.${studentEmail},phone_number.eq.${studentPhone},user_id.eq.${studentId}`);
+        const serverEnrolls = (cloudData.enrollments || []).map((e: any) => ({
+          course_id: e.courseId || e.course_id,
+          progress_percent: e.progressPercentage ?? e.progress_percentage ?? 0,
+          completed_lessons: e.completedLessons || e.completed_lessons || [],
+          last_accessed_at: e.enrolledAt || e.enrolled_at,
+        }));
+
+        // Synchroniser aussi les achats, quiz et certificats réels du Cloud
+        if (cloudData.authenticated && typeof window !== 'undefined') {
+          try {
+            if (cloudData.purchases.length > 0) {
+              localStorage.setItem('nana_student_purchases', JSON.stringify(cloudData.purchases));
+            }
+            if (cloudData.quizzes.length > 0) {
+              localStorage.setItem('nana_student_quizzes', JSON.stringify(cloudData.quizzes));
+            }
+            if (cloudData.certificates.length > 0) {
+              localStorage.setItem('nana_student_certificates', JSON.stringify(cloudData.certificates));
+            }
+          } catch {}
         }
 
-        const { data: enrolls } = await query;
-        if (isMounted && Array.isArray(enrolls) && enrolls.length > 0) {
-          setRealEnrollments(enrolls);
-          const courseIds = enrolls.map(e => e.course_id).filter(Boolean);
+        const studentId = cloudData.student?.id || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || '';
+        const studentEmail = cloudData.student?.email || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') : null) || '';
+        const studentPhone = cloudData.student?.phoneNumber || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_phone') : null) || '';
+
+        let supaEnrolls: any[] = [];
+        if (studentId || studentEmail || studentPhone) {
+          const filters: string[] = [];
+          if (studentId) filters.push(`student_id.eq.${studentId}`);
+          if (studentEmail) filters.push(`student_email.eq.${studentEmail}`);
+          if (studentPhone) filters.push(`student_phone.eq.${studentPhone}`);
+          if (filters.length > 0) {
+            const { data: enrolls } = await supabase.from('enrollments').select('*').or(filters.join(','));
+            if (Array.isArray(enrolls)) supaEnrolls = enrolls;
+          }
+        }
+
+        const mergedMap = new Map<string, any>();
+        [...serverEnrolls, ...supaEnrolls].forEach((e) => {
+          if (e?.course_id && !mergedMap.has(e.course_id)) mergedMap.set(e.course_id, e);
+        });
+        const finalEnrolls = Array.from(mergedMap.values());
+
+        if (isMounted) {
+          setRealEnrollments(finalEnrolls);
+          const courseIds = finalEnrolls.map(e => e.course_id).filter(Boolean);
           if (courseIds.length > 0) {
             const { data: coursesData } = await supabase.from('courses').select('*').in('id', courseIds);
             if (isMounted && Array.isArray(coursesData)) {
@@ -590,7 +626,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     return () => { isMounted = false; };
   }, []);
 
-  // Répertoire des Campus & Cours Souscrits Réels (avec fallback démo)
+  // Répertoire des Campus & Cours Souscrits 100% Réels (zéro fallback démo)
   const enrolledCourses = useMemo(() => {
     if (realEnrollments.length > 0) {
       return realEnrollments.map((enr) => {
@@ -623,46 +659,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
       });
     }
 
-    return [
-      {
-        ...DEFAULT_MASTERCLASS_COURSE,
-        id: 'telecom-fintech-masterclass',
-        campusName: 'Campus : Ibrahim P. Konkobo',
-        instructorName: 'Ibrahim Pousbila Konkobo',
-        instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-        title: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
-        tagline: 'Maîtrisez les flux Mobile Money, les passerelles USSD et la vente hybride POS & Webinaire.',
-        progress: 80,
-        completedLessons: 19,
-        totalLessons: 24,
-        lastLessonTitle: 'Module 4 - Partie 3 : Orchestration des Webhooks Wave & Orange Money',
-        lastAccessed: 'Aujourd\'hui à 11:42',
-        category: 'Fintech & Mobile Money',
-        durationLabel: '3h 15m • 6 Modules',
-        coverImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
-        trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        status: 'in_progress' as const
-      },
-      {
-        id: 'course-pos-resilience-offline',
-        campusName: 'Campus : Systèmes POS & Caisses',
-        instructorName: 'Ing. Marc Ouedraogo',
-        instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-        title: 'Architecture Caisses Connectées & Mode Déconnecté (Offline-First)',
-        tagline: 'Garantir 100% des encaissements en zone rurale ou coupure réseau avec synchronisation delta.',
-        progress: 100,
-        completedLessons: 16,
-        totalLessons: 16,
-        lastLessonTitle: 'Examen Final de Certification & Délivrance du Diplôme',
-        lastAccessed: 'Hier',
-        certificateId: 'CERT-2026-BF-948201',
-        category: 'Systèmes POS & Matériel',
-        durationLabel: '2h 20m • 4 Modules',
-        coverImage: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?auto=format&fit=crop&w=1200&q=80',
-        trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-        status: 'completed' as const
-      }
-    ];
+    return [];
   }, [realEnrollments, realCoursesMap]);
 
   // Filtrage des cours par statut et recherche
@@ -1060,16 +1057,29 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     });
 
     setQuizzes(updatedQuizzes);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('nana_student_quizzes', JSON.stringify(updatedQuizzes));
-      } catch (err) {
-        console.warn('Erreur sauvegarde quizzes localStorage:', err);
-      }
-    }
+    // Persistance Cloud officielle (quiz + certificat si validé)
+    import('../../../../../services/studentAuthService')
+      .then(async ({ saveStudentQuizCloud, saveStudentCertificateCloud }) => {
+        await saveStudentQuizCloud({
+          quizId: activeQuizModal.id,
+          courseId: activeQuizModal.courseId,
+          title: activeQuizModal.title,
+          score: calculatedScore,
+          passed,
+          minScoreToPass: activeQuizModal.minScoreToPass
+        });
+        if (passed) {
+          await saveStudentCertificateCloud({
+            courseId: activeQuizModal.courseId,
+            courseTitle: activeQuizModal.courseTitle || activeQuizModal.title,
+            studentName: studentName || 'Étudiant'
+          });
+        }
+      })
+      .catch(() => {});
 
     if (passed) {
-      setToastMessage(`🎉 Félicitations ! Quiz validé avec ${calculatedScore}%. Votre certificat est débloqué !`);
+      setToastMessage(`🎉 Félicitations ! Quiz validé avec ${calculatedScore}%. Votre certificat est enregistré dans le Cloud !`);
     } else {
       setToastMessage(`Score : ${calculatedScore}%. Seuil de validation : ${activeQuizModal.minScoreToPass}%. Réessayez !`);
     }

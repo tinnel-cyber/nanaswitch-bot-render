@@ -222,13 +222,197 @@ export function registerStudent(data: {
   return { success: true, student: newStudent };
 }
 
-// Enregistrement lors d'un paiement de cours
+const STORAGE_KEY_TOKEN = 'nana_student_token_v1';
+
+export function getStudentToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(STORAGE_KEY_TOKEN) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveStudentSession(token: string, student: Partial<StudentAccount>, enrolledIds?: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    if (student?.id) localStorage.setItem('nana_student_id', student.id);
+    if (student?.fullName) localStorage.setItem(STORAGE_KEY_NAME, student.fullName);
+    if (student?.email) localStorage.setItem(STORAGE_KEY_EMAIL, student.email);
+    if (student?.phoneNumber) localStorage.setItem(STORAGE_KEY_PHONE, student.phoneNumber);
+    localStorage.setItem(
+      STORAGE_KEY_CURRENT,
+      JSON.stringify({
+        id: student.id || '',
+        fullName: student.fullName || 'Étudiant',
+        email: student.email || '',
+        phoneNumber: student.phoneNumber || '',
+        enrolledCourseIds: enrolledIds || student.enrolledCourseIds || [],
+        createdAt: Date.now(),
+        lastLoginAt: Date.now(),
+      })
+    );
+    if (Array.isArray(enrolledIds)) {
+      localStorage.setItem(STORAGE_KEY_ENROLLED, JSON.stringify(enrolledIds));
+    }
+  } catch {}
+}
+
+export async function registerStudentAccount(params: {
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  password: string;
+}): Promise<{ success: boolean; student?: StudentAccount; error?: string }> {
+  try {
+    const res = await fetch('/api/student/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) {
+      return { success: false, error: json?.error || 'Inscription impossible.' };
+    }
+    saveStudentSession(json.token, json.student, json.enrolledCourseIds || []);
+    return { success: true, student: json.student };
+  } catch {
+    return { success: false, error: 'Erreur de connexion au Cloud.' };
+  }
+}
+
+export async function loginStudentAccount(
+  identifier: string,
+  password: string
+): Promise<{ success: boolean; student?: StudentAccount; error?: string }> {
+  try {
+    const res = await fetch('/api/student/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, password }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) {
+      return { success: false, error: json?.error || 'Identifiants incorrects.' };
+    }
+    saveStudentSession(json.token, json.student, json.enrolledCourseIds || []);
+    return { success: true, student: json.student };
+  } catch {
+    return { success: false, error: 'Erreur de connexion au Cloud.' };
+  }
+}
+
+export async function verifyStudentCourseAccess(courseId: string): Promise<boolean> {
+  const token = getStudentToken();
+  if (!token || !courseId) return false;
+  try {
+    const res = await fetch(
+      `/api/student/enrollments/verify?courseId=${encodeURIComponent(courseId)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    const json = await res.json().catch(() => null);
+    return Boolean(res.ok && json?.success && json?.hasAccess === true);
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchStudentDashboardCloud(): Promise<{
+  authenticated: boolean;
+  student?: any;
+  enrolledCourseIds: string[];
+  enrollments: any[];
+  purchases: any[];
+  quizzes: any[];
+  certificates: any[];
+}> {
+  const token = getStudentToken();
+  if (!token) {
+    return { authenticated: false, enrolledCourseIds: [], enrollments: [], purchases: [], quizzes: [], certificates: [] };
+  }
+  try {
+    const res = await fetch('/api/student/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      return { authenticated: false, enrolledCourseIds: [], enrollments: [], purchases: [], quizzes: [], certificates: [] };
+    }
+    const json = await res.json();
+    return {
+      authenticated: true,
+      student: json.student,
+      enrolledCourseIds: Array.isArray(json.enrolledCourseIds) ? json.enrolledCourseIds : [],
+      enrollments: Array.isArray(json.enrollments) ? json.enrollments : [],
+      purchases: Array.isArray(json.purchases) ? json.purchases : [],
+      quizzes: Array.isArray(json.quizzes) ? json.quizzes : [],
+      certificates: Array.isArray(json.certificates) ? json.certificates : [],
+    };
+  } catch {
+    return { authenticated: false, enrolledCourseIds: [], enrollments: [], purchases: [], quizzes: [], certificates: [] };
+  }
+}
+
+export async function saveStudentQuizCloud(payload: {
+  courseId: string;
+  lessonId?: string;
+  quizTitle: string;
+  score: number;
+  maxScore?: number;
+  passed?: boolean;
+}): Promise<boolean> {
+  const token = getStudentToken();
+  try {
+    const res = await fetch('/api/student/quizzes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveStudentCertificateCloud(payload: {
+  id?: string;
+  courseId: string;
+  courseTitle: string;
+  studentName: string;
+}): Promise<boolean> {
+  const token = getStudentToken();
+  try {
+    const res = await fetch('/api/student/certificates', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Enregistrement sécurisé côté serveur lors d'un paiement ou inscription (Marketplace, Thème Digital Pro, Live Formations)
 export function recordCourseEnrollment(params: {
   courseId: string;
+  courseTitle?: string;
   fullName: string;
   phoneNumber: string;
   email?: string;
   password?: string;
+  amount?: number;
+  paymentMethod?: string;
+  transactionId?: string;
+  source?: 'marketplace' | 'digital_pro' | 'live_webinar' | string;
 }): StudentAccount {
   const students = getAllStudents();
   const cleanPhone = params.phoneNumber.replace(/[^0-9]/g, '');
@@ -244,16 +428,15 @@ export function recordCourseEnrollment(params: {
     if (!student.enrolledCourseIds.includes(params.courseId)) {
       student.enrolledCourseIds.push(params.courseId);
     }
-    if (params.password) student.password = params.password;
     if (params.fullName) student.fullName = params.fullName;
     student.lastLoginAt = Date.now();
   } else {
     student = {
-      id: `student-${Date.now().toString(36)}`,
-      fullName: params.fullName.trim() || 'Élève Académie',
+      id: `std_${Date.now().toString(36)}`,
+      fullName: params.fullName.trim() || 'Étudiant',
       phoneNumber: params.phoneNumber.trim(),
       email: cleanEmail,
-      password: params.password || '123456', // Mot de passe par défaut si non fourni
+      password: '',
       enrolledCourseIds: [params.courseId],
       createdAt: Date.now(),
       lastLoginAt: Date.now()
@@ -263,39 +446,34 @@ export function recordCourseEnrollment(params: {
 
   saveStudents(students);
 
-  // Mettre à jour la liste des cours inscrits
-  const enrolledList = getEnrolledCourseIds();
-  if (!enrolledList.includes(params.courseId)) {
-    enrolledList.push(params.courseId);
-    try {
-      localStorage.setItem(STORAGE_KEY_ENROLLED, JSON.stringify(enrolledList));
-    } catch (e) {}
-  }
-
-  // Activer la session
-  localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(student));
-  localStorage.setItem(STORAGE_KEY_NAME, student.fullName);
-  localStorage.setItem(STORAGE_KEY_PHONE, student.phoneNumber);
-  if (student.email) localStorage.setItem(STORAGE_KEY_EMAIL, student.email);
-
-  // Synchronisation asynchrone dans la table SQL Supabase enrollments
-  if (params.courseId) {
-    import('../lib/supabase').then(({ supabase }) => {
-      supabase.from('enrollments').upsert({
-        course_id: params.courseId,
-        student_id: student.id,
-        student_name: student.fullName,
-        student_phone: student.phoneNumber,
-        student_email: student.email || null,
-        status: 'active',
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'course_id,student_id' }).then(({ error }) => {
-        if (error) {
-          console.warn('[STUDENT AUTH] Note de synchronisation Supabase enrollments:', error.message);
-        }
-      });
-    }).catch(() => {});
-  }
+  // Appel serveur sécurisé POST /api/student/enroll (émet un jeton HMAC signé)
+  const existingToken = getStudentToken();
+  fetch('/api/student/enroll', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(existingToken ? { Authorization: `Bearer ${existingToken}` } : {}),
+    },
+    keepalive: true,
+    body: JSON.stringify({
+      courseId: params.courseId,
+      courseTitle: params.courseTitle || params.courseId,
+      fullName: student.fullName,
+      email: student.email,
+      phoneNumber: student.phoneNumber,
+      amount: params.amount || 0,
+      paymentMethod: params.paymentMethod || 'MOBILE_MONEY',
+      transactionId: params.transactionId || '',
+      source: params.source || 'marketplace',
+    }),
+  })
+    .then((r) => r.json())
+    .then((json) => {
+      if (json?.success && json.token && json.student) {
+        saveStudentSession(json.token, json.student, student.enrolledCourseIds);
+      }
+    })
+    .catch(() => {});
 
   return student;
 }
@@ -309,8 +487,11 @@ export function navigateToStudentDashboard(): void {
 
 export function logoutStudent(): void {
   if (typeof window === 'undefined') return;
+  localStorage.removeItem(STORAGE_KEY_TOKEN);
   localStorage.removeItem(STORAGE_KEY_CURRENT);
   localStorage.removeItem(STORAGE_KEY_NAME);
   localStorage.removeItem(STORAGE_KEY_EMAIL);
   localStorage.removeItem(STORAGE_KEY_PHONE);
+  localStorage.removeItem('nana_student_id');
+  localStorage.removeItem(STORAGE_KEY_ENROLLED);
 }

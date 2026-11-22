@@ -977,12 +977,60 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     expiresInSeconds: 3600
   }), [orderId, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, city, deliveryAddress, effectiveStoreName, effectiveWPhone, resolvedProduct, isDigitalProduct, finalTotal, currency, selectedOperator]);
 
-  // Envoi automatique et audit du reçu côté API
+  // Envoi automatique du reçu côté API + Inscription LMS sécurisée (Thème Digital Pro, Live Formations, Marketplace)
   useEffect(() => {
     if (currentStep === 'STEP_3' && orderId) {
       sendDigitalReceiptViaApi(digitalReceiptPayload).catch(() => {});
+
+      const prodAny = resolvedProduct as any;
+      const prodId = String(resolvedProduct.id || '');
+      const prodNameLower = String(resolvedProduct.name || '').toLowerCase();
+      const prodCatLower = String(prodAny?.category || '').toLowerCase();
+      const metaCourseId = prodAny?.metadata?.course_id || prodAny?.courseId || '';
+      const metaSource = prodAny?.metadata?.enrollment_source || '';
+
+      const isCourseOrFormation = Boolean(
+        metaCourseId ||
+        prodId.startsWith('course_prod_') ||
+        prodId.startsWith('course_') ||
+        prodId.startsWith('webinar_') ||
+        prodId.startsWith('live_webinar_') ||
+        prodCatLower.includes('formation') ||
+        prodCatLower.includes('masterclass') ||
+        prodCatLower.includes('webinaire') ||
+        prodCatLower.includes('académie') ||
+        prodCatLower.includes('academy') ||
+        prodNameLower.includes('formation') ||
+        prodNameLower.includes('masterclass') ||
+        prodNameLower.includes('webinaire')
+      );
+
+      if (isCourseOrFormation && completedDetails?.paymentMethod !== 'CASH_ON_DELIVERY') {
+        const cleanCourseId = metaCourseId || (prodId.startsWith('course_prod_') ? prodId.replace(/^course_prod_/, '') : prodId);
+        const enrollmentSource =
+          metaSource ||
+          (prodId.startsWith('webinar_') || prodId.startsWith('live_') || prodCatLower.includes('webinaire') || prodCatLower.includes('live') || prodNameLower.includes('webinaire')
+            ? 'live_webinar'
+            : 'digital_pro');
+
+        import('../../studentAuthService')
+          .then(({ recordCourseEnrollment }) => {
+            recordCourseEnrollment({
+              courseId: cleanCourseId,
+              courseTitle: resolvedProduct.name,
+              fullName: customerName.trim() || 'Étudiant',
+              phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
+              email: customerEmail.trim() || undefined,
+              amount: finalTotal,
+              paymentMethod: completedDetails?.paymentMethod || 'MOBILE_MONEY',
+              transactionId: completedDetails?.transactionId || orderId,
+              source: enrollmentSource
+            });
+          })
+          .catch(() => {});
+      }
     }
-  }, [currentStep, orderId, digitalReceiptPayload]);
+  }, [currentStep, orderId, digitalReceiptPayload, resolvedProduct, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, finalTotal]);
 
   // Message W formaté pour le bouton post-paiement
   const getWReceiptUrl = () => {

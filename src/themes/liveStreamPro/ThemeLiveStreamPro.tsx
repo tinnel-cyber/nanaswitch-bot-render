@@ -146,9 +146,13 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
         name: webinar.title,
         price: webinar.price || 0,
         originalPrice: webinar.originalPrice,
-        category: webinar.category,
+        category: webinar.category || 'Formation Live',
         stock: 50,
-        linkedFunnelId: targetFunnelId
+        linkedFunnelId: targetFunnelId,
+        metadata: {
+          course_id: (webinar as any).courseId || webinar.id,
+          enrollment_source: 'live_webinar'
+        }
       } as any);
     }
   };

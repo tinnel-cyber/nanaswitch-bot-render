@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { loginStudent, registerStudent, navigateToStudentDashboard, StudentAccount } from '../../../../../services/studentAuthService';
+import { loginStudentAccount, registerStudentAccount, navigateToStudentDashboard, StudentAccount } from '../../../../../services/studentAuthService';
 import { playTapBeep, playValidationBeep } from '../../../../../utils/audio';
 
 export interface StudentAuthModalProps {
@@ -43,7 +43,7 @@ export const StudentAuthModal: React.FC<StudentAuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
@@ -51,9 +51,9 @@ export const StudentAuthModal: React.FC<StudentAuthModalProps> = ({
 
     try {
       if (mode === 'login') {
-        const res = loginStudent(identifier, password);
+        const res = await loginStudentAccount(identifier, password);
         if (!res.success || !res.student) {
-          setError(res.error || 'Erreur lors de la connexion.');
+          setError(res.error || 'Identifiants invalides ou compte introuvable.');
           setIsLoading(false);
           return;
         }
@@ -65,7 +65,7 @@ export const StudentAuthModal: React.FC<StudentAuthModalProps> = ({
         }
         onClose();
       } else {
-        const res = registerStudent({
+        const res = await registerStudentAccount({
           fullName,
           email,
           phoneNumber,

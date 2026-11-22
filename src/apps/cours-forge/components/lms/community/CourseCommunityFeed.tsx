@@ -91,62 +91,102 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
     }
   }, [courseId, currentUserId, currentUserName, currentUserAvatar, currentUserRole]);
 
-  // Real-time Firestore subscription to course feed
+  // Chargement & rafraîchissement temps réel (5s) via l'API Cloud /api/campus/chat/:courseId
+  const fetchCloudMessages = useCallback(async () => {
+    if (!courseId) return;
+    try {
+      const res = await fetch(`/api/campus/chat/${encodeURIComponent(courseId)}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.messages)) {
+        const mapped: CommunityPost[] = json.messages.map((m: any) => ({
+          id: m.id,
+          courseId: m.courseId,
+          authorId: m.authorId,
+          authorName: m.authorName || 'Étudiant',
+          authorRole: m.authorRole === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT',
+          authorAvatar: m.authorAvatar || undefined,
+          content: m.content,
+          topicTag: (m.topicTag as CommunityTopicTag) || 'ENTRAIDE',
+          attachmentUrl: m.attachmentUrl || undefined,
+          attachmentType: m.attachmentUrl ? 'IMAGE' : undefined,
+          likesCount: Number(m.likesCount || 0),
+          likedBy: Array.isArray(m.likedBy) ? m.likedBy : [],
+          commentsCount: Number(m.commentsCount || 0),
+          comments: Array.isArray(m.comments) ? m.comments : [],
+          createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
+        }));
+        setPosts(mapped);
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.warn('[CAMPUS CHAT] Erreur sync Cloud:', err);
+    }
+  }, [courseId]);
+
   useEffect(() => {
     if (!courseId) return;
-
-    const unsubscribe = subscribeToCourseFeed(courseId, ({ posts: feedPosts, hasMore: feedHasMore, lastDoc: feedLastDoc }) => {
-      setPosts(feedPosts);
-      setHasMore(feedHasMore);
-      setLastDoc(feedLastDoc);
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [courseId]);
+    fetchCloudMessages();
+    const timer = setInterval(fetchCloudMessages, 5000);
+    return () => clearInterval(timer);
+  }, [courseId, fetchCloudMessages]);
 
   // Handle cursor pagination
   const handleLoadMore = async () => {
     if (!courseId || loadingMore || !hasMore) return;
     setLoadingMore(true);
-
     try {
-      const { posts: nextPosts, hasMore: nextHasMore, lastDoc: nextLastDoc } = await loadMoreCourseFeed(courseId, 10, lastDoc);
-      if (!nextHasMore) {
-        setHasMore(false);
-      }
-      setPosts((prev) => [...prev, ...nextPosts]);
-      setLastDoc(nextLastDoc);
-    } catch (err) {
-      console.error('Erreur pagination curseur:', err);
+      await fetchCloudMessages();
     } finally {
       setLoadingMore(false);
     }
   };
 
-  // Submit new community post
+  // Submit new community post via Cloud API /api/campus/chat/:courseId
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postContent.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      await createCommunityPost(courseId, {
-        courseId,
-        authorId: currentUserId,
-        authorName: currentUserName,
-        authorRole: currentUserRole,
-        authorAvatar: currentUserAvatar,
-        content: postContent.trim(),
-        topicTag: selectedTag,
-        attachmentUrl: attachmentUrl.trim() || undefined,
-        attachmentType: attachmentUrl.trim() ? 'IMAGE' : undefined
+      const res = await fetch(`/api/campus/chat/${encodeURIComponent(courseId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          authorId: currentUserId,
+          authorName: currentUserName,
+          authorRole: currentUserRole,
+          authorAvatar: currentUserAvatar || '',
+          content: postContent.trim(),
+          topicTag: selectedTag,
+          attachmentUrl: attachmentUrl.trim() || ''
+        })
       });
-
-      setPostContent('');
-      setAttachmentUrl('');
-      setIsAddingImage(false);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success && json.message) {
+        const m = json.message;
+        const newPost: CommunityPost = {
+          id: m.id,
+          courseId: m.courseId,
+          authorId: m.authorId,
+          authorName: m.authorName,
+          authorRole: m.authorRole === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT',
+          authorAvatar: m.authorAvatar || undefined,
+          content: m.content,
+          topicTag: (m.topicTag as CommunityTopicTag) || selectedTag,
+          attachmentUrl: m.attachmentUrl || undefined,
+          attachmentType: m.attachmentUrl ? 'IMAGE' : undefined,
+          likesCount: 0,
+          likedBy: [],
+          commentsCount: 0,
+          comments: [],
+          createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
+        };
+        setPosts((prev) => [newPost, ...prev]);
+        setPostContent('');
+        setAttachmentUrl('');
+        setIsAddingImage(false);
+      }
     } catch (err) {
       console.error('Erreur création post:', err);
     } finally {

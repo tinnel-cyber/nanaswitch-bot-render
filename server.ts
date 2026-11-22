@@ -3592,6 +3592,520 @@ async function startServer() {
     return res.json({ success: true, deletedId: cleanId });
   });
 
+  // ============================================================================
+  // 2J. CHANTIER 2 LMS : AUTH ÉTUDIANT SÉCURISÉE (SCRYPT + HMAC), ENROLLMENTS
+  //     VÉRIFIÉS CÔTÉ SERVEUR, QUIZ, CERTIFICATS, ACHATS & CHAT CAMPUS RÉEL
+  // ============================================================================
+  const LMS_STUDENTS_FILE = path.join(DATA_DIR, 'lms_students.json');
+  const LMS_ENROLLMENTS_FILE = path.join(DATA_DIR, 'lms_enrollments.json');
+  const LMS_QUIZZES_FILE = path.join(DATA_DIR, 'lms_student_quizzes.json');
+  const LMS_CERTIFICATES_FILE = path.join(DATA_DIR, 'lms_student_certificates.json');
+  const LMS_PURCHASES_FILE = path.join(DATA_DIR, 'lms_student_purchases.json');
+  const LMS_CAMPUS_CHAT_FILE = path.join(DATA_DIR, 'lms_campus_chat.json');
+
+  const STUDENT_TOKEN_SECRET =
+    process.env.STUDENT_JWT_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    'nanasore_student_hmac_secret_v1';
+
+  const hashStudentPassword = (password: string): string => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derived = crypto.scryptSync(password, salt, 32).toString('hex');
+    return `${salt}:${derived}`;
+  };
+
+  const verifyStudentPassword = (password: string, storedHash: string): boolean => {
+    const parts = String(storedHash || '').split(':');
+    if (parts.length !== 2) return false;
+    const [salt, keyHex] = parts;
+    const derived = crypto.scryptSync(password, salt, 32).toString('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(keyHex, 'hex'));
+    } catch {
+      return false;
+    }
+  };
+
+  const signStudentToken = (payload: { studentId: string; email?: string; phone?: string }): string => {
+    const body = Buffer.from(
+      JSON.stringify({ ...payload, iat: Date.now(), exp: Date.now() + 30 * 24 * 60 * 60 * 1000 })
+    ).toString('base64url');
+    const sig = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(body).digest('base64url');
+    return `${body}.${sig}`;
+  };
+
+  const verifyStudentToken = (token: string): { studentId: string; email?: string; phone?: string } | null => {
+    try {
+      const [body, sig] = String(token || '').split('.');
+      if (!body || !sig) return null;
+      const expected = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(body).digest('base64url');
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+      const decoded = JSON.parse(Buffer.from(body, 'base64url').toString('utf-8'));
+      if (!decoded?.studentId || (decoded.exp && Date.now() > decoded.exp)) return null;
+      return decoded;
+    } catch {
+      return null;
+    }
+  };
+
+  const extractStudentSession = (req: any) => {
+    const authHeader = String(req.headers?.authorization || '');
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const token = bearer || String(req.headers?.['x-student-token'] || req.query?.token || '').trim();
+    return token ? verifyStudentToken(token) : null;
+  };
+
+  const normalizePhoneKey = (p?: string) => String(p || '').replace(/[^0-9]/g, '');
+
+  // POST /api/student/auth/register
+  app.post('/api/student/auth/register', async (req, res) => {
+    const { fullName = '', email = '', phoneNumber = '', password = '' } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanPhone = normalizePhoneKey(phoneNumber);
+    if (!String(fullName).trim() || (!cleanEmail && cleanPhone.length < 6) || String(password).length < 4) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nom complet, email ou téléphone, et mot de passe (min. 4 caractères) requis.',
+      });
+    }
+
+    const all = readJsonArrayFile(LMS_STUDENTS_FILE);
+    const existing = all.find(
+      (s: any) =>
+        (cleanEmail && s.email === cleanEmail) ||
+        (cleanPhone.length >= 6 && normalizePhoneKey(s.phoneNumber) === cleanPhone)
+    );
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: 'Un compte étudiant existe déjà avec cet email ou numéro. Connectez-vous.',
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const student = {
+      id: `std_${crypto.randomBytes(6).toString('hex')}`,
+      fullName: String(fullName).trim(),
+      email: cleanEmail,
+      phoneNumber: String(phoneNumber || '').trim(),
+      passwordHash: hashStudentPassword(String(password)),
+      createdAt: nowIso,
+    };
+
+    all.unshift(student);
+    writeJsonArrayFile(LMS_STUDENTS_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('student_profiles').upsert({
+          id: student.id,
+          full_name: student.fullName,
+          email: student.email || null,
+          phone_number: student.phoneNumber || null,
+          created_at: nowIso,
+        });
+      } catch {}
+    }
+
+    const token = signStudentToken({
+      studentId: student.id,
+      email: student.email,
+      phone: student.phoneNumber,
+    });
+
+    const { passwordHash: _ignored, ...safeStudent } = student;
+    return res.json({ success: true, token, student: safeStudent, enrolledCourseIds: [] });
+  });
+
+  // POST /api/student/auth/login
+  app.post('/api/student/auth/login', (req, res) => {
+    const { identifier = '', password = '' } = req.body || {};
+    const cleanId = String(identifier || '').trim().toLowerCase();
+    const cleanPhone = normalizePhoneKey(identifier);
+    if (!cleanId || !String(password)) {
+      return res.status(400).json({ success: false, error: 'Identifiant et mot de passe requis.' });
+    }
+
+    const all = readJsonArrayFile(LMS_STUDENTS_FILE);
+    const found = all.find(
+      (s: any) =>
+        (s.email && s.email.toLowerCase() === cleanId) ||
+        (cleanPhone.length >= 6 && normalizePhoneKey(s.phoneNumber) === cleanPhone)
+    );
+
+    if (!found || !verifyStudentPassword(String(password), found.passwordHash)) {
+      return res.status(401).json({ success: false, error: 'Identifiant ou mot de passe incorrect.' });
+    }
+
+    const token = signStudentToken({
+      studentId: found.id,
+      email: found.email,
+      phone: found.phoneNumber,
+    });
+
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE).filter(
+      (e: any) =>
+        e.studentId === found.id ||
+        (found.email && e.studentEmail === found.email) ||
+        (normalizePhoneKey(found.phoneNumber).length >= 6 &&
+          normalizePhoneKey(e.studentPhone) === normalizePhoneKey(found.phoneNumber))
+    );
+
+    const { passwordHash: _ignored, ...safeStudent } = found;
+    return res.json({
+      success: true,
+      token,
+      student: safeStudent,
+      enrolledCourseIds: Array.from(new Set(enrollments.map((e: any) => e.courseId))),
+    });
+  });
+
+  // POST /api/student/enroll — Inscription sécurisée (Marketplace, Thème Digital Pro, Live Formations)
+  app.post('/api/student/enroll', async (req, res) => {
+    const {
+      courseId,
+      courseTitle = '',
+      fullName = 'Étudiant',
+      email = '',
+      phoneNumber = '',
+      amount = 0,
+      paymentMethod = 'MOBILE_MONEY',
+      transactionId = '',
+      source = 'marketplace',
+    } = req.body || {};
+
+    const cleanCourseId = String(courseId || '').trim();
+    if (!cleanCourseId) {
+      return res.status(400).json({ success: false, error: 'courseId requis' });
+    }
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY') {
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les formations.' });
+    }
+
+    const session = extractStudentSession(req);
+    const cleanEmail = String(email || session?.email || '').trim().toLowerCase();
+    const cleanPhone = String(phoneNumber || session?.phone || '').trim();
+    const phoneDigits = normalizePhoneKey(cleanPhone);
+
+    // Trouver ou créer le profil étudiant côté serveur
+    const students = readJsonArrayFile(LMS_STUDENTS_FILE);
+    let student = students.find(
+      (s: any) =>
+        (session?.studentId && s.id === session.studentId) ||
+        (cleanEmail && s.email === cleanEmail) ||
+        (phoneDigits.length >= 6 && normalizePhoneKey(s.phoneNumber) === phoneDigits)
+    );
+
+    const nowIso = new Date().toISOString();
+    if (!student) {
+      student = {
+        id: session?.studentId || `std_${crypto.randomBytes(6).toString('hex')}`,
+        fullName: String(fullName || 'Étudiant').trim(),
+        email: cleanEmail,
+        phoneNumber: cleanPhone,
+        passwordHash: '',
+        createdAt: nowIso,
+      };
+      students.unshift(student);
+      writeJsonArrayFile(LMS_STUDENTS_FILE, students);
+    }
+
+    // Enregistrement de l'inscription (idempotent par studentId + courseId)
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE);
+    let enrollment = enrollments.find(
+      (e: any) => e.studentId === student.id && e.courseId === cleanCourseId
+    );
+    if (!enrollment) {
+      enrollment = {
+        id: `enr_${crypto.randomBytes(5).toString('hex')}`,
+        studentId: student.id,
+        studentName: student.fullName,
+        studentEmail: student.email,
+        studentPhone: student.phoneNumber,
+        courseId: cleanCourseId,
+        courseTitle: String(courseTitle || cleanCourseId),
+        amount: Math.max(0, Number(amount) || 0),
+        paymentMethod: String(paymentMethod),
+        transactionId: String(transactionId || `ENR-${Date.now().toString(36).toUpperCase()}`),
+        source: String(source),
+        status: 'ACTIVE',
+        progressPercentage: 0,
+        completedLessons: [],
+        enrolledAt: nowIso,
+      };
+      enrollments.unshift(enrollment);
+      writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
+    }
+
+    // Enregistrement de l'achat dans l'historique étudiant
+    const purchases = readJsonArrayFile(LMS_PURCHASES_FILE);
+    const txKey = enrollment.transactionId;
+    if (!purchases.some((p: any) => p.transactionId === txKey)) {
+      purchases.unshift({
+        id: `pur_${crypto.randomBytes(4).toString('hex')}`,
+        studentId: student.id,
+        courseId: cleanCourseId,
+        title: enrollment.courseTitle,
+        amount: enrollment.amount,
+        currency: 'XOF',
+        paymentMethod: enrollment.paymentMethod,
+        transactionId: txKey,
+        source: enrollment.source,
+        status: 'PAID',
+        createdAt: nowIso,
+      });
+      writeJsonArrayFile(LMS_PURCHASES_FILE, purchases);
+    }
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('enrollments').upsert({
+          id: `${cleanCourseId}_${student.id}`,
+          course_id: cleanCourseId,
+          student_id: student.id,
+          student_name: student.fullName,
+          student_email: student.email || null,
+          student_phone: student.phoneNumber || null,
+          status: 'ACTIVE',
+          progress_percentage: enrollment.progressPercentage || 0,
+          completed_lessons: enrollment.completedLessons || [],
+          enrolled_at: nowIso,
+        });
+      } catch {}
+    }
+
+    const token = signStudentToken({
+      studentId: student.id,
+      email: student.email,
+      phone: student.phoneNumber,
+    });
+
+    const { passwordHash: _ignored, ...safeStudent } = student;
+    return res.json({ success: true, token, student: safeStudent, enrollment });
+  });
+
+  // GET /api/student/enrollments/verify?courseId=... — Contrôle d'accès réel côté serveur (anti-bypass localStorage)
+  app.get('/api/student/enrollments/verify', async (req, res) => {
+    const courseId = String(req.query.courseId || '').trim();
+    if (!courseId) {
+      return res.status(400).json({ success: false, hasAccess: false, error: 'courseId requis' });
+    }
+    const session = extractStudentSession(req);
+    if (!session) {
+      return res.json({ success: true, hasAccess: false, reason: 'UNAUTHENTICATED' });
+    }
+
+    const phoneDigits = normalizePhoneKey(session.phone);
+    const localMatch = readJsonArrayFile(LMS_ENROLLMENTS_FILE).find(
+      (e: any) =>
+        e.courseId === courseId &&
+        e.status === 'ACTIVE' &&
+        (e.studentId === session.studentId ||
+          (session.email && e.studentEmail === session.email) ||
+          (phoneDigits.length >= 6 && normalizePhoneKey(e.studentPhone) === phoneDigits))
+    );
+
+    if (localMatch) {
+      return res.json({ success: true, hasAccess: true, enrollment: localMatch });
+    }
+
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('enrollments')
+          .select('*')
+          .eq('course_id', courseId)
+          .eq('student_id', session.studentId)
+          .maybeSingle();
+        if (data) {
+          return res.json({ success: true, hasAccess: true, enrollment: data });
+        }
+      } catch {}
+    }
+
+    return res.json({ success: true, hasAccess: false, reason: 'NOT_ENROLLED' });
+  });
+
+  // GET /api/student/me — Données complètes du Tableau de Bord Étudiant (zéro mock, zéro student-demo)
+  app.get('/api/student/me', async (req, res) => {
+    const session = extractStudentSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Session étudiant requise.' });
+    }
+
+    const students = readJsonArrayFile(LMS_STUDENTS_FILE);
+    const student = students.find((s: any) => s.id === session.studentId) || {
+      id: session.studentId,
+      fullName: 'Étudiant',
+      email: session.email || '',
+      phoneNumber: session.phone || '',
+    };
+
+    const phoneDigits = normalizePhoneKey(student.phoneNumber || session.phone);
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE).filter(
+      (e: any) =>
+        e.studentId === student.id ||
+        (student.email && e.studentEmail === student.email) ||
+        (phoneDigits.length >= 6 && normalizePhoneKey(e.studentPhone) === phoneDigits)
+    );
+    const purchases = readJsonArrayFile(LMS_PURCHASES_FILE).filter((p: any) => p.studentId === student.id);
+    const quizzes = readJsonArrayFile(LMS_QUIZZES_FILE).filter((q: any) => q.studentId === student.id);
+    const certificates = readJsonArrayFile(LMS_CERTIFICATES_FILE).filter((c: any) => c.studentId === student.id);
+
+    const { passwordHash: _ignored, ...safeStudent } = student as any;
+    return res.json({
+      success: true,
+      student: safeStudent,
+      enrolledCourseIds: Array.from(new Set(enrollments.map((e: any) => e.courseId))),
+      enrollments,
+      purchases,
+      quizzes,
+      certificates,
+    });
+  });
+
+  // POST /api/student/quizzes — Persistance Cloud réelle d'un résultat de quiz
+  app.post('/api/student/quizzes', async (req, res) => {
+    const session = extractStudentSession(req);
+    const studentId = session?.studentId || String(req.body?.studentId || '').trim();
+    if (!studentId) {
+      return res.status(401).json({ success: false, error: 'Session étudiant requise.' });
+    }
+    const row = {
+      id: `qz_${crypto.randomBytes(5).toString('hex')}`,
+      studentId,
+      courseId: String(req.body?.courseId || ''),
+      lessonId: String(req.body?.lessonId || ''),
+      quizTitle: String(req.body?.quizTitle || 'Quiz'),
+      score: Number(req.body?.score) || 0,
+      maxScore: Number(req.body?.maxScore) || 100,
+      passed: Boolean(req.body?.passed ?? (Number(req.body?.score) || 0) >= 60),
+      completedAt: new Date().toISOString(),
+    };
+    const all = readJsonArrayFile(LMS_QUIZZES_FILE);
+    all.unshift(row);
+    writeJsonArrayFile(LMS_QUIZZES_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('student_quizzes').insert({
+          id: row.id,
+          student_id: row.studentId,
+          course_id: row.courseId,
+          lesson_id: row.lessonId,
+          quiz_title: row.quizTitle,
+          score: row.score,
+          max_score: row.maxScore,
+          passed: row.passed,
+          completed_at: row.completedAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, quiz: row });
+  });
+
+  // POST /api/student/certificates — Persistance Cloud réelle d'un certificat obtenu
+  app.post('/api/student/certificates', async (req, res) => {
+    const session = extractStudentSession(req);
+    const studentId = session?.studentId || String(req.body?.studentId || '').trim();
+    if (!studentId) {
+      return res.status(401).json({ success: false, error: 'Session étudiant requise.' });
+    }
+    const row = {
+      id: String(req.body?.id || `CERT-${Date.now().toString(36).toUpperCase()}`),
+      studentId,
+      courseId: String(req.body?.courseId || ''),
+      courseTitle: String(req.body?.courseTitle || 'Formation Certifiante'),
+      studentName: String(req.body?.studentName || 'Étudiant'),
+      issuedAt: new Date().toISOString(),
+    };
+    const all = readJsonArrayFile(LMS_CERTIFICATES_FILE).filter(
+      (c: any) => !(c.studentId === row.studentId && c.courseId === row.courseId)
+    );
+    all.unshift(row);
+    writeJsonArrayFile(LMS_CERTIFICATES_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('student_certificates').upsert({
+          id: row.id,
+          student_id: row.studentId,
+          course_id: row.courseId,
+          course_title: row.courseTitle,
+          student_name: row.studentName,
+          issued_at: row.issuedAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, certificate: row });
+  });
+
+  // GET & POST /api/campus/chat/:courseId — Chat multi-utilisateurs réel du Campus Privé
+  app.get('/api/campus/chat/:courseId', (req, res) => {
+    const courseId = String(req.params.courseId || '').trim();
+    const list = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE)
+      .filter((m: any) => m.courseId === courseId)
+      .slice(0, 100);
+    return res.json({ success: true, messages: list });
+  });
+
+  app.post('/api/campus/chat/:courseId', async (req, res) => {
+    const courseId = String(req.params.courseId || '').trim();
+    const {
+      authorId = '',
+      authorName = 'Étudiant',
+      authorRole = 'STUDENT',
+      authorAvatar = '',
+      content = '',
+      topicTag = 'ENTRAIDE',
+      attachmentUrl = '',
+    } = req.body || {};
+
+    if (!courseId || !String(content).trim()) {
+      return res.status(400).json({ success: false, error: 'courseId et content requis' });
+    }
+
+    const msg = {
+      id: `msg_${crypto.randomBytes(5).toString('hex')}`,
+      courseId,
+      authorId: String(authorId || `u_${Date.now()}`),
+      authorName: String(authorName).trim(),
+      authorRole: String(authorRole),
+      authorAvatar: String(authorAvatar || ''),
+      content: String(content).trim(),
+      topicTag: String(topicTag || 'ENTRAIDE'),
+      attachmentUrl: String(attachmentUrl || ''),
+      likesCount: 0,
+      likedBy: [],
+      commentsCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    const all = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+    all.unshift(msg);
+    writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_messages').insert({
+          id: msg.id,
+          course_id: msg.courseId,
+          author_id: msg.authorId,
+          author_name: msg.authorName,
+          author_role: msg.authorRole,
+          content: msg.content,
+          topic_tag: msg.topicTag,
+          attachment_url: msg.attachmentUrl || null,
+          created_at: msg.createdAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, message: msg });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

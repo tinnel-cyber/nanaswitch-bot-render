@@ -76,15 +76,32 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
 }) => {
   const isFree = isFreePlan(subscription || currentUser?.subscription);
   const [course, setCourse] = useState<Course>(() => getMockCourseById(courseId));
-  const [isEnrolled, setIsEnrolled] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(`nana_course_enrolled_${courseId}`) === 'true';
+  // Contrôle d'accès vérifié côté serveur (fini le contournement via localStorage)
+  const isStaffPreview = Boolean(
+    currentUser && ['admin', 'superadmin', 'instructor', 'owner', 'merchant'].includes(String((currentUser as any)?.role || '').toLowerCase())
+  );
+  const [isEnrolled, setIsEnrolled] = useState<boolean>(isStaffPreview);
+  useEffect(() => {
+    if (isStaffPreview) {
+      setIsEnrolled(true);
+      return;
     }
-    return false;
-  });
+    let cancelled = false;
+    import('../../../../services/studentAuthService')
+      .then(({ verifyStudentCourseAccess }) => verifyStudentCourseAccess(courseId))
+      .then((hasAccess) => {
+        if (!cancelled) setIsEnrolled(hasAccess);
+      })
+      .catch(() => {
+        if (!cancelled) setIsEnrolled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, isStaffPreview]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<StudentEnrollment>(() => 
-    getInitialStudentEnrollment(courseId, currentUser?.name || currentUser?.email?.split('@')[0] || 'Étudiant NaNa')
+    getInitialStudentEnrollment(courseId, currentUser?.name || currentUser?.email?.split('@')[0] || 'Étudiant')
   );
 
   // Leçon activement lue
