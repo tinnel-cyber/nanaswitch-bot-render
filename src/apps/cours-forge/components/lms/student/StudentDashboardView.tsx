@@ -52,6 +52,7 @@ import { DEFAULT_MASTERCLASS_COURSE } from '../mockCourses';
 import { SEED_MARKETPLACE_COURSES } from '../../../../../services/marketplaceService';
 import { supabase } from '../../../../../lib/supabase';
 import { playTapBeep } from '../../../../../utils/audio';
+import { CourseCommunityFeed } from '../community/CourseCommunityFeed';
 
 export type StudentDashboardTab = 
   | 'HUB'
@@ -2829,7 +2830,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           )}
 
           {/* ===================================================== */}
-          {/* ONGLET : MESSAGES & NOTIFICATIONS INTER-CAMPUS        */}
+          {/* ONGLET : CAMPUS SOCIAL & NOTIFICATIONS INTER-CAMPUS   */}
           {/* ===================================================== */}
           {activeTab === 'MESSAGES' && (
             <div className="space-y-6">
@@ -2839,11 +2840,11 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                   <div className="flex items-center gap-2">
                     <MessageCircle className="w-5 h-5 text-[#1D4ED8]" />
                     <h3 className="text-lg sm:text-xl font-extrabold text-[#0F172A] tracking-tight">
-                      💬 Centre de Communication &amp; Notifications Inter-Campus
+                      💬 Campus Social — Groupes Privés, Salons &amp; Rooms Premium
                     </h3>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Regroupe toutes les réponses des formateurs aux questions posées dans leurs campus respectifs. Soyez alerté en temps réel sans vous connecter manuellement à chaque campus.
+                    Créez des groupes privés, échangez dans des salons thématiques style Discord / Teams et accédez aux Rooms Premium sur abonnement.
                   </p>
                 </div>
 
@@ -2856,6 +2857,19 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Vrai Campus Social Unifié 100% Cloud (Groupes, Salons, Rooms Premium) */}
+              <CourseCommunityFeed
+                courseId={enrolledCourses[0]?.id || 'global'}
+                courseTitle={enrolledCourses[0]?.title || 'Campus Social NaNa'}
+                currentUserId={
+                  (typeof window !== 'undefined' && localStorage.getItem('nana_student_id')) ||
+                  studentEmail ||
+                  'student-guest'
+                }
+                currentUserName={studentName || 'Étudiant'}
+                currentUserRole="STUDENT"
+              />
 
               {/* Filtre par Campus */}
               <div className="bg-white border border-[#E2E8F0] p-3 rounded-2xl shadow-xs flex items-center gap-2 overflow-x-auto">

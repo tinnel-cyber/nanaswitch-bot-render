@@ -4240,6 +4240,612 @@ async function startServer() {
     return res.json({ success: true, message: msg });
   });
 
+  // ============================================================================
+  // 2K. CHANTIER 6 : CAMPUS SOCIAL UNIFIÉ (GROUPES PRIVÉS, SALONS DISCORD/TEAMS,
+  //     ROOMS PREMIUM SUR ABONNEMENT, LIKES & FILS DE DISCUSSION 100% CLOUD/SQL)
+  // ============================================================================
+  const CAMPUS_GROUPS_FILE = path.join(DATA_DIR, 'campus_social_groups.json');
+  const CAMPUS_CHANNELS_FILE = path.join(DATA_DIR, 'campus_social_channels.json');
+  const CAMPUS_MEMBERS_FILE = path.join(DATA_DIR, 'campus_social_memberships.json');
+
+  const ensureDefaultCampusWorkspace = (courseId: string) => {
+    const cid = String(courseId || 'global').trim();
+    const groups = readJsonArrayFile(CAMPUS_GROUPS_FILE);
+    const channels = readJsonArrayFile(CAMPUS_CHANNELS_FILE);
+
+    const hasGroup = groups.some((g: any) => g.courseId === cid);
+    if (!hasGroup) {
+      const defaultGroupId = `grp_${cid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 24)}_main`;
+      const nowIso = new Date().toISOString();
+      const newGroup = {
+        id: defaultGroupId,
+        courseId: cid,
+        name: cid === 'global' ? 'Campus Principal NaNa' : 'Promotion Officielle',
+        description: 'Espace collaboratif officiel : annonces, entraide, devoirs et salon VIP.',
+        visibility: 'public',
+        inviteCode: '',
+        subscriptionPrice: 0,
+        billingCycle: 'monthly',
+        ownerId: 'system',
+        ownerName: 'Équipe Pédagogique',
+        createdAt: nowIso,
+      };
+      groups.unshift(newGroup);
+      writeJsonArrayFile(CAMPUS_GROUPS_FILE, groups);
+
+      const defaults = [
+        {
+          id: `ch_${defaultGroupId}_annonces`,
+          groupId: defaultGroupId,
+          courseId: cid,
+          name: 'annonces',
+          description: 'Annonces officielles des formateurs et planning des sessions.',
+          channelType: 'announcements',
+          isPremium: false,
+          subscriptionPrice: 0,
+          createdBy: 'system',
+          createdAt: nowIso,
+        },
+        {
+          id: `ch_${defaultGroupId}_entraide`,
+          groupId: defaultGroupId,
+          courseId: cid,
+          name: 'entraide-general',
+          description: 'Questions-réponses entre apprenants et partages d’astuces.',
+          channelType: 'text',
+          isPremium: false,
+          subscriptionPrice: 0,
+          createdBy: 'system',
+          createdAt: nowIso,
+        },
+        {
+          id: `ch_${defaultGroupId}_devoirs`,
+          groupId: defaultGroupId,
+          courseId: cid,
+          name: 'devoirs-projets',
+          description: 'Partagez vos réalisations et recevez les retours de la promo.',
+          channelType: 'text',
+          isPremium: false,
+          subscriptionPrice: 0,
+          createdBy: 'system',
+          createdAt: nowIso,
+        },
+        {
+          id: `ch_${defaultGroupId}_vip_room`,
+          groupId: defaultGroupId,
+          courseId: cid,
+          name: 'room-vip-coaching',
+          description: 'Room Premium sur abonnement : coaching rapproché, audits privés & ressources exclusives.',
+          channelType: 'premium_room',
+          isPremium: true,
+          subscriptionPrice: 10000,
+          createdBy: 'system',
+          createdAt: nowIso,
+        },
+      ];
+      channels.push(...defaults);
+      writeJsonArrayFile(CAMPUS_CHANNELS_FILE, channels);
+    }
+  };
+
+  const userHasGroupAccess = (group: any, userId: string, userRole: string, memberships: any[]) => {
+    if (!group) return false;
+    if (userRole === 'INSTRUCTOR' || group.ownerId === userId) return true;
+    if (group.visibility === 'public') return true;
+    return memberships.some((m: any) => m.userId === userId && m.groupId === group.id);
+  };
+
+  const userHasChannelAccess = (channel: any, group: any, userId: string, userRole: string, memberships: any[]) => {
+    if (!channel) return false;
+    if (userRole === 'INSTRUCTOR' || channel.createdBy === userId || group?.ownerId === userId) return true;
+    if (group && !userHasGroupAccess(group, userId, userRole, memberships)) return false;
+    if (!channel.isPremium) return true;
+    return memberships.some((m: any) => m.userId === userId && m.channelId === channel.id);
+  };
+
+  // GET /api/campus/social/workspace
+  app.get('/api/campus/social/workspace', (req, res) => {
+    const courseId = String(req.query?.courseId || 'global').trim();
+    const userId = String(req.query?.userId || '').trim();
+    const userRole = String(req.query?.userRole || 'STUDENT').toUpperCase();
+
+    ensureDefaultCampusWorkspace(courseId);
+
+    const memberships = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+    const groups = readJsonArrayFile(CAMPUS_GROUPS_FILE)
+      .filter((g: any) => g.courseId === courseId || courseId === 'global')
+      .map((g: any) => ({
+        ...g,
+        hasAccess: userHasGroupAccess(g, userId, userRole, memberships),
+        memberCount: Math.max(1, memberships.filter((m: any) => m.groupId === g.id).length),
+      }));
+
+    const groupMap = new Map(groups.map((g: any) => [g.id, g]));
+    const channels = readJsonArrayFile(CAMPUS_CHANNELS_FILE)
+      .filter((c: any) => groupMap.has(c.groupId))
+      .map((c: any) => ({
+        ...c,
+        hasAccess: userHasChannelAccess(c, groupMap.get(c.groupId), userId, userRole, memberships),
+      }));
+
+    return res.json({ success: true, groups, channels });
+  });
+
+  // POST /api/campus/social/groups — Créer un groupe Public, Privé (avec code d'invitation) ou Premium (sur abonnement)
+  app.post('/api/campus/social/groups', async (req, res) => {
+    const {
+      courseId = 'global',
+      name = '',
+      description = '',
+      visibility = 'public',
+      subscriptionPrice = 0,
+      billingCycle = 'monthly',
+      ownerId = '',
+      ownerName = 'Membre',
+    } = req.body || {};
+
+    if (!String(name).trim() || !String(ownerId).trim()) {
+      return res.status(400).json({ success: false, error: 'Nom du groupe et identifiant créateur requis.' });
+    }
+
+    const vis = ['public', 'private', 'premium'].includes(String(visibility)) ? String(visibility) : 'public';
+    const groupId = `grp_${crypto.randomBytes(5).toString('hex')}`;
+    const inviteCode = vis === 'private' ? `PRIV-${crypto.randomBytes(3).toString('hex').toUpperCase()}` : '';
+    const nowIso = new Date().toISOString();
+
+    const group = {
+      id: groupId,
+      courseId: String(courseId).trim(),
+      name: String(name).trim(),
+      description: String(description || '').trim(),
+      visibility: vis,
+      inviteCode,
+      subscriptionPrice: vis === 'premium' ? Math.max(0, Number(subscriptionPrice) || 5000) : 0,
+      billingCycle: String(billingCycle || 'monthly'),
+      ownerId: String(ownerId).trim(),
+      ownerName: String(ownerName).trim(),
+      createdAt: nowIso,
+    };
+
+    const groups = readJsonArrayFile(CAMPUS_GROUPS_FILE);
+    groups.unshift(group);
+    writeJsonArrayFile(CAMPUS_GROUPS_FILE, groups);
+
+    // Salon #general automatique dans le nouveau groupe
+    const defaultChannel = {
+      id: `ch_${crypto.randomBytes(5).toString('hex')}`,
+      groupId,
+      courseId: group.courseId,
+      name: vis === 'premium' ? 'salon-premium-vip' : 'general',
+      description: `Salon principal du groupe ${group.name}`,
+      channelType: vis === 'premium' ? 'premium_room' : 'text',
+      isPremium: vis === 'premium',
+      subscriptionPrice: group.subscriptionPrice,
+      createdBy: group.ownerId,
+      createdAt: nowIso,
+    };
+    const channels = readJsonArrayFile(CAMPUS_CHANNELS_FILE);
+    channels.push(defaultChannel);
+    writeJsonArrayFile(CAMPUS_CHANNELS_FILE, channels);
+
+    // Créateur automatiquement membre/owner
+    const membership = {
+      id: `mem_${crypto.randomBytes(5).toString('hex')}`,
+      groupId,
+      channelId: defaultChannel.id,
+      userId: group.ownerId,
+      userName: group.ownerName,
+      role: 'owner',
+      accessType: vis === 'premium' ? 'premium_subscription' : vis === 'private' ? 'invite' : 'free',
+      joinedAt: nowIso,
+    };
+    const members = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+    members.unshift(membership);
+    writeJsonArrayFile(CAMPUS_MEMBERS_FILE, members);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_groups').insert({
+          id: group.id,
+          course_id: group.courseId,
+          name: group.name,
+          description: group.description,
+          visibility: group.visibility,
+          invite_code: group.inviteCode || null,
+          subscription_price: group.subscriptionPrice,
+          billing_cycle: group.billingCycle,
+          owner_id: group.ownerId,
+          owner_name: group.ownerName,
+          created_at: nowIso,
+        });
+        await supabaseAdmin.from('campus_channels').insert({
+          id: defaultChannel.id,
+          group_id: defaultChannel.groupId,
+          course_id: defaultChannel.courseId,
+          name: defaultChannel.name,
+          description: defaultChannel.description,
+          channel_type: defaultChannel.channelType,
+          is_premium: defaultChannel.isPremium,
+          subscription_price: defaultChannel.subscriptionPrice,
+          created_by: defaultChannel.createdBy,
+          created_at: nowIso,
+        });
+        await supabaseAdmin.from('campus_memberships').insert({
+          id: membership.id,
+          group_id: membership.groupId,
+          channel_id: membership.channelId,
+          user_id: membership.userId,
+          user_name: membership.userName,
+          role: membership.role,
+          access_type: membership.accessType,
+          joined_at: nowIso,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, group: { ...group, hasAccess: true }, defaultChannel: { ...defaultChannel, hasAccess: true } });
+  });
+
+  // POST /api/campus/social/groups/:groupId/join — Rejoindre un groupe (Public, Code Privé ou Abonnement Premium)
+  app.post('/api/campus/social/groups/:groupId/join', async (req, res) => {
+    const groupId = String(req.params.groupId || '').trim();
+    const { userId = '', userName = 'Étudiant', inviteCode = '', paymentMethod = '', paymentRef = '' } = req.body || {};
+    if (!groupId || !String(userId).trim()) {
+      return res.status(400).json({ success: false, error: 'groupId et userId requis.' });
+    }
+
+    const group = readJsonArrayFile(CAMPUS_GROUPS_FILE).find((g: any) => g.id === groupId);
+    if (!group) {
+      return res.status(404).json({ success: false, error: 'Groupe introuvable.' });
+    }
+
+    if (group.visibility === 'private') {
+      if (!inviteCode || String(inviteCode).trim().toUpperCase() !== String(group.inviteCode).toUpperCase()) {
+        return res.status(403).json({ success: false, error: "Code d'invitation invalide pour ce groupe privé." });
+      }
+    }
+
+    if (group.visibility === 'premium') {
+      if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY') {
+        return res.status(400).json({ success: false, error: 'Le paiement à la livraison est interdit pour les abonnements Premium.' });
+      }
+      if (group.subscriptionPrice > 0 && !String(paymentRef).trim()) {
+        return res.status(402).json({ success: false, error: 'Paiement Mobile Money requis pour débloquer ce groupe Premium.' });
+      }
+    }
+
+    const members = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+    const already = members.find((m: any) => m.groupId === groupId && m.userId === String(userId).trim());
+    if (already) {
+      return res.json({ success: true, membership: already, alreadyMember: true });
+    }
+
+    const membership = {
+      id: `mem_${crypto.randomBytes(5).toString('hex')}`,
+      groupId,
+      channelId: null,
+      userId: String(userId).trim(),
+      userName: String(userName).trim(),
+      role: 'member',
+      accessType: group.visibility === 'premium' ? 'premium_subscription' : group.visibility === 'private' ? 'invite' : 'free',
+      paymentRef: String(paymentRef || ''),
+      joinedAt: new Date().toISOString(),
+    };
+    members.unshift(membership);
+    writeJsonArrayFile(CAMPUS_MEMBERS_FILE, members);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_memberships').insert({
+          id: membership.id,
+          group_id: membership.groupId,
+          user_id: membership.userId,
+          user_name: membership.userName,
+          role: membership.role,
+          access_type: membership.accessType,
+          payment_ref: membership.paymentRef || null,
+          joined_at: membership.joinedAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, membership });
+  });
+
+  // POST /api/campus/social/channels — Créer un salon (#channel) ou une Room Premium dans un groupe
+  app.post('/api/campus/social/channels', async (req, res) => {
+    const {
+      groupId = '',
+      courseId = 'global',
+      name = '',
+      description = '',
+      channelType = 'text',
+      isPremium = false,
+      subscriptionPrice = 0,
+      createdBy = 'system',
+    } = req.body || {};
+
+    if (!groupId || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'groupId et nom du salon requis.' });
+    }
+
+    const cleanName = String(name)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-_àâäéèêëïîôùûüç]/gi, '');
+
+    const channel = {
+      id: `ch_${crypto.randomBytes(5).toString('hex')}`,
+      groupId: String(groupId).trim(),
+      courseId: String(courseId).trim(),
+      name: cleanName || 'salon',
+      description: String(description || '').trim(),
+      channelType: isPremium ? 'premium_room' : String(channelType || 'text'),
+      isPremium: Boolean(isPremium),
+      subscriptionPrice: isPremium ? Math.max(0, Number(subscriptionPrice) || 5000) : 0,
+      createdBy: String(createdBy).trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const channels = readJsonArrayFile(CAMPUS_CHANNELS_FILE);
+    channels.push(channel);
+    writeJsonArrayFile(CAMPUS_CHANNELS_FILE, channels);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_channels').insert({
+          id: channel.id,
+          group_id: channel.groupId,
+          course_id: channel.courseId,
+          name: channel.name,
+          description: channel.description,
+          channel_type: channel.channelType,
+          is_premium: channel.isPremium,
+          subscription_price: channel.subscriptionPrice,
+          created_by: channel.createdBy,
+          created_at: channel.createdAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, channel: { ...channel, hasAccess: true } });
+  });
+
+  // POST /api/campus/social/rooms/:channelId/subscribe — Débloquer une Room Premium sur Abonnement
+  app.post('/api/campus/social/rooms/:channelId/subscribe', async (req, res) => {
+    const channelId = String(req.params.channelId || '').trim();
+    const { userId = '', userName = 'Étudiant', paymentMethod = 'MOBILE_MONEY', paymentRef = '' } = req.body || {};
+    if (!channelId || !String(userId).trim()) {
+      return res.status(400).json({ success: false, error: 'channelId et userId requis.' });
+    }
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY') {
+      return res.status(400).json({ success: false, error: 'Le paiement à la livraison est interdit pour une Room Premium.' });
+    }
+
+    const channel = readJsonArrayFile(CAMPUS_CHANNELS_FILE).find((c: any) => c.id === channelId);
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Room introuvable.' });
+    }
+    if (channel.isPremium && channel.subscriptionPrice > 0 && !String(paymentRef).trim()) {
+      return res.status(402).json({ success: false, error: 'Référence de paiement Mobile Money requise.' });
+    }
+
+    const members = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+    const membership = {
+      id: `mem_${crypto.randomBytes(5).toString('hex')}`,
+      groupId: channel.groupId,
+      channelId,
+      userId: String(userId).trim(),
+      userName: String(userName).trim(),
+      role: 'member',
+      accessType: 'premium_subscription',
+      paymentRef: String(paymentRef || `SUB-${Date.now()}`),
+      joinedAt: new Date().toISOString(),
+    };
+    members.unshift(membership);
+    writeJsonArrayFile(CAMPUS_MEMBERS_FILE, members);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_memberships').insert({
+          id: membership.id,
+          group_id: membership.groupId,
+          channel_id: membership.channelId,
+          user_id: membership.userId,
+          user_name: membership.userName,
+          role: membership.role,
+          access_type: membership.accessType,
+          payment_ref: membership.paymentRef,
+          joined_at: membership.joinedAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, membership, unlocked: true });
+  });
+
+  // GET & POST /api/campus/social/channels/:channelId/messages — Messages multi-utilisateurs avec contrôle d'accès serveur
+  app.get('/api/campus/social/channels/:channelId/messages', (req, res) => {
+    const channelId = String(req.params.channelId || '').trim();
+    const userId = String(req.query?.userId || '').trim();
+    const userRole = String(req.query?.userRole || 'STUDENT').toUpperCase();
+
+    const channel = readJsonArrayFile(CAMPUS_CHANNELS_FILE).find((c: any) => c.id === channelId);
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Salon introuvable.' });
+    }
+    const group = readJsonArrayFile(CAMPUS_GROUPS_FILE).find((g: any) => g.id === channel.groupId);
+    const memberships = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+
+    if (!userHasChannelAccess(channel, group, userId, userRole, memberships)) {
+      return res.status(403).json({
+        success: false,
+        code: channel.isPremium || group?.visibility === 'premium' ? 'PREMIUM_ROOM_LOCKED' : 'PRIVATE_GROUP_LOCKED',
+        error: channel.isPremium
+          ? 'Cette Room Premium nécessite un abonnement actif.'
+          : "Ce groupe privé nécessite un code d'invitation.",
+      });
+    }
+
+    const list = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE)
+      .filter((m: any) => m.channelId === channelId)
+      .slice(0, 100);
+
+    return res.json({ success: true, messages: list });
+  });
+
+  app.post('/api/campus/social/channels/:channelId/messages', async (req, res) => {
+    const channelId = String(req.params.channelId || '').trim();
+    const {
+      authorId = '',
+      authorName = 'Étudiant',
+      authorRole = 'STUDENT',
+      authorAvatar = '',
+      content = '',
+      topicTag = 'ENTRAIDE',
+      attachmentUrl = '',
+    } = req.body || {};
+
+    if (!channelId || !String(content).trim()) {
+      return res.status(400).json({ success: false, error: 'channelId et content requis.' });
+    }
+
+    const channel = readJsonArrayFile(CAMPUS_CHANNELS_FILE).find((c: any) => c.id === channelId);
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Salon introuvable.' });
+    }
+    const group = readJsonArrayFile(CAMPUS_GROUPS_FILE).find((g: any) => g.id === channel.groupId);
+    const memberships = readJsonArrayFile(CAMPUS_MEMBERS_FILE);
+
+    if (!userHasChannelAccess(channel, group, String(authorId), String(authorRole).toUpperCase(), memberships)) {
+      return res.status(403).json({ success: false, error: 'Accès non autorisé à ce salon.' });
+    }
+
+    const msg = {
+      id: `msg_${crypto.randomBytes(5).toString('hex')}`,
+      courseId: channel.courseId,
+      groupId: channel.groupId,
+      channelId,
+      authorId: String(authorId || `u_${Date.now()}`),
+      authorName: String(authorName).trim(),
+      authorRole: String(authorRole),
+      authorAvatar: String(authorAvatar || ''),
+      content: String(content).trim(),
+      topicTag: String(topicTag || 'ENTRAIDE'),
+      attachmentUrl: String(attachmentUrl || ''),
+      likesCount: 0,
+      likedBy: [],
+      commentsCount: 0,
+      comments: [],
+      isPinned: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    const all = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+    all.unshift(msg);
+    writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('campus_messages').insert({
+          id: msg.id,
+          course_id: msg.courseId,
+          group_id: msg.groupId,
+          channel_id: msg.channelId,
+          author_id: msg.authorId,
+          author_name: msg.authorName,
+          author_role: msg.authorRole,
+          content: msg.content,
+          topic_tag: msg.topicTag,
+          attachment_url: msg.attachmentUrl || null,
+          likes_count: 0,
+          liked_by: [],
+          comments: [],
+          is_pinned: false,
+          created_at: msg.createdAt,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, message: msg });
+  });
+
+  // POST /api/campus/social/messages/:messageId/like — Toggle Like persisté Cloud & SQL
+  app.post('/api/campus/social/messages/:messageId/like', async (req, res) => {
+    const messageId = String(req.params.messageId || '').trim();
+    const userId = String(req.body?.userId || '').trim();
+    if (!messageId || !userId) {
+      return res.status(400).json({ success: false, error: 'messageId et userId requis.' });
+    }
+
+    const all = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+    const idx = all.findIndex((m: any) => m.id === messageId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Message introuvable.' });
+    }
+
+    const likedBy: string[] = Array.isArray(all[idx].likedBy) ? [...all[idx].likedBy] : [];
+    const pos = likedBy.indexOf(userId);
+    if (pos >= 0) likedBy.splice(pos, 1);
+    else likedBy.push(userId);
+
+    all[idx].likedBy = likedBy;
+    all[idx].likesCount = likedBy.length;
+    writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('campus_messages')
+          .update({ liked_by: likedBy, likes_count: likedBy.length })
+          .eq('id', messageId);
+      } catch {}
+    }
+
+    return res.json({ success: true, likesCount: likedBy.length, likedBy });
+  });
+
+  // POST /api/campus/social/messages/:messageId/comments — Ajouter une réponse (Thread) persistée Cloud & SQL
+  app.post('/api/campus/social/messages/:messageId/comments', async (req, res) => {
+    const messageId = String(req.params.messageId || '').trim();
+    const { authorId = '', authorName = 'Étudiant', authorRole = 'STUDENT', content = '' } = req.body || {};
+    if (!messageId || !String(content).trim()) {
+      return res.status(400).json({ success: false, error: 'messageId et content requis.' });
+    }
+
+    const all = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+    const idx = all.findIndex((m: any) => m.id === messageId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Message introuvable.' });
+    }
+
+    const comment = {
+      id: `cmt_${crypto.randomBytes(4).toString('hex')}`,
+      authorId: String(authorId || `u_${Date.now()}`),
+      authorName: String(authorName).trim(),
+      authorRole: String(authorRole),
+      content: String(content).trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const comments = Array.isArray(all[idx].comments) ? [...all[idx].comments, comment] : [comment];
+    all[idx].comments = comments;
+    all[idx].commentsCount = comments.length;
+    writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('campus_messages')
+          .update({ comments })
+          .eq('id', messageId);
+      } catch {}
+    }
+
+    return res.json({ success: true, comment, commentsCount: comments.length });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
