@@ -186,14 +186,77 @@ export function downloadSubtitleFile(content: string, filename: string, mime = '
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+function encodeMono16kWav(samples: Float32Array, sampleRate: number): Blob {
+  const numSamples = samples.length;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
 /**
- * Transcription automatique via le serveur (/api/ai/transcribe) sur un Blob audio (voix off ou piste audio),
- * puis découpage horodaté prêt pour l'incrustation live et l'export .SRT / .VTT.
+ * Extrait et compresse localement la piste audio d'une vidéo/audio en WAV mono 16 kHz léger
+ * (évite d'envoyer une vidéo MP4 de 30 Mo en Base64).
+ */
+async function extractCompactWavFromMediaBlob(mediaBlob: Blob): Promise<Blob> {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return mediaBlob;
+    const arrBuf = await mediaBlob.arrayBuffer();
+    const ctx = new AudioCtx();
+    const decoded = await ctx.decodeAudioData(arrBuf.slice(0));
+    ctx.close().catch(() => {});
+
+    const targetRate = 16000;
+    const maxSec = Math.min(decoded.duration, 120); // jusqu'à 2 minutes
+    const frameCount = Math.max(1, Math.floor(maxSec * targetRate));
+    const offline = new OfflineAudioContext(1, frameCount, targetRate);
+    const src = offline.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offline.destination);
+    src.start(0);
+    const rendered = await offline.startRendering();
+    return encodeMono16kWav(rendered.getChannelData(0), targetRate);
+  } catch {
+    return mediaBlob;
+  }
+}
+
+/**
+ * Transcription automatique via le serveur (/api/ai/transcribe) sur un Blob vidéo ou audio,
+ * avec extraction audio locale légère (WAV 16kHz) puis découpage horodaté prêt pour l'incrustation et .SRT / .VTT.
  */
 export async function autoTranscribeBlobToSubtitles(
-  audioBlob: Blob,
+  mediaBlob: Blob,
   durationSec: number
 ): Promise<{ text: string; cues: SubtitleCue[] }> {
+  const payloadBlob =
+    mediaBlob.type.startsWith('video/') || mediaBlob.size > 1_500_000
+      ? await extractCompactWavFromMediaBlob(mediaBlob)
+      : mediaBlob;
+
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -201,7 +264,7 @@ export async function autoTranscribeBlobToSubtitles(
       resolve(res.includes(',') ? res.split(',')[1] : res);
     };
     reader.onerror = () => reject(new Error('Impossible de lire le fichier audio.'));
-    reader.readAsDataURL(audioBlob);
+    reader.readAsDataURL(payloadBlob);
   });
 
   const res = await fetch('/api/ai/transcribe', {
@@ -209,15 +272,20 @@ export async function autoTranscribeBlobToSubtitles(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       audioBase64: base64,
-      mimeType: audioBlob.type || 'audio/webm',
-      language: 'fr'
+      mimeType: payloadBlob.type || 'audio/wav',
+      language: 'fr',
+      mode: 'video_subtitles'
     })
   });
 
   const json = await res.json().catch(() => null);
   const transcript = String(json?.text || json?.transcript || '').trim();
   if (!res.ok || !transcript) {
-    throw new Error(json?.error || 'Transcription automatique indisponible — vous pouvez coller ou dicter votre script ci-dessous.');
+    throw new Error(
+      json?.error ||
+        json?.message ||
+        'Aucune parole détectée ou transcription indisponible — utilisez la Dictée Micro directe ou saisissez votre script ci-dessous.'
+    );
   }
 
   return {

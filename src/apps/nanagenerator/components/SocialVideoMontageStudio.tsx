@@ -376,21 +376,100 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setSubtitleStatusMsg(`✅ ${cues.length} sous-titres générés et synchronisés (${maxDurationSec}s) !`);
   };
 
+  const [isLiveDictating, setIsLiveDictating] = useState<boolean>(false);
+  const speechRecognitionRef = useRef<any>(null);
+
+  const handleToggleLiveDictation = () => {
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      setEncodeError('La dictée vocale directe n\'est pas supportée sur ce navigateur. Utilisez « Auto-Transcrire Audio » ou tapez votre texte.');
+      return;
+    }
+
+    if (isLiveDictating && speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch {}
+      setIsLiveDictating(false);
+      return;
+    }
+
+    playTapBeep();
+    setEncodeError(null);
+    const rec = new SpeechRec();
+    rec.lang = 'fr-FR';
+    rec.continuous = true;
+    rec.interimResults = true;
+    speechRecognitionRef.current = rec;
+
+    let finalTranscript = subtitleScript.trim();
+    rec.onstart = () => {
+      setIsLiveDictating(true);
+      setSubtitleStatusMsg('🎙️ Dictée micro en cours... Parlez clairement (cliquez sur Arrêter quand terminé).');
+    };
+    rec.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const piece = event.results[i][0]?.transcript || '';
+        if (event.results[i].isFinal) {
+          finalTranscript = [finalTranscript, piece.trim()].filter(Boolean).join(' ');
+        } else {
+          interim += piece;
+        }
+      }
+      const liveText = [finalTranscript, interim.trim()].filter(Boolean).join(' ').trim();
+      setSubtitleScript(liveText);
+      if (liveText) {
+        const cues = generateTimedSubtitlesFromScript(liveText, videoDuration || maxDurationSec || 30);
+        setSubtitleCues(cues);
+      }
+    };
+    rec.onerror = (ev: any) => {
+      setIsLiveDictating(false);
+      if (ev?.error !== 'aborted') {
+        setEncodeError(`Erreur dictée micro : ${ev?.error || 'autorisation micro refusée'}.`);
+      }
+    };
+    rec.onend = () => {
+      setIsLiveDictating(false);
+      if (finalTranscript.trim()) {
+        const cues = generateTimedSubtitlesFromScript(finalTranscript, videoDuration || maxDurationSec || 30);
+        setSubtitleCues(cues);
+        setSubtitleStatusMsg(`✅ ${cues.length} sous-titres dictés et synchronisés !`);
+        playValidationBeep();
+      }
+    };
+    try {
+      rec.start();
+    } catch {
+      setIsLiveDictating(false);
+    }
+  };
+
   const handleAutoTranscribeVoice = async () => {
-    const blobToTranscribe = rawVoiceBlob || sourceFile;
+    let blobToTranscribe: Blob | null = rawVoiceBlob || sourceFile;
+    if (!blobToTranscribe && previewUrl) {
+      try {
+        setIsAutoTranscribing(true);
+        setSubtitleStatusMsg('Extraction de la piste audio de la vidéo...');
+        const fetched = await fetch(previewUrl);
+        if (fetched.ok) blobToTranscribe = await fetched.blob();
+      } catch {}
+    }
     if (!blobToTranscribe) {
-      setEncodeError('Enregistrez une voix off (onglet Voix DSP) ou importez une vidéo/audio pour la transcription automatique.');
+      setIsAutoTranscribing(false);
+      setEncodeError('Importez une vidéo ou enregistrez une voix off (onglet Voix DSP) pour la transcription automatique.');
       return;
     }
     setIsAutoTranscribing(true);
     setEncodeError(null);
-    setSubtitleStatusMsg('Transcription automatique IA en cours...');
+    setSubtitleStatusMsg('Extraction audio WAV légère + Transcription automatique IA en cours...');
     try {
-      const result = await autoTranscribeBlobToSubtitles(blobToTranscribe, maxDurationSec || videoDuration || 30);
+      const result = await autoTranscribeBlobToSubtitles(blobToTranscribe, videoDuration || maxDurationSec || 30);
       setSubtitleScript(result.text);
       setSubtitleCues(result.cues);
       playValidationBeep();
-      setSubtitleStatusMsg(`✅ ${result.cues.length} sous-titres transcrits automatiquement depuis votre audio !`);
+      setSubtitleStatusMsg(`✅ ${result.cues.length} sous-titres transcrits automatiquement et affichés sur la vidéo !`);
     } catch (err: any) {
       playCancelSound();
       setSubtitleStatusMsg(null);
@@ -1050,9 +1129,12 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       }
     }
 
-    // Si la timeline a été montée (multi-clips, Cut, suppression, vitesse, mute, trim ou calques visuels) -> assemblage complet
+    // Si la timeline, un texte, des sous-titres, un filtre ou des calques visuels sont actifs -> rendu Canvas complet (couleurs & textes garantis)
     const isTimelineEdited =
       visualLayers.length > 0 ||
+      Boolean(combinedOverlayText) ||
+      subtitleCues.length > 0 ||
+      Boolean(activeFilterCss) ||
       timelineClips.length > 1 ||
       (timelineClips.length === 1 &&
         (timelineClips[0].startSec > 0.1 ||
@@ -1562,7 +1644,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                             )}
                           </div>
                           {(overlayPrice.trim() || overlayContact.trim()) && (
-                            <p className="text-[10.5px] font-bold text-white/90 mt-0.5 truncate">
+                            <p className="text-[10.5px] font-bold mt-0.5 truncate opacity-95" style={{ color: textColor }}>
                               {[overlayPrice.trim(), overlayContact.trim()].filter(Boolean).join(' • ')}
                             </p>
                           )}
@@ -1777,15 +1859,30 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         Transcrivez automatiquement votre voix off par IA ou découpez votre script en sous-titres synchronisés (.SRT / .VTT + incrustation live).
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAutoTranscribeVoice}
-                      disabled={isAutoTranscribing}
-                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 disabled:opacity-60 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                    >
-                      {isAutoTranscribing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
-                      <span>{isAutoTranscribing ? 'Transcription...' : 'Auto-Transcrire Audio'}</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleToggleLiveDictation}
+                        className={`px-3 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition ${
+                          isLiveDictating
+                            ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
+                            : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40'
+                        }`}
+                        title="Dicter directement vos sous-titres au micro en français (instantané)"
+                      >
+                        <Mic className="w-3.5 h-3.5" />
+                        <span>{isLiveDictating ? 'Arrêter dictée' : 'Dicter au micro'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAutoTranscribeVoice}
+                        disabled={isAutoTranscribing}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 disabled:opacity-60 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {isAutoTranscribing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                        <span>{isAutoTranscribing ? 'Transcription...' : 'Auto-Transcrire Audio'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   <textarea
@@ -1852,6 +1949,16 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           onClick={() => {
                             playTapBeep();
                             setSubtitleTemplateId(tpl.id);
+                            if (subtitleCues.length === 0) {
+                              const sampleText =
+                                subtitleScript.trim() ||
+                                overlayHeadline.trim() ||
+                                'Votre sous-titre viral ici !';
+                              if (!subtitleScript.trim()) setSubtitleScript(sampleText);
+                              setSubtitleCues(
+                                generateTimedSubtitlesFromScript(sampleText, videoDuration || maxDurationSec || 30)
+                              );
+                            }
                           }}
                           className={`text-left p-3 rounded-2xl border transition cursor-pointer space-y-1.5 ${
                             active
@@ -1867,7 +1974,10 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           </div>
                           <p className="text-[10.5px] text-slate-400">{tpl.desc}</p>
                           <div className="pt-1">
-                            <span className={`inline-block text-[11px] ${tpl.previewClass}`}>
+                            <span
+                              className={`inline-block text-[11px] ${tpl.previewClass}`}
+                              style={active && subtitleCustomColor ? { color: subtitleCustomColor } : undefined}
+                            >
                               EXEMPLE VIRAL
                             </span>
                           </div>
@@ -1887,6 +1997,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           onClick={() => {
                             playTapBeep();
                             setSubtitleCustomColor(hex);
+                            if (subtitleCues.length === 0 && subtitleScript.trim()) {
+                              setSubtitleCues(
+                                generateTimedSubtitlesFromScript(subtitleScript.trim(), videoDuration || maxDurationSec || 30)
+                              );
+                            }
                           }}
                           className={`w-6 h-6 rounded-full border-2 cursor-pointer transition ${
                             resolvedSubtitleColor.toLowerCase() === hex.toLowerCase()
@@ -1901,7 +2016,14 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         <input
                           type="color"
                           value={resolvedSubtitleColor}
-                          onChange={(e) => setSubtitleCustomColor(e.target.value)}
+                          onChange={(e) => {
+                            setSubtitleCustomColor(e.target.value);
+                            if (subtitleCues.length === 0 && subtitleScript.trim()) {
+                              setSubtitleCues(
+                                generateTimedSubtitlesFromScript(subtitleScript.trim(), videoDuration || maxDurationSec || 30)
+                              );
+                            }
+                          }}
                           className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
                         />
                         <span>Libre</span>

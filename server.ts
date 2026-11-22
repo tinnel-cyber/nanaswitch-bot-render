@@ -8603,53 +8603,87 @@ async function startServer() {
     }
   });
 
-  // Online Voice Recognition endpoint via Gemini Flash
+  // Online Voice Recognition & Video Auto-Subtitles endpoint via Gemini Flash
   app.post('/api/ai/transcribe', async (req, res) => {
     try {
-      const { audioBase64, mimeType = 'audio/wav' } = req.body;
+      const { audioBase64, mimeType = 'audio/wav', language = 'fr', mode = 'pos' } = req.body || {};
       if (!audioBase64) {
-        return res.status(400).json({ error: 'Flux audio manquant' });
+        return res.status(400).json({ success: false, error: 'Flux audio manquant' });
       }
 
       const ai = getGenAI();
       if (!ai) {
-        return res.json({ success: false, text: '', message: 'Gemini API non configurée (mode local actif)' });
+        return res.status(503).json({
+          success: false,
+          text: '',
+          error: 'Clé IA Gemini non configurée sur le serveur. Utilisez la dictée micro directe ou saisissez votre script.',
+        });
       }
 
-      let cleanMime = (mimeType || 'audio/wav').split(';')[0].trim().toLowerCase();
+      let cleanMime = String(mimeType || 'audio/wav').split(';')[0].trim().toLowerCase();
       if (!cleanMime || cleanMime === 'audio/undefined') cleanMime = 'audio/wav';
 
       const promptText =
-        "Tu es le transcripteur vocal ultra-précis d'une caisse de boutique africaine (monnaie Franc CFA). " +
-        "Écoute attentivement cet enregistrement audio et transcris EXACTEMENT en français les articles, quantités et prix dictés par le gérant ou le client " +
-        "(exemples typiques : 'Deux paquets de sucre à 500 francs et une boîte de lait', '2 pains et 1 lait 800', 'trois laits 1500', 'un sac de riz 25kg et deux bouteilles d'huile'). " +
-        "Réponds UNIQUEMENT avec la phrase exacte transcrite, sans guillemets, sans politesse et sans balisage markdown. Si l'enregistrement est du silence ou inaudible, réponds par une chaîne vide.";
+        mode === 'video_subtitles'
+          ? `Tu es un moteur professionnel de sous-titrage vidéo automatique (${language}). ` +
+            "Écoute attentivement cet audio ou cette vidéo et transcris EXACTEMENT toutes les paroles prononcées avec une ponctuation naturelle pour créer des sous-titres. " +
+            "Réponds UNIQUEMENT avec le texte transcrit brut, sans guillemets, sans horodatage et sans commentaire. Si aucune parole n'est audible, réponds une chaîne vide."
+          : "Tu es le transcripteur vocal ultra-précis d'une caisse de boutique africaine (monnaie Franc CFA). " +
+            "Écoute attentivement cet enregistrement audio et transcris EXACTEMENT en français les articles, quantités et prix dictés par le gérant ou le client " +
+            "(exemples typiques : 'Deux paquets de sucre à 500 francs et une boîte de lait', '2 pains et 1 lait 800', 'trois laits 1500', 'un sac de riz 25kg et deux bouteilles d'huile'). " +
+            "Réponds UNIQUEMENT avec la phrase exacte transcrite, sans guillemets, sans politesse et sans balisage markdown. Si l'enregistrement est du silence ou inaudible, réponds par une chaîne vide.";
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType: cleanMime,
-                data: audioBase64,
-              },
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let text = '';
+      let usedModel = candidateModels[0];
+      let lastErr: any = null;
+
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: cleanMime,
+                    data: audioBase64,
+                  },
+                },
+                { text: promptText },
+              ],
             },
-            { text: promptText },
-          ],
-        },
-      });
+          });
+          text = response?.text?.trim() || '';
+          usedModel = modelName;
+          lastErr = null;
+          break;
+        } catch (mErr: any) {
+          lastErr = mErr;
+          console.warn(`[Transcribe] Modèle ${modelName} indisponible:`, mErr?.message);
+        }
+      }
 
-      const text = response?.text?.trim() || '';
+      if (lastErr && !text) {
+        return res.status(502).json({
+          success: false,
+          text: '',
+          error: lastErr?.message || 'Service de transcription temporairement indisponible.',
+        });
+      }
 
       res.json({
         success: true,
         text,
-        source: 'gemini-3.8-flash',
+        source: usedModel,
       });
     } catch (err: any) {
-      console.warn('Erreur transcription en ligne Gemini, passage hors-ligne :', err?.message);
-      res.json({ success: false, text: '', message: err?.message || 'Erreur transcription' });
+      console.warn('Erreur transcription en ligne Gemini :', err?.message);
+      res.status(500).json({
+        success: false,
+        text: '',
+        error: err?.message || 'Erreur lors de la transcription automatique.',
+      });
     }
   });
 
