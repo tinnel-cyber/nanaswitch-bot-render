@@ -2527,56 +2527,33 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                   </div>
 
                   {/* Curseur Tête de lecture (Playhead) intégré pour positionner précisément le Cut */}
-                  {selectedClip && (
-                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
-                      <div className="flex items-center justify-between text-[10.5px]">
-                        <span className="font-bold text-amber-300 flex items-center gap-1.5">
-                          <Scissors className="w-3 h-3" />
-                          Position de coupe (Tête de lecture)
-                        </span>
-                        <span className="font-mono font-black text-white">
-                          {currentVideoTime.toFixed(1)}s / {selectedClip.sourceDurationSec.toFixed(1)}s
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={selectedClip.startSec}
-                        max={Math.max(selectedClip.startSec + 0.1, selectedClip.endSec)}
-                        step={0.1}
-                        value={Math.max(selectedClip.startSec, Math.min(selectedClip.endSec, currentVideoTime))}
-                        onChange={(e) => handleScrubPlayhead(Number(e.target.value))}
-                        className="w-full accent-amber-400 cursor-pointer"
-                      />
-                    </div>
-                  )}
-
-                  {/* Barre d'actions principales : Lire montage, Cut, Supprimer, Dupliquer, Déplacer */}
+                  {/* Barre d'actions principales : Lire montage, Cut, Supprimer, Dupliquer, Extraire l'audio, Déplacer */}
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={handlePlayFullTimeline}
                       disabled={timelineClips.length === 0}
-                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer shadow-sm"
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer shadow-sm"
                       title="Lire le montage assemblé (ignore les segments supprimés)"
                     >
                       {isVideoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      <span>{isVideoPlaying ? 'Pause' : 'Lire montage'}</span>
+                      <span>{isVideoPlaying ? 'Pause' : 'Lire'}</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleSplitAtPlayhead}
                       disabled={!selectedClip}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      title="Couper le clip sélectionné à la tête de lecture (ou au milieu si à 0.0s)"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      title="Couper le clip à la ligne rouge de la timeline (ou au milieu si à 0.0s)"
                     >
                       <Scissors className="w-3.5 h-3.5" />
-                      <span>Cut ici ({currentVideoTime.toFixed(1)}s)</span>
+                      <span>Cut ({currentVideoTime.toFixed(1)}s)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteSelectedClip()}
                       disabled={!selectedClip}
-                      className="px-2.5 py-1.5 rounded-xl bg-rose-600/25 hover:bg-rose-600/45 disabled:opacity-35 text-rose-200 border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-rose-600/25 hover:bg-rose-600/45 disabled:opacity-35 text-rose-200 border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                       title="Supprimer le segment sélectionné"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2586,7 +2563,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       type="button"
                       onClick={handleDuplicateSelectedClip}
                       disabled={!selectedClip}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       <span>Dupliquer</span>
@@ -2595,7 +2572,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       type="button"
                       onClick={handleExtractAudioFromVideo}
                       disabled={isExtractingAudio || timelineClips.length === 0}
-                      className="px-2.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/35 disabled:opacity-35 text-cyan-200 border border-cyan-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 disabled:opacity-35 text-cyan-200 border border-cyan-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                       title="Extraire et détacher la piste audio de la vidéo sur la timeline"
                     >
                       {isExtractingAudio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AudioWaveform className="w-3.5 h-3.5" />}
@@ -2605,7 +2582,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       type="button"
                       onClick={() => handleMoveSelectedClip('left')}
                       disabled={!selectedClip || timelineClips.findIndex(c => c.id === selectedClip.id) <= 0}
-                      className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
+                      className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
                       title="Déplacer à gauche"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
@@ -2614,7 +2591,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       type="button"
                       onClick={() => handleMoveSelectedClip('right')}
                       disabled={!selectedClip || timelineClips.findIndex(c => c.id === selectedClip.id) >= timelineClips.length - 1}
-                      className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
+                      className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
                       title="Déplacer à droite"
                     >
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -2633,190 +2610,330 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     </p>
                   )}
 
-                  {/* Piste 1 : Piste Vidéo Interactive des Segments */}
-                  {timelineClips.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <Film className="w-3 h-3 text-indigo-400" />
-                        <span>Piste Vidéo</span>
-                      </div>
-                      <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1.5">
-                        {timelineClips.map((clip, idx) => {
-                          const isSel = selectedClip?.id === clip.id;
-                          const outDur = getClipOutputDuration(clip);
-                          return (
-                            <div
-                              key={clip.id}
-                              onClick={() => handleSelectClip(clip)}
-                              role="button"
-                              tabIndex={0}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') handleSelectClip(clip);
-                              }}
-                              style={{ minWidth: `${Math.max(120, Math.min(230, Math.round(outDur * 14)))}px` }}
-                              className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 shrink-0 ${
-                                isSel
-                                  ? 'bg-indigo-600/30 border-indigo-400 shadow-lg shadow-indigo-950/50'
-                                  : 'bg-slate-900 border-slate-800 hover:border-slate-600'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-[10.5px] font-black text-white truncate">
-                                  #{idx + 1} {clip.label}
-                                </span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {clip.speed !== 1 && (
-                                    <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black">
-                                      {clip.speed}x
-                                    </span>
-                                  )}
-                                  {clip.muted && <VolumeX className="w-3 h-3 text-rose-400" />}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteSelectedClip(clip.id);
-                                    }}
-                                    className="p-1 rounded-md hover:bg-rose-500/30 text-slate-400 hover:text-rose-200 transition-colors cursor-pointer"
-                                    title={`Supprimer ${clip.label}`}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                              <span className="text-[9.5px] font-mono text-slate-400">
-                                {clip.startSec.toFixed(1)}s → {clip.endSec.toFixed(1)}s ({outDur}s)
+                  {/* VRAIE TIMELINE PLATE MULTI-PISTES (STYLE CAPCUT / PREMIERE PRO) */}
+                  {timelineClips.length > 0 ? (() => {
+                    const safeTotal = Math.max(0.5, totalTimelineSec);
+                    // Calcul de la position exacte (%) de la tête de lecture sur la timeline plate
+                    let timelinePlayheadSec = 0;
+                    const selIdx = selectedClip ? timelineClips.findIndex(c => c.id === selectedClip.id) : 0;
+                    for (let i = 0; i < Math.max(0, selIdx); i++) {
+                      timelinePlayheadSec += getClipOutputDuration(timelineClips[i]);
+                    }
+                    if (selectedClip) {
+                      const localOffset = Math.max(0, Math.min(selectedClip.endSec - selectedClip.startSec, currentVideoTime - selectedClip.startSec));
+                      timelinePlayheadSec += localOffset / (selectedClip.speed || 1);
+                    }
+                    const playheadPct = Math.max(0, Math.min(100, (timelinePlayheadSec / safeTotal) * 100));
+                    const tickCount = 6;
+                    const rulerTicks = Array.from({ length: tickCount + 1 }, (_, i) => Number(((safeTotal / tickCount) * i).toFixed(1)));
+
+                    const handleScrubFlatTimeline = (timelineTargetSec: number) => {
+                      let acc = 0;
+                      for (const clip of timelineClips) {
+                        const outDur = getClipOutputDuration(clip);
+                        if (timelineTargetSec <= acc + outDur + 0.01 || clip.id === timelineClips[timelineClips.length - 1].id) {
+                          const offsetOut = Math.max(0, Math.min(outDur, timelineTargetSec - acc));
+                          const sourceTime = Number((clip.startSec + offsetOut * (clip.speed || 1)).toFixed(2));
+                          if (selectedClipId !== clip.id) setSelectedClipId(clip.id);
+                          if (previewUrl !== clip.sourceUrl) setPreviewUrl(clip.sourceUrl);
+                          handleScrubPlayhead(sourceTime);
+                          return;
+                        }
+                        acc += outDur;
+                      }
+                    };
+
+                    return (
+                      <div className="space-y-2">
+                        <div className="rounded-xl bg-[#070B14] border border-slate-800 overflow-hidden select-none shadow-inner">
+                          {/* Règle graduée Timecode (cliquable et glissable pour déplacer la ligne rouge) */}
+                          <div className="flex items-stretch h-7 bg-slate-950 border-b border-slate-800">
+                            <div className="w-16 sm:w-20 shrink-0 border-r border-slate-800 flex items-center justify-center px-1">
+                              <span className="text-[10px] font-mono font-black text-amber-400">
+                                {timelinePlayheadSec.toFixed(1)}s
                               </span>
                             </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Piste 2 : Piste Audio dédiée (Son vidéo lié OU Audio extrait avec forme d'onde PCM) */}
-                      <div className="space-y-1.5 pt-1">
-                        <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5">
-                            <Music className="w-3 h-3 text-emerald-400" />
-                            <span>Piste Audio</span>
-                          </span>
-                          {extractedAudioUrl && (
-                            <span className="text-[10px] font-mono text-emerald-300">
-                              Audio détaché • {extractedAudioDuration}s
-                            </span>
-                          )}
-                        </div>
-
-                        {extractedAudioUrl ? (
-                          <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 space-y-2">
-                            {/* Forme d'onde PCM réelle */}
-                            <div className="h-9 flex items-end gap-[2px] px-1 overflow-hidden">
-                              {(extractedAudioPeaks.length > 0 ? extractedAudioPeaks : Array(36).fill(0.4)).map((peak, i) => (
-                                <div
-                                  key={i}
-                                  style={{ height: `${Math.round(peak * 100)}%` }}
-                                  className={`flex-1 rounded-full transition-colors ${
-                                    extractedAudioMuted ? 'bg-slate-600/60' : 'bg-gradient-to-t from-emerald-500 to-cyan-300'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-
-                            {/* Contrôles de la Piste Audio Extraite */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-emerald-500/20">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={handleTogglePlayExtractedAudio}
-                                  className="px-2 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
-                                >
-                                  {isPlayingExtractedAudio ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                                  <span>{isPlayingExtractedAudio ? 'Pause' : 'Écouter'}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = !extractedAudioMuted;
-                                    setExtractedAudioMuted(next);
-                                    if (extractedAudioRef.current) extractedAudioRef.current.muted = next;
-                                  }}
-                                  className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center gap-1 cursor-pointer border ${
-                                    extractedAudioMuted
-                                      ? 'bg-rose-600/25 text-rose-200 border-rose-500/40'
-                                      : 'bg-slate-900 text-slate-200 border-slate-700'
-                                  }`}
-                                >
-                                  {extractedAudioMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                                  <span>{extractedAudioMuted ? 'Muet' : `${Math.round(extractedAudioVolume * 100)}%`}</span>
-                                </button>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={extractedAudioVolume}
-                                  onChange={(e) => {
-                                    const v = Number(e.target.value);
-                                    setExtractedAudioVolume(v);
-                                    if (extractedAudioRef.current) extractedAudioRef.current.volume = v;
-                                  }}
-                                  className="w-20 accent-emerald-400 cursor-pointer"
-                                  title="Volume piste audio"
-                                />
+                            <div className="flex-1 relative">
+                              {/* Graduations */}
+                              <div className="absolute inset-0 flex items-end justify-between px-1.5 pb-1 pointer-events-none">
+                                {rulerTicks.map((t, i) => (
+                                  <div key={i} className="flex flex-col items-center">
+                                    <span className="text-[9px] font-mono text-slate-500 leading-none">{t}s</span>
+                                    <span className="w-px h-1.5 bg-slate-700 mt-0.5" />
+                                  </div>
+                                ))}
                               </div>
-
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={handleSendExtractedAudioToDsp}
-                                  className="px-2 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 text-[10.5px] font-bold cursor-pointer"
-                                  title="Envoyer cette piste dans le Studio Voix (Égaliseur + Anti-Bruit)"
-                                >
-                                  🎛️ Voix DSP
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleDownloadExtractedAudio}
-                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-slate-700 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
-                                  title="Télécharger l'audio extrait (.WAV)"
-                                >
-                                  <Download className="w-3 h-3" />
-                                  <span>.WAV</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleDeleteExtractedAudio}
-                                  className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 cursor-pointer"
-                                  title="Supprimer cette piste audio"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                              {/* Input range transparent par-dessus la règle pour glisser au doigt ou à la souris */}
+                              <input
+                                type="range"
+                                min={0}
+                                max={safeTotal}
+                                step={0.1}
+                                value={Math.min(safeTotal, timelinePlayheadSec)}
+                                onChange={(e) => handleScrubFlatTimeline(Number(e.target.value))}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-30"
+                                title="Glissez pour déplacer la tête de lecture sur la timeline"
+                              />
+                              {/* Poignée triangle rouge en haut de la tête de lecture */}
+                              <div
+                                style={{ left: `${playheadPct}%` }}
+                                className="absolute bottom-0 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center"
+                              >
+                                <div className="w-2.5 h-2.5 bg-rose-500 rotate-45 translate-y-1 shadow" />
                               </div>
                             </div>
                           </div>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-slate-900/80 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 text-[11px] text-slate-300">
-                              <AudioWaveform className="w-4 h-4 text-emerald-400 shrink-0" />
-                              <span>
-                                {selectedClip?.muted
-                                  ? 'Son vidéo coupé (Muet) — réactivez le son ou extrayez l\'audio'
-                                  : `Audio intégré à la vidéo (${totalTimelineSec}s)`}
-                              </span>
+
+                          {/* Corps Multi-Pistes Plat avec Ligne Rouge Verticale Continue */}
+                          <div className="relative">
+                            {/* Ligne verticale de la tête de lecture traversant TOUTES les pistes */}
+                            <div className="pointer-events-none absolute inset-y-0 left-16 sm:left-20 right-0 z-20">
+                              <div
+                                style={{ left: `${playheadPct}%` }}
+                                className="absolute top-0 bottom-0 w-[2px] bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)] -translate-x-1/2"
+                              />
                             </div>
-                            <button
-                              type="button"
-                              onClick={handleExtractAudioFromVideo}
-                              disabled={isExtractingAudio}
-                              className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-500/40 text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
-                            >
-                              {isExtractingAudio ? <Loader2 className="w-3 h-3 animate-spin" /> : <AudioWaveform className="w-3 h-3" />}
-                              <span>Extraire / Détacher l&apos;audio</span>
-                            </button>
+
+                            {/* PISTE V1 : VIDÉO (barres plates horizontales proportionnelles) */}
+                            <div className="flex items-stretch h-11 border-b border-slate-800/80">
+                              <div className="w-16 sm:w-20 shrink-0 border-r border-slate-800 bg-slate-950/90 flex items-center justify-center gap-1 text-[10px] font-black text-indigo-300">
+                                <Film className="w-3 h-3" />
+                                <span>V1</span>
+                              </div>
+                              <div className="flex-1 flex items-center bg-[#0B1020] p-1 gap-[2px] overflow-hidden">
+                                {timelineClips.map((clip, idx) => {
+                                  const isSel = selectedClip?.id === clip.id;
+                                  const outDur = getClipOutputDuration(clip);
+                                  const widthPct = Math.max(8, (outDur / safeTotal) * 100);
+                                  return (
+                                    <div
+                                      key={clip.id}
+                                      onClick={() => handleSelectClip(clip)}
+                                      role="button"
+                                      tabIndex={0}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') handleSelectClip(clip);
+                                      }}
+                                      style={{ width: `${widthPct}%` }}
+                                      className={`h-full rounded-[3px] px-2 flex items-center justify-between gap-1 cursor-pointer transition-colors overflow-hidden border-y border-x ${
+                                        isSel
+                                          ? 'bg-indigo-600/80 border-amber-300 text-white shadow-sm'
+                                          : 'bg-indigo-950/80 border-indigo-500/40 text-indigo-100 hover:bg-indigo-900/70'
+                                      }`}
+                                      title={`${clip.label} (${clip.startSec.toFixed(1)}s → ${clip.endSec.toFixed(1)}s)`}
+                                    >
+                                      <div className="min-w-0 flex items-center gap-1.5">
+                                        <span className="text-[10px] font-black truncate">
+                                          #{idx + 1} {clip.label}
+                                        </span>
+                                        <span className="text-[9px] font-mono opacity-80 hidden sm:inline shrink-0">
+                                          {outDur}s
+                                        </span>
+                                        {clip.speed !== 1 && (
+                                          <span className="px-1 rounded bg-amber-400/25 text-amber-200 text-[8.5px] font-black shrink-0">
+                                            {clip.speed}x
+                                          </span>
+                                        )}
+                                        {clip.muted && <VolumeX className="w-2.5 h-2.5 text-rose-300 shrink-0" />}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteSelectedClip(clip.id);
+                                        }}
+                                        className="p-0.5 rounded hover:bg-rose-500 text-white/70 hover:text-white transition-colors cursor-pointer shrink-0 z-10"
+                                        title={`Supprimer ${clip.label}`}
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* PISTE A1 : AUDIO (barre plate verte continue avec forme d'onde PCM) */}
+                            <div className="flex items-stretch h-10 border-b border-slate-800/80">
+                              <div className="w-16 sm:w-20 shrink-0 border-r border-slate-800 bg-slate-950/90 flex items-center justify-center gap-1 text-[10px] font-black text-emerald-300">
+                                <Music className="w-3 h-3" />
+                                <span>A1</span>
+                              </div>
+                              <div className="flex-1 flex items-center bg-[#091318] p-1">
+                                {extractedAudioUrl ? (
+                                  <div className="relative w-full h-full rounded-[3px] bg-emerald-700/35 border border-emerald-400/70 px-1.5 flex items-end gap-[2px] overflow-hidden">
+                                    {(extractedAudioPeaks.length > 0 ? extractedAudioPeaks : Array(40).fill(0.45)).map((peak, i) => (
+                                      <div
+                                        key={i}
+                                        style={{ height: `${Math.round(peak * 85)}%` }}
+                                        className={`flex-1 rounded-t-[1px] ${
+                                          extractedAudioMuted ? 'bg-slate-600/50' : 'bg-emerald-400/85'
+                                        }`}
+                                      />
+                                    ))}
+                                    <span className="absolute left-1.5 top-0.5 text-[9px] font-black text-emerald-100 bg-slate-950/70 px-1 rounded pointer-events-none">
+                                      🎵 Audio extrait ({extractedAudioDuration}s)
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-full rounded-[3px] bg-emerald-950/60 border border-emerald-500/35 px-2 flex items-center justify-between gap-2 overflow-hidden">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <AudioWaveform className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                      <span className="text-[10px] font-bold text-emerald-200 truncate">
+                                        {selectedClip?.muted
+                                          ? 'Audio vidéo coupé (Muet)'
+                                          : `Audio vidéo intégré (${safeTotal.toFixed(1)}s)`}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleExtractAudioFromVideo}
+                                      disabled={isExtractingAudio}
+                                      className="px-2 py-0.5 rounded bg-cyan-500/25 hover:bg-cyan-500/40 text-cyan-200 border border-cyan-400/40 text-[9.5px] font-black shrink-0 cursor-pointer z-10"
+                                    >
+                                      {isExtractingAudio ? '...' : 'Extraire'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* PISTE T1 : TEXTE / SOUS-TITRES / CALQUES (barre plate compacte) */}
+                            <div className="flex items-stretch h-8">
+                              <div className="w-16 sm:w-20 shrink-0 border-r border-slate-800 bg-slate-950/90 flex items-center justify-center gap-1 text-[10px] font-black text-amber-300">
+                                <Type className="w-3 h-3" />
+                                <span>T1</span>
+                              </div>
+                              <div className="flex-1 flex items-center bg-[#0D0E1A] p-1 gap-1 overflow-hidden">
+                                {subtitleCues.length > 0 || combinedOverlayText || visualLayers.length > 0 ? (
+                                  <>
+                                    {combinedOverlayText && (
+                                      <div className="h-full flex-1 rounded-[3px] bg-amber-500/30 border border-amber-400/60 px-2 flex items-center justify-between text-[9.5px] font-bold text-amber-100 truncate">
+                                        <span className="truncate">T: {combinedOverlayText}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOverlayHeadline('');
+                                            setOverlayPrice('');
+                                            setOverlayContact('');
+                                          }}
+                                          className="ml-1 hover:text-rose-300 cursor-pointer shrink-0 z-10"
+                                          title="Retirer le texte"
+                                        >
+                                          <X className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                    {subtitleCues.length > 0 && (
+                                      <div className="h-full flex-1 rounded-[3px] bg-fuchsia-600/30 border border-fuchsia-400/60 px-2 flex items-center justify-between text-[9.5px] font-bold text-fuchsia-100 truncate">
+                                        <span className="truncate">CC: {subtitleCues.length} sous-titre(s)</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSubtitleCues([])}
+                                          className="ml-1 hover:text-rose-300 cursor-pointer shrink-0 z-10"
+                                          title="Retirer les sous-titres"
+                                        >
+                                          <X className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                    {visualLayers.length > 0 && (
+                                      <div className="h-full flex-1 rounded-[3px] bg-sky-600/30 border border-sky-400/60 px-2 flex items-center justify-between text-[9.5px] font-bold text-sky-100 truncate">
+                                        <span className="truncate">🖼️ {visualLayers.length} calque(s)</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setVisualLayers([])}
+                                          className="ml-1 hover:text-rose-300 cursor-pointer shrink-0 z-10"
+                                          title="Retirer les calques"
+                                        >
+                                          <X className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-[9.5px] text-slate-600 px-2 italic">
+                                    Aucun texte, sous-titre ou logo — ajoutez-les depuis les onglets ci-dessus
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Barre de contrôle compacte de l'audio extrait (uniquement quand A1 est détaché) */}
+                        {extractedAudioUrl && (
+                          <div className="p-2 rounded-xl bg-emerald-950/35 border border-emerald-500/35 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={handleTogglePlayExtractedAudio}
+                                className="px-2 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10.5px] font-black flex items-center gap-1 cursor-pointer"
+                              >
+                                {isPlayingExtractedAudio ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                                <span>{isPlayingExtractedAudio ? 'Pause' : 'Écouter A1'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = !extractedAudioMuted;
+                                  setExtractedAudioMuted(next);
+                                  if (extractedAudioRef.current) extractedAudioRef.current.muted = next;
+                                }}
+                                className={`px-2 py-1 rounded-lg text-[10.5px] font-bold flex items-center gap-1 cursor-pointer border ${
+                                  extractedAudioMuted
+                                    ? 'bg-rose-600/25 text-rose-200 border-rose-500/40'
+                                    : 'bg-slate-900 text-slate-200 border-slate-700'
+                                }`}
+                              >
+                                {extractedAudioMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                                <span>{extractedAudioMuted ? 'Muet' : `${Math.round(extractedAudioVolume * 100)}%`}</span>
+                              </button>
+                              <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={extractedAudioVolume}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  setExtractedAudioVolume(v);
+                                  if (extractedAudioRef.current) extractedAudioRef.current.volume = v;
+                                }}
+                                className="w-20 accent-emerald-400 cursor-pointer"
+                                title="Volume piste audio A1"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={handleSendExtractedAudioToDsp}
+                                className="px-2 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 text-[10.5px] font-bold cursor-pointer"
+                              >
+                                🎛️ Voix DSP
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleDownloadExtractedAudio}
+                                className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-slate-700 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>.WAV</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleDeleteExtractedAudio}
+                                className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 cursor-pointer"
+                                title="Supprimer la piste audio A1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
-                    </div>
-                  ) : (
+                    );
+                  })() : (
                     <div className="p-3 rounded-xl border border-dashed border-slate-800 text-center text-[11px] text-slate-400">
                       Importez une vidéo pour activer la timeline multi-clips.
                     </div>
