@@ -21,6 +21,16 @@ export interface CamBubbleConfig {
   mirror: boolean;
 }
 
+export interface BrandWatermarkConfig {
+  enabled: boolean;
+  text: string;
+  logoDataUrl?: string;
+  corner: CamBubbleCorner;
+  opacity: number; // 0.2 .. 1.0
+  color: string;
+  sizePct: number; // 8 .. 22
+}
+
 export interface ScreenRecorderOptions {
   mode: RecorderMode;
   quality: RecorderQuality;
@@ -36,6 +46,7 @@ export interface ScreenRecorderOptions {
   micDeviceId?: string;
   facingMode?: 'user' | 'environment';
   bubble: CamBubbleConfig;
+  watermark?: BrandWatermarkConfig;
   previewCanvas?: HTMLCanvasElement | null;
   onStop?: (result: RecordedMediaResult) => void;
   onError?: (message: string) => void;
@@ -117,6 +128,78 @@ function resolveRecorderCanvasSize(
   return { width: quality === '1080p' ? 1920 : 1280, height: baseShort };
 }
 
+function drawBrandWatermarkOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  wm: BrandWatermarkConfig | undefined,
+  logoImg: HTMLImageElement | null
+): void {
+  if (!wm || !wm.enabled) return;
+  const cleanText = String(wm.text || '').trim();
+  const hasLogo = Boolean(logoImg && logoImg.complete && logoImg.naturalWidth > 0);
+  if (!cleanText && !hasLogo) return;
+
+  const margin = Math.round(Math.min(W, H) * 0.03);
+  const scaleFactor = Math.max(8, Math.min(22, Number(wm.sizePct) || 12)) / 100;
+  const logoH = hasLogo ? Math.round(Math.min(W, H) * scaleFactor * 0.65) : 0;
+  const logoW = hasLogo && logoImg ? Math.round((logoImg.naturalWidth / Math.max(1, logoImg.naturalHeight)) * logoH) : 0;
+  const fontSize = Math.max(14, Math.round(Math.min(W, H) * scaleFactor * 0.24));
+  const padX = Math.round(fontSize * 0.75);
+  const padY = Math.round(fontSize * 0.45);
+  const gap = hasLogo && cleanText ? Math.round(fontSize * 0.5) : 0;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.2, Math.min(1, Number(wm.opacity) || 0.8));
+  ctx.font = `800 ${fontSize}px system-ui, -apple-system, sans-serif`;
+  const textW = cleanText ? Math.ceil(ctx.measureText(cleanText).width) : 0;
+
+  const boxW = padX * 2 + logoW + gap + textW;
+  const boxH = Math.max(logoH, fontSize) + padY * 2;
+
+  let bx = margin;
+  let by = margin;
+  if (wm.corner === 'top-right') {
+    bx = W - boxW - margin;
+    by = margin;
+  } else if (wm.corner === 'bottom-left') {
+    bx = margin;
+    by = H - boxH - margin;
+  } else if (wm.corner === 'bottom-right') {
+    bx = W - boxW - margin;
+    by = H - boxH - margin;
+  }
+
+  // Cartouche vitrée discrète si texte présent (garantit lisibilité sur fond clair ou sombre)
+  if (cleanText) {
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.58)';
+    ctx.beginPath();
+    ctx.roundRect(bx, by, boxW, boxH, Math.round(boxH * 0.32));
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  let cursorX = bx + padX;
+  if (hasLogo && logoImg) {
+    const ly = by + (boxH - logoH) / 2;
+    ctx.drawImage(logoImg, cursorX, ly, logoW, logoH);
+    cursorX += logoW + gap;
+  }
+
+  if (cleanText) {
+    ctx.fillStyle = wm.color || '#FFFFFF';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(cleanText, cursorX, by + boxH / 2);
+  }
+
+  ctx.restore();
+}
+
 export class ProScreenRecorderSession {
   private screenStream: MediaStream | null = null;
   private camStream: MediaStream | null = null;
@@ -135,6 +218,8 @@ export class ProScreenRecorderSession {
   private pausedSinceMs: number | null = null;
   private stopped = false;
   private bubbleConfig: CamBubbleConfig;
+  private watermarkConfig?: BrandWatermarkConfig;
+  private watermarkImg: HTMLImageElement | null = null;
   private mode: RecorderMode;
   private fps: number;
   private outputFormat: 'auto' | 'mp4' | 'webm';
@@ -149,6 +234,8 @@ export class ProScreenRecorderSession {
   constructor(options: ScreenRecorderOptions) {
     this.mode = options.mode;
     this.bubbleConfig = { ...options.bubble };
+    this.watermarkConfig = options.watermark ? { ...options.watermark } : undefined;
+    this.loadWatermarkImage(options.watermark?.logoDataUrl);
     this.previewCanvas = options.previewCanvas || null;
     this.fps = options.fps || 30;
     this.outputFormat = options.outputFormat || 'auto';
@@ -169,10 +256,29 @@ export class ProScreenRecorderSession {
     this.ctx = ctx;
   }
 
+  private loadWatermarkImage(dataUrl?: string): void {
+    if (!dataUrl) {
+      this.watermarkImg = null;
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = dataUrl;
+    this.watermarkImg = img;
+  }
+
   public updateBubbleConfig(patch: Partial<CamBubbleConfig>): void {
     this.bubbleConfig = { ...this.bubbleConfig, ...patch };
     if (this.bubbleConfig.enabled && !this.camStream && !this.stopped && this.mode === 'screen') {
       this.startCameraBubble().catch(() => {});
+    }
+  }
+
+  public updateWatermarkConfig(next: BrandWatermarkConfig): void {
+    const prevLogo = this.watermarkConfig?.logoDataUrl;
+    this.watermarkConfig = { ...next };
+    if (next.logoDataUrl !== prevLogo) {
+      this.loadWatermarkImage(next.logoDataUrl);
     }
   }
 
@@ -518,6 +624,9 @@ export class ProScreenRecorderSession {
       ctx.restore();
     }
 
+    // 2B. Signature & Marque (Filigrane Live sur chaque image enregistrée)
+    drawBrandWatermarkOnCanvas(ctx, W, H, this.watermarkConfig, this.watermarkImg);
+
     // 3. Miroir dans le canvas d'aperçu UI si fourni
     if (this.previewCanvas) {
       const pCtx = this.previewCanvas.getContext('2d');
@@ -600,7 +709,8 @@ export class ProScreenRecorderSession {
  * avec téléchargement immédiat sur l'ordinateur.
  */
 export async function captureOneShotScreenPng(
-  bubble?: CamBubbleConfig
+  bubble?: CamBubbleConfig,
+  watermark?: BrandWatermarkConfig
 ): Promise<{ filename: string; dataUrl: string }> {
   if (!isScreenCaptureSupported()) {
     throw new Error('La capture d\'écran instantanée nécessite un navigateur sur ordinateur.');
@@ -679,6 +789,20 @@ export async function captureOneShotScreenPng(
         ctx.stroke();
         ctx.restore();
       } catch {}
+    }
+
+    if (watermark?.enabled) {
+      let wmImg: HTMLImageElement | null = null;
+      if (watermark.logoDataUrl) {
+        wmImg = await new Promise<HTMLImageElement | null>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          img.src = watermark.logoDataUrl!;
+        });
+      }
+      drawBrandWatermarkOnCanvas(ctx, W, H, watermark, wmImg);
     }
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png', 1));

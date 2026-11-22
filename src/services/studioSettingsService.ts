@@ -55,6 +55,15 @@ export interface VideoStudioSettings {
   defaultExportResolution: ExportResSetting;
   defaultExportContainer: 'mp4' | 'webm';
   defaultSubtitleLanguage: SubtitleLangCode;
+
+  // 7. Signature & Filigrane de Marque (pendant l'enregistrement)
+  watermarkEnabled: boolean;
+  watermarkText: string;
+  watermarkLogoDataUrl: string;
+  watermarkCorner: CamBubbleCorner;
+  watermarkOpacity: number; // 0.2 .. 1.0
+  watermarkColor: string;
+  watermarkSizePct: number; // 8 .. 22
 }
 
 const STORAGE_KEY = 'nana_video_studio_settings_v1';
@@ -88,7 +97,15 @@ export const DEFAULT_VIDEO_STUDIO_SETTINGS: VideoStudioSettings = {
   defaultSocialFormat: '9:16',
   defaultExportResolution: '720p',
   defaultExportContainer: 'mp4',
-  defaultSubtitleLanguage: 'fr'
+  defaultSubtitleLanguage: 'fr',
+
+  watermarkEnabled: false,
+  watermarkText: '',
+  watermarkLogoDataUrl: '',
+  watermarkCorner: 'top-left',
+  watermarkOpacity: 0.8,
+  watermarkColor: '#FFFFFF',
+  watermarkSizePct: 12
 };
 
 export function loadVideoStudioSettings(): VideoStudioSettings {

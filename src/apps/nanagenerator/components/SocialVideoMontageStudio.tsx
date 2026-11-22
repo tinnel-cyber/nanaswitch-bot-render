@@ -1192,6 +1192,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         micDeviceId: studioSettings.selectedMicDeviceId || undefined,
         facingMode: recFacingMode,
         bubble: camBubble,
+        watermark: {
+          enabled: studioSettings.watermarkEnabled,
+          text: studioSettings.watermarkText,
+          logoDataUrl: studioSettings.watermarkLogoDataUrl || undefined,
+          corner: studioSettings.watermarkCorner,
+          opacity: studioSettings.watermarkOpacity,
+          color: studioSettings.watermarkColor,
+          sizePct: studioSettings.watermarkSizePct
+        },
         previewCanvas: recorderPreviewCanvasRef.current,
         onStop: (result) => {
           setIsScreenRecording(false);
@@ -1246,6 +1255,59 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     }
   };
 
+  const watermarkLogoInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Mise à jour live de la signature / filigrane même pendant l'enregistrement
+  useEffect(() => {
+    recorderSessionRef.current?.updateWatermarkConfig({
+      enabled: studioSettings.watermarkEnabled,
+      text: studioSettings.watermarkText,
+      logoDataUrl: studioSettings.watermarkLogoDataUrl || undefined,
+      corner: studioSettings.watermarkCorner,
+      opacity: studioSettings.watermarkOpacity,
+      color: studioSettings.watermarkColor,
+      sizePct: studioSettings.watermarkSizePct
+    });
+  }, [
+    studioSettings.watermarkEnabled,
+    studioSettings.watermarkText,
+    studioSettings.watermarkLogoDataUrl,
+    studioSettings.watermarkCorner,
+    studioSettings.watermarkOpacity,
+    studioSettings.watermarkColor,
+    studioSettings.watermarkSizePct
+  ]);
+
+  const handleImportWatermarkLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensionner proprement (max 220px) pour persistance légère dans localStorage
+        const maxSide = 220;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = c.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          const dataUrl = c.toDataURL('image/png');
+          updateStudioSetting('watermarkLogoDataUrl', dataUrl);
+          if (!studioSettings.watermarkEnabled) {
+            updateStudioSetting('watermarkEnabled', true);
+          }
+          playValidationBeep();
+        }
+      };
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handlePauseResumeScreenRecording = () => {
     const s = recorderSessionRef.current;
     if (!s || !isScreenRecording) return;
@@ -1275,7 +1337,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         playValidationBeep();
         setRecStatusMsg(`📸 Capture d'image téléchargée : ${filename}`);
       } else {
-        const shot = await captureOneShotScreenPng(camBubble);
+        const shot = await captureOneShotScreenPng(camBubble, {
+          enabled: studioSettings.watermarkEnabled,
+          text: studioSettings.watermarkText,
+          logoDataUrl: studioSettings.watermarkLogoDataUrl || undefined,
+          corner: studioSettings.watermarkCorner,
+          opacity: studioSettings.watermarkOpacity,
+          color: studioSettings.watermarkColor,
+          sizePct: studioSettings.watermarkSizePct
+        });
         setLastScreenshot(shot);
         playValidationBeep();
         setRecStatusMsg(`📸 Capture d'écran téléchargée directement : ${shot.filename}`);
@@ -2888,6 +2958,181 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         <option value="ar">🇸🇦 Arabe</option>
                       </select>
                     </div>
+                  </div>
+                </div>
+
+                {/* 5. SIGNATURE & MARQUE SUR LA VIDÉO PENDANT L'ENREGISTREMENT (FILIGRANE LIVE) */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-black text-white block">
+                        5. Signature &amp; Marque sur la vidéo (Filigrane pendant l&apos;enregistrement)
+                      </span>
+                      <p className="text-[10.5px] text-slate-400">
+                        Apposez automatiquement votre signature texte et/ou votre logo sur chaque vidéo enregistrée et capture `.PNG`.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateStudioSetting('watermarkEnabled', !studioSettings.watermarkEnabled)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black border cursor-pointer shrink-0 ${
+                        studioSettings.watermarkEnabled
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-300'
+                          : 'bg-slate-900 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {studioSettings.watermarkEnabled ? '✓ Signature ON' : 'Signature OFF'}
+                    </button>
+                  </div>
+
+                  {/* Texte de signature + Import Logo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Texte de signature / Marque</label>
+                      <input
+                        type="text"
+                        value={studioSettings.watermarkText}
+                        onChange={(e) => updateStudioSetting('watermarkText', e.target.value)}
+                        placeholder={`Ex: © ${storeName} • @MonCompte`}
+                        className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Logo de marque (PNG/JPG)</label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => watermarkLogoInputRef.current?.click()}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{studioSettings.watermarkLogoDataUrl ? 'Changer le logo' : '+ Importer mon logo'}</span>
+                        </button>
+                        {studioSettings.watermarkLogoDataUrl && (
+                          <div className="relative shrink-0">
+                            <img
+                              src={studioSettings.watermarkLogoDataUrl}
+                              alt="Logo marque"
+                              className="w-9 h-9 rounded-lg object-contain bg-slate-900 border border-slate-700 p-0.5"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateStudioSetting('watermarkLogoDataUrl', '')}
+                              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center cursor-pointer"
+                              title="Retirer le logo"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                        <input
+                          ref={watermarkLogoInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImportWatermarkLogo}
+                          className="hidden"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Coin, Taille, Opacité & Couleur */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Position sur la vidéo</label>
+                      <select
+                        value={studioSettings.watermarkCorner}
+                        onChange={(e) => updateStudioSetting('watermarkCorner', e.target.value as any)}
+                        className="w-full p-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="top-left">↖ Haut-Gauche</option>
+                        <option value="top-right">↗ Haut-Droite</option>
+                        <option value="bottom-left">↙ Bas-Gauche</option>
+                        <option value="bottom-right">↘ Bas-Droite</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10.5px]">
+                        <span className="font-bold text-slate-400">Opacité</span>
+                        <span className="font-mono font-bold text-amber-300">
+                          {Math.round(studioSettings.watermarkOpacity * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.2}
+                        max={1}
+                        step={0.05}
+                        value={studioSettings.watermarkOpacity}
+                        onChange={(e) => updateStudioSetting('watermarkOpacity', Number(e.target.value))}
+                        className="w-full accent-amber-400 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10.5px]">
+                        <span className="font-bold text-slate-400">Taille</span>
+                        <span className="font-mono font-bold text-indigo-300">{studioSettings.watermarkSizePct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={8}
+                        max={22}
+                        step={1}
+                        value={studioSettings.watermarkSizePct}
+                        onChange={(e) => updateStudioSetting('watermarkSizePct', Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Couleur de la signature + Aperçu en direct */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10.5px] font-bold text-slate-400 mr-1">Couleur :</span>
+                      {['#FFFFFF', '#FDE047', '#34D399', '#38BDF8', '#FB7185', '#F97316'].map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => updateStudioSetting('watermarkColor', hex)}
+                          style={{ backgroundColor: hex }}
+                          className={`w-5 h-5 rounded-full border-2 cursor-pointer ${
+                            studioSettings.watermarkColor.toLowerCase() === hex.toLowerCase()
+                              ? 'border-white scale-110'
+                              : 'border-slate-700'
+                          }`}
+                          title={hex}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        value={studioSettings.watermarkColor}
+                        onChange={(e) => updateStudioSetting('watermarkColor', e.target.value)}
+                        className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer"
+                        title="Couleur personnalisée"
+                      />
+                    </div>
+
+                    {(studioSettings.watermarkText.trim() || studioSettings.watermarkLogoDataUrl) && (
+                      <div
+                        style={{ opacity: studioSettings.watermarkOpacity }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-white/20"
+                      >
+                        {studioSettings.watermarkLogoDataUrl && (
+                          <img src={studioSettings.watermarkLogoDataUrl} alt="" className="w-4 h-4 object-contain" />
+                        )}
+                        {studioSettings.watermarkText.trim() && (
+                          <span
+                            className="text-[11px] font-black"
+                            style={{ color: studioSettings.watermarkColor }}
+                          >
+                            {studioSettings.watermarkText.trim()}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
