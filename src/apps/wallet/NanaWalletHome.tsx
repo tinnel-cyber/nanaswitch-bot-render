@@ -1,1081 +1,1440 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- * 
- * nanawallet — Écran d'Accueil & Dashboard Portefeuille Mobile Hybride
- * Design Épuré, Moderne & Chaleureux de Classe Mondiale.
- * Palette Officielle : Fond blanc cassé (#F9F8F6), Accents Bleu Royal (#1E3A8A / #2563EB).
- */
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Wallet, 
-  ArrowUpRight, 
+import {
+  Wallet,
+  PlusCircle,
+  ArrowUpRight,
   ArrowDownLeft,
-  PlusCircle, 
-  History, 
-  ShieldCheck, 
-  Smartphone, 
-  Bell, 
-  CheckCircle2, 
-  ChevronRight, 
-  X, 
-  Sparkles, 
-  RefreshCw, 
-  Eye, 
-  EyeOff, 
-  CreditCard, 
-  Layers, 
-  ExternalLink,
-  QrCode,
-  ArrowRight,
-  TrendingDown,
-  TrendingUp,
+  ShieldCheck,
   Lock,
-  Zap,
-  Info
+  KeyRound,
+  Link2,
+  Copy,
+  Check,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Download,
+  Send,
+  X,
+  ExternalLink,
+  Share2,
+  Sparkles,
+  Store
 } from 'lucide-react';
-import NanaWalletRecharge from './NanaWalletRecharge';
-import NanaWalletCryptoComingSoon from './NanaWalletCryptoComingSoon';
-import NanaWalletCheckout from './NanaWalletCheckout';
-import { playTapBeep, playValidationBeep, playCashChime, formatCFA } from '../../utils/audio';
 import { supabase } from '../../lib/supabase';
-
-export interface WalletTransaction {
-  id: string;
-  type: 'CREDIT' | 'DEBIT';
-  title: string;
-  subtitle: string;
-  amount: number;
-  currency: string;
-  date: string;
-  time: string;
-  timestamp: number;
-  category: 'RECHARGE' | 'SERVICE' | 'PRODUCT' | 'CRYPTO';
-  reference: string;
-  operator?: string;
-  status: 'CONFIRMED' | 'PENDING' | 'FAILED';
-}
-
-const INITIAL_TRANSACTIONS: WalletTransaction[] = [
-  {
-    id: 'tx_101',
-    type: 'DEBIT',
-    title: 'Génération de CV Pro IA',
-    subtitle: 'Service Pay-per-use Nanasore',
-    amount: 300,
-    currency: 'FCFA',
-    date: "Aujourd'hui",
-    time: '14:20',
-    timestamp: Date.now() - 1000 * 60 * 85,
-    category: 'SERVICE',
-    reference: 'REF-CV-88412',
-    status: 'CONFIRMED'
-  },
-  {
-    id: 'tx_102',
-    type: 'CREDIT',
-    title: 'Recharge Mobile Money (Wave)',
-    subtitle: 'Dépôt direct sur nanawallet',
-    amount: 1000,
-    currency: 'FCFA',
-    date: 'Hier',
-    time: '09:15',
-    timestamp: Date.now() - 1000 * 60 * 60 * 22,
-    category: 'RECHARGE',
-    reference: 'REF-WAV-99120',
-    operator: 'Wave CI/SN',
-    status: 'CONFIRMED'
-  },
-  {
-    id: 'tx_103',
-    type: 'DEBIT',
-    title: 'Activation Produit Supplémentaire',
-    subtitle: 'Boutique Store Studio (Produit #4)',
-    amount: 1000,
-    currency: 'FCFA',
-    date: 'Il y a 3 jours',
-    time: '18:40',
-    timestamp: Date.now() - 1000 * 60 * 60 * 70,
-    category: 'PRODUCT',
-    reference: 'REF-PROD-44109',
-    status: 'CONFIRMED'
-  },
-  {
-    id: 'tx_104',
-    type: 'CREDIT',
-    title: 'Bonus de Bienvenue NaNa',
-    subtitle: 'Ouverture de compte nanawallet',
-    amount: 1550,
-    currency: 'FCFA',
-    date: 'Il y a 5 jours',
-    time: '10:00',
-    timestamp: Date.now() - 1000 * 60 * 60 * 120,
-    category: 'RECHARGE',
-    reference: 'REF-BONUS-001',
-    status: 'CONFIRMED'
-  }
-];
+import { useAuth } from '../../context/AuthContext';
+import { playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
+import { UltimateCheckout } from '../../services/nana-switch/payment/UltimateCheckout';
 
 export interface NanaWalletHomeProps {
   onBackToHub?: () => void;
   className?: string;
 }
 
+interface PaygModuleItem {
+  id: string;
+  name: string;
+  category: string;
+  unitLabel: string;
+  priceXof: number;
+  supabaseModuleKey: string;
+  description: string;
+}
+
+interface WalletTxItem {
+  id: string;
+  type: 'CREDIT' | 'DEBIT';
+  title: string;
+  subtitle: string;
+  amount: number;
+  currency: string;
+  category?: string;
+  reference?: string;
+  status: string;
+  createdAt: string;
+}
+
+interface PaymentLinkItem {
+  id: string;
+  title: string;
+  description: string;
+  amount: number;
+  currency: string;
+  url: string;
+  merchant_name?: string;
+  clicks?: number;
+  payments?: number;
+}
+
+interface UniverseOption {
+  id: string;
+  name: string;
+  sector?: string;
+  balanceXof: number;
+}
+
+type WalletTab = 'HOME' | 'PAYG' | 'LINKS' | 'WITHDRAW' | 'SECURITY';
+
+const QUICK_RECHARGE_AMOUNTS = [2000, 5000, 10000, 25000, 50000];
+
+const formatCFA = (val: number) => `${Math.round(Number(val) || 0).toLocaleString('fr-FR')} FCFA`;
+
 export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWalletHomeProps) {
-  // =========================================================================
-  // 1. ÉTAT PRINCIPAL DU PORTEFEUILLE (SYNCHRONISÉ AVEC LE PROFIL RÉEL)
-  // =========================================================================
-  const [balance, setBalance] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('nana_user_wallet_balance');
-      if (saved && !isNaN(Number(saved))) return Number(saved);
-    }
-    return 1250; // Valeur par défaut professionnelle
-  });
+  const { user: authUser } = useAuth();
 
-  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>(INITIAL_TRANSACTIONS);
-  const [activeNavTab, setActiveNavTab] = useState<'home' | 'recharge' | 'history' | 'security' | 'crypto' | 'checkout'>(() => {
-    if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      const params = new URLSearchParams(window.location.search);
-      if (path.includes('/checkout') || params.get('tab') === 'checkout') return 'checkout';
-      if (path.includes('/crypto') || params.get('tab') === 'crypto') return 'crypto';
-      if (path.includes('/recharge') || params.get('tab') === 'recharge' || params.get('action') === 'recharge') {
-        return 'recharge';
-      }
-    }
-    return 'home';
-  });
-  const [activityFilter, setActivityFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+  const [activeTab, setActiveTab] = useState<WalletTab>('HOME');
+  const [universes, setUniverses] = useState<UniverseOption[]>([]);
+  const [selectedUniverseId, setSelectedUniverseId] = useState<string>('');
+  const [resolvedUserId, setResolvedUserId] = useState<string>(authUser?.id || '');
+  const [resolvedUserName, setResolvedUserName] = useState<string>(authUser?.name || 'Marchand');
+  const [resolvedUserEmail, setResolvedUserEmail] = useState<string>(authUser?.email || '');
+  const [resolvedUserPhone, setResolvedUserPhone] = useState<string>(authUser?.phone || '');
 
-  // Modales interactives
-  const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
-  const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
-  const [isCryptoInfoModalOpen, setIsCryptoInfoModalOpen] = useState(false);
-  const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<WalletTransaction | null>(null);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Source de vérité serveur (zéro mock, zéro solde fictif)
+  const [balanceXof, setBalanceXof] = useState<number>(0);
+  const [transactions, setTransactions] = useState<WalletTxItem[]>([]);
+  const [paygCatalog, setPaygCatalog] = useState<PaygModuleItem[]>([]);
+  const [entitlements, setEntitlements] = useState<Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }>>({});
+  const [hasMasterPin, setHasMasterPin] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(false);
+  const [activityFilter, setActivityFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // État du formulaire de recharge
-  const [rechargeAmount, setRechargeAmount] = useState<number>(2500);
-  const [rechargeOperator, setRechargeOperator] = useState<'wave' | 'orange' | 'moov' | 'mtn' | 'card'>('wave');
-  const [rechargePhone, setRechargePhone] = useState<string>('+226 70 00 11 22');
-  const [isProcessingRecharge, setIsProcessingRecharge] = useState(false);
+  // Recharge via VRAI UltimateCheckout
+  const [isRechargeAmountModalOpen, setIsRechargeAmountModalOpen] = useState<boolean>(false);
+  const [rechargeAmount, setRechargeAmount] = useState<number>(5000);
+  const [isUltimateCheckoutOpen, setIsUltimateCheckoutOpen] = useState<boolean>(false);
+  const [activeRechargeOrderId, setActiveRechargeOrderId] = useState<string>('');
 
-  // Valeur calculée en USDT (Taux simulé 1 USDT ≈ 610 FCFA)
-  const cryptoPreview = useMemo(() => {
-    return (balance / 610).toFixed(2);
-  }, [balance]);
+  // Pay-As-You-Go multi-sélection
+  const [selectedPaygIds, setSelectedPaygIds] = useState<string[]>([]);
+  const [paygPinInput, setPaygPinInput] = useState<string>('');
+  const [isPayingPayg, setIsPayingPayg] = useState<boolean>(false);
 
-  // Nom utilisateur synchronisé
-  const userName = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const storedUser = localStorage.getItem('nana_store_auth_user');
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          if (parsed.name || parsed.displayName) return parsed.name || parsed.displayName;
-          if (parsed.email) return parsed.email.split('@')[0];
-        }
-      } catch {}
-    }
-    return 'Utilisateur Nanasore';
+  // Liens de paiement (identiques au Wallet principal)
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLinkItem[]>([]);
+  const [isLoadingLinks, setIsLoadingLinks] = useState<boolean>(false);
+  const [linkTitle, setLinkTitle] = useState<string>('');
+  const [linkDescription, setLinkDescription] = useState<string>('');
+  const [linkAmount, setLinkAmount] = useState<string>('');
+  const [isCreatingLink, setIsCreatingLink] = useState<boolean>(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+
+  // Retraits Mobile Money réels
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [withdrawProvider, setWithdrawProvider] = useState<'wave' | 'orange' | 'moov' | 'mtn'>('wave');
+  const [withdrawPhone, setWithdrawPhone] = useState<string>('');
+  const [withdrawPin, setWithdrawPin] = useState<string>('');
+  const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState<boolean>(false);
+
+  // Master PIN (création / modification)
+  const [currentPinInput, setCurrentPinInput] = useState<string>('');
+  const [newPinInput, setNewPinInput] = useState<string>('');
+  const [confirmPinInput, setConfirmPinInput] = useState<string>('');
+  const [isSavingPin, setIsSavingPin] = useState<boolean>(false);
+
+  // PWA Install Prompt (/manifest-wallet.json)
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
+  const [showIosInstallHint, setShowIosInstallHint] = useState<boolean>(false);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => {
+      setToast(prev => (prev?.msg === msg ? null : prev));
+    }, 4500);
   }, []);
 
-  const userInitial = useMemo(() => {
-    return (userName.trim()[0] || 'N').toUpperCase();
-  }, [userName]);
-
-  // =========================================================================
-  // 2. SYNCHRONISATION EN TEMPS RÉEL (FIRESTORE / LOCALSTORAGE)
-  // =========================================================================
+  // 1. Injection dynamique du Manifest PWA dédié (/manifest-wallet.json) + capture beforeinstallprompt
   useEffect(() => {
-    const handleSync = (e: any) => {
-      if (e.detail?.profile?.wallet_balance !== undefined) {
-        setBalance(Number(e.detail.profile.wallet_balance));
+    if (typeof document === 'undefined') return;
+    const existingManifest = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+    const previousHref = existingManifest?.getAttribute('href') || '/manifest.json';
+
+    if (existingManifest) {
+      existingManifest.setAttribute('href', '/manifest-wallet.json');
+    } else {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = '/manifest-wallet.json';
+      document.head.appendChild(link);
+    }
+
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || (window.navigator as any)?.standalone === true;
+    if (isStandalone) setIsPwaInstalled(true);
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+      showToast('NaNa Wallet Marchand installé sur votre écran d\'accueil !', 'success');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      if (existingManifest && previousHref) {
+        existingManifest.setAttribute('href', previousHref);
+      }
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, [showToast]);
+
+  const handleInstallPwa = async () => {
+    playTapBeep();
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice.catch(() => null);
+      if (choice?.outcome === 'accepted') {
+        setIsPwaInstalled(true);
+      }
+      setDeferredPrompt(null);
+    } else {
+      setShowIosInstallHint(prev => !prev);
+    }
+  };
+
+  // 2. Résolution utilisateur connecté + Univers marchands réels (Cloud)
+  useEffect(() => {
+    let mounted = true;
+    const bootstrapUserAndUniverses = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const u = authData?.user;
+        const uid = u?.id || authUser?.id || '';
+        const uEmail = u?.email || authUser?.email || '';
+        const uName =
+          (u?.user_metadata as any)?.full_name ||
+          (u?.user_metadata as any)?.name ||
+          authUser?.name ||
+          uEmail.split('@')[0] ||
+          'Marchand';
+        const uPhone = (u?.user_metadata as any)?.phone || authUser?.phone || '';
+
+        if (mounted) {
+          setResolvedUserId(uid);
+          setResolvedUserEmail(uEmail);
+          setResolvedUserName(uName);
+          if (uPhone) {
+            setResolvedUserPhone(uPhone);
+            setWithdrawPhone(prev => prev || uPhone);
+          }
+        }
+
+        if (uid) {
+          const { data: univRows } = await supabase
+            .from('universes')
+            .select('id, name, sector, balances')
+            .eq('user_id', uid)
+            .order('created_at', { ascending: false });
+
+          if (mounted && Array.isArray(univRows) && univRows.length > 0) {
+            const mapped: UniverseOption[] = univRows.map((r: any) => ({
+              id: String(r.id),
+              name: r.name || 'Univers Marchand',
+              sector: r.sector || '',
+              balanceXof: Number(r.balances?.XOF ?? 0) || 0,
+            }));
+            setUniverses(mapped);
+            setSelectedUniverseId(prev => prev || mapped[0].id);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[WALLET] Chargement univers:', err);
       }
     };
-    window.addEventListener('nana_profile_synced', handleSync);
-    return () => window.removeEventListener('nana_profile_synced', handleSync);
-  }, []);
+    bootstrapUserAndUniverses();
+    return () => { mounted = false; };
+  }, [authUser?.id, authUser?.email, authUser?.name, authUser?.phone]);
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  }, []);
+  // 3. Chargement unifié du résumé Wallet depuis le serveur (zéro mock)
+  const fetchWalletSummary = useCallback(async () => {
+    if (!selectedUniverseId && !resolvedUserId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedUniverseId) params.set('universeId', selectedUniverseId);
+      if (resolvedUserId) params.set('userId', resolvedUserId);
 
-  // =========================================================================
-  // 3. ACTION : CONFIRMER UNE RECHARGE MOBILE MONEY
-  // =========================================================================
-  const handleConfirmRecharge = useCallback(async () => {
-    if (rechargeAmount <= 0) return;
-    playTapBeep();
-    setIsProcessingRecharge(true);
+      const res = await fetch(`/api/merchant/wallet/summary?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        const nextBal = Number(json.balanceXof ?? 0) || 0;
+        setBalanceXof(nextBal);
+        setTransactions(Array.isArray(json.transactions) ? json.transactions : []);
+        setPaygCatalog(Array.isArray(json.paygCatalog) ? json.paygCatalog : []);
+        setEntitlements(json.entitlements && typeof json.entitlements === 'object' ? json.entitlements : {});
+        setHasMasterPin(Boolean(json.hasMasterPin));
+      }
+    } catch (err) {
+      console.warn('[WALLET] Erreur chargement summary:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedUniverseId, resolvedUserId]);
 
-    setTimeout(async () => {
-      const newBal = balance + rechargeAmount;
-      setBalance(newBal);
+  useEffect(() => {
+    fetchWalletSummary();
+  }, [fetchWalletSummary]);
 
-      const opLabel = 
-        rechargeOperator === 'wave' ? 'Wave' :
-        rechargeOperator === 'orange' ? 'Orange Money' :
-        rechargeOperator === 'moov' ? 'Moov Africa' :
-        rechargeOperator === 'mtn' ? 'MTN MoMo' : 'Carte Bancaire';
+  // Écoute Temps Réel Cloud sur wallet_transactions & universes
+  useEffect(() => {
+    if (!selectedUniverseId && !resolvedUserId) return;
+    const channel = supabase
+      .channel(`unified-wallet-${selectedUniverseId || resolvedUserId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_transactions' }, () => {
+        fetchWalletSummary();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'universes' }, () => {
+        fetchWalletSummary();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedUniverseId, resolvedUserId, fetchWalletSummary]);
 
-      const newTx: WalletTransaction = {
-        id: `tx_${Date.now()}`,
-        type: 'CREDIT',
-        title: `Recharge ${opLabel}`,
-        subtitle: `Dépôt validé via ${rechargePhone}`,
-        amount: rechargeAmount,
-        currency: 'FCFA',
-        date: "Aujourd'hui",
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(),
-        category: 'RECHARGE',
-        reference: `REF-${rechargeOperator.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`,
-        operator: opLabel,
-        status: 'CONFIRMED'
-      };
-
-      setTransactions(prev => [newTx, ...prev]);
-
-      // Sauvegarde dans le cache local
-      try {
-        localStorage.setItem('nana_user_wallet_balance', String(newBal));
-      } catch {}
-
-      // Mise à jour Supabase si utilisateur connecté
-      (async () => {
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          const uid = authData?.user?.id;
-          if (uid) {
-            await supabase.from('app_registry').upsert({
-              key: `wallet_${uid}`,
-              name: `wallet_${uid}`,
-              module_key: 'user_wallet',
-              config_json: { balance: newBal, updatedAt: new Date().toISOString() },
-              updated_at: new Date().toISOString()
-            });
-          }
-        } catch (e) {
-          console.warn('[WALLET] Synchro Supabase ignorée :', e);
+  const broadcastWalletBalanceUpdate = useCallback((nextBalanceXof: number) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nanasore_wallet_updated', {
+        detail: {
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          balanceXof: nextBalanceXof
         }
-      })();
+      }));
+    }
+  }, [selectedUniverseId, resolvedUserId]);
 
-      setIsProcessingRecharge(false);
-      setIsRechargeModalOpen(false);
-      playCashChime();
-      showToast(`🎉 Recharge réussie ! +${formatCFA(rechargeAmount)} crédités sur votre portefeuille.`);
-    }, 1200);
-  }, [balance, rechargeAmount, rechargeOperator, rechargePhone, showToast]);
+  // 4. Chargement des Liens de paiement IDENTIQUES au Wallet principal (/api/payment-links)
+  const fetchPaymentLinks = useCallback(async () => {
+    if (!selectedUniverseId) {
+      setPaymentLinks([]);
+      return;
+    }
+    setIsLoadingLinks(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      if (!token) {
+        setPaymentLinks([]);
+        return;
+      }
+      const res = await fetch(`/api/payment-links?tenantId=${encodeURIComponent(selectedUniverseId)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(json?.links)) {
+        setPaymentLinks(json.links);
+      }
+    } catch (err) {
+      console.warn('[WALLET] Erreur chargement liens de paiement:', err);
+    } finally {
+      setIsLoadingLinks(false);
+    }
+  }, [selectedUniverseId]);
 
-  // =========================================================================
-  // 4. ACTION : EFFECTUER UN PAIEMENT / USAGE DE SERVICE
-  // =========================================================================
-  const handleExecuteUsageDebit = useCallback((serviceName: string, serviceCost: number) => {
-    playTapBeep();
-    if (balance < serviceCost) {
-      showToast('⚠️ Solde insuffisant. Veuillez recharger votre portefeuille.');
+  useEffect(() => {
+    if (activeTab === 'LINKS') {
+      fetchPaymentLinks();
+    }
+  }, [activeTab, fetchPaymentLinks]);
+
+  const handleCreatePaymentLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUniverseId) {
+      showToast('Sélectionnez d\'abord un univers marchand pour générer un lien de paiement.', 'error');
+      return;
+    }
+    const amt = Number(linkAmount);
+    if (!linkTitle.trim() || !Number.isFinite(amt) || amt <= 0) {
+      showToast('Veuillez saisir un libellé et un montant valide (> 0 FCFA).', 'error');
       return;
     }
 
-    const nextBal = balance - serviceCost;
-    setBalance(nextBal);
-
-    const debitTx: WalletTransaction = {
-      id: `tx_${Date.now()}`,
-      type: 'DEBIT',
-      title: serviceName,
-      subtitle: 'Paiement à l’usage instantané',
-      amount: serviceCost,
-      currency: 'FCFA',
-      date: "Aujourd'hui",
-      time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      timestamp: Date.now(),
-      category: 'SERVICE',
-      reference: `REF-PAY-${Math.floor(10000 + Math.random() * 90000)}`,
-      status: 'CONFIRMED'
-    };
-
-    setTransactions(prev => [debitTx, ...prev]);
-
+    setIsCreatingLink(true);
     try {
-      localStorage.setItem('nana_user_wallet_balance', String(nextBal));
-    } catch {}
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      const res = await fetch('/api/payment-links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          tenantId: selectedUniverseId,
+          title: linkTitle.trim(),
+          description: linkDescription.trim(),
+          amount: amt,
+          currency: 'XOF',
+          origin: typeof window !== 'undefined' ? window.location.origin : ''
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Impossible de générer le lien de paiement.');
+      }
 
-    setIsUsageModalOpen(false);
-    playValidationBeep();
-    showToast(`✅ ${serviceName} réglé avec succès (-${formatCFA(serviceCost)}).`);
-  }, [balance, showToast]);
+      playValidationBeep();
+      setLinkTitle('');
+      setLinkDescription('');
+      setLinkAmount('');
+      showToast('Lien de paiement généré et synchronisé dans tout votre Dashboard !', 'success');
+      await fetchPaymentLinks();
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors de la création du lien.', 'error');
+    } finally {
+      setIsCreatingLink(false);
+    }
+  };
 
-  // Filtrage des transactions pour l'historique
+  // 5. Lancement du VRAI UltimateCheckout pour la Recharge
+  const handleLaunchUltimateCheckout = () => {
+    if (rechargeAmount < 100) {
+      showToast('Montant minimum de recharge : 100 FCFA.', 'error');
+      return;
+    }
+    playTapBeep();
+    const orderId = `WLT-RECH-${Date.now().toString(36).toUpperCase()}`;
+    setActiveRechargeOrderId(orderId);
+    setIsRechargeAmountModalOpen(false);
+    setIsUltimateCheckoutOpen(true);
+  };
+
+  const handleUltimateCheckoutSuccess = async (details: any) => {
+    setIsUltimateCheckoutOpen(false);
+    try {
+      const res = await fetch('/api/merchant/wallet/recharge/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          amount: Number(details?.amount || rechargeAmount),
+          provider: details?.provider || details?.paymentMethod || 'UltimateCheckout',
+          reference: details?.transactionRef || details?.orderId || activeRechargeOrderId,
+          orderId: activeRechargeOrderId,
+          phone: details?.phone || resolvedUserPhone
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Erreur confirmation recharge.');
+      }
+      playCashChime();
+      const nextBal = Number(json.balanceXof ?? 0) || 0;
+      setBalanceXof(nextBal);
+      broadcastWalletBalanceUpdate(nextBal);
+      await fetchWalletSummary();
+      showToast(`Recharge de ${formatCFA(Number(details?.amount || rechargeAmount))} créditée et synchronisée partout !`, 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors de la synchronisation de la recharge.', 'error');
+    }
+  };
+
+  // 6. Paiement multi-modules Pay-As-You-Go (décrémente partout + exécute dans le Cloud pour chaque module)
+  const togglePaygModule = (modId: string) => {
+    playTapBeep();
+    setSelectedPaygIds(prev =>
+      prev.includes(modId) ? prev.filter(id => id !== modId) : [...prev, modId]
+    );
+  };
+
+  const selectedPaygTotal = useMemo(() => {
+    return paygCatalog
+      .filter(m => selectedPaygIds.includes(m.id))
+      .reduce((sum, m) => sum + m.priceXof, 0);
+  }, [paygCatalog, selectedPaygIds]);
+
+  const handleExecutePaygPayment = async () => {
+    if (selectedPaygIds.length === 0) {
+      showToast('Sélectionnez au moins un module Pay-As-You-Go.', 'error');
+      return;
+    }
+    if (balanceXof < selectedPaygTotal) {
+      showToast(`Solde insuffisant (${formatCFA(balanceXof)}). Rechargez via UltimateCheckout.`, 'error');
+      return;
+    }
+    if (hasMasterPin && !paygPinInput.trim()) {
+      showToast('Veuillez saisir votre Master PIN pour autoriser ce paiement.', 'error');
+      return;
+    }
+
+    setIsPayingPayg(true);
+    try {
+      const res = await fetch('/api/merchant/wallet/pay-as-you-go', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          moduleIds: selectedPaygIds,
+          pin: paygPinInput.trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Paiement Pay-As-You-Go refusé.');
+      }
+
+      playCashChime();
+      const nextBal = Number(json.balanceXof ?? 0) || 0;
+      setBalanceXof(nextBal);
+      setSelectedPaygIds([]);
+      setPaygPinInput('');
+      broadcastWalletBalanceUpdate(nextBal);
+      await fetchWalletSummary();
+      showToast(
+        `${json.activatedModules?.length || 1} module(s) activé(s) sur le Cloud (-${formatCFA(json.totalCost)}) !`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors du paiement Pay-As-You-Go.', 'error');
+    } finally {
+      setIsPayingPayg(false);
+    }
+  };
+
+  // 7. Retrait Mobile Money réel (protégé par Master PIN + POST /api/payouts/request)
+  const handleWithdrawSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Math.round(Number(withdrawAmount) || 0);
+    if (amt < 1000) {
+      showToast('Montant minimum de retrait : 1 000 FCFA.', 'error');
+      return;
+    }
+    if (amt > balanceXof) {
+      showToast(`Solde insuffisant (${formatCFA(balanceXof)} disponible).`, 'error');
+      return;
+    }
+    if (!withdrawPhone.trim()) {
+      showToast('Renseignez votre numéro Mobile Money bénéficiaire.', 'error');
+      return;
+    }
+    if (hasMasterPin && !withdrawPin.trim()) {
+      showToast('Saisissez votre Master PIN pour confirmer le retrait.', 'error');
+      return;
+    }
+
+    setIsSubmittingWithdraw(true);
+    try {
+      if (hasMasterPin) {
+        const pinRes = await fetch('/api/merchant/wallet/pin/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            universeId: selectedUniverseId,
+            userId: resolvedUserId,
+            pin: withdrawPin.trim()
+          })
+        });
+        const pinJson = await pinRes.json().catch(() => null);
+        if (!pinRes.ok || !pinJson?.verified) {
+          throw new Error(pinJson?.error || 'Master PIN incorrect.');
+        }
+      }
+
+      const providerNames: Record<string, string> = {
+        wave: 'Wave Mobile Money',
+        orange: 'Orange Money',
+        moov: 'Moov Money',
+        mtn: 'MTN Mobile Money'
+      };
+      const res = await fetch('/api/payouts/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: selectedUniverseId || `user_${resolvedUserId}`,
+          userId: resolvedUserId || null,
+          amount: amt,
+          fee: 0,
+          netAmount: amt,
+          currency: 'XOF',
+          country: 'UEMOA',
+          countryCode: 'BF',
+          operatorId: withdrawProvider,
+          operatorName: providerNames[withdrawProvider],
+          destination: withdrawPhone.trim(),
+          beneficiary: resolvedUserName,
+          mode: 'PRODUCTION'
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Erreur demande de retrait.');
+      }
+
+      playValidationBeep();
+      const nextBal = Math.max(0, balanceXof - amt);
+      setBalanceXof(nextBal);
+      setWithdrawAmount('');
+      setWithdrawPin('');
+      broadcastWalletBalanceUpdate(nextBal);
+      await fetchWalletSummary();
+      showToast(`Retrait de ${formatCFA(amt)} vers ${providerNames[withdrawProvider]} enregistré !`, 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors du retrait.', 'error');
+    } finally {
+      setIsSubmittingWithdraw(false);
+    }
+  };
+
+  // 8. Création / Mise à jour Master PIN (scrypt côté serveur)
+  const handleSaveMasterPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{4,6}$/.test(newPinInput.trim())) {
+      showToast('Le Master PIN doit contenir entre 4 et 6 chiffres.', 'error');
+      return;
+    }
+    if (newPinInput.trim() !== confirmPinInput.trim()) {
+      showToast('Les deux saisies du Master PIN ne correspondent pas.', 'error');
+      return;
+    }
+    setIsSavingPin(true);
+    try {
+      const res = await fetch('/api/merchant/wallet/pin/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          pin: newPinInput.trim(),
+          currentPin: currentPinInput.trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Impossible d\'enregistrer le Master PIN.');
+      }
+
+      playValidationBeep();
+      setHasMasterPin(true);
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      showToast('Master PIN chiffré et activé sur votre Wallet Marchand !', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur enregistrement Master PIN.', 'error');
+    } finally {
+      setIsSavingPin(false);
+    }
+  };
+
   const filteredTransactions = useMemo(() => {
     if (activityFilter === 'ALL') return transactions;
     return transactions.filter(t => t.type === activityFilter);
   }, [transactions, activityFilter]);
 
-    // =========================================================================
-  // ÉCRAN 4 : PAIEMENT INSTANTANÉ À L'USAGE (CHECKOUT)
-  // =========================================================================
-  if (activeNavTab === 'checkout') {
-    return (
-      <NanaWalletCheckout
-        onBack={() => {
-          setActiveNavTab('home');
-          if (typeof window !== 'undefined' && window.location.pathname.includes('/checkout')) {
-            window.history.pushState({}, '', '/wallet');
-          }
-        }}
-        onNavigateRecharge={() => setActiveNavTab('recharge')}
-        onSuccess={(srv, newBal) => {
-          setBalance(newBal);
-          const newTx: WalletTransaction = {
-            id: `tx_${Date.now()}`,
-            type: 'DEBIT',
-            title: srv.title,
-            subtitle: 'Paiement instantané à l’usage',
-            amount: srv.cost,
-            currency: 'FCFA',
-            date: "Aujourd'hui",
-            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            timestamp: Date.now(),
-            category: 'SERVICE',
-            reference: `REF-PAY-${Math.floor(10000 + Math.random() * 90000)}`,
-            status: 'CONFIRMED'
-          };
-          setTransactions(prev => [newTx, ...prev]);
-          setActiveNavTab('home');
-          showToast(`✅ ${srv.title} activé avec succès (-${formatCFA(srv.cost)}).`);
-        }}
-      />
-    );
-  }
-
-  // =========================================================================
-  // ÉCRAN 3 : SECTION CRYPTO USDT BIENTÔT DISPONIBLE
-  // =========================================================================
-  if (activeNavTab === 'crypto') {
-    return (
-      <NanaWalletCryptoComingSoon
-        onBack={() => {
-          setActiveNavTab('home');
-          if (typeof window !== 'undefined' && window.location.pathname.includes('/crypto')) {
-            window.history.pushState({}, '', '/wallet');
-          }
-        }}
-      />
-    );
-  }
-
-  // =========================================================================
-  // ÉCRAN 2 : RECHARGE NANAWTCHIT DÉDIÉ (PLEIN ÉCRAN FLUIDE)
-  // =========================================================================
-  if (activeNavTab === 'recharge') {
-    return (
-      <NanaWalletRecharge
-        onNavigateCrypto={() => setActiveNavTab('crypto')}
-        onBack={() => {
-          setActiveNavTab('home');
-          if (typeof window !== 'undefined' && window.location.pathname.includes('/recharge')) {
-            window.history.pushState({}, '', '/wallet');
-          }
-        }}
-        onSuccess={(amt, op) => {
-          const newBal = balance + amt;
-          setBalance(newBal);
-          const newTx: WalletTransaction = {
-            id: `tx_${Date.now()}`,
-            type: 'CREDIT',
-            title: `Recharge ${op}`,
-            subtitle: 'Alimentation validée via Nanawtchit',
-            amount: amt,
-            currency: 'FCFA',
-            date: "Aujourd'hui",
-            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            timestamp: Date.now(),
-            category: 'RECHARGE',
-            reference: `REF-RECH-${Math.floor(10000 + Math.random() * 90000)}`,
-            operator: op,
-            status: 'CONFIRMED'
-          };
-          setTransactions(prev => [newTx, ...prev]);
-          setActiveNavTab('home');
-          showToast(`🎉 Recharge réussie ! +${formatCFA(amt)} crédités.`);
-        }}
-      />
-    );
-  }
+  const activeUniverse = useMemo(
+    () => universes.find(u => u.id === selectedUniverseId) || null,
+    [universes, selectedUniverseId]
+  );
 
   return (
-    <div className={`min-h-screen bg-[#F9F8F6] text-[#1A1A1A] font-sans antialiased flex justify-center items-center p-0 sm:p-4 select-none ${className}`}>
-      
-      {/* Toast Flottant de Notification Réussie */}
-      {toastMessage && (
-        <div className="fixed top-5 z-50 max-w-sm w-[90%] bg-[#1E3A8A] text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-2xl border border-blue-400/40 flex items-center gap-3 animate-bounce">
-          <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />
-          <span className="flex-1">{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="text-blue-200 hover:text-white">
-            <X size={16} />
+    <div className={`min-h-[100dvh] w-full bg-slate-950 text-slate-100 font-sans antialiased flex flex-col ${className}`}>
+      {/* Toast Flottant */}
+      {toast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] max-w-md px-4 py-3 rounded-2xl shadow-2xl border text-xs font-bold flex items-center gap-2.5 ${
+          toast.type === 'success'
+            ? 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200'
+            : toast.type === 'error'
+              ? 'bg-rose-950/95 border-rose-500/60 text-rose-200'
+              : 'bg-blue-950/95 border-blue-500/60 text-blue-200'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span className="flex-1">{toast.msg}</span>
+          <button type="button" onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Conteneur simulant l'écran d'un smartphone moderne (Responsive : 100% sur mobile, cadre immersif sur desktop) */}
-      <div className="w-full max-w-md bg-[#F9F8F6] sm:rounded-[3rem] sm:shadow-2xl overflow-hidden flex flex-col h-screen sm:h-[844px] border-0 sm:border-8 sm:border-[#1E3A8A] relative">
-        
-        {/* ===================================================================== */}
-        {/* EN-TÊTE SUPÉRIEURE (HEADER) */}
-        {/* ===================================================================== */}
-        <header className="px-6 pt-6 sm:pt-8 pb-3 flex justify-between items-center bg-[#F9F8F6] border-b border-gray-100/60 sticky top-0 z-20">
-          <div className="flex items-center space-x-3">
-            {/* Avatar avec badge de connexion */}
-            <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1E3A8A] to-[#1E40AF] text-white flex items-center justify-center font-extrabold text-base shadow-md shadow-blue-900/20 ring-2 ring-white">
-                {userInitial}
-              </div>
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
+      {/* En-tête Sticky Mobile-First */}
+      <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/90 px-4 py-3">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#1E3A8A] to-blue-600 text-white flex items-center justify-center font-black shadow-lg shrink-0">
+              <Wallet className="w-5 h-5" />
             </div>
-
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="text-[11px] text-gray-500 font-medium">Bienvenue sur</p>
-                <span className="text-[11px] font-black text-[#1E3A8A] tracking-tight">nanawallet</span>
+                <h1 className="text-sm font-black text-white truncate">NaNa Wallet Marchand</h1>
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[9px] font-black uppercase">
+                  Unifié
+                </span>
               </div>
-              <h2 className="text-sm font-bold text-[#1A1A1A] truncate max-w-[170px]">{userName}</h2>
+              <p className="text-[11px] text-slate-400 truncate">
+                {activeUniverse ? activeUniverse.name : resolvedUserName}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Bouton de Notification */}
-            <button 
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!isPwaInstalled && (
+              <button
+                type="button"
+                onClick={handleInstallPwa}
+                className="px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                title="Installer NaNa Wallet sur votre téléphone"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Installer</span>
+              </button>
+            )}
+            <button
               type="button"
               onClick={() => {
                 playTapBeep();
-                setIsNotificationOpen(!isNotificationOpen);
+                fetchWalletSummary();
+                if (activeTab === 'LINKS') fetchPaymentLinks();
               }}
-              className="w-9 h-9 rounded-full bg-white shadow-xs border border-gray-100 flex items-center justify-center text-gray-600 hover:text-[#1E3A8A] cursor-pointer transition active:scale-95 relative"
-              title="Centre de notifications"
+              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+              title="Synchroniser avec le Cloud"
             >
-              <Bell size={17} />
-              <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-blue-600 rounded-full" />
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
             </button>
-
-            {/* Badge de Sécurité & Statut Vérifié */}
-            <div 
-              onClick={() => {
-                playTapBeep();
-                showToast("🛡️ Portefeuille sécurisé par architecture hybride NaNaSwitch.");
-              }}
-              className="w-9 h-9 rounded-full bg-white shadow-xs border border-gray-100 flex items-center justify-center text-[#1E3A8A] cursor-pointer hover:bg-blue-50 transition active:scale-95"
-              title="Statut de Sécurité Vérifié"
-            >
-              <ShieldCheck size={20} className="text-emerald-600" />
-            </div>
-
-            {/* Si un callback de retour vers le Hub existe */}
             {onBackToHub && (
-              <button 
+              <button
                 type="button"
                 onClick={onBackToHub}
-                className="w-9 h-9 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center justify-center transition active:scale-95 ml-1"
-                title="Quitter et revenir au Hub"
+                className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                title="Retour au Dashboard"
               >
-                <X size={17} />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
-        </header>
+        </div>
 
-        {/* CONTENU PRINCIPAL DÉFILANT */}
-        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-5">
-          
-          {/* ===================================================================== */}
-          {/* CARTE DE SOLDE PRINCIPAL (HERO CARD DE CLASSE MONDIALE) */}
-          {/* ===================================================================== */}
-          <div className="bg-gradient-to-br from-[#1E3A8A] via-[#1E40AF] to-[#0F172A] text-white rounded-3xl p-6 shadow-xl shadow-blue-950/20 relative overflow-hidden flex flex-col justify-between border border-blue-400/20">
-            {/* Reflet lumineux abstrait de verre (Glassmorphism) */}
-            <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-blue-500/25 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/10 rounded-full blur-xl pointer-events-none" />
+        {/* Sélecteur d'Univers si plusieurs univers */}
+        {universes.length > 1 && (
+          <div className="max-w-3xl mx-auto mt-2.5 flex items-center gap-2">
+            <Store className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <select
+              value={selectedUniverseId}
+              onChange={(e) => setSelectedUniverseId(e.target.value)}
+              className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
+            >
+              {universes.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </header>
 
-            <div className="relative z-10">
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-blue-200 uppercase tracking-wider">
-                    Solde Principal
-                  </span>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      setIsBalanceHidden(!isBalanceHidden);
-                    }}
-                    className="text-blue-300 hover:text-white transition p-0.5"
-                    title={isBalanceHidden ? "Afficher le solde" : "Masquer le solde"}
-                  >
-                    {isBalanceHidden ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                </div>
-                <span className="bg-blue-900/70 text-cyan-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-cyan-400/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  Hybride Active
+      {/* Indice d'installation iOS/Android si prompt natif indisponible */}
+      {showIosInstallHint && (
+        <div className="max-w-3xl mx-auto w-full px-4 pt-3">
+          <div className="p-3 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 text-xs text-indigo-200 flex items-start justify-between gap-2">
+            <span>
+              📲 Pour installer <strong>NaNa Wallet Marchand</strong> : ouvrez le menu de votre navigateur (Partager sur Safari iOS ou ⋮ sur Chrome Android) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong>.
+            </span>
+            <button type="button" onClick={() => setShowIosInstallHint(false)} className="text-indigo-300 hover:text-white shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Contenu Principal Fluide (Mobile-First, pb-28 pour la barre du bas) */}
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-4 pb-28 space-y-5">
+        {/* CARTE SOLDE PRINCIPAL UNIFIÉ */}
+        <section className="rounded-3xl bg-gradient-to-br from-[#1E3A8A] via-[#1E40AF] to-slate-900 border border-blue-400/25 p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
+          <div className="absolute -right-10 -bottom-10 w-44 h-44 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="flex items-start justify-between gap-2 relative z-10">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-200">
+                  Solde Marchand Réel (Synchronisé)
                 </span>
-              </div>
-
-              {/* Chiffre du Solde */}
-              <h1 className="text-3xl sm:text-[34px] font-extrabold tracking-tight mt-1 text-white flex items-baseline gap-2 font-mono">
-                {isBalanceHidden ? (
-                  <span>••••••••</span>
-                ) : (
-                  <>
-                    <span>{balance.toLocaleString('fr-FR')}</span>
-                    <span className="text-base font-normal text-blue-200">FCFA</span>
-                  </>
-                )}
-              </h1>
-
-              {/* Mention Équivalent Crypto USDT Grisée */}
-              <div className="text-xs text-blue-200/90 mt-2 flex items-center gap-2">
-                <span>≈ {isBalanceHidden ? '•••' : cryptoPreview} USDT</span>
                 <button
                   type="button"
-                  onClick={() => setActiveNavTab('crypto')}
-                  className="inline-flex items-center gap-1 text-[10px] bg-blue-950/70 hover:bg-blue-900 text-blue-200 px-2 py-0.5 rounded-md border border-blue-400/30 transition cursor-pointer"
+                  onClick={() => setIsBalanceHidden(prev => !prev)}
+                  className="text-blue-200 hover:text-white cursor-pointer"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  <span>Bientôt</span>
-                  <Info size={10} className="text-blue-300" />
+                  {isBalanceHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
+              </div>
+              <div className="text-3xl sm:text-4xl font-black text-white mt-1 font-mono tracking-tight">
+                {isBalanceHidden ? '••••••••' : formatCFA(balanceXof)}
               </div>
             </div>
 
-            {/* Deux Boutons d'Action Rapide dans la Carte */}
-            <div className="grid grid-cols-2 gap-3 mt-6 pt-4 border-t border-white/10 relative z-10">
-              <button 
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  setActiveNavTab('recharge');
-                }}
-                className="bg-white text-[#1E3A8A] hover:bg-blue-50 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-950/20 transition-all active:scale-95 cursor-pointer"
-              >
-                <PlusCircle size={16} className="text-[#1E3A8A]" />
-                <span>Recharger</span>
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => {
-                  playTapBeep();
-                  setActiveNavTab('checkout');
-                }}
-                className="bg-blue-700/80 hover:bg-blue-700 text-white border border-blue-400/30 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-              >
-                <ArrowUpRight size={16} className="text-blue-200" />
-                <span>Payer / Usage</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('SECURITY')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-black border flex items-center gap-1 cursor-pointer ${
+                hasMasterPin
+                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+                  : 'bg-amber-500/20 text-amber-200 border-amber-400/40 animate-pulse'
+              }`}
+            >
+              <Lock className="w-3 h-3" />
+              <span>{hasMasterPin ? 'Master PIN Actif' : 'Activer Master PIN'}</span>
+            </button>
           </div>
 
-          {/* ===================================================================== */}
-          {/* SECTION PORTEFEUILLES & ACTIFS (FIAT & CRYPTO PRÉPARATION) */}
-          {/* ===================================================================== */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Portefeuilles &amp; Actifs
-              </h3>
-              <span className="text-[11px] font-semibold text-[#1E3A8A] flex items-center gap-1 cursor-pointer">
-                <span>Multi-devises</span>
-              </span>
-            </div>
-
-            <div className="space-y-2.5">
-              
-              {/* Actif 1 : Monnaie Locale (XOF) */}
-              <div 
-                onClick={() => {
-                  playTapBeep();
-                  setActiveNavTab('recharge');
-                }}
-                className="bg-white p-3.5 rounded-2xl shadow-xs flex items-center justify-between border border-gray-100 hover:border-blue-200 transition cursor-pointer group active:scale-98"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1E3A8A] flex items-center justify-center font-black text-sm group-hover:bg-[#1E3A8A] group-hover:text-white transition">
-                    F
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-bold text-[#1A1A1A]">Monnaie Locale (XOF)</p>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    </div>
-                    <p className="text-[11px] text-gray-400 font-medium">Actif principal (NaNaSwitch)</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-[#1E3A8A] block font-mono">
-                    {isBalanceHidden ? '••••' : `${balance.toLocaleString('fr-FR')} F`}
-                  </span>
-                  <span className="text-[10px] text-emerald-600 font-semibold">Disponible</span>
-                </div>
-              </div>
-
-              {/* Actif 2 : Crypto-actifs (USDT) — Grisé "Bientôt" */}
-              <div 
-                onClick={() => {
-                  playTapBeep();
-                  setActiveNavTab('crypto');
-                }}
-                className="bg-white/80 p-3.5 rounded-2xl shadow-xs flex items-center justify-between border border-gray-100 opacity-80 hover:opacity-100 transition cursor-pointer group active:scale-98"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center font-bold text-base group-hover:bg-amber-100 group-hover:text-amber-800 transition">
-                    ₮
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-bold text-gray-700">Crypto-actifs (USDT)</p>
-                    </div>
-                    <p className="text-[11px] text-gray-400 font-medium">Réseau Polygon / Tron</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] bg-gray-100 text-gray-600 font-bold px-2.5 py-1 rounded-md border border-gray-200 group-hover:border-amber-300 group-hover:bg-amber-50 group-hover:text-amber-900 transition">
-                    Bientôt
-                  </span>
-                  <ChevronRight size={14} className="text-gray-400" />
-                </div>
-              </div>
-
-            </div>
+          <div className="grid grid-cols-3 gap-2.5 relative z-10">
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setIsRechargeAmountModalOpen(true);
+              }}
+              className="py-2.5 px-3 rounded-2xl bg-white text-[#1E3A8A] hover:bg-blue-50 font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition active:scale-95"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Recharger</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setActiveTab('PAYG');
+              }}
+              className="py-2.5 px-3 rounded-2xl bg-blue-600/80 hover:bg-blue-600 text-white border border-blue-400/30 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+            >
+              <Layers className="w-4 h-4" />
+              <span>Pay-As-Go</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setActiveTab('LINKS');
+              }}
+              className="py-2.5 px-3 rounded-2xl bg-slate-900/70 hover:bg-slate-900 text-white border border-white/15 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-95"
+            >
+              <Link2 className="w-4 h-4" />
+              <span>Lien Pay</span>
+            </button>
           </div>
+        </section>
 
-          {/* ===================================================================== */}
-          {/* FLUX D'ACTIVITÉ RÉCENTE (TRANSACTIONS DÉBIT & CRÉDIT) */}
-          {/* ===================================================================== */}
-          <div className="pb-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Activité récente
-              </h3>
-              
-              {/* Filtres Rapides */}
-              <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg text-[10px] font-bold text-gray-500">
-                <button
-                  type="button"
-                  onClick={() => setActivityFilter('ALL')}
-                  className={`px-2 py-0.5 rounded-md transition ${activityFilter === 'ALL' ? 'bg-white text-[#1E3A8A] shadow-xs' : 'hover:text-gray-900'}`}
-                >
-                  Tous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActivityFilter('CREDIT')}
-                  className={`px-2 py-0.5 rounded-md transition ${activityFilter === 'CREDIT' ? 'bg-white text-emerald-700 shadow-xs' : 'hover:text-gray-900'}`}
-                >
-                  + Dépôts
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActivityFilter('DEBIT')}
-                  className={`px-2 py-0.5 rounded-md transition ${activityFilter === 'DEBIT' ? 'bg-white text-rose-700 shadow-xs' : 'hover:text-gray-900'}`}
-                >
-                  - Usages
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              {filteredTransactions.map((tx) => {
-                const isCredit = tx.type === 'CREDIT';
-                return (
-                  <div 
-                    key={tx.id}
-                    onClick={() => {
-                      playTapBeep();
-                      setSelectedTxForReceipt(tx);
-                    }}
-                    className="bg-white p-3 rounded-2xl shadow-xs flex items-center justify-between border border-gray-100 hover:border-blue-200 transition cursor-pointer group active:scale-98"
+        {/* ONGLET 1 : ACCUEIL & HISTORIQUE RÉEL */}
+        {activeTab === 'HOME' && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                Historique Réel ({filteredTransactions.length})
+              </h2>
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px] font-bold">
+                {(['ALL', 'CREDIT', 'DEBIT'] as const).map(f => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setActivityFilter(f)}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                      activityFilter === f ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                        isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
-                      }`}>
-                        {isCredit ? <PlusCircle size={15} /> : <ArrowUpRight size={15} />}
+                    {f === 'ALL' ? 'Tous' : f === 'CREDIT' ? '+ Crédits' : '- Débits'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="p-8 rounded-2xl bg-slate-900/70 border border-slate-800 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                <span>Synchronisation du portefeuille avec le Cloud...</span>
+              </div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-900/60 border border-dashed border-slate-800 text-center space-y-2">
+                <Wallet className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs font-bold text-slate-300">Aucune transaction enregistrée</p>
+                <p className="text-[11px] text-slate-500">
+                  Rechargez votre wallet via UltimateCheckout ou générez un lien de paiement pour encaisser.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredTransactions.map(tx => {
+                  const isCredit = tx.type === 'CREDIT';
+                  return (
+                    <div
+                      key={tx.id}
+                      className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          isCredit ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
+                          {isCredit ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{tx.title}</p>
+                          <p className="text-[11px] text-slate-400 truncate">{tx.subtitle}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            {tx.createdAt ? new Date(tx.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                          </p>
+                        </div>
                       </div>
-                      <div className="truncate max-w-[190px]">
-                        <p className="text-xs font-bold text-[#1A1A1A] truncate">{tx.title}</p>
-                        <p className="text-[10px] text-gray-400 font-medium">
-                          {tx.date}, {tx.time} {tx.operator ? `• ${tx.operator}` : ''}
+                      <div className="text-right shrink-0">
+                        <p className={`text-xs font-black font-mono ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isCredit ? '+' : '-'}{formatCFA(tx.amount)}
                         </p>
+                        <span className="text-[9px] uppercase font-bold text-slate-400">{tx.status}</span>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className={`text-xs font-extrabold font-mono block ${
-                        isCredit ? 'text-emerald-600' : 'text-rose-600'
-                      }`}>
-                        {isCredit ? '+' : '-'}{tx.amount.toLocaleString('fr-FR')} {tx.currency}
-                      </span>
-                      <span className="text-[9px] text-gray-400 uppercase tracking-wider font-semibold">
-                        Confirmé
-                      </span>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ONGLET 2 : MODULES SOUMIS AU PAY-AS-YOU-GO (SÉLECTION MULTIPLE + DÉCRÉMENTATION PARTOUT + CLOUD) */}
+        {activeTab === 'PAYG' && (
+          <section className="space-y-4">
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <h2 className="text-sm font-black text-white">Modules soumis au Pay-As-You-Go</h2>
+              </div>
+              <p className="text-xs text-slate-400">
+                Sélectionnez un ou plusieurs modules à activer. Chaque paiement décrémente immédiatement votre solde partout et exécute l'activation dans le Cloud pour chaque module concerné.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {paygCatalog.map(mod => {
+                const isSelected = selectedPaygIds.includes(mod.id);
+                const activeCredits = entitlements[mod.id]?.credits || 0;
+                return (
+                  <button
+                    key={mod.id}
+                    type="button"
+                    onClick={() => togglePaygModule(mod.id)}
+                    className={`text-left p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-blue-950/60 border-blue-500 shadow-lg shadow-blue-950/40'
+                        : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-bold">
+                          {mod.category}
+                        </span>
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-blue-600 border-blue-400 text-white' : 'border-slate-600'
+                        }`}>
+                          {isSelected && <Check className="w-3.5 h-3.5" />}
+                        </div>
+                      </div>
+                      <h3 className="text-xs font-black text-white">{mod.name}</h3>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">{mod.description}</p>
                     </div>
-                  </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <div>
+                        <span className="text-sm font-black text-emerald-400 font-mono">{formatCFA(mod.priceXof)}</span>
+                        <span className="block text-[10px] text-slate-400">{mod.unitLabel}</span>
+                      </div>
+                      {activeCredits > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-black">
+                          {activeCredits} actif{activeCredits > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </button>
                 );
               })}
             </div>
-          </div>
 
-        </div>
-
-        {/* ===================================================================== */}
-        {/* BARRE DE NAVIGATION INFÉRIEURE FIXE (BOTTOM BAR) */}
-        {/* ===================================================================== */}
-        <nav className="bg-white border-t border-gray-100 px-6 py-2.5 flex justify-around items-center sticky bottom-0 z-20 shadow-xs">
-          
-          <button 
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              setActiveNavTab('home');
-            }}
-            className={`flex flex-col items-center cursor-pointer transition ${
-              activeNavTab === 'home' ? 'text-[#1E3A8A]' : 'text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            <div className={`p-1 rounded-xl ${activeNavTab === 'home' ? 'bg-blue-50' : ''}`}>
-              <Wallet size={19} />
-            </div>
-            <span className={`text-[10px] mt-0.5 ${activeNavTab === 'home' ? 'font-black' : 'font-medium'}`}>
-              Accueil
-            </span>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              setActiveNavTab('recharge');
-            }}
-            className="flex flex-col items-center text-gray-400 hover:text-[#1E3A8A] cursor-pointer transition active:scale-95"
-          >
-            <div className="p-1 rounded-xl hover:bg-blue-50">
-              <PlusCircle size={19} />
-            </div>
-            <span className="text-[10px] font-medium mt-0.5">Recharger</span>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              setActiveNavTab('history');
-              setActivityFilter('ALL');
-            }}
-            className={`flex flex-col items-center cursor-pointer transition ${
-              activeNavTab === 'history' ? 'text-[#1E3A8A]' : 'text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            <div className={`p-1 rounded-xl ${activeNavTab === 'history' ? 'bg-blue-50' : ''}`}>
-              <History size={19} />
-            </div>
-            <span className={`text-[10px] mt-0.5 ${activeNavTab === 'history' ? 'font-black' : 'font-medium'}`}>
-              Historique
-            </span>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              showToast("🔒 Master PIN actif. Vos fonds sont protégés par chiffrement.");
-            }}
-            className="flex flex-col items-center text-gray-400 hover:text-[#1E3A8A] cursor-pointer transition"
-          >
-            <div className="p-1 rounded-xl hover:bg-blue-50">
-              <ShieldCheck size={19} />
-            </div>
-            <span className="text-[10px] font-medium mt-0.5">Sécurité</span>
-          </button>
-
-        </nav>
-
-        {/* ===================================================================== */}
-        {/* MODAL 1 : RECHARGEMENT RAPIDE MOBILE MONEY */}
-        {/* ===================================================================== */}
-        {isRechargeModalOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex flex-col justify-end animate-fadeIn">
-            <div className="bg-[#F9F8F6] rounded-t-[2.5rem] p-6 space-y-4 max-h-[90%] overflow-y-auto border-t-2 border-[#1E3A8A] shadow-2xl animate-slideUp">
-              
-              <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#1E3A8A] flex items-center justify-center font-bold">
-                    <PlusCircle size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#1A1A1A]">Recharger mon Portefeuille</h3>
-                    <p className="text-[10px] text-gray-500">Alimentation instantanée sans frais cachés</p>
-                  </div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => setIsRechargeModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-white text-gray-400 hover:text-gray-700 flex items-center justify-center"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Sélection du Montant Rapide */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                  Montant à recharger :
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1000, 2500, 5000, 10000].map(amt => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        setRechargeAmount(amt);
-                      }}
-                      className={`py-2 px-1 rounded-xl text-xs font-bold transition cursor-pointer border ${
-                        rechargeAmount === amt 
-                          ? 'bg-[#1E3A8A] text-white border-[#1E3A8A] shadow-xs' 
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
-                      }`}
-                    >
-                      {amt.toLocaleString()} F
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Choix de l'Opérateur */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                  Mode de règlement :
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'wave', label: 'Wave (CI / SN)', badge: '0%' },
-                    { id: 'orange', label: 'Orange Money', badge: 'BF/CI' },
-                    { id: 'moov', label: 'Moov Africa', badge: 'UEMOA' },
-                    { id: 'card', label: 'Carte Bancaire', badge: 'Visa/MC' }
-                  ].map(op => (
-                    <button
-                      key={op.id}
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        setRechargeOperator(op.id as any);
-                      }}
-                      className={`p-2.5 rounded-xl text-left border transition cursor-pointer flex items-center justify-between ${
-                        rechargeOperator === op.id
-                          ? 'bg-blue-50/80 border-[#1E3A8A] text-[#1E3A8A] font-bold ring-1 ring-[#1E3A8A]'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <span className="text-xs">{op.label}</span>
-                      <span className="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono">
-                        {op.badge}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Champ Numéro Mobile */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                  Numéro de débit Mobile Money :
-                </label>
-                <input 
-                  type="tel"
-                  value={rechargePhone}
-                  onChange={(e) => setRechargePhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-mono font-bold text-gray-800 outline-none focus:border-[#1E3A8A]"
-                  placeholder="+226 70 00 00 00"
-                />
-              </div>
-
-              {/* Bouton de validation */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  disabled={isProcessingRecharge}
-                  onClick={handleConfirmRecharge}
-                  className="w-full py-3.5 rounded-xl bg-[#1E3A8A] hover:bg-blue-900 text-white font-extrabold text-xs shadow-lg shadow-blue-950/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
-                >
-                  {isProcessingRecharge ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                      <span>Validation sécurisée en cours...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 fill-current text-amber-300" />
-                      <span>Confirmer et Recharger {rechargeAmount.toLocaleString()} FCFA</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* MODAL 2 : PAYER / USAGE DE SERVICES INTERNES */}
-        {/* ===================================================================== */}
-        {isUsageModalOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex flex-col justify-end animate-fadeIn">
-            <div className="bg-[#F9F8F6] rounded-t-[2.5rem] p-6 space-y-4 max-h-[90%] overflow-y-auto border-t-2 border-[#1E3A8A] shadow-2xl animate-slideUp">
-              
-              <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#1E3A8A] flex items-center justify-center font-bold">
-                    <ArrowUpRight size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#1A1A1A]">Payer un service à l’usage</h3>
-                    <p className="text-[10px] text-gray-500">Débit direct sur votre solde ({balance.toLocaleString()} F dispo)</p>
-                  </div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => setIsUsageModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-white text-gray-400 hover:text-gray-700 flex items-center justify-center"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Liste des Services Éligibles au Wallet */}
-              <div className="space-y-2">
-                {[
-                  { name: 'Génération de CV Pro & Lettre IA', price: 300, desc: 'Téléchargement PDF certifié' },
-                  { name: 'Produit Boutique Supplémentaire', price: 1000, desc: 'Ajout permanent à votre catalogue' },
-                  { name: 'Tunnel de Vente Modulaire', price: 5000, desc: 'Activation de tunnel de conversion' },
-                  { name: 'Pack 100 Notifications SMS OTP', price: 2500, desc: 'Routage SMS garanti UEMOA' },
-                  { name: 'Signature Électronique Certifiée', price: 300, desc: 'Preuve légale horodatée DocuSign' }
-                ].map((s, idx) => (
-                  <div 
-                    key={idx}
-                    className="p-3 bg-white rounded-2xl border border-gray-200 flex items-center justify-between hover:border-blue-300 transition"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-[#1A1A1A]">{s.name}</p>
-                      <p className="text-[10px] text-gray-400">{s.desc}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleExecuteUsageDebit(s.name, s.price)}
-                      className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-[#1E3A8A] text-[#1E3A8A] hover:text-white font-black text-xs transition cursor-pointer active:scale-95 border border-blue-200"
-                    >
-                      Payer {s.price} F
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* MODAL 3 : DÉTAIL DU REÇU ÉLECTRONIQUE DE TRANSACTION */}
-        {/* ===================================================================== */}
-        {selectedTxForReceipt && (
-          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-gray-100 animate-slideUp">
-              
-              <div className="text-center pb-2 border-b border-gray-100">
-                <div className={`w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-2 ${
-                  selectedTxForReceipt.type === 'CREDIT' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
-                }`}>
-                  {selectedTxForReceipt.type === 'CREDIT' ? <PlusCircle size={24} /> : <ArrowUpRight size={24} />}
-                </div>
-                <h3 className="text-base font-black text-[#1A1A1A]">{selectedTxForReceipt.title}</h3>
-                <span className={`text-2xl font-black font-mono mt-1 block ${
-                  selectedTxForReceipt.type === 'CREDIT' ? 'text-emerald-600' : 'text-rose-600'
-                }`}>
-                  {selectedTxForReceipt.type === 'CREDIT' ? '+' : '-'}{selectedTxForReceipt.amount.toLocaleString()} {selectedTxForReceipt.currency}
-                </span>
-              </div>
-
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1 border-b border-gray-50">
-                  <span className="text-gray-400">Référence</span>
-                  <span className="font-mono font-bold text-gray-800">{selectedTxForReceipt.reference}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-gray-50">
-                  <span className="text-gray-400">Date &amp; Heure</span>
-                  <span className="font-medium text-gray-800">{selectedTxForReceipt.date} à {selectedTxForReceipt.time}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-gray-50">
-                  <span className="text-gray-400">Statut</span>
-                  <span className="font-bold text-emerald-600 flex items-center gap-1">
-                    <CheckCircle2 size={13} /> Vérifié &amp; Scellé
+            {/* Barre de confirmation Pay-As-You-Go */}
+            {selectedPaygIds.length > 0 && (
+              <div className="p-4 rounded-2xl bg-slate-900 border-2 border-blue-500/50 space-y-3 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300">
+                    {selectedPaygIds.length} module(s) sélectionné(s)
+                  </span>
+                  <span className="text-base font-black text-white font-mono">
+                    Total : {formatCFA(selectedPaygTotal)}
                   </span>
                 </div>
+
+                {hasMasterPin && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Master PIN requis pour valider le paiement</span>
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={paygPinInput}
+                      onChange={(e) => setPaygPinInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Saisissez votre Master PIN (4-6 chiffres)"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-mono tracking-widest focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExecutePaygPayment}
+                    disabled={isPayingPayg || balanceXof < selectedPaygTotal}
+                    className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+                  >
+                    {isPayingPayg ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Exécution sur le Cloud...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Payer {formatCFA(selectedPaygTotal)} &amp; Activer</span>
+                      </>
+                    )}
+                  </button>
+                  {balanceXof < selectedPaygTotal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRechargeAmount(Math.max(1000, selectedPaygTotal - balanceXof));
+                        setIsRechargeAmountModalOpen(true);
+                      }}
+                      className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black cursor-pointer"
+                    >
+                      Recharger
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ONGLET 3 : LIENS DE PAIEMENT (IDENTIQUES AU WALLET PRINCIPAL) */}
+        {activeTab === 'LINKS' && (
+          <section className="space-y-4">
+            <form onSubmit={handleCreatePaymentLink} className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-blue-400" />
+                <h2 className="text-sm font-black text-white">Générer un Lien de Paiement Unifié</h2>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Identique aux liens générés depuis votre Dashboard Principal — tout paiement reçu crédite directement ce Wallet et apparaît partout.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={linkTitle}
+                  onChange={(e) => setLinkTitle(e.target.value)}
+                  placeholder="Titre (ex: Acompte Prestation, Formation...)"
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                  required
+                />
+                <input
+                  type="number"
+                  min={100}
+                  value={linkAmount}
+                  onChange={(e) => setLinkAmount(e.target.value)}
+                  placeholder="Montant en FCFA (ex: 15000)"
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+              <input
+                type="text"
+                value={linkDescription}
+                onChange={(e) => setLinkDescription(e.target.value)}
+                placeholder="Description courte (optionnel)"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={isCreatingLink}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+              >
+                {isCreatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                <span>Générer le lien de paiement officiel</span>
+              </button>
+            </form>
+
+            <div className="space-y-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                Vos Liens de Paiement ({paymentLinks.length})
+              </h3>
+              {isLoadingLinks ? (
+                <div className="p-6 text-center text-xs text-slate-400">Chargement des liens...</div>
+              ) : paymentLinks.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-900/50 border border-dashed border-slate-800 text-center text-xs text-slate-400">
+                  Aucun lien de paiement créé pour cet univers.
+                </div>
+              ) : (
+                paymentLinks.map(lnk => (
+                  <div key={lnk.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-white truncate">{lnk.title}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{lnk.url}</p>
+                      </div>
+                      <span className="text-xs font-black text-emerald-400 font-mono shrink-0">
+                        {formatCFA(lnk.amount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                      <span className="text-[10px] text-slate-400">
+                        {lnk.clicks || 0} clic(s) • {lnk.payments || 0} paiement(s)
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(lnk.url).catch(() => {});
+                            setCopiedLinkId(lnk.id);
+                            setTimeout(() => setCopiedLinkId(null), 2000);
+                            showToast('Lien copié !', 'success');
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedLinkId === lnk.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedLinkId === lnk.id ? 'Copié' : 'Copier'}</span>
+                        </button>
+                        <a
+                          href={`https://wa.me/?text=${encodeURIComponent(`Bonjour, voici votre lien de paiement sécurisé (${lnk.title} - ${formatCFA(lnk.amount)}) : ${lnk.url}`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>WhatsApp</span>
+                        </a>
+                        <a
+                          href={lnk.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                          title="Ouvrir le lien"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ONGLET 4 : RETRAITS MOBILE MONEY RÉELS */}
+        {activeTab === 'WITHDRAW' && (
+          <form onSubmit={handleWithdrawSubmit} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-emerald-400" />
+              <h2 className="text-sm font-black text-white">Retrait Mobile Money Réel</h2>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {(['wave', 'orange', 'moov', 'mtn'] as const).map(op => (
+                <button
+                  key={op}
+                  type="button"
+                  onClick={() => setWithdrawProvider(op)}
+                  className={`py-2.5 rounded-xl text-xs font-black uppercase border cursor-pointer transition ${
+                    withdrawProvider === op
+                      ? 'bg-blue-600 text-white border-blue-400'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  {op}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300">Montant à retirer (min. 1 000 FCFA)</label>
+              <input
+                type="number"
+                min={1000}
+                max={balanceXof || undefined}
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="Ex: 10000"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-blue-500"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300">Numéro bénéficiaire</label>
+              <input
+                type="tel"
+                value={withdrawPhone}
+                onChange={(e) => setWithdrawPhone(e.target.value)}
+                placeholder="+226 70 00 00 00"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-blue-500"
+                required
+              />
+            </div>
+
+            {hasMasterPin && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Master PIN de sécurité</span>
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={withdrawPin}
+                  onChange={(e) => setWithdrawPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Entrez votre Master PIN"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono tracking-widest focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmittingWithdraw || balanceXof < 1000}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+            >
+              {isSubmittingWithdraw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              <span>Confirmer le retrait Mobile Money</span>
+            </button>
+          </form>
+        )}
+
+        {/* ONGLET 5 : SÉCURITÉ MASTER PIN & APPLICATION PWA */}
+        {activeTab === 'SECURITY' && (
+          <section className="space-y-4">
+            <form onSubmit={handleSaveMasterPin} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <h2 className="text-sm font-black text-white">Master PIN (Sécurité Wallet)</h2>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                  hasMasterPin
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                }`}>
+                  {hasMasterPin ? 'Configuré' : 'Non configuré'}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Votre Master PIN (4 à 6 chiffres) est chiffré côté serveur et protège tous vos paiements Pay-As-You-Go ainsi que vos retraits Mobile Money.
+              </p>
+
+              {hasMasterPin && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Master PIN actuel</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={currentPinInput}
+                    onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono tracking-widest focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Nouveau Master PIN (4-6 chiffres)</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono tracking-widest focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Confirmer le Master PIN</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={confirmPinInput}
+                    onChange={(e) => setConfirmPinInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono tracking-widest focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
               </div>
 
               <button
-                type="button"
-                onClick={() => setSelectedTxForReceipt(null)}
-                className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs transition cursor-pointer"
+                type="submit"
+                disabled={isSavingPin}
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
               >
-                Fermer le reçu
+                {isSavingPin ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                <span>{hasMasterPin ? 'Mettre à jour le Master PIN' : 'Activer mon Master PIN'}</span>
               </button>
+            </form>
 
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* MODAL 4 : INFO CRYPTO-ACTIFS USDT (BIENTÔT) */}
-        {/* ===================================================================== */}
-        {isCryptoInfoModalOpen && (
-          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-gray-100 animate-slideUp text-center">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto text-2xl font-black shadow-xs">
-                ₮
-              </div>
-              <h3 className="text-base font-black text-[#1A1A1A]">
-                Portefeuille Crypto USDT (Bientôt disponible)
-              </h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                nanawallet intégrera les transferts stables en USDT sur les réseaux Polygon et Tron à frais ultra-réduits (&lt; 0.1$). Vous pourrez convertir instantanément vos FCFA en USDT et vice-versa.
-              </p>
-              <div className="p-3 bg-blue-50 rounded-xl text-left border border-blue-100">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#1E3A8A] block mb-0.5">
-                  Avantage Membre
-                </span>
-                <p className="text-xs text-gray-700 font-medium">
-                  Zéro frais de tenue de compte crypto &amp; conversion 1-clic vers vos comptes Mobile Money.
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-black text-white">Application Installable (PWA)</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {isPwaInstalled
+                    ? 'NaNa Wallet Marchand est installé sur votre appareil.'
+                    : 'Installez NaNa Wallet directement sur votre écran d\'accueil mobile.'}
                 </p>
               </div>
+              {!isPwaInstalled && (
+                <button
+                  type="button"
+                  onClick={handleInstallPwa}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Installer</span>
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+
+      {/* BARRE DE NAVIGATION INFÉRIEURE FIXE (MOBILE-FIRST) */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 safe-area-pb">
+        <div className="max-w-3xl mx-auto grid grid-cols-5 gap-1">
+          {[
+            { id: 'HOME' as WalletTab, label: 'Accueil', icon: Wallet },
+            { id: 'PAYG' as WalletTab, label: 'Pay-As-Go', icon: Layers },
+            { id: 'LINKS' as WalletTab, label: 'Liens', icon: Link2 },
+            { id: 'WITHDRAW' as WalletTab, label: 'Retrait', icon: Send },
+            { id: 'SECURITY' as WalletTab, label: 'PIN', icon: Lock },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
               <button
+                key={tab.id}
                 type="button"
                 onClick={() => {
-                  playValidationBeep();
-                  setIsCryptoInfoModalOpen(false);
-                  showToast("✨ Vous êtes inscrit sur la liste d'accès anticipé USDT !");
+                  playTapBeep();
+                  setActiveTab(tab.id);
                 }}
-                className="w-full py-3 rounded-xl bg-[#1E3A8A] hover:bg-blue-900 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition cursor-pointer ${
+                  isActive ? 'bg-blue-600/20 text-blue-300' : 'text-slate-400 hover:text-white'
+                }`}
               >
-                Rejoindre la liste d'attente prioritaire
+                <Icon className="w-4 h-4" />
+                <span className="text-[10px] font-bold mt-0.5">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* MODALE CHOIX MONTANT RECHARGE AVANT LANCEMENT DU VRAI ULTIMATECHECKOUT */}
+      {isRechargeAmountModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-white">Recharger NaNa Wallet</h3>
+                <p className="text-[11px] text-slate-400">Paiement sécurisé via UltimateCheckout</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRechargeAmountModalOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        )}
 
-      </div>
+            <div className="grid grid-cols-3 gap-2">
+              {QUICK_RECHARGE_AMOUNTS.map(amt => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setRechargeAmount(amt)}
+                  className={`py-2 rounded-xl text-xs font-black border cursor-pointer transition ${
+                    rechargeAmount === amt
+                      ? 'bg-blue-600 text-white border-blue-400'
+                      : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  {amt.toLocaleString('fr-FR')} F
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-300">Ou montant libre (FCFA)</label>
+              <input
+                type="number"
+                min={100}
+                value={rechargeAmount}
+                onChange={(e) => setRechargeAmount(Number(e.target.value) || 0)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLaunchUltimateCheckout}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Continuer vers UltimateCheckout ({formatCFA(rechargeAmount)})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* VRAI ULTIMATECHECKOUT BRANCHÉ POUR LA RECHARGE RÉELLE */}
+      {isUltimateCheckoutOpen && (
+        <UltimateCheckout
+          isModal={true}
+          isOpen={isUltimateCheckoutOpen}
+          onClose={() => setIsUltimateCheckoutOpen(false)}
+          onCancel={() => setIsUltimateCheckoutOpen(false)}
+          amount={rechargeAmount}
+          currency="FCFA"
+          orderId={activeRechargeOrderId}
+          orderDescription={`Recharge NaNa Wallet Marchand (${activeUniverse?.name || resolvedUserName})`}
+          storeName={activeUniverse?.name || 'NaNa Wallet Marchand'}
+          merchantId={selectedUniverseId || resolvedUserId || 'nana-wallet'}
+          defaultCustomerName={resolvedUserName}
+          defaultEmail={resolvedUserEmail}
+          defaultPhone={resolvedUserPhone}
+          onSuccess={handleUltimateCheckoutSuccess}
+        />
+      )}
     </div>
   );
 }

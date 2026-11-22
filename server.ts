@@ -6217,6 +6217,553 @@ async function startServer() {
     });
   });
 
+  // ============================================================================
+  // 2J. WALLET NANA MARCHAND UNIFIÉ (SOLDE RÉEL, PAY-AS-YOU-GO, MASTER PIN SCRYPT, ULTIMATECHECKOUT)
+  // ============================================================================
+  const MERCHANT_WALLETS_FILE = path.join(DATA_DIR, 'merchant_wallets.json');
+  const WALLET_TXS_FILE = path.join(DATA_DIR, 'merchant_wallet_transactions.json');
+  const WALLET_PINS_FILE = path.join(DATA_DIR, 'merchant_wallet_pins.json');
+  const PAYG_ENTITLEMENTS_FILE = path.join(DATA_DIR, 'payg_entitlements.json');
+
+  const PAYG_MODULES_CATALOG = [
+    {
+      id: 'cv-pro-ia',
+      name: 'CV Pro IA & Lettre Certifiée',
+      category: 'Carrière & IA',
+      unitLabel: '1 génération certifiée',
+      priceXof: 500,
+      supabaseModuleKey: 'cv_pro_ia',
+      description: 'Création de CV ATS haute précision + lettre de motivation IA + export PDF.'
+    },
+    {
+      id: 'studio-video-ia',
+      name: 'Studio Vidéo Pub & Avatar IA',
+      category: 'Marketing IA',
+      unitLabel: '1 vidéo publicitaire HD',
+      priceXof: 1500,
+      supabaseModuleKey: 'studio_video_ia',
+      description: 'Génération de vidéos publicitaires avec présentateur virtuel et voix off.'
+    },
+    {
+      id: 'theme-generator-ia',
+      name: 'Générateur de Thème Digital IA',
+      category: 'Boutique & Design',
+      unitLabel: '1 thème digital complet',
+      priceXof: 2000,
+      supabaseModuleKey: 'theme_generator_ia',
+      description: 'Génération et publication d\'un thème e-commerce ou académie sur-mesure.'
+    },
+    {
+      id: 'course-forge-ai',
+      name: 'Course Forge IA (Quiz & Syllabus)',
+      category: 'Formation LMS',
+      unitLabel: '1 pack génération IA',
+      priceXof: 1000,
+      supabaseModuleKey: 'course_forge_ai',
+      description: 'Génération automatique de modules, quiz corrigés et simulations orales IA.'
+    },
+    {
+      id: 'escrow-devis-pro',
+      name: 'Devis & Contrat Séquestre Escrow',
+      category: 'B2B & Juridique',
+      unitLabel: '1 dossier séquestre',
+      priceXof: 1000,
+      supabaseModuleKey: 'escrow_devis_pro',
+      description: 'Émission d\'un devis B2B signé avec protection de paiement séquestre.'
+    },
+    {
+      id: 'whatsapp-social-blast',
+      name: 'Campagne WhatsApp & Social Blast',
+      category: 'Acquisition',
+      unitLabel: '1 campagne multi-canaux',
+      priceXof: 1500,
+      supabaseModuleKey: 'whatsapp_social_blast',
+      description: 'Diffusion promotionnelle ciblée sur WhatsApp, statut et liens trackés.'
+    },
+    {
+      id: 'salles-vip-live',
+      name: 'Session Live / Salle VIP Illimitée',
+      category: 'Live & Communauté',
+      unitLabel: '1 session Live HD',
+      priceXof: 2500,
+      supabaseModuleKey: 'salles_vip_live',
+      description: 'Ouverture d\'une salle Live HD illimitée avec billetterie intégrée.'
+    },
+    {
+      id: 'kyc-express-audit',
+      name: 'Vérification KYC Express Prioritaire',
+      category: 'Conformité',
+      unitLabel: '1 traitement prioritaire',
+      priceXof: 2000,
+      supabaseModuleKey: 'kyc_express_audit',
+      description: 'Passage prioritaire en tête de file pour la validation de conformité.'
+    },
+    {
+      id: 'export-comptable-pro',
+      name: 'Export Comptable & Factures Pro',
+      category: 'Finance',
+      unitLabel: '1 pack export certifié',
+      priceXof: 750,
+      supabaseModuleKey: 'export_comptable_pro',
+      description: 'Grand livre des ventes, TVA et factures PDF certifiées pour comptable.'
+    },
+    {
+      id: 'sms-otp-pack',
+      name: 'Pack 100 SMS & Alertes Clients',
+      category: 'Notifications',
+      unitLabel: '100 crédits SMS',
+      priceXof: 1200,
+      supabaseModuleKey: 'sms_otp_pack',
+      description: 'Notifications SMS automatiques de commandes, livraisons et codes OTP.'
+    }
+  ];
+
+  const hashWalletPin = (pin: string) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derived = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+    return `${salt}:${derived}`;
+  };
+
+  const verifyWalletPinHash = (pin: string, storedHash: string): boolean => {
+    const parts = String(storedHash || '').split(':');
+    if (parts.length !== 2) return false;
+    const [salt, hex] = parts;
+    const derived = crypto.scryptSync(String(pin), salt, 32);
+    const expected = Buffer.from(hex, 'hex');
+    if (derived.length !== expected.length) return false;
+    return crypto.timingSafeEqual(derived, expected);
+  };
+
+  const getWalletPinRecord = async (ownerKey: string) => {
+    const pins = readJsonArrayFile(WALLET_PINS_FILE);
+    let rec = pins.find((p: any) => p.ownerKey === ownerKey) || null;
+    if (!rec && supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('app_registry')
+          .select('config_json, value')
+          .eq('key', `wallet_pin_${ownerKey}`)
+          .maybeSingle();
+        if (data?.config_json?.pinHash || data?.value?.pinHash) {
+          rec = data.config_json || data.value;
+        }
+      } catch {}
+    }
+    return rec;
+  };
+
+  const readUnifiedWalletBalance = async (universeId: string, userId: string): Promise<{ balanceXof: number; balances: Record<string, number> }> => {
+    const key = universeId || (userId ? `user_${userId}` : 'default');
+    if (supabaseAdmin && universeId) {
+      try {
+        const { data: uRow } = await supabaseAdmin
+          .from('universes')
+          .select('balances')
+          .eq('id', universeId)
+          .maybeSingle();
+        if (uRow?.balances && typeof uRow.balances === 'object') {
+          const b = uRow.balances as Record<string, any>;
+          return {
+            balanceXof: Number(b.XOF ?? 0) || 0,
+            balances: {
+              XOF: Number(b.XOF ?? 0) || 0,
+              USD: Number(b.USD ?? 0) || 0,
+              XAF: Number(b.XAF ?? 0) || 0,
+              GNF: Number(b.GNF ?? 0) || 0,
+              GHS: Number(b.GHS ?? 0) || 0,
+            }
+          };
+        }
+      } catch {}
+    }
+
+    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
+    const found = wallets.find((w: any) => w.key === key || (universeId && w.universeId === universeId));
+    const xof = Number(found?.balanceXof ?? 0) || 0;
+    return {
+      balanceXof: xof,
+      balances: found?.balances || { XOF: xof, USD: 0, XAF: 0, GNF: 0, GHS: 0 }
+    };
+  };
+
+  const writeUnifiedWalletBalance = async (universeId: string, userId: string, nextBalanceXof: number, existingBalances?: Record<string, number>) => {
+    const key = universeId || (userId ? `user_${userId}` : 'default');
+    const nowIso = new Date().toISOString();
+    const safeXof = Math.max(0, Math.round(Number(nextBalanceXof) || 0));
+    const nextBalances = {
+      XOF: safeXof,
+      USD: Number(existingBalances?.USD ?? 0) || 0,
+      XAF: Number(existingBalances?.XAF ?? 0) || 0,
+      GNF: Number(existingBalances?.GNF ?? 0) || 0,
+      GHS: Number(existingBalances?.GHS ?? 0) || 0,
+    };
+
+    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
+    const idx = wallets.findIndex((w: any) => w.key === key || (universeId && w.universeId === universeId));
+    const updatedRow = { key, universeId: universeId || '', userId: userId || '', balanceXof: safeXof, balances: nextBalances, updatedAt: nowIso };
+    if (idx >= 0) wallets[idx] = updatedRow;
+    else wallets.unshift(updatedRow);
+    writeJsonArrayFile(MERCHANT_WALLETS_FILE, wallets);
+
+    if (supabaseAdmin && universeId) {
+      try {
+        await supabaseAdmin
+          .from('universes')
+          .update({ balances: nextBalances, updated_at: nowIso })
+          .eq('id', universeId);
+      } catch {}
+    }
+    return { balanceXof: safeXof, balances: nextBalances };
+  };
+
+  // GET /api/merchant/wallet/summary
+  app.get('/api/merchant/wallet/summary', async (req, res) => {
+    const universeId = String(req.query.universeId || '').trim();
+    const userId = String(req.query.userId || '').trim();
+    const ownerKey = universeId || userId || 'default';
+
+    const { balanceXof, balances } = await readUnifiedWalletBalance(universeId, userId);
+
+    // Historique réel (local + Supabase wallet_transactions)
+    let txs = readJsonArrayFile(WALLET_TXS_FILE).filter((t: any) =>
+      (universeId && String(t.universeId || '') === universeId) ||
+      (userId && String(t.userId || '') === userId)
+    );
+
+    if (supabaseAdmin && (universeId || userId)) {
+      try {
+        let q = supabaseAdmin
+          .from('wallet_transactions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(80);
+        if (universeId) q = q.eq('universe_id', universeId);
+        else if (userId) q = q.eq('user_id', userId);
+        const { data, error } = await q;
+        if (!error && Array.isArray(data)) {
+          const seen = new Set(txs.map((t: any) => String(t.id)));
+          for (const row of data) {
+            if (!seen.has(String(row.id))) {
+              const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+              const rawType = String(row.type || 'DEBIT').toUpperCase();
+              txs.push({
+                id: row.id,
+                universeId: row.universe_id || universeId,
+                userId: row.user_id || userId,
+                type: rawType === 'CREDIT' || rawType === 'RECHARGE' || rawType === 'SALE' ? 'CREDIT' : 'DEBIT',
+                title: meta.title || (rawType === 'WITHDRAWAL' ? `Retrait ${meta.operatorName || 'Mobile Money'}` : rawType),
+                subtitle: meta.subtitle || meta.destination || 'Transaction Wallet',
+                amount: Number(row.amount) || 0,
+                currency: meta.currency || 'XOF',
+                category: meta.category || rawType,
+                reference: meta.reference || row.id,
+                status: row.status || 'COMPLETED',
+                createdAt: row.created_at || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    txs.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+    // Entitlements Pay-As-You-Go actifs par module
+    const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE).filter((e: any) =>
+      e.ownerKey === ownerKey || (universeId && e.universeId === universeId) || (userId && e.userId === userId)
+    );
+    const entitlementsMap: Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }> = {};
+    for (const e of allEnts) {
+      entitlementsMap[e.moduleId] = {
+        credits: Number(e.credits) || 0,
+        totalSpentXof: Number(e.totalSpentXof) || 0,
+        lastUnlockedAt: e.lastUnlockedAt || ''
+      };
+    }
+
+    const pinRecord = await getWalletPinRecord(ownerKey);
+
+    return res.json({
+      success: true,
+      universeId,
+      balanceXof,
+      balances,
+      hasMasterPin: Boolean(pinRecord?.pinHash),
+      transactions: txs.slice(0, 80),
+      paygCatalog: PAYG_MODULES_CATALOG,
+      entitlements: entitlementsMap
+    });
+  });
+
+  // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (scrypt)
+  app.post('/api/merchant/wallet/pin/set', async (req, res) => {
+    const { universeId = '', userId = '', pin = '', currentPin = '' } = req.body || {};
+    const ownerKey = String(universeId || userId || '').trim();
+    const cleanPin = String(pin || '').trim();
+
+    if (!ownerKey) {
+      return res.status(400).json({ success: false, error: 'Identifiant univers ou utilisateur requis.' });
+    }
+    if (!/^\d{4,6}$/.test(cleanPin)) {
+      return res.status(400).json({ success: false, error: 'Le Master PIN doit contenir entre 4 et 6 chiffres.' });
+    }
+
+    const existing = await getWalletPinRecord(ownerKey);
+    if (existing?.pinHash) {
+      if (!currentPin || !verifyWalletPinHash(String(currentPin), existing.pinHash)) {
+        return res.status(403).json({ success: false, error: 'Master PIN actuel incorrect.' });
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const pinHash = hashWalletPin(cleanPin);
+    const record = { ownerKey, universeId, userId, pinHash, updatedAt: nowIso };
+
+    const pins = readJsonArrayFile(WALLET_PINS_FILE);
+    const idx = pins.findIndex((p: any) => p.ownerKey === ownerKey);
+    if (idx >= 0) pins[idx] = record;
+    else pins.unshift(record);
+    writeJsonArrayFile(WALLET_PINS_FILE, pins);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('app_registry').upsert({
+          key: `wallet_pin_${ownerKey}`,
+          name: `Master PIN ${ownerKey}`,
+          module_key: 'wallet_security',
+          config_json: record,
+          value: record,
+          updated_at: nowIso,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, hasMasterPin: true });
+  });
+
+  // POST /api/merchant/wallet/pin/verify — Vérification du Master PIN
+  app.post('/api/merchant/wallet/pin/verify', async (req, res) => {
+    const { universeId = '', userId = '', pin = '' } = req.body || {};
+    const ownerKey = String(universeId || userId || '').trim();
+    const existing = await getWalletPinRecord(ownerKey);
+    if (!existing?.pinHash) {
+      return res.json({ success: true, verified: true, hasMasterPin: false });
+    }
+    const ok = verifyWalletPinHash(String(pin || ''), existing.pinHash);
+    if (!ok) {
+      return res.status(403).json({ success: false, verified: false, error: 'Master PIN incorrect.' });
+    }
+    return res.json({ success: true, verified: true, hasMasterPin: true });
+  });
+
+  // POST /api/merchant/wallet/recharge/confirm — Crédit réel UNIQUEMENT après paiement UltimateCheckout (idempotent)
+  app.post('/api/merchant/wallet/recharge/confirm', async (req, res) => {
+    const {
+      universeId = '',
+      userId = '',
+      amount = 0,
+      provider = 'NanaSwitch',
+      reference = '',
+      orderId = '',
+      phone = ''
+    } = req.body || {};
+
+    const cleanAmount = Math.round(Number(amount) || 0);
+    const txRef = String(reference || orderId || '').trim();
+    if ((!universeId && !userId) || cleanAmount < 100 || !txRef) {
+      return res.status(400).json({ success: false, error: 'Référence de paiement UltimateCheckout et montant (>= 100 FCFA) requis.' });
+    }
+
+    const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+    const alreadyProcessed = allTxs.find((t: any) => String(t.reference || '') === txRef);
+    if (alreadyProcessed) {
+      const current = await readUnifiedWalletBalance(universeId, userId);
+      return res.json({ success: true, duplicate: true, balanceXof: current.balanceXof, transaction: alreadyProcessed });
+    }
+
+    const current = await readUnifiedWalletBalance(universeId, userId);
+    const updated = await writeUnifiedWalletBalance(universeId, userId, current.balanceXof + cleanAmount, current.balances);
+
+    const nowIso = new Date().toISOString();
+    const txId = `RECH-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const txRecord = {
+      id: txId,
+      universeId: String(universeId),
+      userId: String(userId),
+      type: 'CREDIT',
+      title: `Recharge Wallet (${provider})`,
+      subtitle: phone ? `Via UltimateCheckout • ${phone}` : 'Validée via UltimateCheckout',
+      amount: cleanAmount,
+      currency: 'XOF',
+      category: 'RECHARGE',
+      reference: txRef,
+      status: 'COMPLETED',
+      createdAt: nowIso
+    };
+
+    allTxs.unshift(txRecord);
+    writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: txId,
+          universe_id: universeId || null,
+          user_id: userId || null,
+          type: 'CREDIT',
+          amount: cleanAmount,
+          status: 'COMPLETED',
+          metadata: txRecord,
+          created_at: nowIso,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, balanceXof: updated.balanceXof, balances: updated.balances, transaction: txRecord });
+  });
+
+  // POST /api/merchant/wallet/pay-as-you-go — Paiement multi-modules Pay-As-You-Go :
+  // vérifie Master PIN, décrémente le solde PARTOUT et exécute l'activation dans Supabase pour CHAQUE module
+  app.post('/api/merchant/wallet/pay-as-you-go', async (req, res) => {
+    const { universeId = '', userId = '', moduleIds = [], pin = '' } = req.body || {};
+    const ownerKey = String(universeId || userId || '').trim();
+    if (!ownerKey) {
+      return res.status(400).json({ success: false, error: 'Identifiant marchand requis.' });
+    }
+
+    const uniqueIds = Array.from(new Set((Array.isArray(moduleIds) ? moduleIds : []).map(String)));
+    const selectedModules = PAYG_MODULES_CATALOG.filter(m => uniqueIds.includes(m.id));
+    if (selectedModules.length === 0) {
+      return res.status(400).json({ success: false, error: 'Veuillez sélectionner au moins un module Pay-As-You-Go.' });
+    }
+
+    // 1. Contrôle Master PIN si configuré
+    const pinRecord = await getWalletPinRecord(ownerKey);
+    if (pinRecord?.pinHash) {
+      if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+        return res.status(403).json({ success: false, code: 'INVALID_MASTER_PIN', error: 'Master PIN incorrect. Paiement refusé.' });
+      }
+    }
+
+    // 2. Calcul serveur du montant total et contrôle strict du solde réel
+    const totalCost = selectedModules.reduce((sum, m) => sum + m.priceXof, 0);
+    const current = await readUnifiedWalletBalance(universeId, userId);
+    if (current.balanceXof < totalCost) {
+      return res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_BALANCE',
+        error: `Solde insuffisant (${current.balanceXof.toLocaleString('fr-FR')} FCFA disponible pour ${totalCost.toLocaleString('fr-FR')} FCFA requis). Rechargez via UltimateCheckout.`
+      });
+    }
+
+    // 3. Décrémentation atomique du solde partout (Supabase universes + local)
+    const updatedWallet = await writeUnifiedWalletBalance(universeId, userId, current.balanceXof - totalCost, current.balances);
+    const nowIso = new Date().toISOString();
+    const txId = `PAYG-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+    const txRecord = {
+      id: txId,
+      universeId: String(universeId),
+      userId: String(userId),
+      type: 'DEBIT',
+      title: selectedModules.length === 1
+        ? `Pay-As-You-Go : ${selectedModules[0].name}`
+        : `Pay-As-You-Go (${selectedModules.length} modules)`,
+      subtitle: selectedModules.map(m => m.name).join(' • '),
+      amount: totalCost,
+      currency: 'XOF',
+      category: 'PAY_AS_YOU_GO',
+      reference: txId,
+      moduleIds: selectedModules.map(m => m.id),
+      status: 'COMPLETED',
+      createdAt: nowIso
+    };
+
+    const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+    allTxs.unshift(txRecord);
+    writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: txId,
+          universe_id: universeId || null,
+          user_id: userId || null,
+          type: 'DEBIT',
+          amount: totalCost,
+          status: 'COMPLETED',
+          metadata: txRecord,
+          created_at: nowIso,
+        });
+      } catch {}
+    }
+
+    // 4. Exécution & activation dans Supabase + local pour CHAQUE module concerné
+    const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
+    const activatedModules: any[] = [];
+
+    for (const mod of selectedModules) {
+      const entIdx = allEnts.findIndex((e: any) => e.ownerKey === ownerKey && e.moduleId === mod.id);
+      const prevCredits = entIdx >= 0 ? (Number(allEnts[entIdx].credits) || 0) : 0;
+      const prevSpent = entIdx >= 0 ? (Number(allEnts[entIdx].totalSpentXof) || 0) : 0;
+
+      const entRecord = {
+        ownerKey,
+        universeId: String(universeId),
+        userId: String(userId),
+        moduleId: mod.id,
+        moduleName: mod.name,
+        supabaseModuleKey: mod.supabaseModuleKey,
+        credits: prevCredits + 1,
+        totalSpentXof: prevSpent + mod.priceXof,
+        lastTxId: txId,
+        lastUnlockedAt: nowIso,
+        status: 'ACTIVE'
+      };
+
+      if (entIdx >= 0) allEnts[entIdx] = entRecord;
+      else allEnts.unshift(entRecord);
+      activatedModules.push(entRecord);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('app_registry').upsert({
+            key: `payg_module_${ownerKey}_${mod.id}`,
+            name: `${mod.name} (${ownerKey})`,
+            module_key: mod.supabaseModuleKey,
+            config_json: entRecord,
+            value: entRecord,
+            updated_at: nowIso,
+          });
+        } catch {}
+        try {
+          await supabaseAdmin.from('payg_entitlements').upsert({
+            id: `${ownerKey}_${mod.id}`,
+            universe_id: universeId || null,
+            user_id: userId || null,
+            module_id: mod.id,
+            module_key: mod.supabaseModuleKey,
+            credits: entRecord.credits,
+            total_spent_xof: entRecord.totalSpentXof,
+            last_tx_id: txId,
+            status: 'ACTIVE',
+            updated_at: nowIso,
+          });
+        } catch {}
+      }
+    }
+    writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
+
+    return res.json({
+      success: true,
+      balanceXof: updatedWallet.balanceXof,
+      balances: updatedWallet.balances,
+      totalCost,
+      transaction: txRecord,
+      activatedModules
+    });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

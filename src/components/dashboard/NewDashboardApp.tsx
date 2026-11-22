@@ -1750,14 +1750,25 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-[#1E40AF] border border-blue-200 text-xs font-bold shrink-0 cursor-pointer"
-            >
-              <Menu className="w-3.5 h-3.5" />
-              <span>Navigation</span>
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleOpenRegistryModule('nana-wallet')}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#1E40AF] text-white text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+                title="Ouvrir NaNa Wallet Marchand"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>Wallet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-[#1E40AF] border border-blue-200 text-xs font-bold shrink-0 cursor-pointer"
+              >
+                <Menu className="w-3.5 h-3.5" />
+                <span>Navigation</span>
+              </button>
+            </div>
           </div>
         )}
       </header>
@@ -1841,6 +1852,31 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                       );
                     })}
                   </nav>
+
+                  {/* MODULES ACTIFS (APPREGISTRY CONNECTÉ SUR MOBILE) */}
+                  <div className="pt-4 border-t border-slate-100 space-y-2 pb-6">
+                    <div className="px-2 flex items-center justify-between">
+                      <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                        Modules Actifs ({activeOmnibarModules.length})
+                      </h4>
+                    </div>
+                    <div className="space-y-1">
+                      {activeOmnibarModules.map((mod) => (
+                        <button
+                          key={mod.id}
+                          type="button"
+                          onClick={() => {
+                            setIsMobileSidebarOpen(false);
+                            handleOpenRegistryModule(mod);
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-blue-50/70 hover:text-[#1E40AF] transition cursor-pointer group"
+                        >
+                          <span className="truncate">{mod.name}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1E40AF] shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3082,7 +3118,21 @@ function TabWallet({
 
     fetchRealPayouts();
 
-    // Écoute temps réel Supabase Realtime
+    // Écoute temps réel Cloud + événements NaNa Wallet Marchand unifié
+    const handleWalletSyncEvent = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && (!detail.universeId || detail.universeId === app.id) && typeof detail.balanceXof === 'number') {
+        if (onUpdateApp) {
+          onUpdateApp({
+            ...app,
+            balances: { ...app.balances, XOF: detail.balanceXof }
+          });
+        }
+        fetchRealPayouts();
+      }
+    };
+    window.addEventListener('nanasore_wallet_updated', handleWalletSyncEvent);
+
     const channel = supabase
       .channel(`wallet-withdrawals-${app.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_transactions' }, () => {
@@ -3092,6 +3142,7 @@ function TabWallet({
 
     return () => {
       isMounted = false;
+      window.removeEventListener('nanasore_wallet_updated', handleWalletSyncEvent);
       supabase.removeChannel(channel);
     };
   }, [app.id]);
@@ -3282,14 +3333,26 @@ function TabWallet({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div>
-        <div className="flex items-center gap-2.5">
-          <Wallet className="w-6 h-6 text-[#1E40AF]" />
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Wallet & Retraits Réels Multi-Pays</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <Wallet className="w-6 h-6 text-[#1E40AF]" />
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Wallet & Retraits Réels Multi-Pays</h1>
+          </div>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Gérez votre trésorerie, rechargez via UltimateCheckout, activez vos modules Pay-As-You-Go et effectuez vos reversements.
+          </p>
         </div>
-        <p className="text-xs text-slate-500 font-medium mt-1">
-          Gérez votre trésorerie et effectuez vos demandes de reversements réelles vers vos comptes Mobile Money ou bancaires partout dans le monde.
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('app_navigate', { detail: { view: 'NANA_WALLET', path: '/nana-wallet' } }));
+          }}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1E40AF] hover:bg-blue-800 text-white text-xs font-black shadow-md transition cursor-pointer shrink-0"
+        >
+          <Wallet className="w-4 h-4" />
+          <span>Ouvrir NaNa Wallet (Pay-As-You-Go &amp; Master PIN)</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
