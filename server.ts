@@ -6584,22 +6584,331 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
         });
       }
 
-      // Simulation locale prête si clés non définies
+      // Fallback Stockage Coffre Serveur Réel (écrit réellement les octets dans DATA_DIR/vault_files)
       return res.json({
         success: true,
-        uploadUrl: `/api/r2/upload-simulation?key=${encodeURIComponent(fileKey)}`,
+        uploadUrl: `/api/vault/upload?key=${encodeURIComponent(fileKey)}`,
         fileKey,
         bucket: 'nanasore-digital-vault',
-        simulated: true
+        simulated: false,
+        storageMode: 'server_vault'
       });
     } catch (err: any) {
       console.error('R2 presigned URL error:', err);
-      res.status(500).json({ error: err.message || 'Erreur génération lien R2' });
+      res.status(500).json({ error: err.message || 'Erreur génération lien de stockage Cloud' });
     }
   });
 
-  app.put('/api/r2/upload-simulation', (_req, res) => {
-    res.json({ success: true, message: 'Upload simulé avec succès' });
+  // Stockage binaire réel dans le Coffre Serveur (DATA_DIR/vault_files) — zéro faux 200 OK
+  const VAULT_FILES_DIR = path.join(DATA_DIR, 'vault_files');
+  const DIGITAL_DELIVERIES_FILE = path.join(DATA_DIR, 'digital_deliveries.json');
+  const sanitizeVaultKey = (rawKey: string) =>
+    String(rawKey || 'file.bin')
+      .replace(/\.\./g, '')
+      .replace(/^\/+/, '')
+      .replace(/[^a-zA-Z0-9._\/-]/g, '_');
+
+  const handleRealVaultUpload = (req: any, res: any) => {
+    const rawKey = String(req.query?.key || '').trim();
+    if (!rawKey) {
+      return res.status(400).json({ success: false, error: 'Paramètre key requis.' });
+    }
+    const safeKey = sanitizeVaultKey(rawKey);
+    const fullPath = path.join(VAULT_FILES_DIR, safeKey);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    req.on('end', () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        fs.writeFileSync(fullPath, buffer);
+        return res.json({
+          success: true,
+          fileKey: safeKey,
+          bytesStored: buffer.length,
+          message: 'Fichier stocké dans le Coffre Cloud avec succès'
+        });
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Erreur écriture fichier.' });
+      }
+    });
+    req.on('error', (err: any) => {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur flux upload.' });
+    });
+  };
+
+  app.put('/api/vault/upload', handleRealVaultUpload);
+  app.put('/api/r2/upload-simulation', handleRealVaultUpload);
+
+  // =========================================================================
+  // 3.7. LIVRAISON NUMÉRIQUE DOUBLE ACCÈS (EMAIL + LIEN DIRECT /download/:orderId)
+  // =========================================================================
+  app.post('/api/digital/register-delivery', async (req, res) => {
+    try {
+      const {
+        orderId,
+        productId = '',
+        productName = 'Produit Numérique',
+        deliveryMode = 'download_file', // 'download_file' | 'campus_private' | 'vip_room'
+        allowDownload,
+        fileKey = '',
+        fileUrl = '',
+        fileName = '',
+        fileSize = '',
+        customerName = 'Client',
+        customerEmail = '',
+        customerPhone = '',
+        storeName = 'Boutique Agréée',
+      } = req.body || {};
+
+      const cleanOrderId = String(orderId || `CMD-${Date.now().toString().slice(-6)}`).trim();
+      const isCampusOrVip = deliveryMode === 'campus_private' || deliveryMode === 'vip_room';
+      const canDownload = typeof allowDownload === 'boolean' ? allowDownload : !isCampusOrVip;
+
+      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'nanasore.com';
+      const baseUrl = `${proto}://${host}`;
+      const downloadUrl = `/download/${encodeURIComponent(cleanOrderId)}`;
+      const absoluteDownloadUrl = `${baseUrl}${downloadUrl}`;
+      const downloadSpaceUrl = `${baseUrl}/academic/upload?tab=client`;
+
+      let emailSent = false;
+      const brevoKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
+      if (canDownload && customerEmail && String(customerEmail).includes('@') && brevoKey) {
+        try {
+          const emailHtml = `
+            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;border:1px solid #e2e8f0;border-radius:16px;">
+              <h2 style="color:#0056D2;margin-top:0;">Vos accès sont prêts 🎉</h2>
+              <p>Bonjour <strong>${String(customerName)}</strong>,</p>
+              <p>Merci pour votre commande <strong>${cleanOrderId}</strong> chez <strong>${String(storeName)}</strong> pour <strong>${String(productName)}</strong>.</p>
+              <p>Vous disposez d'un double accès sécurisé :</p>
+              <p style="margin:20px 0;">
+                <a href="${absoluteDownloadUrl}" style="display:inline-block;padding:12px 20px;background:#0056D2;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:bold;">
+                  Télécharger directement mon fichier
+                </a>
+              </p>
+              <p style="font-size:13px;color:#475569;">
+                Vous pouvez également retrouver tous vos téléchargements à tout moment dans votre espace dédié :
+                <a href="${downloadSpaceUrl}" style="color:#0056D2;">Ouvrir mon Espace de Téléchargement</a>.
+              </p>
+            </div>`;
+          const brevoResp = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+              accept: 'application/json',
+              'api-key': brevoKey,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              sender: { name: String(storeName || 'Nanasore'), email: 'contact@nanasore.com' },
+              to: [{ email: String(customerEmail).trim(), name: String(customerName) }],
+              subject: `Vos accès de téléchargement — ${String(productName)} (${cleanOrderId})`,
+              htmlContent: emailHtml,
+            }),
+          });
+          emailSent = brevoResp.ok;
+        } catch (emailErr) {
+          console.warn('[DIGITAL DELIVERY EMAIL WARN]', emailErr);
+        }
+      }
+
+      const record = {
+        id: `del_${crypto.randomBytes(5).toString('hex')}`,
+        orderId: cleanOrderId,
+        productId: String(productId || ''),
+        productName: String(productName),
+        deliveryMode: String(deliveryMode),
+        allowDownload: canDownload,
+        fileKey: fileKey ? sanitizeVaultKey(String(fileKey)) : '',
+        fileUrl: String(fileUrl || ''),
+        fileName: String(fileName || (fileKey ? path.basename(String(fileKey)) : `${cleanOrderId}.pdf`)),
+        fileSize: String(fileSize || 'Archive Sécurisée'),
+        customerName: String(customerName),
+        customerEmail: String(customerEmail || '').trim().toLowerCase(),
+        customerPhone: String(customerPhone || '').trim(),
+        storeName: String(storeName),
+        downloadUrl,
+        emailSent,
+        createdAt: new Date().toISOString(),
+      };
+
+      const existing = readJsonArrayFile(DIGITAL_DELIVERIES_FILE).filter(
+        (d: any) => d.orderId !== cleanOrderId
+      );
+      existing.unshift(record);
+      writeJsonArrayFile(DIGITAL_DELIVERIES_FILE, existing);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('digital_deliveries').upsert({
+            id: record.id,
+            order_id: record.orderId,
+            product_id: record.productId || null,
+            product_name: record.productName,
+            delivery_mode: record.deliveryMode,
+            allow_download: record.allowDownload,
+            file_key: record.fileKey || null,
+            file_url: record.fileUrl || null,
+            file_name: record.fileName || null,
+            file_size: record.fileSize || null,
+            customer_name: record.customerName,
+            customer_email: record.customerEmail || null,
+            customer_phone: record.customerPhone || null,
+            store_name: record.storeName,
+            email_sent: record.emailSent,
+            created_at: record.createdAt,
+          });
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        delivery: record,
+        downloadUrl: canDownload ? downloadUrl : null,
+        emailSent,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur enregistrement livraison.' });
+    }
+  });
+
+  app.get('/api/digital/deliveries', async (req, res) => {
+    const emailFilter = String(req.query?.email || '').trim().toLowerCase();
+    const phoneFilter = String(req.query?.phone || '').replace(/[^0-9]/g, '');
+    let list = readJsonArrayFile(DIGITAL_DELIVERIES_FILE);
+
+    if (emailFilter || phoneFilter) {
+      list = list.filter((d: any) => {
+        const matchEmail = emailFilter && String(d.customerEmail || '').toLowerCase() === emailFilter;
+        const matchPhone =
+          phoneFilter.length >= 6 &&
+          String(d.customerPhone || '').replace(/[^0-9]/g, '').endsWith(phoneFilter);
+        return matchEmail || matchPhone;
+      });
+    }
+
+    return res.json({ success: true, deliveries: list.slice(0, 50) });
+  });
+
+  // ROUTE RÉELLE GET /download/:orderId — Sert le fichier acheté (R2 / Coffre Cloud / URL publique)
+  // Bloque le téléchargement pour les formations Campus Privé & Salles VIP non autorisées
+  app.get('/download/:orderId', async (req, res) => {
+    try {
+      const orderId = decodeURIComponent(String(req.params.orderId || '')).trim();
+      if (!orderId) {
+        return res.status(400).json({ success: false, error: 'Identifiant de commande requis.' });
+      }
+
+      // 1. Recherche dans digital_deliveries.json
+      let delivery: any = readJsonArrayFile(DIGITAL_DELIVERIES_FILE).find(
+        (d: any) => d.orderId === orderId || d.id === orderId
+      );
+
+      // 2. Fallback recherche dans Supabase digital_deliveries ou orders
+      if (!delivery && supabaseAdmin) {
+        try {
+          const { data: dRow } = await supabaseAdmin
+            .from('digital_deliveries')
+            .select('*')
+            .eq('order_id', orderId)
+            .maybeSingle();
+          if (dRow) {
+            delivery = {
+              orderId: dRow.order_id,
+              productName: dRow.product_name,
+              deliveryMode: dRow.delivery_mode,
+              allowDownload: dRow.allow_download,
+              fileKey: dRow.file_key,
+              fileUrl: dRow.file_url,
+              fileName: dRow.file_name,
+            };
+          } else {
+            const { data: oRow } = await supabaseAdmin
+              .from('orders')
+              .select('id, file_key, items, status')
+              .eq('id', orderId)
+              .maybeSingle();
+            if (oRow && oRow.file_key) {
+              delivery = {
+                orderId: oRow.id,
+                productName: (Array.isArray(oRow.items) && oRow.items[0]?.name) || 'Produit Numérique',
+                deliveryMode: 'download_file',
+                allowDownload: true,
+                fileKey: oRow.file_key,
+                fileName: path.basename(String(oRow.file_key)),
+              };
+            }
+          }
+        } catch {}
+      }
+
+      if (!delivery) {
+        return res.status(404).json({
+          success: false,
+          error: `Aucun fichier téléchargeable trouvé pour la commande ${orderId}.`,
+        });
+      }
+
+      // 3. Protection Campus Privé / Salle VIP (non téléchargeable sauf autorisation auteur)
+      if (
+        (delivery.deliveryMode === 'campus_private' || delivery.deliveryMode === 'vip_room') &&
+        !delivery.allowDownload
+      ) {
+        return res.status(403).json({
+          success: false,
+          code: 'CAMPUS_STREAM_ONLY',
+          redirectUrl: '/student/dashboard',
+          error:
+            "Cette formation du Campus Privé / Salle VIP est accessible directement en ligne dans votre Tableau de Bord Étudiant et n'est pas autorisée au téléchargement.",
+        });
+      }
+
+      // 4. Si URL directe HTTP(S) (ex: stockage Cloud public), redirection 302
+      if (delivery.fileUrl && /^https?:\/\//i.test(delivery.fileUrl) && !delivery.fileUrl.includes('r2.nanaswitch.com')) {
+        return res.redirect(302, delivery.fileUrl);
+      }
+
+      // 5. Si fichier stocké dans le Coffre Serveur (DATA_DIR/vault_files)
+      if (delivery.fileKey) {
+        const safeKey = sanitizeVaultKey(delivery.fileKey);
+        const localPath = path.join(VAULT_FILES_DIR, safeKey);
+        if (fs.existsSync(localPath)) {
+          const downloadName = delivery.fileName || path.basename(localPath);
+          res.setHeader('Content-Disposition', `attachment; filename="${downloadName.replace(/"/g, '')}"`);
+          return res.sendFile(localPath);
+        }
+
+        // 6. Si Cloudflare R2 configuré → génère une vraie Signed URL 1h et redirige
+        if (process.env.R2_ENDPOINT_URL && process.env.R2_ACCESS_KEY_ID) {
+          const { getSecureDownloadUrl } = await import('./lib/r2');
+          const signedUrl = await getSecureDownloadUrl(delivery.fileKey, 3600);
+          return res.redirect(302, signedUrl);
+        }
+
+        // 7. Si Supabase Storage configuré → génère une Signed URL sur products_digital ou academic_uploads
+        if (supabaseAdmin) {
+          for (const bucket of ['products_digital', 'academic_uploads']) {
+            try {
+              const { data: signed } = await supabaseAdmin.storage
+                .from(bucket)
+                .createSignedUrl(delivery.fileKey, 3600);
+              if (signed?.signedUrl) {
+                return res.redirect(302, signed.signedUrl);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      return res.status(404).json({
+        success: false,
+        error: `Le fichier associé à la commande ${orderId} est introuvable dans le Coffre Cloud.`,
+      });
+    } catch (err: any) {
+      console.error('[DOWNLOAD ROUTE ERROR]', err);
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lors du téléchargement.' });
+    }
   });
 
   // =========================================================================

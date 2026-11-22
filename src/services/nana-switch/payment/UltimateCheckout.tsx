@@ -977,60 +977,113 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     expiresInSeconds: 3600
   }), [orderId, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, city, deliveryAddress, effectiveStoreName, effectiveWPhone, resolvedProduct, isDigitalProduct, finalTotal, currency, selectedOperator]);
 
-  // Envoi automatique du reçu côté API + Inscription LMS sécurisée (Thème Digital Pro, Live Formations, Marketplace)
+  // Classification précise post-paiement : Campus Privé / Salle VIP vs Produit Numérique Téléchargeable
+  const digitalDeliveryProfile = useMemo(() => {
+    const prodAny = resolvedProduct as any;
+    const prodId = String(resolvedProduct.id || '');
+    const prodNameLower = String(resolvedProduct.name || '').toLowerCase();
+    const prodCatLower = String(prodAny?.category || '').toLowerCase();
+    const metaCourseId = prodAny?.metadata?.course_id || prodAny?.courseId || '';
+    const metaSource = prodAny?.metadata?.enrollment_source || '';
+    const fileKey = prodAny?.file_key || prodAny?.fileKey || prodAny?.metadata?.file_key || '';
+    const fileUrl = prodAny?.downloadUrl || prodAny?.file_url || prodAny?.metadata?.file_url || '';
+    const authorAllowsDownload = Boolean(prodAny?.allowDownload || prodAny?.metadata?.allow_download || fileKey || fileUrl);
+
+    const isVipRoom = Boolean(
+      prodId.startsWith('vip_') ||
+      prodId.startsWith('salle_vip_') ||
+      prodCatLower.includes('salle vip') ||
+      prodNameLower.includes('salle vip')
+    );
+
+    const isCampusCourse = Boolean(
+      metaCourseId ||
+      prodId.startsWith('course_prod_') ||
+      prodId.startsWith('course_') ||
+      prodId.startsWith('webinar_') ||
+      prodId.startsWith('live_webinar_') ||
+      prodCatLower.includes('formation') ||
+      prodCatLower.includes('masterclass') ||
+      prodCatLower.includes('webinaire') ||
+      prodCatLower.includes('académie') ||
+      prodCatLower.includes('academy') ||
+      prodNameLower.includes('formation') ||
+      prodNameLower.includes('masterclass') ||
+      prodNameLower.includes('webinaire')
+    );
+
+    const isCampusOrVip = isCampusCourse || isVipRoom;
+    // Un produit numérique classique ou une formation externe avec fichier d'accès est téléchargeable ;
+    // une formation Campus Privé / Salle VIP n'est téléchargeable QUE si l'auteur a explicitement attaché un fichier ou activé allowDownload.
+    const canDownloadFile = isCampusOrVip ? authorAllowsDownload : Boolean(isDigitalProduct);
+
+    return {
+      isCampusOrVip,
+      isVipRoom,
+      isCampusCourse,
+      canDownloadFile,
+      fileKey,
+      fileUrl,
+      cleanCourseId: metaCourseId || (prodId.startsWith('course_prod_') ? prodId.replace(/^course_prod_/, '') : prodId),
+      enrollmentSource:
+        metaSource ||
+        (prodId.startsWith('webinar_') || prodId.startsWith('live_') || prodCatLower.includes('webinaire') || prodCatLower.includes('live') || prodNameLower.includes('webinaire')
+          ? 'live_webinar'
+          : 'digital_pro'),
+    };
+  }, [resolvedProduct, isDigitalProduct]);
+
+  // Envoi automatique du reçu + Enrôlement Campus Privé + Livraison Double Accès (Email + /download/:orderId)
   useEffect(() => {
     if (currentStep === 'STEP_3' && orderId) {
       sendDigitalReceiptViaApi(digitalReceiptPayload).catch(() => {});
 
-      const prodAny = resolvedProduct as any;
-      const prodId = String(resolvedProduct.id || '');
-      const prodNameLower = String(resolvedProduct.name || '').toLowerCase();
-      const prodCatLower = String(prodAny?.category || '').toLowerCase();
-      const metaCourseId = prodAny?.metadata?.course_id || prodAny?.courseId || '';
-      const metaSource = prodAny?.metadata?.enrollment_source || '';
+      if (completedDetails?.paymentMethod !== 'CASH_ON_DELIVERY') {
+        if (digitalDeliveryProfile.isCampusOrVip) {
+          import('../../studentAuthService')
+            .then(({ recordCourseEnrollment }) => {
+              recordCourseEnrollment({
+                courseId: digitalDeliveryProfile.cleanCourseId,
+                courseTitle: resolvedProduct.name,
+                fullName: customerName.trim() || 'Étudiant',
+                phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
+                email: customerEmail.trim() || undefined,
+                amount: finalTotal,
+                paymentMethod: completedDetails?.paymentMethod || 'MOBILE_MONEY',
+                transactionId: completedDetails?.transactionId || orderId,
+                source: digitalDeliveryProfile.enrollmentSource
+              });
+            })
+            .catch(() => {});
+        }
 
-      const isCourseOrFormation = Boolean(
-        metaCourseId ||
-        prodId.startsWith('course_prod_') ||
-        prodId.startsWith('course_') ||
-        prodId.startsWith('webinar_') ||
-        prodId.startsWith('live_webinar_') ||
-        prodCatLower.includes('formation') ||
-        prodCatLower.includes('masterclass') ||
-        prodCatLower.includes('webinaire') ||
-        prodCatLower.includes('académie') ||
-        prodCatLower.includes('academy') ||
-        prodNameLower.includes('formation') ||
-        prodNameLower.includes('masterclass') ||
-        prodNameLower.includes('webinaire')
-      );
-
-      if (isCourseOrFormation && completedDetails?.paymentMethod !== 'CASH_ON_DELIVERY') {
-        const cleanCourseId = metaCourseId || (prodId.startsWith('course_prod_') ? prodId.replace(/^course_prod_/, '') : prodId);
-        const enrollmentSource =
-          metaSource ||
-          (prodId.startsWith('webinar_') || prodId.startsWith('live_') || prodCatLower.includes('webinaire') || prodCatLower.includes('live') || prodNameLower.includes('webinaire')
-            ? 'live_webinar'
-            : 'digital_pro');
-
-        import('../../studentAuthService')
-          .then(({ recordCourseEnrollment }) => {
-            recordCourseEnrollment({
-              courseId: cleanCourseId,
-              courseTitle: resolvedProduct.name,
-              fullName: customerName.trim() || 'Étudiant',
-              phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
-              email: customerEmail.trim() || undefined,
-              amount: finalTotal,
-              paymentMethod: completedDetails?.paymentMethod || 'MOBILE_MONEY',
-              transactionId: completedDetails?.transactionId || orderId,
-              source: enrollmentSource
-            });
-          })
-          .catch(() => {});
+        if (isDigitalProduct || digitalDeliveryProfile.isCampusOrVip) {
+          fetch('/api/digital/register-delivery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({
+              orderId,
+              productId: resolvedProduct.id,
+              productName: resolvedProduct.name,
+              deliveryMode: digitalDeliveryProfile.isVipRoom
+                ? 'vip_room'
+                : digitalDeliveryProfile.isCampusCourse
+                  ? 'campus_private'
+                  : 'download_file',
+              allowDownload: digitalDeliveryProfile.canDownloadFile,
+              fileKey: digitalDeliveryProfile.fileKey,
+              fileUrl: digitalDeliveryProfile.fileUrl,
+              customerName: customerName.trim() || 'Client',
+              customerEmail: customerEmail.trim() || '',
+              customerPhone: paymentPhone.trim() || deliveryPhone.trim(),
+              storeName: effectiveStoreName
+            })
+          }).catch(() => {});
+        }
       }
     }
-  }, [currentStep, orderId, digitalReceiptPayload, resolvedProduct, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, finalTotal]);
+  }, [currentStep, orderId, digitalReceiptPayload, digitalDeliveryProfile, isDigitalProduct, resolvedProduct, completedDetails, customerName, paymentPhone, deliveryPhone, customerEmail, finalTotal, effectiveStoreName]);
 
   // Message W formaté pour le bouton post-paiement
   const getWReceiptUrl = () => {
@@ -2088,8 +2141,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             </div>
           </div>
 
-          {/* SECTION ACCÈS PRODUITS NUMÉRIQUES & LIENS PRÉ-SIGNÉS */}
-          {isDigitalProduct && (
+          {/* SECTION ACCÈS POST-PAIEMENT : CAMPUS PRIVÉ / SALLE VIP vs DOUBLE ACCÈS NUMÉRIQUE */}
+          {(isDigitalProduct || digitalDeliveryProfile.isCampusOrVip) && (
             <div className="max-w-md mx-auto p-4.5 rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-blue-200 text-left space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
@@ -2097,34 +2150,54 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs sm:text-sm font-black text-slate-900">
-                    Vos Accès Produits Numériques
+                    {digitalDeliveryProfile.isCampusOrVip && !digitalDeliveryProfile.canDownloadFile
+                      ? 'Accès Activé — Campus Privé & Salles VIP'
+                      : 'Vos Accès Produits Numériques (Double Accès)'}
                   </h4>
                   <p className="text-[11px] text-blue-700 font-semibold">
-                    Lien pré-signé sécurisé Cloud Souverain • Expire dans 1 heure (3600s)
+                    {digitalDeliveryProfile.isCampusOrVip && !digitalDeliveryProfile.canDownloadFile
+                      ? 'Votre compte étudiant est inscrit automatiquement • Lecture sécurisée en ligne'
+                      : customerEmail.trim()
+                        ? `Lien direct prêt + copie envoyée par email à ${customerEmail.trim()}`
+                        : 'Lien direct sécurisé + disponible dans votre Espace de Téléchargement'}
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                <a
-                  href={`/download/${orderId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-3 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition hover:scale-[1.01]"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Télécharger Directement</span>
-                </a>
+                {digitalDeliveryProfile.isCampusOrVip && (
+                  <a
+                    href="/student/dashboard"
+                    className="py-3 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition hover:scale-[1.01] sm:col-span-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Accéder à mon Tableau de Bord Étudiant</span>
+                  </a>
+                )}
 
-                <a
-                  href="/client/dashboard"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-3 px-3.5 rounded-xl bg-white hover:bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition hover:scale-[1.01]"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Mon Espace Client</span>
-                </a>
+                {digitalDeliveryProfile.canDownloadFile && (
+                  <>
+                    <a
+                      href={`/download/${encodeURIComponent(orderId)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-3 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition hover:scale-[1.01]"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Télécharger Directement</span>
+                    </a>
+
+                    <a
+                      href="/academic/upload?tab=client"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-3 px-3.5 rounded-xl bg-white hover:bg-slate-50 border-2 border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition hover:scale-[1.01]"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Espace Téléchargement</span>
+                    </a>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -112,7 +112,35 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
         setIsLoadingOrders(true);
         const userId = currentUser?.id || currentUser?.uid;
 
-        // Requête Supabase réelle sur les commandes
+        // 1. Chargement Cloud réel via /api/digital/deliveries
+        const merged: MockDigitalOrder[] = [];
+        try {
+          const emailParam = currentUser?.email ? `email=${encodeURIComponent(currentUser.email)}` : '';
+          const delRes = await fetch(`/api/digital/deliveries${emailParam ? `?${emailParam}` : ''}`);
+          if (delRes.ok) {
+            const delJson = await delRes.json();
+            if (Array.isArray(delJson?.deliveries)) {
+              for (const d of delJson.deliveries) {
+                if (d.allowDownload === false) continue;
+                const ext = (d.fileName || d.fileKey || 'PDF').split('.').pop()?.toUpperCase() || 'PDF';
+                merged.push({
+                  orderId: d.orderId,
+                  productName: d.productName || 'Produit Numérique',
+                  category: d.deliveryMode === 'download_file' ? 'Produit Numérique' : 'Ressource Académique',
+                  fileType: ext,
+                  fileSize: d.fileSize || 'Archive Sécurisée',
+                  purchaseDate: d.createdAt ? new Date(d.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Récemment',
+                  fileKey: d.fileKey || '',
+                  isPaid: true,
+                  downloadUrl: d.downloadUrl || `/download/${encodeURIComponent(d.orderId)}`,
+                  expiresInSeconds: 3600
+                });
+              }
+            }
+          }
+        } catch {}
+
+        // 2. Complément Cloud sur les commandes SQL
         let query = supabase
           .from('orders')
           .select('id, total, status, created_at, customer_id, items, file_key, payment_method')
@@ -126,27 +154,31 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
         const { data, error } = await query;
 
         if (!error && data && data.length > 0 && isMounted) {
-          const itemsList: MockDigitalOrder[] = data.map((o: any, idx: number) => {
+          const seen = new Set(merged.map((m) => m.orderId));
+          data.forEach((o: any, idx: number) => {
+            if (!o.file_key) return;
+            const oid = String(o.id || `CMD-${idx + 1}`);
+            if (seen.has(oid)) return;
             const firstItem = Array.isArray(o.items) && o.items.length > 0 ? o.items[0] : null;
-            const pName = firstItem?.name || firstItem?.title || o.product_name || `Produit Numérique #${o.id?.slice(0, 6) || idx + 1}`;
+            const pName = firstItem?.name || firstItem?.title || o.product_name || `Produit Numérique #${oid.slice(0, 6)}`;
             const ext = o.file_key?.split('.').pop()?.toUpperCase() || 'PDF';
-
-            return {
-              orderId: `CMD-${String(o.id || idx + 1).slice(-4).toUpperCase()}`,
+            merged.push({
+              orderId: oid,
               productName: pName,
-              category: firstItem?.category || 'Formation & E-Book',
+              category: firstItem?.category || 'Produit Numérique',
               fileType: ext,
               fileSize: firstItem?.size || 'Archive Sécurisée',
               purchaseDate: o.created_at ? new Date(o.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : "Récemment",
-              fileKey: o.file_key || `products/digital/${o.id || idx}.pdf`,
+              fileKey: o.file_key,
               isPaid: o.status === 'PAID' || o.status === 'COMPLETED' || o.status === 'SUCCESS',
-              downloadUrl: `/download/CMD-${String(o.id || idx + 1).slice(-4).toUpperCase()}`,
+              downloadUrl: `/download/${encodeURIComponent(oid)}`,
               expiresInSeconds: 3600
-            };
+            });
           });
-          setOrders(itemsList);
-        } else if (isMounted) {
-          setOrders([]);
+        }
+
+        if (isMounted) {
+          setOrders(merged);
         }
       } catch (err) {
         console.warn("Info chargement des commandes numériques authentiques:", err);
@@ -158,7 +190,7 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
 
     loadRealDigitalOrders();
     return () => { isMounted = false; };
-  }, [currentUser?.id, currentUser?.uid]);
+  }, [currentUser?.id, currentUser?.uid, currentUser?.email]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -204,33 +236,87 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
         storageTargetName = destination === 'VAULT' ? 'Coffre Cloud Haute Sécurité' : 'Stockage Cloud Souverain';
       } else {
         fileKey = `academic/submissions/${studentNumber}/${timestamp}_${sanitizedName}`;
-        storageTargetName = 'Stockage Cloud Souverain (academic_uploads)';
+        storageTargetName = 'Stockage Cloud Souverain (Académique)';
       }
 
-      setUploadProgress(45);
+      setUploadProgress(40);
 
-      // 1. Sauvegarde dans le bucket Supabase
-      const bucketName = activeTab === 'vendor' ? 'products_digital' : 'academic_uploads';
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from(bucketName)
-        .upload(fileKey, selectedFile, { upsert: true });
-
-      if (!uploadErr && uploadData?.path) {
-        const { data: pub } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
-        publicUrl = pub?.publicUrl || '';
-      } else {
-        publicUrl = `https://r2.nanaswitch.com/${fileKey}`;
+      // 1. Upload binaire RÉEL vers Cloudflare R2 ou Coffre Serveur Cloud (/api/r2/presigned-url -> PUT)
+      let uploadedToVault = false;
+      try {
+        const preRes = await fetch('/api/r2/presigned-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileType: selectedFile.type || 'application/octet-stream',
+            role: activeTab === 'vendor' ? 'vendor' : activeTab === 'professeur' ? 'professeur' : 'etudiant',
+            userId: vendorId,
+            courseId,
+            assignmentId: assignmentName || 'devoir'
+          })
+        });
+        const preJson = await preRes.json().catch(() => null);
+        if (preRes.ok && preJson?.uploadUrl) {
+          fileKey = preJson.fileKey || fileKey;
+          const putRes = await fetch(preJson.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': selectedFile.type || 'application/octet-stream' },
+            body: selectedFile
+          });
+          if (putRes.ok) {
+            uploadedToVault = true;
+          }
+        }
+      } catch (vaultErr) {
+        console.warn('[UPLOAD VAULT WARN]', vaultErr);
       }
 
-      setUploadProgress(75);
+      setUploadProgress(70);
 
-      // 2. Génération de la Signed URL de téléchargement pré-signée (1 heure = 3600 secondes)
-      // Lien direct ou route Next.js sécurisée
-      const simulatedPresignedUrl = `${window.location.origin}/download/CMD-${timestamp.toString().slice(-4)}`;
+      // 2. Fallback complémentaire vers le bucket Cloud si le Coffre R2/Serveur n'a pas répondu
+      if (!uploadedToVault) {
+        const bucketName = activeTab === 'vendor' ? 'products_digital' : 'academic_uploads';
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from(bucketName)
+          .upload(fileKey, selectedFile, { upsert: true });
 
-      // 3. Enregistrement en base Supabase
+        if (!uploadErr && uploadData?.path) {
+          const { data: pub } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
+          publicUrl = pub?.publicUrl || '';
+          uploadedToVault = true;
+        }
+      }
+
+      if (!uploadedToVault) {
+        throw new Error("Impossible de stocker le fichier dans le Coffre Cloud. Veuillez réessayer.");
+      }
+
+      // 3. Enregistrement réel de la livraison téléchargeable (/api/digital/register-delivery -> /download/:orderId)
+      const generatedOrderId = `CMD-${timestamp.toString(36).toUpperCase().slice(-6)}`;
+      const deliveryRes = await fetch('/api/digital/register-delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: generatedOrderId,
+          productName: activeTab === 'vendor' ? (productName || selectedFile.name) : (title || selectedFile.name),
+          deliveryMode: 'download_file',
+          allowDownload: true,
+          fileKey,
+          fileUrl: publicUrl,
+          fileName: selectedFile.name,
+          fileSize: sizeFormatted,
+          customerName: currentUser?.name || 'Utilisateur',
+          customerEmail: currentUser?.email || '',
+          storeName: 'Espace Upload Académique & Vendeur'
+        })
+      });
+      const deliveryJson = await deliveryRes.json().catch(() => null);
+      const realDownloadPath = deliveryJson?.downloadUrl || `/download/${encodeURIComponent(generatedOrderId)}`;
+      const absoluteDownloadUrl = `${window.location.origin}${realDownloadPath}`;
+
+      // 4. Enregistrement en base Cloud
       if (activeTab === 'vendor') {
-        // Enregistrement dans la table `products`
         await supabase.from('products').insert([
           {
             name: productName || selectedFile.name,
@@ -244,9 +330,8 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
           }
         ]);
 
-        // Ajout immédiat à la liste des téléchargements de démo client
         const newOrder: MockDigitalOrder = {
-          orderId: `CMD-${timestamp.toString().slice(-4)}`,
+          orderId: generatedOrderId,
           productName: productName || selectedFile.name,
           category: productCategory,
           fileType: ext.toUpperCase(),
@@ -254,12 +339,11 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
           purchaseDate: "Aujourd'hui",
           fileKey: fileKey,
           isPaid: true,
-          downloadUrl: `/download/CMD-${timestamp.toString().slice(-4)}`,
+          downloadUrl: realDownloadPath,
           expiresInSeconds: 3600
         };
         setOrders(prev => [newOrder, ...prev]);
       } else {
-        // Enregistrement dans `academic_uploads`
         await supabase.from('academic_uploads').insert([
           {
             user_id: currentUser?.id || 'user_academic',
@@ -271,7 +355,8 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
               title: title || selectedFile.name,
               courseId,
               assignmentName,
-              studentNumber
+              studentNumber,
+              orderId: generatedOrderId
             },
             created_at: new Date().toISOString()
           }
@@ -280,8 +365,8 @@ export const AcademicUploadView: React.FC<AcademicUploadViewProps> = ({
 
       setUploadProgress(100);
       setSuccessResult({
-        url: publicUrl,
-        presignedDownloadUrl: simulatedPresignedUrl,
+        url: publicUrl || absoluteDownloadUrl,
+        presignedDownloadUrl: absoluteDownloadUrl,
         target: storageTargetName,
         fileName: selectedFile.name,
         fileSize: sizeFormatted,

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v42-lms-quiz-voice-sql-persistence';
+const CACHE_NAME = 'nanasore-v43-digital-download-vault-dual-access';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
