@@ -441,7 +441,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setHistoryFuture(f => [timelineClips, ...f.slice(0, 24)]);
     setHistoryPast(p => p.slice(0, -1));
     setTimelineClips(previous);
-    if (previous[0]) setSelectedClipId(previous[0].id);
+    if (previous[0]) {
+      setSelectedClipId(previous[0].id);
+      setPreviewUrl(previous[0].sourceUrl);
+      setCurrentVideoTime(previous[0].startSec);
+    }
   };
 
   const handleRedoTimeline = () => {
@@ -451,50 +455,172 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setHistoryPast(p => [...p.slice(-24), timelineClips]);
     setHistoryFuture(f => f.slice(1));
     setTimelineClips(next);
-    if (next[0]) setSelectedClipId(next[0].id);
+    if (next[0]) {
+      setSelectedClipId(next[0].id);
+      setPreviewUrl(next[0].sourceUrl);
+      setCurrentVideoTime(next[0].startSec);
+    } else {
+      setSelectedClipId('');
+      setPreviewUrl('');
+    }
   };
 
-  const handleSelectClip = (clip: TimelineClip) => {
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+
+  const handleSelectClip = (clip: TimelineClip, autoPlay = false) => {
     playTapBeep();
     setSelectedClipId(clip.id);
-    if (previewUrl !== clip.sourceUrl) {
+    setCurrentVideoTime(clip.startSec);
+    const switchingSrc = previewUrl !== clip.sourceUrl;
+    if (switchingSrc) {
       setPreviewUrl(clip.sourceUrl);
     }
-    const v = videoPreviewRef.current;
-    if (v) {
+    const applySeek = () => {
+      const v = videoPreviewRef.current;
+      if (!v) return;
       try {
         v.playbackRate = clip.speed || 1;
         v.muted = clip.muted;
         v.currentTime = clip.startSec;
+        if (autoPlay) {
+          v.play().catch(() => {});
+        }
+      } catch {}
+    };
+    if (switchingSrc) {
+      setTimeout(applySeek, 90);
+    } else {
+      applySeek();
+    }
+  };
+
+  const handleScrubPlayhead = (targetSec: number) => {
+    const clamped = Math.max(0, Number(targetSec.toFixed(2)));
+    setCurrentVideoTime(clamped);
+    const v = videoPreviewRef.current;
+    if (v) {
+      try {
+        v.currentTime = clamped;
       } catch {}
     }
+    // Sélectionner automatiquement le clip qui contient cette position sur la même source
+    const matching = timelineClips.find(
+      c => c.sourceUrl === previewUrl && clamped >= c.startSec && clamped <= c.endSec
+    );
+    if (matching && matching.id !== selectedClipId) {
+      setSelectedClipId(matching.id);
+    }
+  };
+
+  const handlePlayFullTimeline = () => {
+    const v = videoPreviewRef.current;
+    if (!v || timelineClips.length === 0) return;
+    if (!v.paused) {
+      v.pause();
+      setIsVideoPlaying(false);
+      return;
+    }
+    const first = timelineClips[0];
+    handleSelectClip(first, true);
+    setIsVideoPlaying(true);
+    setTimelineNotice(`▶ Lecture de la timeline (${timelineClips.length} segment${timelineClips.length > 1 ? 's' : ''}, passages supprimés ignorés).`);
   };
 
   const handleSplitAtPlayhead = () => {
     if (!selectedClip) return;
-    const playhead = videoPreviewRef.current?.currentTime ?? currentVideoTime;
-    const { clips: nextClips, rightClipId } = splitClipAtTime(timelineClips, selectedClip.id, playhead);
+    const rawPlayhead = videoPreviewRef.current?.currentTime ?? currentVideoTime;
+    // 1. Trouver le clip sous la tête de lecture (priorité au clip sélectionné, sinon le clip contenant le playhead)
+    let targetClip = selectedClip;
+    if (rawPlayhead <= targetClip.startSec + 0.3 || rawPlayhead >= targetClip.endSec - 0.3) {
+      const underPlayhead = timelineClips.find(
+        c =>
+          c.sourceUrl === previewUrl &&
+          rawPlayhead > c.startSec + 0.3 &&
+          rawPlayhead < c.endSec - 0.3
+      );
+      if (underPlayhead) {
+        targetClip = underPlayhead;
+      }
+    }
+
+    // 2. Si le playhead est exactement au bord (ex: 0.0s), couper intelligemment au milieu du clip sélectionné
+    let cutPoint = rawPlayhead;
+    let usedMidpoint = false;
+    if (cutPoint <= targetClip.startSec + 0.3 || cutPoint >= targetClip.endSec - 0.3) {
+      const dur = targetClip.endSec - targetClip.startSec;
+      if (dur < 0.7) {
+        setTimelineNotice('⚠️ Segment trop court (< 0.7s) pour être coupé davantage.');
+        playCancelSound();
+        return;
+      }
+      cutPoint = Number(((targetClip.startSec + targetClip.endSec) / 2).toFixed(2));
+      usedMidpoint = true;
+    }
+
+    const { clips: nextClips, rightClipId } = splitClipAtTime(timelineClips, targetClip.id, cutPoint);
     if (!rightClipId) {
-      setTimelineNotice('Placez la tête de lecture au milieu du clip (au moins 0.3s des bords) pour faire un Cut.');
+      setTimelineNotice('⚠️ Impossible de couper ici. Déplacez le curseur de lecture à l\'intérieur du clip.');
       playCancelSound();
       return;
     }
     playValidationBeep();
-    pushTimelineState(nextClips, rightClipId, `✂️ Cut effectué à ${playhead.toFixed(1)}s — 2 segments créés.`);
+    setCurrentVideoTime(cutPoint);
+    if (videoPreviewRef.current) {
+      try {
+        videoPreviewRef.current.currentTime = cutPoint;
+      } catch {}
+    }
+    pushTimelineState(
+      nextClips,
+      rightClipId,
+      usedMidpoint
+        ? `✂️ Cut effectué au milieu (${cutPoint.toFixed(1)}s) — 2 segments créés. Cliquez sur 🗑️ pour supprimer un passage.`
+        : `✂️ Cut effectué à ${cutPoint.toFixed(1)}s — 2 segments créés.`
+    );
   };
 
-  const handleDeleteSelectedClip = () => {
-    if (!selectedClip) return;
+  const handleDeleteSelectedClip = (clipIdToDelete?: string) => {
+    const target = clipIdToDelete
+      ? timelineClips.find(c => c.id === clipIdToDelete) || selectedClip
+      : selectedClip;
+    if (!target) return;
+
+    const deletedIdx = timelineClips.findIndex(c => c.id === target.id);
     if (timelineClips.length <= 1) {
-      setTimelineNotice('Impossible de supprimer le seul clip restant. Faites d\'abord un Cut pour supprimer un passage.');
-      playCancelSound();
+      // Permettre de vider le clip unique (récupérable via Annuler / Undo)
+      playTapBeep();
+      pushTimelineState([], '', `🗑️ Segment "${target.label}" supprimé. Cliquez sur ↩️ Annuler pour le restaurer ou importez une vidéo.`);
+      setPreviewUrl('');
+      setSourceFile(null);
+      setCurrentVideoTime(0);
+      setIsVideoPlaying(false);
       return;
     }
+
     playTapBeep();
-    const nextClips = deleteClipFromTimeline(timelineClips, selectedClip.id);
-    pushTimelineState(nextClips, nextClips[0]?.id || '', `🗑️ Segment "${selectedClip.label}" supprimé.`);
-    if (nextClips[0]) {
-      setPreviewUrl(nextClips[0].sourceUrl);
+    const nextClips = deleteClipFromTimeline(timelineClips, target.id);
+    const nextSelected = nextClips[Math.min(deletedIdx, nextClips.length - 1)] || nextClips[0];
+    pushTimelineState(
+      nextClips,
+      nextSelected?.id || '',
+      `🗑️ Segment "${target.label}" supprimé (${nextClips.length} segment${nextClips.length > 1 ? 's' : ''} restant${nextClips.length > 1 ? 's' : ''}).`
+    );
+    if (nextSelected) {
+      const switching = previewUrl !== nextSelected.sourceUrl;
+      if (switching) setPreviewUrl(nextSelected.sourceUrl);
+      setCurrentVideoTime(nextSelected.startSec);
+      const seekRemaining = () => {
+        const v = videoPreviewRef.current;
+        if (!v) return;
+        try {
+          v.pause();
+          v.playbackRate = nextSelected.speed || 1;
+          v.muted = nextSelected.muted;
+          v.currentTime = nextSelected.startSec;
+        } catch {}
+      };
+      if (switching) setTimeout(seekRemaining, 90);
+      else seekRemaining();
     }
   };
 
@@ -795,6 +921,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setEncodeResult(null);
     setEncodeError(null);
     const localUrl = URL.createObjectURL(file);
+    setTimelineClips([]);
+    setSelectedClipId('');
+    setHistoryPast([]);
+    setHistoryFuture([]);
+    setCurrentVideoTime(0);
     setPreviewUrl(localUrl);
   };
 
@@ -1256,24 +1387,47 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       setVideoDuration(Math.round(d));
                       setMaxDurationSec(Math.min(Math.round(d), SOCIAL_FORMATS[socialFormat].maxRecommendedSec));
                       setTimelineClips(prev =>
-                        prev.map(c =>
-                          c.sourceUrl === previewUrl && (c.sourceDurationSec === 30 || c.endSec > d)
-                            ? { ...c, sourceDurationSec: d, endSec: Math.min(c.endSec === 30 ? d : c.endSec, d) }
-                            : c
-                        )
+                        prev.map(c => {
+                          if (c.sourceUrl !== previewUrl) return c;
+                          const wasDefaultEnd = Math.abs(c.endSec - c.sourceDurationSec) < 0.05;
+                          return {
+                            ...c,
+                            sourceDurationSec: d,
+                            endSec: wasDefaultEnd ? d : Math.min(c.endSec, d),
+                          };
+                        })
                       );
                     }}
+                    onPlay={(e) => {
+                      setIsVideoPlaying(true);
+                      if (selectedClip) {
+                        const t = e.currentTarget.currentTime;
+                        if (t < selectedClip.startSec - 0.15 || t >= selectedClip.endSec - 0.08) {
+                          e.currentTarget.currentTime = selectedClip.startSec;
+                          setCurrentVideoTime(selectedClip.startSec);
+                        }
+                        e.currentTarget.playbackRate = selectedClip.speed || 1;
+                        e.currentTarget.muted = selectedClip.muted;
+                      }
+                    }}
+                    onPause={() => setIsVideoPlaying(false)}
                     onTimeUpdate={(e) => {
                       const t = e.currentTarget.currentTime;
                       setCurrentVideoTime(t);
-                      if (selectedClip && !e.currentTarget.paused && t >= selectedClip.endSec - 0.05) {
-                        const idx = timelineClips.findIndex(c => c.id === selectedClip.id);
-                        const nextClip = idx >= 0 && idx + 1 < timelineClips.length ? timelineClips[idx + 1] : null;
-                        if (nextClip) {
-                          handleSelectClip(nextClip);
-                          setTimeout(() => videoPreviewRef.current?.play().catch(() => {}), 60);
-                        } else if (timelineClips.length > 1 || selectedClip.endSec < selectedClip.sourceDurationSec - 0.1) {
-                          e.currentTarget.pause();
+                      if (selectedClip && !e.currentTarget.paused) {
+                        if (t < selectedClip.startSec - 0.15) {
+                          e.currentTarget.currentTime = selectedClip.startSec;
+                          return;
+                        }
+                        if (t >= selectedClip.endSec - 0.06) {
+                          const idx = timelineClips.findIndex(c => c.id === selectedClip.id);
+                          const nextClip = idx >= 0 && idx + 1 < timelineClips.length ? timelineClips[idx + 1] : null;
+                          if (nextClip) {
+                            handleSelectClip(nextClip, true);
+                          } else if (timelineClips.length > 1 || selectedClip.endSec < selectedClip.sourceDurationSec - 0.1) {
+                            e.currentTarget.pause();
+                            setIsVideoPlaying(false);
+                          }
                         }
                       }
                     }}
@@ -2026,23 +2180,57 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     </div>
                   </div>
 
-                  {/* Barre d'actions principales : Cut, Supprimer, Dupliquer, Déplacer */}
+                  {/* Curseur Tête de lecture (Playhead) intégré pour positionner précisément le Cut */}
+                  {selectedClip && (
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10.5px]">
+                        <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                          <Scissors className="w-3 h-3" />
+                          Position de coupe (Tête de lecture)
+                        </span>
+                        <span className="font-mono font-black text-white">
+                          {currentVideoTime.toFixed(1)}s / {selectedClip.sourceDurationSec.toFixed(1)}s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={selectedClip.startSec}
+                        max={Math.max(selectedClip.startSec + 0.1, selectedClip.endSec)}
+                        step={0.1}
+                        value={Math.max(selectedClip.startSec, Math.min(selectedClip.endSec, currentVideoTime))}
+                        onChange={(e) => handleScrubPlayhead(Number(e.target.value))}
+                        className="w-full accent-amber-400 cursor-pointer"
+                      />
+                    </div>
+                  )}
+
+                  {/* Barre d'actions principales : Lire montage, Cut, Supprimer, Dupliquer, Déplacer */}
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handlePlayFullTimeline}
+                      disabled={timelineClips.length === 0}
+                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1 cursor-pointer shadow-sm"
+                      title="Lire le montage assemblé (ignore les segments supprimés)"
+                    >
+                      {isVideoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      <span>{isVideoPlaying ? 'Pause' : 'Lire montage'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={handleSplitAtPlayhead}
                       disabled={!selectedClip}
                       className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      title="Couper le clip sélectionné à la position actuelle de lecture"
+                      title="Couper le clip sélectionné à la tête de lecture (ou au milieu si à 0.0s)"
                     >
                       <Scissors className="w-3.5 h-3.5" />
                       <span>Cut ici ({currentVideoTime.toFixed(1)}s)</span>
                     </button>
                     <button
                       type="button"
-                      onClick={handleDeleteSelectedClip}
-                      disabled={!selectedClip || timelineClips.length <= 1}
-                      className="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 disabled:opacity-35 text-rose-300 border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      onClick={() => handleDeleteSelectedClip()}
+                      disabled={!selectedClip}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-600/25 hover:bg-rose-600/45 disabled:opacity-35 text-rose-200 border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                       title="Supprimer le segment sélectionné"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2078,7 +2266,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                   </div>
 
                   {timelineNotice && (
-                    <p className="text-[11px] text-emerald-300 font-semibold">{timelineNotice}</p>
+                    <p
+                      className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border ${
+                        timelineNotice.startsWith('⚠️')
+                          ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
+                          : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
+                      }`}
+                    >
+                      {timelineNotice}
+                    </p>
                   )}
 
                   {/* Piste Visuelle Interactive des Segments */}
@@ -2088,11 +2284,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         const isSel = selectedClip?.id === clip.id;
                         const outDur = getClipOutputDuration(clip);
                         return (
-                          <button
+                          <div
                             key={clip.id}
-                            type="button"
                             onClick={() => handleSelectClip(clip)}
-                            style={{ minWidth: `${Math.max(105, Math.min(220, Math.round(outDur * 14)))}px` }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') handleSelectClip(clip);
+                            }}
+                            style={{ minWidth: `${Math.max(120, Math.min(230, Math.round(outDur * 14)))}px` }}
                             className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 shrink-0 ${
                               isSel
                                 ? 'bg-indigo-600/30 border-indigo-400 shadow-lg shadow-indigo-950/50'
@@ -2110,12 +2310,23 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                                   </span>
                                 )}
                                 {clip.muted && <VolumeX className="w-3 h-3 text-rose-400" />}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteSelectedClip(clip.id);
+                                  }}
+                                  className="p-1 rounded-md hover:bg-rose-500/30 text-slate-400 hover:text-rose-200 transition-colors cursor-pointer"
+                                  title={`Supprimer ${clip.label}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
                             </div>
                             <span className="text-[9.5px] font-mono text-slate-400">
                               {clip.startSec.toFixed(1)}s → {clip.endSec.toFixed(1)}s ({outDur}s)
                             </span>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
