@@ -173,32 +173,121 @@ export function mapSupabaseCourseToMarketplace(row: any): MarketplaceCourse {
  * Écouteur en temps réel pour tous les cours publiés (Supabase SQL & Firestore)
  * Garantit la disponibilité immédiate des cours créés par les formateurs
  */
+const DISMISSED_EXAMPLES_KEY = 'nana_dismissed_example_courses_v1';
+
+export function isExampleCourseId(courseId: string): boolean {
+  return SEED_MARKETPLACE_COURSES.some((sc) => sc.id === courseId);
+}
+
+export function getDismissedExampleCourseIds(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(DISMISSED_EXAMPLES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getActiveSeedCourses(): MarketplaceCourse[] {
+  const dismissed = new Set(getDismissedExampleCourseIds());
+  return SEED_MARKETPLACE_COURSES.filter((c) => !dismissed.has(c.id));
+}
+
+export function dismissExampleCourse(courseId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = new Set(getDismissedExampleCourseIds());
+    current.add(courseId);
+    localStorage.setItem(DISMISSED_EXAMPLES_KEY, JSON.stringify(Array.from(current)));
+    const cached = localStorage.getItem('nana_published_courses_cache');
+    if (cached) {
+      const list = JSON.parse(cached).filter((c: any) => c.id !== courseId);
+      localStorage.setItem('nana_published_courses_cache', JSON.stringify(list));
+    }
+    window.dispatchEvent(new CustomEvent('nana_courses_updated'));
+  } catch {}
+}
+
+export function dismissAllExampleCourses(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const allSeedIds = SEED_MARKETPLACE_COURSES.map((c) => c.id);
+    localStorage.setItem(DISMISSED_EXAMPLES_KEY, JSON.stringify(allSeedIds));
+    const cached = localStorage.getItem('nana_published_courses_cache');
+    if (cached) {
+      const seedSet = new Set(allSeedIds);
+      const list = JSON.parse(cached).filter((c: any) => !seedSet.has(c.id));
+      localStorage.setItem('nana_published_courses_cache', JSON.stringify(list));
+    }
+    window.dispatchEvent(new CustomEvent('nana_courses_updated'));
+  } catch {}
+}
+
+export function restoreExampleCourses(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(DISMISSED_EXAMPLES_KEY);
+    window.dispatchEvent(new CustomEvent('nana_courses_updated'));
+  } catch {}
+}
+
+export async function deleteCourseEverywhere(courseId: string): Promise<boolean> {
+  if (isExampleCourseId(courseId)) {
+    dismissExampleCourse(courseId);
+    return true;
+  }
+  try {
+    await fetch(`/api/lms/courses/${encodeURIComponent(courseId)}`, { method: 'DELETE' }).catch(() => {});
+    await Promise.allSettled([
+      supabase.from('courses').delete().eq('id', courseId),
+      supabase.from('products').delete().eq('id', `course_prod_${courseId}`),
+    ]);
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('nana_published_courses_cache');
+      if (cached) {
+        const list = JSON.parse(cached).filter((c: any) => c.id !== courseId);
+        localStorage.setItem('nana_published_courses_cache', JSON.stringify(list));
+      }
+      localStorage.removeItem(`nana_course_structure_${courseId}`);
+      window.dispatchEvent(new CustomEvent('nana_courses_updated'));
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function subscribeToPublishedCourses(
   callback: (courses: MarketplaceCourse[]) => void
 ): () => void {
   const coursesRef = collection(db, 'courses');
   const q = query(coursesRef, where('status', '==', 'published'));
 
-  // Pour garantir la résilience et zéro latence : fusion immédiate avec seed
-  let localCache = [...SEED_MARKETPLACE_COURSES];
-
-  // Vérifier s'il y a des cours publiés enregistrés dans le localStorage
-  try {
-    const savedLocal = localStorage.getItem('nana_published_courses_cache');
-    if (savedLocal) {
-      const parsed = JSON.parse(savedLocal);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localCache = mergeCourseLists(localCache, parsed);
+  const buildInitialList = () => {
+    const dismissed = new Set(getDismissedExampleCourseIds());
+    let localCache = getActiveSeedCourses();
+    try {
+      const savedLocal = localStorage.getItem('nana_published_courses_cache');
+      if (savedLocal) {
+        const parsed = JSON.parse(savedLocal);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleanParsed = parsed.filter((c: any) => !dismissed.has(c.id));
+          localCache = mergeCourseLists(localCache, cleanParsed);
+        }
       }
+    } catch (e) {
+      console.warn('Erreur lecture cache local cours:', e);
     }
-  } catch (e) {
-    console.warn('Erreur lecture cache local cours:', e);
-  }
+    return localCache;
+  };
 
-  callback(localCache);
+  callback(buildInitialList());
 
   const fetchCourses = async () => {
     try {
+      const dismissed = new Set(getDismissedExampleCourseIds());
       const allFoundCourses: MarketplaceCourse[] = [];
 
       // 1. Supabase Courses (Source Principale des Formateurs)
@@ -210,7 +299,9 @@ export function subscribeToPublishedCourses(
 
         if (!supaErr && Array.isArray(supaData)) {
           supaData.forEach(row => {
-            allFoundCourses.push(mapSupabaseCourseToMarketplace(row));
+            if (!dismissed.has(String(row.id))) {
+              allFoundCourses.push(mapSupabaseCourseToMarketplace(row));
+            }
           });
         }
       } catch (err) {
@@ -222,6 +313,7 @@ export function subscribeToPublishedCourses(
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
           snapshot.forEach((docSnap) => {
+            if (dismissed.has(docSnap.id)) return;
             const data = docSnap.data() as MarketplaceCourse;
             if (!allFoundCourses.some(c => c.id === docSnap.id)) {
               allFoundCourses.push({
@@ -235,16 +327,25 @@ export function subscribeToPublishedCourses(
         console.warn('[MARKETPLACE] Firestore fetch courses notice:', err);
       }
 
-      const merged = mergeCourseLists(SEED_MARKETPLACE_COURSES, allFoundCourses);
+      const merged = mergeCourseLists(getActiveSeedCourses(), allFoundCourses).filter(
+        (c) => !dismissed.has(c.id)
+      );
       localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
       callback(merged);
     } catch (error) {
       console.warn('Mode autonome cours :', error);
-      callback(localCache);
+      callback(buildInitialList());
     }
   };
 
   fetchCourses();
+
+  const onLocalUpdate = () => {
+    callback(buildInitialList());
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('nana_courses_updated', onLocalUpdate);
+  }
 
   // Écoute temps réel des changements sur la table 'courses' Supabase
   const channelName = `courses_live_${Math.random().toString(36).substring(7)}`;

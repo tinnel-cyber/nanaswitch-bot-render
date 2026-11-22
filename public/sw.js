@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v38-checkout-tdz-cod-fix';
+const CACHE_NAME = 'nanasore-v39-lms-publish-removable-examples';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

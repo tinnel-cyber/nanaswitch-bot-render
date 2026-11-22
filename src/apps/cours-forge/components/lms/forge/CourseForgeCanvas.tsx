@@ -67,7 +67,7 @@ import { ContentBankDrawer } from './ContentBankDrawer';
 import { ModuleDeliverySettingsModal } from './ModuleDeliverySettingsModal';
 import { AdvancedCourseSettingsModal } from './AdvancedCourseSettingsModal';
 import { exportCourseToJson, parseAndValidateCourseJson } from '../../../../../services/courseImportExport';
-import { updateModuleBranding, saveCourseStructure, saveCourseGlobalSettings } from '../../../../../services/lmsService';
+import { updateModuleBranding, saveCourseStructure, saveCourseGlobalSettings, publishCourseToStorefront } from '../../../../../services/lmsService';
 
 // Modules initiaux structurés pour le Drag-and-Drop & Drip
 const INITIAL_MODULES: CourseModule[] = [
@@ -1253,15 +1253,47 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           <button
             type="button"
             onClick={() => {
-              saveCourseStructure(activeCourseId, modules, nodes, edges);
-              setSavedNotification(`Architecture du cours "${activeCourseTitle}" enregistrée dans Firestore !`);
+              saveCourseStructure(activeCourseId, modules, nodes, edges, {
+                title: activeCourseTitle,
+                tenantId: currentUser?.storeId,
+              });
+              setSavedNotification(`Architecture du cours "${activeCourseTitle}" enregistrée dans Supabase !`);
               onSaveSuccess?.(activeCourseId);
               setTimeout(() => setSavedNotification(null), 3500);
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Sauvegarder</span>
+          </button>
+
+          {/* Publication directe Campus + Vitrine Digital Pro */}
+          <button
+            type="button"
+            onClick={async () => {
+              const res = await publishCourseToStorefront({
+                courseId: activeCourseId,
+                title: activeCourseTitle,
+                price: Number((courseGlobalSettings as any)?.price) || 15000,
+                description: (courseGlobalSettings as any)?.description || '',
+                thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
+                tenantId: currentUser?.storeId || '',
+                modules,
+                nodes,
+                edges,
+              });
+              setSavedNotification(
+                res.success
+                  ? `🚀 "${activeCourseTitle}" publié dans le Campus ET synchronisé dans votre vitrine Digital Pro !`
+                  : `Erreur de publication : ${res.error || 'réessayez'}`
+              );
+              onSaveSuccess?.(activeCourseId);
+              setTimeout(() => setSavedNotification(null), 4500);
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Publier (Campus + Vitrine)</span>
           </button>
         </div>
       </div>

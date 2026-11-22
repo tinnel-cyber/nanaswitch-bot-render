@@ -4,7 +4,7 @@ import {
   Filter, FileSpreadsheet, FileText, ArrowLeft, ExternalLink, 
   ChevronRight, Sparkles, ShieldCheck, Mail, PhoneCall, 
   Laptop, Check, User, RefreshCw, Eye, MessageSquare, ArrowUpRight,
-  Rocket, Flame, Share2, DollarSign, Zap, GraduationCap
+  Rocket, Flame, Share2, DollarSign, Zap, GraduationCap, Trash2, Store, RotateCcw
 } from 'lucide-react';
 import { 
   AssignmentSubmission, StudentRosterItem, InstructorKpiMetrics, 
@@ -18,7 +18,15 @@ import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { PromoCampaign } from '../../../../types/campaign';
 import { MarketplaceCourse } from './marketplace/types';
 import { subscribeToCampaigns } from '../../../../services/campaignService';
-import { SEED_MARKETPLACE_COURSES, subscribeToPublishedCourses } from '../../../../services/marketplaceService';
+import {
+  SEED_MARKETPLACE_COURSES,
+  subscribeToPublishedCourses,
+  isExampleCourseId,
+  dismissAllExampleCourses,
+  restoreExampleCourses,
+  deleteCourseEverywhere
+} from '../../../../services/marketplaceService';
+import { publishCourseToStorefront } from '../../../../services/lmsService';
 import { UltimateFunnelBuilder } from '../../../../components/storeBuilder/UltimateFunnelBuilder';
 import { isLimitReached, triggerLimitReachedUpsell, getStoredFunnelsCount } from '../../../../utils/planFeatures';
 import { registerSubdomainInFirebase } from '../../../../services/omniFunnelService';
@@ -773,16 +781,53 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
 
             {/* Section 1 : Catalogue des Cours Publiés Prêts à Promouvoir */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  Cours Disponibles pour Lancement de Funnel ({courses.length})
+                  Cours Disponibles ({courses.length})
                 </h4>
-                <span className="text-[11px] text-slate-500">Cliquez sur Promouvoir pour créer la page de vente</span>
+                <div className="flex items-center gap-2">
+                  {courses.some((c) => isExampleCourseId(c.id)) ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        dismissAllExampleCourses();
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Supprimer tous les exemples</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        restoreExampleCourses();
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Réafficher les exemples</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
+              {/* Phrase explicative pour les premiers formateurs */}
+              {courses.some((c) => isExampleCourseId(c.id)) && (
+                <div className="p-3 rounded-2xl bg-indigo-950/50 border border-indigo-500/30 text-indigo-200 text-[11.5px] flex items-center justify-between gap-3">
+                  <span>
+                    💡 <strong>Cours d&apos;exemple inclus pour vous aider à vous situer dès vos débuts.</strong> Vous pouvez les modifier ou les supprimer à volonté en 1 clic — dès que vous publiez vos propres cours, ils se synchronisent automatiquement dans votre vitrine Digital Pro.
+                  </span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {courses.map((course) => (
+                {courses.map((course) => {
+                  const isExample = isExampleCourseId(course.id);
+                  return (
                   <div
                     key={course.id}
                     className="p-4 rounded-3xl bg-slate-900 border border-slate-800 hover:border-emerald-500/40 transition group flex flex-col justify-between space-y-4"
@@ -794,9 +839,27 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
                           alt={course.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
-                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9.5px] font-black bg-slate-950/80 text-emerald-300 border border-emerald-500/30 backdrop-blur-sm">
-                          {course.category}
-                        </span>
+                        <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-slate-950/80 text-emerald-300 border border-emerald-500/30 backdrop-blur-sm">
+                            {course.category}
+                          </span>
+                          {isExample && (
+                            <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-500/90 text-slate-950">
+                              EXEMPLE MODÈLE
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            playTapBeep();
+                            await deleteCourseEverywhere(course.id);
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-xl bg-slate-950/85 hover:bg-rose-600 text-slate-200 hover:text-white border border-slate-700 transition cursor-pointer"
+                          title={isExample ? 'Supprimer ce cours exemple' : 'Supprimer ce cours du Campus et de la vitrine'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                         <span className="absolute bottom-2 right-2 px-2.5 py-0.5 rounded-lg text-xs font-black bg-slate-950/90 text-white border border-slate-700">
                           {course.price.toLocaleString('fr-FR')} FCFA
                         </span>
@@ -812,10 +875,29 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {course.durationLabel}
-                      </span>
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          playValidationBeep();
+                          await publishCourseToStorefront({
+                            courseId: course.id,
+                            title: course.title,
+                            description: course.description || course.tagline,
+                            price: course.price,
+                            thumbnailUrl: course.coverImage,
+                            category: course.category || 'Formation',
+                            tenantId: currentUser?.storeId || '',
+                            modules: course.modules || [],
+                          });
+                          alert(`✅ "${course.title}" est maintenant synchronisé dans votre vitrine Digital Pro !`);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
+                        title="Synchroniser ce cours dans votre vitrine Digital Pro (products)"
+                      >
+                        <Store className="w-3 h-3" />
+                        <span>Vitrine</span>
+                      </button>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -833,7 +915,7 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
                           title="Créer un Funnel ⚡ pour ce cours"
                         >
                           <Zap className="w-3.5 h-3.5 fill-slate-950" />
-                          <span>Créer un Funnel ⚡</span>
+                          <span>Funnel ⚡</span>
                         </button>
 
                         <button
@@ -850,7 +932,8 @@ export const InstructorHubView: React.FC<InstructorHubViewProps> = ({
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
 

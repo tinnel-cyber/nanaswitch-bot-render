@@ -3457,6 +3457,141 @@ async function startServer() {
     return res.json({ success: true, ticket: row, whatsappEscalationUrl });
   });
 
+  // ============================================================================
+  // 2I. CHANTIER 1 LMS : PUBLICATION COURS (CAMPUS + VITRINE PRODUCTS) & SUPPRESSION
+  // ============================================================================
+  const LMS_COURSES_FILE = path.join(DATA_DIR, 'lms_published_courses.json');
+
+  // POST /api/lms/courses/publish — Publie le cours dans Supabase `courses` ET le synchronise dans `products` (Thème Digital Pro)
+  app.post('/api/lms/courses/publish', async (req, res) => {
+    const {
+      courseId,
+      title = 'Formation Express',
+      description = '',
+      price = 15000,
+      thumbnailUrl = '',
+      category = 'Formation',
+      tenantId = '',
+      modules = [],
+      nodes = [],
+      edges = [],
+    } = req.body || {};
+
+    const cleanId = String(courseId || '').trim();
+    if (!cleanId) {
+      return res.status(400).json({ success: false, error: 'courseId requis' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const cleanPrice = Math.max(0, Number(price) || 0);
+    const slug = String(title || cleanId)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || cleanId;
+
+    const record = {
+      id: cleanId,
+      title: String(title).trim(),
+      slug,
+      description: String(description || '').trim(),
+      price: cleanPrice,
+      thumbnail_url: String(thumbnailUrl || ''),
+      category: String(category || 'Formation'),
+      tenant_id: String(tenantId || ''),
+      status: 'published',
+      is_published: true,
+      modules,
+      nodes,
+      edges,
+      storefrontProductId: `course_prod_${cleanId}`,
+      updated_at: nowIso,
+    };
+
+    const existing = readJsonArrayFile(LMS_COURSES_FILE).filter((c: any) => c.id !== cleanId);
+    existing.unshift(record);
+    writeJsonArrayFile(LMS_COURSES_FILE, existing);
+
+    const synced = { courses: false, products: false };
+
+    if (supabaseAdmin) {
+      try {
+        const { error: cErr } = await supabaseAdmin.from('courses').upsert({
+          id: cleanId,
+          title: record.title,
+          slug: record.slug,
+          description: record.description,
+          price: record.price,
+          thumbnail_url: record.thumbnail_url || null,
+          status: 'published',
+          modules,
+          nodes,
+          edges,
+          settings: { modules, nodes, edges, updatedAt: Date.now() },
+          ...(record.tenant_id ? { tenant_id: record.tenant_id } : {}),
+          updated_at: nowIso,
+        });
+        synced.courses = !cErr;
+      } catch {}
+
+      // Synchronisation automatique vers la vitrine `products` (Thème Digital Pro)
+      try {
+        const productPayload: any = {
+          id: record.storefrontProductId,
+          title: record.title,
+          name: record.title,
+          description: record.description || `Accès complet au Campus Privé : ${record.title}`,
+          price: record.price,
+          category: record.category || 'Formation',
+          thumbnail_url: record.thumbnail_url || null,
+          image_url: record.thumbnail_url || null,
+          stock: 9999,
+          is_digital: true,
+          metadata: {
+            course_id: cleanId,
+            is_lms_course: true,
+            source: 'course_forge_publish',
+          },
+          updated_at: nowIso,
+        };
+        if (record.tenant_id) productPayload.tenant_id = record.tenant_id;
+
+        const { error: pErr } = await supabaseAdmin.from('products').upsert(productPayload);
+        synced.products = !pErr;
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      course: record,
+      storefrontProductId: record.storefrontProductId,
+      synced,
+    });
+  });
+
+  // DELETE /api/lms/courses/:courseId — Supprime un cours du Campus ET son produit miroir en vitrine
+  app.delete('/api/lms/courses/:courseId', async (req, res) => {
+    const cleanId = String(req.params.courseId || '').trim();
+    if (!cleanId) {
+      return res.status(400).json({ success: false, error: 'courseId requis' });
+    }
+
+    const remaining = readJsonArrayFile(LMS_COURSES_FILE).filter((c: any) => c.id !== cleanId);
+    writeJsonArrayFile(LMS_COURSES_FILE, remaining);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('courses').delete().eq('id', cleanId);
+      } catch {}
+      try {
+        await supabaseAdmin.from('products').delete().eq('id', `course_prod_${cleanId}`);
+      } catch {}
+    }
+
+    return res.json({ success: true, deletedId: cleanId });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

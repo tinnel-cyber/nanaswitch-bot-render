@@ -368,6 +368,74 @@ export async function saveCourseStructure(
 }
 
 /**
+ * Publie un cours dans le Campus (`courses`) ET le synchronise automatiquement
+ * comme produit numérique dans la vitrine du marchand (`products` / Thème Digital Pro).
+ */
+export async function publishCourseToStorefront(params: {
+  courseId: string;
+  title: string;
+  description?: string;
+  price?: number;
+  thumbnailUrl?: string;
+  category?: string;
+  tenantId?: string;
+  modules?: CourseModule[];
+  nodes?: any[];
+  edges?: any[];
+}): Promise<{ success: boolean; storefrontProductId?: string; error?: string }> {
+  try {
+    await saveCourseStructure(
+      params.courseId,
+      params.modules || [],
+      params.nodes || [],
+      params.edges || [],
+      {
+        title: params.title,
+        description: params.description,
+        price: params.price,
+        thumbnailUrl: params.thumbnailUrl,
+        tenantId: params.tenantId,
+        status: 'published',
+      }
+    );
+
+    const res = await fetch('/api/lms/courses/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const json = await res.json().catch(() => null);
+
+    // Filet de sécurité côté client Supabase `products`
+    const productId = `course_prod_${params.courseId}`;
+    try {
+      await supabase.from('products').upsert({
+        id: productId,
+        title: params.title,
+        name: params.title,
+        description: params.description || `Accès complet au Campus Privé : ${params.title}`,
+        price: Math.max(0, Number(params.price) || 0),
+        category: params.category || 'Formation',
+        thumbnail_url: params.thumbnailUrl || null,
+        image_url: params.thumbnailUrl || null,
+        stock: 9999,
+        is_digital: true,
+        ...(params.tenantId ? { tenant_id: params.tenantId } : {}),
+        metadata: { course_id: params.courseId, is_lms_course: true },
+        updated_at: new Date().toISOString(),
+      });
+    } catch {}
+
+    return {
+      success: Boolean(json?.success ?? true),
+      storefrontProductId: json?.storefrontProductId || productId,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erreur lors de la publication' };
+  }
+}
+
+/**
  * Charge la structure d'un cours depuis Supabase (avec fallback miroir localStorage)
  */
 export async function loadCourseStructure(
