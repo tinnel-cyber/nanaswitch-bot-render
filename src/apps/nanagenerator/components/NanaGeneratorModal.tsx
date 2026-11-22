@@ -46,6 +46,7 @@ import {
   DEFAULT_FREE_CREDITS 
 } from '../../../utils/firestoreService';
 import { UltimateCheckout } from '../../../services/nana-switch/payment/UltimateCheckout';
+const SocialVideoMontageStudio = React.lazy(() => import('./SocialVideoMontageStudio').then(m => ({ default: m.SocialVideoMontageStudio })));
 import { FLOW_STUDIO_URL, openFlowInApp, showGoogleFlowToast } from '../../../utils/launchGoogleFlow';
 import { getResolvedGeminiApiKey } from '../../../services/legalAiService';
 import { 
@@ -355,6 +356,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
 
   // État du Studio de Montage (Post-Production) & Kit de Montage IA Split-Screen
   const [showMontageKit, setShowMontageKit] = useState<boolean>(false);
+  const [isMontageStudioOpen, setIsMontageStudioOpen] = useState<boolean>(false);
   const [copiedKitBlock, setCopiedKitBlock] = useState<string | null>(null);
   const [isRedirectModalOpen, setIsRedirectModalOpen] = useState<boolean>(false);
   const montageKitRef = useRef<HTMLDivElement>(null);
@@ -1486,6 +1488,20 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* BOUTON STUDIO DE MONTAGE PRO (ENCODAGE LOCAL + CAPCUT/CANVA + PUBLICATION RÉSEAUX) */}
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              setIsMontageStudioOpen(true);
+            }}
+            className="px-3 py-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg transition active:scale-95 cursor-pointer"
+            title="Ouvrir le Studio de Montage Vidéo Pro (9:16, Trim, Habillage, Voix Off, CapCut/Canva)"
+          >
+            <Film className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Montage Pro</span>
+          </button>
+
           {/* BADGE ÉLÉGANT DU SOLDE EN TEMPS RÉEL + BOUTON RECHARGER */}
           <div className="flex items-center gap-2 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-2xl shadow-inner">
             <Coins className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
@@ -2672,6 +2688,27 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Studio de Montage Vidéo Pro Plein Écran (Encodage local videoEncoderService + CapCut/Canva + Kit Réseaux) */}
+      {isMontageStudioOpen && (
+        <React.Suspense
+          fallback={
+            <div className="fixed inset-0 z-[100000] bg-slate-950 flex items-center justify-center text-xs font-bold text-slate-300">
+              Chargement du Studio de Montage Vidéo Pro...
+            </div>
+          }
+        >
+          <SocialVideoMontageStudio
+            isOpen={isMontageStudioOpen}
+            onClose={() => setIsMontageStudioOpen(false)}
+            initialVideoUrl={generatedVideoUrl || ''}
+            initialHeadline={flowProductDescription || textPrompt || storeName || ''}
+            storeName={storeName || 'Ma Boutique'}
+            whatsappPhone={currentUser?.phone || ''}
+            publicLink={typeof window !== 'undefined' ? window.location.origin : ''}
+          />
+        </React.Suspense>
       )}
 
     </div>

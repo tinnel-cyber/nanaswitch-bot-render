@@ -36,6 +36,8 @@ export interface VideoEncodeOptions {
   signal?: AbortSignal;
   overlay?: VideoOverlayOptions;
   maxDurationSec?: number;
+  targetWidth?: number;
+  targetHeight?: number;
   overrides?: Partial<WorkerEncodeSettings>;
 }
 
@@ -57,15 +59,18 @@ export function isWebCodecsEncodingSupported(): boolean {
 
 export async function encodeVideo(file: File | Blob, options: VideoEncodeOptions = {}): Promise<VideoEncodeResult> {
   const isChat = options.preset === 'chat';
+  const targetWidth = options.targetWidth || 480;
+  const targetHeight = options.targetHeight || 854;
   const res = await encodeVideoOptimized(
     file,
     (pct) => options.onProgress?.(pct),
     {
       overlay: options.overlay,
-      targetWidth: 480,
-      targetHeight: 854,
-      videoBitsPerSecond: isChat ? 600_000 : 1_200_000,
-      fps: 24
+      targetWidth,
+      targetHeight,
+      videoBitsPerSecond: isChat ? 600_000 : 1_400_000,
+      fps: 24,
+      maxDurationSec: options.maxDurationSec
     }
   );
 
@@ -75,8 +80,8 @@ export async function encodeVideo(file: File | Blob, options: VideoEncodeOptions
     encodedSizeBytes: res.compressedSizeBytes,
     savingsPercent: res.savingsRatioPercent,
     durationSec: res.durationSec,
-    width: 480,
-    height: 854,
+    width: targetWidth,
+    height: targetHeight,
     elapsedMs: res.elapsedMs,
     engine: res.engineUsed === 'passthrough' ? 'passthrough' : 'webcodecs-hardware'
   };
