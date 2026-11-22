@@ -59,12 +59,19 @@ export function clearInstructorLocalCaches(): void {
   }
 }
 
+export interface InstructorPayoutRecord {
+  id: string;
+  amount: number;
+  status?: string;
+  createdAt?: string | number;
+}
+
 /**
- * Abonnement en temps réel aux inscriptions (enrollments) réelles depuis Supabase SQL & Realtime
+ * Abonnement en temps réel aux inscriptions (enrollments) réelles depuis le Cloud
  */
 export function subscribeToEnrollments(
   callback: (enrollments: EnrollmentRecord[]) => void,
-  options?: { instructorId?: string; courseIds?: string[] }
+  options?: { instructorId?: string; courseIds?: string[]; strictCourseFilter?: boolean }
 ): () => void {
   const cacheKey = options?.instructorId ? `${ENROLLMENTS_CACHE_KEY}_${options.instructorId}` : ENROLLMENTS_CACHE_KEY;
 
@@ -80,10 +87,15 @@ export function subscribeToEnrollments(
     callback([]);
   }
 
-  // 2. Requête et écouteur Supabase Realtime
+  // 2. Requête et écouteur Temps Réel Cloud
   try {
     const fetchEnrollments = async () => {
       try {
+        if (options?.strictCourseFilter && (!options.courseIds || options.courseIds.length === 0)) {
+          callback([]);
+          return;
+        }
+
         let query = supabase.from('enrollments').select('*');
         if (options?.courseIds && options.courseIds.length > 0) {
           query = query.in('course_id', options.courseIds);
@@ -94,13 +106,13 @@ export function subscribeToEnrollments(
           const list: EnrollmentRecord[] = data.map((d: any) => ({
             id: d.id,
             courseId: d.course_id || '',
-            studentName: d.user_email?.split('@')[0] || d.user_id || 'Apprenant',
-            phoneNumber: d.phone_number || '',
-            email: d.user_email || '',
+            studentName: d.student_name || d.user_email?.split('@')[0] || d.student_email?.split('@')[0] || d.user_id || 'Apprenant',
+            phoneNumber: d.phone_number || d.student_phone || '',
+            email: d.user_email || d.student_email || '',
             provider: d.provider || 'MOBILE_MONEY',
-            amount: Number(d.amount) || 0,
+            amount: Number(d.amount_paid ?? d.amount ?? 0) || 0,
             currency: d.currency || 'FCFA',
-            status: d.status?.toUpperCase() === 'ACTIVE' || d.status === 'completed' ? 'PAID' : (d.status || 'PAID'),
+            status: d.status?.toUpperCase() === 'ACTIVE' || d.status === 'completed' || d.status === 'PAID' ? 'PAID' : (d.status || 'PAID'),
             createdAt: d.enrolled_at ? new Date(d.enrolled_at).getTime() : (d.created_at ? new Date(d.created_at).getTime() : Date.now())
           }));
 
@@ -117,7 +129,7 @@ export function subscribeToEnrollments(
           callback(list);
         }
       } catch (err) {
-        console.warn('[INSTRUCTOR DATA] Erreur lecture enrollments Supabase:', err);
+        console.warn('[INSTRUCTOR DATA] Erreur lecture enrollments:', err);
       }
     };
 
@@ -149,41 +161,55 @@ export function subscribeToEnrollments(
 }
 
 /**
- * Calcul dynamique des graphiques de gains sur différentes périodes
- * Ne génère JAMAIS de faux chiffres : si 0 vente, retourne 0 FCFA.
+ * Calcul dynamique des graphiques de gains et retraits sur différentes périodes
+ * Ne génère JAMAIS de faux chiffres : si 0 vente ou 0 retrait, retourne 0 FCFA.
  */
 export function computeFinancialAnalytics(
   enrollments: EnrollmentRecord[],
-  period: AnalyticsPeriod
+  period: AnalyticsPeriod,
+  payouts: InstructorPayoutRecord[] = []
 ): ComputedFinancials {
   const now = new Date();
   const validEnrollments = enrollments.filter(e => e.status === 'PAID' || e.amount > 0);
+  const validPayouts = (payouts || []).filter(p => String(p.status || '').toUpperCase() !== 'REJECTED' && (Number(p.amount) || 0) > 0);
+
   const totalGains = validEnrollments.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalRetraits = 0; // Synchronisable avec les demandes de retraits réelles
+  const totalRetraits = validPayouts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const totalBonus = 0;
-  const soldeDisponible = totalGains - totalRetraits;
+  const soldeDisponible = Math.max(0, totalGains - totalRetraits);
   const hasSales = totalGains > 0;
+
+  const toTimestamp = (v?: string | number) => {
+    if (!v) return 0;
+    const t = typeof v === 'number' ? v : new Date(v).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
 
   let data: FinancialDataPoint[] = [];
 
   if (period === '7j') {
-    const daysLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-    data = daysLabels.map((day, idx) => {
+    const weekdayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    data = Array.from({ length: 7 }, (_, idx) => {
       const targetDay = new Date(now);
       targetDay.setDate(now.getDate() - (6 - idx));
       const targetDateStr = targetDay.toISOString().split('T')[0];
+      const dayLabel = `${weekdayNames[targetDay.getDay()]} ${String(targetDay.getDate()).padStart(2, '0')}`;
 
       const dayGains = validEnrollments
-        .filter(e => {
-          const eDate = new Date(e.createdAt).toISOString().split('T')[0];
-          return eDate === targetDateStr;
-        })
+        .filter(e => new Date(e.createdAt).toISOString().split('T')[0] === targetDateStr)
         .reduce((sum, e) => sum + (e.amount || 0), 0);
 
+      const dayRetraits = validPayouts
+        .filter(p => {
+          const ts = toTimestamp(p.createdAt);
+          return ts > 0 && new Date(ts).toISOString().split('T')[0] === targetDateStr;
+        })
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
       return {
-        date: day,
+        date: dayLabel,
         gains: dayGains,
-        retraits: 0,
+        retraits: dayRetraits,
         bonus: 0
       };
     });
@@ -203,19 +229,26 @@ export function computeFinancialAnalytics(
         .filter(e => e.createdAt >= startMs && e.createdAt <= endMs)
         .reduce((sum, e) => sum + (e.amount || 0), 0);
 
+      const weekRetraits = validPayouts
+        .filter(p => {
+          const ts = toTimestamp(p.createdAt);
+          return ts >= startMs && ts <= endMs;
+        })
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
       return {
         date: w.label,
         gains: weekGains,
-        retraits: 0,
+        retraits: weekRetraits,
         bonus: 0
       };
     });
   } else {
-    // '12m' : 6 derniers mois
+    // '12m' : les 12 derniers mois complets
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
     const currentMonthIdx = now.getMonth();
     const months = [];
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 11; i >= 0; i--) {
       const mIdx = (currentMonthIdx - i + 12) % 12;
       months.push({
         label: monthNames[mIdx],
@@ -232,10 +265,19 @@ export function computeFinancialAnalytics(
         })
         .reduce((sum, e) => sum + (e.amount || 0), 0);
 
+      const monthRetraits = validPayouts
+        .filter(p => {
+          const ts = toTimestamp(p.createdAt);
+          if (!ts) return false;
+          const d = new Date(ts);
+          return d.getMonth() === m.month && d.getFullYear() === m.year;
+        })
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
       return {
         date: m.label,
         gains: monthGains,
-        retraits: 0,
+        retraits: monthRetraits,
         bonus: 0
       };
     });

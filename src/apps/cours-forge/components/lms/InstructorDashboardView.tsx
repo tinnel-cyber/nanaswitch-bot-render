@@ -17,6 +17,7 @@ import {
   computeFinancialAnalytics, 
   clearInstructorLocalCaches,
   EnrollmentRecord, 
+  InstructorPayoutRecord,
   ComputedFinancials, 
   FinancialDataPoint, 
   AnalyticsPeriod 
@@ -304,13 +305,19 @@ const OnboardingVideoSection: React.FC<OnboardingVideoSectionProps> = ({
 interface KycSectionProps {
   profile: InstructorProfile;
   onUpdateProfile: (updated: Partial<InstructorProfile>) => void;
+  onSelectKycFile?: (file: File) => void;
   onSubmitKyc: () => void;
+  isSubmittingKyc?: boolean;
+  kycError?: string | null;
 }
 
 const KycSection: React.FC<KycSectionProps> = ({
   profile,
   onUpdateProfile,
-  onSubmitKyc
+  onSelectKycFile,
+  onSubmitKyc,
+  isSubmittingKyc = false,
+  kycError = null
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -320,6 +327,7 @@ const KycSection: React.FC<KycSectionProps> = ({
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
+      onSelectKycFile?.(file);
       onUpdateProfile({
         kycDocName: file.name,
         kycDocSize: `${(file.size / 1024).toFixed(0)} Ko`
@@ -331,6 +339,7 @@ const KycSection: React.FC<KycSectionProps> = ({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      onSelectKycFile?.(file);
       onUpdateProfile({
         kycDocName: file.name,
         kycDocSize: `${(file.size / 1024).toFixed(0)} Ko`
@@ -506,18 +515,30 @@ const KycSection: React.FC<KycSectionProps> = ({
             </div>
           </div>
 
+          {kycError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{kycError}</span>
+            </div>
+          )}
+
           {/* Bouton d'action principal : Soumettre au Super Admin */}
           <button
             type="button"
             onClick={onSubmitKyc}
-            disabled={profile.kycStatus === 'pending_validation'}
+            disabled={profile.kycStatus === 'pending_validation' || isSubmittingKyc}
             className={`w-full py-3 px-4 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-98 ${
-              profile.kycStatus === 'pending_validation'
+              profile.kycStatus === 'pending_validation' || isSubmittingKyc
                 ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
                 : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white shadow-emerald-950/40'
             }`}
           >
-            {profile.kycStatus === 'pending_validation' ? (
+            {isSubmittingKyc ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-300" />
+                <span>Enregistrement du dossier KYC sur le Cloud...</span>
+              </>
+            ) : profile.kycStatus === 'pending_validation' ? (
               <>
                 <Clock className="w-4 h-4 text-amber-300 animate-spin" />
                 <span>Dossier transmis au Super Admin (En examen)</span>
@@ -545,6 +566,11 @@ interface FinancialAnalyticsProps {
   financials: ComputedFinancials;
   onNavigateModule?: (key: string) => void;
   onRequestWithdrawal?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  academyPublicUrl?: string;
+  copiedAcademyLink?: boolean;
+  onCopyAcademyLink?: () => void;
 }
 
 const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
@@ -552,14 +578,19 @@ const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
   onPeriodChange,
   financials,
   onNavigateModule,
-  onRequestWithdrawal
+  onRequestWithdrawal,
+  onRefresh,
+  isRefreshing = false,
+  academyPublicUrl,
+  copiedAcademyLink = false,
+  onCopyAcademyLink
 }) => {
   const data = financials.data;
   const totalGains = financials.totalGains;
   const totalRetraits = financials.totalRetraits;
   const totalBonus = financials.totalBonus;
   const soldeDisponible = financials.soldeDisponible;
-  const maxVal = Math.max(...data.map(d => d.gains), 1);
+  const maxVal = Math.max(...data.map(d => Math.max(d.gains, d.retraits)), 1);
 
   return (
     <div className="rounded-3xl bg-slate-900/90 border border-slate-800/90 p-6 sm:p-8 shadow-xl space-y-6">
@@ -603,13 +634,17 @@ const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
             type="button"
             onClick={() => {
               playTapBeep();
-              clearInstructorLocalCaches();
-              window.location.reload();
+              if (onRefresh) {
+                onRefresh();
+              } else {
+                clearInstructorLocalCaches();
+              }
             }}
-            title="Actualiser et synchroniser avec Firestore"
-            className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition cursor-pointer shadow-sm"
+            disabled={isRefreshing}
+            title="Actualiser et synchroniser avec le Cloud"
+            className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition cursor-pointer shadow-sm disabled:opacity-60"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
           </button>
         </div>
       </div>
@@ -710,15 +745,22 @@ const FinancialAnalytics: React.FC<FinancialAnalyticsProps> = ({
             type="button"
             onClick={() => {
               playValidationBeep();
-              if (navigator.clipboard) {
-                navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.origin + '/courses' : '');
+              if (onCopyAcademyLink) {
+                onCopyAcademyLink();
+              } else if (navigator.clipboard) {
+                const targetUrl = academyPublicUrl || (typeof window !== 'undefined' ? window.location.origin + '/catalog' : '');
+                navigator.clipboard.writeText(targetUrl);
               }
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+            className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+              copiedAcademyLink
+                ? 'bg-emerald-600/30 text-emerald-200 border-emerald-500/50'
+                : 'bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-200 hover:text-white border-indigo-500/40'
+            }`}
             title="Copier le lien public de votre catalogue de formations"
           >
-            <Copy className="w-3.5 h-3.5" />
-            <span>Copier mon lien Académie</span>
+            {copiedAcademyLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copiedAcademyLink ? 'Lien copié ✓' : 'Copier mon lien Académie'}</span>
           </button>
         </div>
       </div>
@@ -838,6 +880,8 @@ interface KpiGridProps {
   coursesCount?: number;
   isUnlimitedCourses?: boolean;
   planId?: string;
+  uniqueVisitorsCount?: number;
+  webinarsCount?: number;
 }
 
 const KpiGrid: React.FC<KpiGridProps> = ({
@@ -850,7 +894,9 @@ const KpiGrid: React.FC<KpiGridProps> = ({
   funnelsCount,
   coursesCount = 1,
   isUnlimitedCourses = false,
-  planId = 'free'
+  planId = 'free',
+  uniqueVisitorsCount = 0,
+  webinarsCount = 0
 }) => {
   const maxAllowedCourses = planId === 'starter' ? 5 : 1;
   const kpiItems = [
@@ -871,9 +917,11 @@ const KpiGrid: React.FC<KpiGridProps> = ({
     },
     {
       title: 'Visiteurs Uniques (Mon Campus)',
-      value: activeStudentsCount > 0 ? (activeStudentsCount * 5).toLocaleString('fr-FR') : '0',
-      subtitle: activeStudentsCount > 0 ? 'Trafic direct & liens partagés' : '0 visiteur • Partagez votre lien Académie pour attirer vos premiers visiteurs',
-      badge: 'Trafic Direct',
+      value: uniqueVisitorsCount > 0 ? uniqueVisitorsCount.toLocaleString('fr-FR') : '0',
+      subtitle: uniqueVisitorsCount > 0
+        ? 'Clics & visites réelles mesurées sur vos liens trackés'
+        : '0 visiteur • Partagez vos liens de cours pour mesurer votre trafic réel',
+      badge: 'Trafic Réel',
       badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
       icon: Globe,
       iconColor: 'text-sky-400'
@@ -929,9 +977,9 @@ const KpiGrid: React.FC<KpiGridProps> = ({
     },
     {
       title: 'Live Webinaires',
-      value: '0 tenu',
-      subtitle: 'Webinaires et Lives interactifs',
-      badge: 'Daily WebRTC',
+      value: `${webinarsCount} ${webinarsCount > 1 ? 'tenus' : 'tenu'}`,
+      subtitle: webinarsCount > 0 ? 'Sessions Live synchronisées avec vos cours' : 'Aucun webinaire programmé pour le moment',
+      badge: 'Live Classroom',
       badgeColor: 'text-pink-400 bg-pink-500/10 border-pink-500/30',
       icon: Radio,
       iconColor: 'text-pink-400'
@@ -1337,13 +1385,19 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
   // Période analytique financière
   const [financialPeriod, setFinancialPeriod] = useState<AnalyticsPeriod>('7j');
 
-  // Flux de données réelles synchronisées Firestore (scopées par formateur)
+  // Flux de données réelles synchronisées Cloud (scopées par formateur)
   const [enrollments, setEnrollments] = useState<EnrollmentRecord[]>([]);
   const [students, setStudents] = useState<StudentRosterItem[]>([]);
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
+  const [instructorPayouts, setInstructorPayouts] = useState<InstructorPayoutRecord[]>([]);
+  const [webinarsCount, setWebinarsCount] = useState<number>(0);
+  const [uniqueVisitorsCount, setUniqueVisitorsCount] = useState<number>(0);
+  const [isRefreshingMetrics, setIsRefreshingMetrics] = useState<boolean>(false);
+  const [copiedAcademyLink, setCopiedAcademyLink] = useState<boolean>(false);
+  const [selectedPromoCourseId, setSelectedPromoCourseId] = useState<string>('');
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  // Devoirs effectifs (uniquement les soumissions réelles Firestore)
+  // Devoirs effectifs (uniquement les soumissions réelles Cloud)
   const effectiveSubmissions = useMemo(() => {
     return submissions;
   }, [submissions]);
@@ -1362,6 +1416,8 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
   const [withdrawalProvider, setWithdrawalProvider] = useState<'wave' | 'orange' | 'moov' | 'mtn'>('wave');
   const [withdrawalPhone, setWithdrawalPhone] = useState<string>('');
   const [withdrawalSuccess, setWithdrawalSuccess] = useState(false);
+  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
+  const [withdrawalError, setWithdrawalError] = useState<string | null>(null);
 
   // Modales interactives de l'Écosystème Formateur
   const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
@@ -1374,11 +1430,45 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
   const [isProModalOpen, setIsProModalOpen] = useState(false);
   const [proModalTab, setProModalTab] = useState<ProFeatureTab>('WHITE_LABEL');
 
+  const instructorCourseIds = useMemo(
+    () => instructorCourses.map(c => String(c.id || c.slug || '')).filter(Boolean),
+    [instructorCourses]
+  );
+
+  const fetchInstructorServerMetrics = useCallback(async () => {
+    setIsRefreshingMetrics(true);
+    try {
+      const params = new URLSearchParams();
+      if (activeUser?.id) params.set('instructorId', activeUser.id);
+      if (instructorCourseIds.length > 0) params.set('courseIds', instructorCourseIds.join(','));
+      const res = await fetch(`/api/instructor/metrics?${params.toString()}`);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setWebinarsCount(Number(json.webinarsCount) || 0);
+        setUniqueVisitorsCount(Number(json.totalDestinationClicks) || 0);
+        if (Array.isArray(json.payouts)) {
+          setInstructorPayouts(json.payouts);
+        }
+      }
+    } catch (err) {
+      console.warn('[INSTRUCTOR] Erreur chargement métriques serveur:', err);
+    } finally {
+      setIsRefreshingMetrics(false);
+    }
+  }, [activeUser?.id, instructorCourseIds]);
+
+  useEffect(() => {
+    fetchInstructorServerMetrics();
+  }, [fetchInstructorServerMetrics]);
+
   useEffect(() => {
     const unsubEnroll = subscribeToEnrollments((list) => {
       setEnrollments(list);
       setIsLoadingData(false);
-    }, { instructorId: activeUser?.id });
+    }, {
+      instructorId: activeUser?.id,
+      courseIds: instructorCourseIds.length > 0 ? instructorCourseIds : undefined
+    });
     const unsubStudents = subscribeToStudentRoster((list) => {
       setStudents(list);
     }, { instructorId: activeUser?.id });
@@ -1391,17 +1481,17 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
       unsubStudents();
       unsubSubmissions();
     };
-  }, [activeUser?.id]);
+  }, [activeUser?.id, instructorCourseIds]);
 
   const financials = useMemo(() => {
-    return computeFinancialAnalytics(enrollments, financialPeriod);
-  }, [enrollments, financialPeriod]);
+    return computeFinancialAnalytics(enrollments, financialPeriod, instructorPayouts);
+  }, [enrollments, financialPeriod, instructorPayouts]);
 
   // Mode Édition Super Admin
   const [isSuperAdminEditMode, setIsSuperAdminEditMode] = useState(false);
   const [hiddenWidgets, setHiddenWidgets] = useState<Record<string, boolean>>({});
 
-  // État du profil & KYC
+  // État du profil & KYC (synchronisé avec le Cloud)
   const [profile, setProfile] = useState<InstructorProfile>({
     fullName: activeUser?.name || instructorName,
     email: activeUser?.email || 'konkobo.telecom@gmail.com',
@@ -1410,23 +1500,174 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
     computerSkill: 'intermediaire',
     kycStatus: isSuperAdmin ? 'valide' : 'non_soumis'
   });
-
+  const [kycFile, setKycFile] = useState<File | null>(null);
+  const [isSubmittingKyc, setIsSubmittingKyc] = useState(false);
+  const [kycError, setKycError] = useState<string | null>(null);
   const [kycSuccessNotice, setKycSuccessNotice] = useState(false);
+
+  // Chargement du profil KYC persisté depuis le Cloud
+  useEffect(() => {
+    const instructorId = activeUser?.id || '';
+    const email = activeUser?.email || '';
+    if (!instructorId && !email) return;
+    let mounted = true;
+    const params = new URLSearchParams();
+    if (instructorId) params.set('instructorId', instructorId);
+    if (email) params.set('email', email);
+    fetch(`/api/instructor/kyc?${params.toString()}`)
+      .then(r => r.json())
+      .then(json => {
+        if (!mounted || !json?.success || !json.profile) return;
+        const p = json.profile;
+        setProfile(prev => ({
+          ...prev,
+          fullName: p.fullName || prev.fullName,
+          email: p.email || prev.email,
+          phone: p.phone || prev.phone,
+          teachingDomain: p.teachingDomain || prev.teachingDomain,
+          computerSkill: (p.computerSkill as any) || prev.computerSkill,
+          kycStatus: isSuperAdmin ? 'valide' : ((p.kycStatus as any) || prev.kycStatus),
+          kycDocName: p.kycDocName || prev.kycDocName,
+          kycDocSize: p.kycDocSize || prev.kycDocSize,
+          kycSubmittedAt: p.kycSubmittedAt || prev.kycSubmittedAt
+        }));
+        if (p.phone && !withdrawalPhone) {
+          setWithdrawalPhone(p.phone);
+        }
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [activeUser?.id, activeUser?.email, isSuperAdmin]);
 
   const handleUpdateProfile = (updated: Partial<InstructorProfile>) => {
     setProfile(prev => ({ ...prev, ...updated }));
   };
 
-  const handleSubmitKyc = () => {
-    playValidationBeep();
-    setProfile(prev => ({
-      ...prev,
-      kycStatus: 'pending_validation',
-      kycSubmittedAt: new Date().toISOString()
-    }));
-    setKycSuccessNotice(true);
-    setTimeout(() => setKycSuccessNotice(false), 5000);
+  const handleSubmitKyc = async () => {
+    setKycError(null);
+    if (!profile.fullName.trim() || !profile.email.trim()) {
+      setKycError('Veuillez renseigner votre nom complet et votre email professionnel.');
+      return;
+    }
+    setIsSubmittingKyc(true);
+    try {
+      let uploadedDocUrl = '';
+      if (kycFile) {
+        const fd = new FormData();
+        fd.append('file', kycFile);
+        fd.append('folder', 'instructor_kyc');
+        const upRes = await fetch('/api/vault/upload', { method: 'POST', body: fd });
+        const upJson = await upRes.json().catch(() => null);
+        if (upRes.ok && upJson?.url) {
+          uploadedDocUrl = upJson.url;
+        }
+      }
+
+      const res = await fetch('/api/instructor/kyc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instructorId: activeUser?.id || profile.email,
+          fullName: profile.fullName,
+          email: profile.email,
+          phone: profile.phone,
+          teachingDomain: profile.teachingDomain,
+          computerSkill: profile.computerSkill,
+          kycDocName: profile.kycDocName || kycFile?.name || '',
+          kycDocSize: profile.kycDocSize || (kycFile ? `${(kycFile.size / 1024).toFixed(0)} Ko` : ''),
+          kycDocUrl: uploadedDocUrl,
+          submitForValidation: true,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Impossible de transmettre le dossier KYC sur le Cloud.');
+      }
+
+      playValidationBeep();
+      setProfile(prev => ({
+        ...prev,
+        kycStatus: (json.profile?.kycStatus as any) || 'pending_validation',
+        kycSubmittedAt: json.profile?.kycSubmittedAt || new Date().toISOString()
+      }));
+      setKycSuccessNotice(true);
+      setTimeout(() => setKycSuccessNotice(false), 5000);
+    } catch (err: any) {
+      setKycError(err?.message || 'Erreur réseau lors de l\'envoi du dossier KYC.');
+    } finally {
+      setIsSubmittingKyc(false);
+    }
   };
+
+  const handleConfirmWithdrawal = async () => {
+    setWithdrawalError(null);
+    const amount = Math.floor(financials.soldeDisponible);
+    if (amount < 1000) {
+      setWithdrawalError('Le montant minimum de retrait est de 1 000 FCFA.');
+      return;
+    }
+    if (!withdrawalPhone.trim()) {
+      setWithdrawalError('Veuillez renseigner votre numéro Mobile Money bénéficiaire.');
+      return;
+    }
+
+    setIsSubmittingWithdrawal(true);
+    try {
+      const providerLabels: Record<string, string> = {
+        wave: 'Wave Mobile Money',
+        orange: 'Orange Money',
+        moov: 'Moov Money',
+        mtn: 'MTN Mobile Money'
+      };
+      const res = await fetch('/api/payouts/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: `instructor_${activeUser?.id || 'default'}`,
+          userId: activeUser?.id || null,
+          amount,
+          fee: 0,
+          netAmount: amount,
+          currency: 'XOF',
+          country: 'UEMOA',
+          countryCode: 'BF',
+          operatorId: withdrawalProvider,
+          operatorName: providerLabels[withdrawalProvider] || withdrawalProvider.toUpperCase(),
+          destination: withdrawalPhone.trim(),
+          beneficiary: profile.fullName || 'Formateur',
+          mode: 'PRODUCTION',
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Erreur lors de l\'enregistrement de la demande de retrait.');
+      }
+
+      playValidationBeep();
+      setWithdrawalSuccess(true);
+      await fetchInstructorServerMetrics();
+    } catch (err: any) {
+      setWithdrawalError(err?.message || 'Impossible de soumettre la demande de retrait.');
+    } finally {
+      setIsSubmittingWithdrawal(false);
+    }
+  };
+
+  const academyPublicUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const firstCourse = instructorCourses[0];
+    if (firstCourse?.slug) return `${window.location.origin}/course/${firstCourse.slug}`;
+    if (firstCourse?.id) return `${window.location.origin}/course/${firstCourse.id}`;
+    return `${window.location.origin}/catalog`;
+  }, [instructorCourses]);
+
+  const handleCopyAcademyLink = useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && academyPublicUrl) {
+      navigator.clipboard.writeText(academyPublicUrl).catch(() => {});
+    }
+    setCopiedAcademyLink(true);
+    setTimeout(() => setCopiedAcademyLink(false), 2500);
+  }, [academyPublicUrl]);
 
   const handleToggleWidgetVisibility = (widgetKey: string) => {
     playTapBeep();
@@ -1950,6 +2191,8 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 coursesCount={coursesCount}
                 isUnlimitedCourses={isUnlimited}
                 planId={resolvedPlanId}
+                uniqueVisitorsCount={uniqueVisitorsCount}
+                webinarsCount={webinarsCount}
               />
             </div>
           )}
@@ -1975,7 +2218,22 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 onPeriodChange={setFinancialPeriod}
                 financials={financials}
                 onNavigateModule={handleNavigate}
-                onRequestWithdrawal={() => setIsWithdrawalModalOpen(true)}
+                onRequestWithdrawal={() => {
+                  setWithdrawalError(null);
+                  setWithdrawalSuccess(false);
+                  if (!withdrawalPhone && profile.phone) {
+                    setWithdrawalPhone(profile.phone);
+                  }
+                  setIsWithdrawalModalOpen(true);
+                }}
+                onRefresh={() => {
+                  clearInstructorLocalCaches();
+                  fetchInstructorServerMetrics();
+                }}
+                isRefreshing={isRefreshingMetrics}
+                academyPublicUrl={academyPublicUrl}
+                copiedAcademyLink={copiedAcademyLink}
+                onCopyAcademyLink={handleCopyAcademyLink}
               />
             </div>
           )}
@@ -2418,7 +2676,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
           })()}
         </div>
       ) : activeTab === 'COHORT_REALTIME' ? (
-        /* VUE SUPERVISION COHORTE REALTIME SUPABASE */
+        /* VUE SUPERVISION COHORTE TEMPS RÉEL CLOUD */
         <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
           <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -2432,7 +2690,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                   </h2>
                   <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10.5px] font-black border border-blue-500/30 flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
-                    SUPABASE REALTIME
+                    TEMPS RÉEL CLOUD
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
@@ -2456,20 +2714,31 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {students.map((student) => (
-                <InstructorCohortRealtimeMonitor
-                  key={student.studentId}
-                  userId={student.studentId}
-                  courseId="telecom-fintech-masterclass"
-                  studentName={student.studentName}
-                  studentEmail={student.studentEmail}
-                />
-              ))}
+              {students.map((student) => {
+                const matchedEnrollment = enrollments.find(
+                  e => (e.email && student.studentEmail && e.email.toLowerCase() === student.studentEmail.toLowerCase()) ||
+                       e.studentName === student.studentName
+                );
+                const resolvedCourseId =
+                  (student as any).courseId ||
+                  matchedEnrollment?.courseId ||
+                  instructorCourses[0]?.id ||
+                  '';
+                return (
+                  <InstructorCohortRealtimeMonitor
+                    key={`${student.studentId}_${resolvedCourseId}`}
+                    userId={student.studentId}
+                    courseId={resolvedCourseId}
+                    studentName={student.studentName}
+                    studentEmail={student.studentEmail}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
       ) : activeTab === 'VIRAL_FUNNELS' ? (
-        /* VUE TUNNELS VIRAUX & SOCIAL BLAST */
+        /* VUE TUNNELS VIRAUX & SOCIAL BLAST (BASÉ SUR LES VRAIS COURS DU FORMATEUR) */
         <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
           <div className="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -2486,7 +2755,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Lancez des ventes flash, configurez des bonus irrésistibles et diffusez en 1-clic sur WhatsApp &amp; réseaux.
+                  Lancez des ventes flash sur vos propres formations et diffusez en 1-clic sur WhatsApp &amp; réseaux.
                 </p>
               </div>
             </div>
@@ -2504,31 +2773,76 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
             </button>
           </div>
 
-          <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
-            <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Chargement du configurateur...</div>}>
-              <SocialBlastHub
-                campaign={{
-                  id: 'camp_demo_masterclass',
-                  courseId: 'telecom-fintech-masterclass',
-                  courseTitle: 'Masterclass Télécom & Fintech UEMOA',
-                  campaignName: 'Vente Flash 48H • Spéciale Rentrée',
-                  headline: 'Maîtrisez les flux Mobile Money et la vente hybride POS',
-                  subheadline: 'Accès instantané avec 4 bonus exclusifs',
-                  originalPrice: 75000,
-                  discountPrice: 45000,
-                  currency: 'FCFA',
-                  deadlineTimestamp: Date.now() + 48 * 3600 * 1000,
-                  ctaType: 'HYBRID',
-                  ctaLabel: 'Rejoindre la promotion maintenant',
-                  bonusItems: [
-                    { id: 'b1', title: 'Pack Code Source Sync Offline', valueCFA: 25000 },
-                    { id: 'b2', title: 'Support VIP WhatsApp 30 jours', valueCFA: 35000 }
-                  ]
+          {instructorCourses.length === 0 ? (
+            <div className="p-10 text-center rounded-3xl bg-slate-900/60 border border-dashed border-slate-800 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
+                <Megaphone className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-white">Publiez d'abord une formation pour lancer une campagne</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Vos campagnes promotionnelles et liens WhatsApp sont générés automatiquement à partir de vos vrais cours publiés.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setActiveTab('COURSE_CREATE');
                 }}
-                onNavigateToFunnel={() => setIsFunnelBuilderOpen(true)}
-              />
-            </React.Suspense>
-          </div>
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition cursor-pointer inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Créer ma première formation</span>
+              </button>
+            </div>
+          ) : (() => {
+            const activePromoCourse =
+              instructorCourses.find(c => String(c.id) === selectedPromoCourseId) ||
+              instructorCourses[0];
+            const coursePrice = Number(activePromoCourse?.price ?? activePromoCourse?.price_cfa ?? 0) || 0;
+            const discounted = coursePrice > 0 ? Math.round(coursePrice * 0.8) : 0;
+            return (
+              <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-4">
+                {instructorCourses.length > 1 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                    <span className="text-xs font-bold text-slate-300">Formation ciblée par la campagne :</span>
+                    <select
+                      value={String(activePromoCourse.id)}
+                      onChange={(e) => setSelectedPromoCourseId(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-amber-500"
+                    >
+                      {instructorCourses.map((c) => (
+                        <option key={String(c.id)} value={String(c.id)}>
+                          {c.title || 'Formation sans titre'} ({(Number(c.price ?? c.price_cfa ?? 0)).toLocaleString('fr-FR')} FCFA)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Chargement du configurateur...</div>}>
+                  <SocialBlastHub
+                    campaign={{
+                      id: `camp_${activePromoCourse.id}`,
+                      courseId: String(activePromoCourse.id),
+                      courseTitle: activePromoCourse.title || 'Ma Formation',
+                      campaignName: `Offre Spéciale • ${activePromoCourse.title || 'Ma Formation'}`,
+                      headline: activePromoCourse.subtitle || activePromoCourse.description || `Rejoignez la formation ${activePromoCourse.title || ''}`,
+                      subheadline: 'Accès immédiat au Campus Privé + Certificat officiel QR Code',
+                      originalPrice: coursePrice,
+                      discountPrice: discounted,
+                      currency: 'FCFA',
+                      deadlineTimestamp: Date.now() + 48 * 3600 * 1000,
+                      ctaType: 'HYBRID',
+                      ctaLabel: 'Rejoindre la formation maintenant',
+                      bonusItems: []
+                    }}
+                    onNavigateToFunnel={() => setIsFunnelBuilderOpen(true)}
+                  />
+                </React.Suspense>
+              </div>
+            );
+          })()}
         </div>
       ) : activeTab === 'INTEGRATIONS' ? (
         /* VUE INTÉGRATIONS & CONNECTEURS LMS */
@@ -2564,7 +2878,10 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
           <KycSection
             profile={profile}
             onUpdateProfile={handleUpdateProfile}
+            onSelectKycFile={setKycFile}
             onSubmitKyc={handleSubmitKyc}
+            isSubmittingKyc={isSubmittingKyc}
+            kycError={kycError}
           />
         </div>
       )}
@@ -2634,17 +2951,26 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
               <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h4 className="text-xs font-bold text-white">0 devoir en attente de correction</h4>
+              <h4 className="text-xs font-bold text-white">
+                {pendingSubmissionsCount > 0
+                  ? `${pendingSubmissionsCount} devoir${pendingSubmissionsCount > 1 ? 's' : ''} en attente de correction`
+                  : '0 devoir en attente de correction'}
+              </h4>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Dès qu'un étudiant téléverse un travail pratique ou un examen dans votre campus, il apparaîtra ici instantanément. Vous pourrez lui attribuer une note sur 20 et lui enregistrer un feedback vocal interactif.
+                {pendingSubmissionsCount > 0
+                  ? 'Ouvrez l\'onglet Corrections pour sélectionner une copie, attribuer une note sur 20 et enregistrer votre feedback.'
+                  : 'Dès qu\'un étudiant téléverse un travail pratique ou un examen dans votre campus, il apparaîtra ici instantanément. Vous pourrez lui attribuer une note sur 20 et lui enregistrer un feedback vocal interactif.'}
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setIsCorrectionDrawerOpen(false)}
+              onClick={() => {
+                setIsCorrectionDrawerOpen(false);
+                if (pendingSubmissionsCount > 0) setActiveTab('CORRECTIONS');
+              }}
               className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer"
             >
-              Compris
+              {pendingSubmissionsCount > 0 ? 'Ouvrir l\'onglet Corrections' : 'Compris'}
             </button>
           </div>
         </div>
@@ -2668,6 +2994,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 onClick={() => {
                   setIsWithdrawalModalOpen(false);
                   setWithdrawalSuccess(false);
+                  setWithdrawalError(null);
                 }}
                 className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
               >
@@ -2680,15 +3007,16 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                 <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
-                <h4 className="text-base font-black text-white">Demande de Retrait Transmise !</h4>
+                <h4 className="text-base font-black text-white">Demande de Retrait Enregistrée !</h4>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Votre demande a été envoyée au Super Admin pour décaissement direct sur votre numéro {withdrawalPhone}. Les fonds seront crédités sous quelques minutes.
+                  Votre demande a été enregistrée sur le Cloud et transmise pour décaissement direct sur votre numéro {withdrawalPhone}. Votre courbe des retraits et votre solde ont été mis à jour.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     setIsWithdrawalModalOpen(false);
                     setWithdrawalSuccess(false);
+                    setWithdrawalError(null);
                   }}
                   className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer"
                 >
@@ -2712,6 +3040,13 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                         ? 'Votre KYC est en cours d\'examen par le Super Admin. Le décaissement sera exécuté dès validation.'
                         : 'Veuillez valider votre KYC dans l\'onglet "Profil & KYC" pour recevoir vos paiements.'}
                     </span>
+                  </div>
+                )}
+
+                {withdrawalError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{withdrawalError}</span>
                   </div>
                 )}
 
@@ -2748,19 +3083,25 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
 
                 <button
                   type="button"
-                  onClick={() => {
-                    playValidationBeep();
-                    setWithdrawalSuccess(true);
-                  }}
-                  disabled={financials.soldeDisponible <= 0 || !withdrawalPhone.trim()}
+                  onClick={handleConfirmWithdrawal}
+                  disabled={isSubmittingWithdrawal || financials.soldeDisponible < 1000 || !withdrawalPhone.trim()}
                   className={`w-full py-3 rounded-xl text-xs font-black transition cursor-pointer shadow-lg flex items-center justify-center gap-2 ${
-                    financials.soldeDisponible > 0 && withdrawalPhone.trim()
+                    !isSubmittingWithdrawal && financials.soldeDisponible >= 1000 && withdrawalPhone.trim()
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-500 hover:to-teal-500 shadow-emerald-950/50'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   }`}
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Confirmer la demande de retrait</span>
+                  {isSubmittingWithdrawal ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Enregistrement de la demande...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Confirmer la demande de retrait</span>
+                    </>
+                  )}
                 </button>
               </div>
             )}

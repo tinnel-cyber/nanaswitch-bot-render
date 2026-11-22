@@ -3309,12 +3309,56 @@ async function startServer() {
     return res.json({ success: true, payout: record });
   });
 
-  app.get('/api/payouts', (req, res) => {
+  app.get('/api/payouts', async (req, res) => {
     const universeId = String(req.query.universeId || '').trim();
+    const userId = String(req.query.userId || '').trim();
     let list = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
+
+    if (supabaseAdmin && (universeId || userId)) {
+      try {
+        let query = supabaseAdmin
+          .from('wallet_transactions')
+          .select('*')
+          .eq('type', 'WITHDRAWAL')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (universeId) query = query.eq('universe_id', universeId);
+        else if (userId) query = query.eq('user_id', userId);
+        const { data, error } = await query;
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const seenIds = new Set(list.map((p: any) => String(p.id)));
+          for (const row of data) {
+            if (!seenIds.has(String(row.id))) {
+              const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+              list.push({
+                id: row.id,
+                universeId: row.universe_id || meta.universeId || '',
+                userId: row.user_id || meta.userId || null,
+                amount: Number(row.amount) || 0,
+                fee: Number(meta.fee) || 0,
+                netAmount: Number(meta.netAmount) || Number(row.amount) || 0,
+                currency: meta.currency || 'XOF',
+                operatorId: meta.operatorId || '',
+                operatorName: meta.operatorName || 'Mobile Money',
+                destination: meta.destination || '',
+                beneficiary: meta.beneficiary || '',
+                mode: meta.mode || 'PRODUCTION',
+                status: row.status || 'PENDING',
+                createdAt: row.created_at || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
     if (universeId) {
       list = list.filter((p: any) => String(p.universeId || '') === universeId);
     }
+    if (userId) {
+      list = list.filter((p: any) => String(p.userId || '') === userId || String(p.universeId || '') === `instructor_${userId}`);
+    }
+    list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     return res.json({ success: true, payouts: list.slice(0, 100) });
   });
 
@@ -5991,6 +6035,186 @@ async function startServer() {
     }
 
     return res.json({ success: true, destination: dest });
+  });
+
+  // ============================================================================
+  // 2I. PROFIL & KYC FORMATEUR PERSISTANT + MÉTRIQUES RÉELLES (WEBINAIRES, VISITES, RETRAITS)
+  // ============================================================================
+  const INSTRUCTOR_KYC_FILE = path.join(DATA_DIR, 'instructor_kyc_profiles.json');
+
+  app.get('/api/instructor/kyc', async (req, res) => {
+    const instructorId = String(req.query.instructorId || '').trim();
+    const email = String(req.query.email || '').trim().toLowerCase();
+    if (!instructorId && !email) {
+      return res.status(400).json({ success: false, error: 'instructorId ou email requis' });
+    }
+
+    const list = readJsonArrayFile(INSTRUCTOR_KYC_FILE);
+    let found = list.find((p: any) =>
+      (instructorId && String(p.instructorId) === instructorId) ||
+      (email && String(p.email || '').toLowerCase() === email)
+    );
+
+    if (!found && supabaseAdmin) {
+      try {
+        const key = `instructor_kyc_${instructorId || email}`;
+        const { data } = await supabaseAdmin
+          .from('app_registry')
+          .select('config_json, value')
+          .eq('key', key)
+          .maybeSingle();
+        if (data?.config_json || data?.value) {
+          found = data.config_json || data.value;
+        }
+      } catch {}
+    }
+
+    return res.json({ success: true, profile: found || null });
+  });
+
+  app.post('/api/instructor/kyc', async (req, res) => {
+    const {
+      instructorId = '',
+      fullName = '',
+      email = '',
+      phone = '',
+      teachingDomain = '',
+      computerSkill = 'intermediaire',
+      kycDocName = '',
+      kycDocSize = '',
+      kycDocUrl = '',
+      submitForValidation = true,
+    } = req.body || {};
+
+    const cleanId = String(instructorId || email || '').trim();
+    if (!cleanId) {
+      return res.status(400).json({ success: false, error: 'Identifiant formateur requis.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const list = readJsonArrayFile(INSTRUCTOR_KYC_FILE);
+    const existingIdx = list.findIndex((p: any) =>
+      (instructorId && String(p.instructorId) === String(instructorId)) ||
+      (email && String(p.email || '').toLowerCase() === String(email).toLowerCase())
+    );
+    const existing = existingIdx >= 0 ? list[existingIdx] : {};
+
+    const record = {
+      ...existing,
+      instructorId: String(instructorId || existing.instructorId || cleanId),
+      fullName: String(fullName || existing.fullName || '').trim(),
+      email: String(email || existing.email || '').trim(),
+      phone: String(phone || existing.phone || '').trim(),
+      teachingDomain: String(teachingDomain || existing.teachingDomain || '').trim(),
+      computerSkill: String(computerSkill || existing.computerSkill || 'intermediaire'),
+      kycDocName: String(kycDocName || existing.kycDocName || ''),
+      kycDocSize: String(kycDocSize || existing.kycDocSize || ''),
+      kycDocUrl: String(kycDocUrl || existing.kycDocUrl || ''),
+      kycStatus: submitForValidation
+        ? (existing.kycStatus === 'valide' ? 'valide' : 'pending_validation')
+        : (existing.kycStatus || 'non_soumis'),
+      kycSubmittedAt: submitForValidation ? nowIso : (existing.kycSubmittedAt || null),
+      updatedAt: nowIso,
+    };
+
+    if (existingIdx >= 0) {
+      list[existingIdx] = record;
+    } else {
+      list.unshift(record);
+    }
+    writeJsonArrayFile(INSTRUCTOR_KYC_FILE, list);
+
+    if (supabaseAdmin) {
+      try {
+        const key = `instructor_kyc_${record.instructorId}`;
+        await supabaseAdmin.from('app_registry').upsert({
+          key,
+          name: `KYC Formateur ${record.fullName || record.instructorId}`,
+          module_key: 'instructor_kyc',
+          config_json: record,
+          value: record,
+          updated_at: nowIso,
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, profile: record });
+  });
+
+  app.get('/api/instructor/metrics', async (req, res) => {
+    const instructorId = String(req.query.instructorId || '').trim();
+    const courseIdsParam = String(req.query.courseIds || '').trim();
+    const courseIds = courseIdsParam ? courseIdsParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    // 1. Webinaires réels
+    let webinars = readJsonArrayFile(LMS_WEBINARS_FILE);
+    if (instructorId) {
+      webinars = webinars.filter((w: any) => !w.merchantId || String(w.merchantId) === instructorId);
+    }
+
+    // 2. Visites réelles (clics cumulés des liens trackés / destinations de cours)
+    let destinations = readJsonArrayFile(COURSE_DESTINATIONS_FILE);
+    if (courseIds.length > 0) {
+      destinations = destinations.filter((d: any) => courseIds.includes(String(d.courseId || '')));
+    }
+    let totalClicks = destinations.reduce((sum: number, d: any) => sum + (Number(d.clicksCount) || 0), 0);
+
+    if (supabaseAdmin && courseIds.length > 0) {
+      try {
+        const { data: cloudDests } = await supabaseAdmin
+          .from('course_destinations')
+          .select('tracking_code, clicks_count')
+          .in('course_id', courseIds);
+        if (Array.isArray(cloudDests) && cloudDests.length > 0) {
+          const cloudClicks = cloudDests.reduce((s: number, r: any) => s + (Number(r.clicks_count) || 0), 0);
+          totalClicks = Math.max(totalClicks, cloudClicks);
+        }
+      } catch {}
+    }
+
+    // 3. Retraits réels du formateur
+    let payouts = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
+    if (instructorId) {
+      payouts = payouts.filter((p: any) =>
+        String(p.userId || '') === instructorId ||
+        String(p.universeId || '') === `instructor_${instructorId}` ||
+        String(p.universeId || '') === instructorId
+      );
+    }
+    if (supabaseAdmin && instructorId) {
+      try {
+        const { data: cloudPayouts } = await supabaseAdmin
+          .from('wallet_transactions')
+          .select('*')
+          .eq('type', 'WITHDRAWAL')
+          .or(`user_id.eq.${instructorId},universe_id.eq.instructor_${instructorId}`)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (Array.isArray(cloudPayouts) && cloudPayouts.length > 0) {
+          const seen = new Set(payouts.map((p: any) => String(p.id)));
+          for (const row of cloudPayouts) {
+            if (!seen.has(String(row.id))) {
+              const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+              payouts.push({
+                id: row.id,
+                amount: Number(row.amount) || 0,
+                status: row.status || 'PENDING',
+                destination: meta.destination || '',
+                operatorName: meta.operatorName || 'Mobile Money',
+                createdAt: row.created_at || new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      webinarsCount: webinars.length,
+      totalDestinationClicks: totalClicks,
+      payouts: payouts.slice(0, 100),
+    });
   });
 
   // 3. Validation ou Rejet par le Super Admin
