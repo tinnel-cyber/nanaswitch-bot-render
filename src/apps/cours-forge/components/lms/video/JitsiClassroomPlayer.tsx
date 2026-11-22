@@ -33,16 +33,16 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
   const [isCompleted, setIsCompleted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Éradique la limite 5 minutes + auth modérateur de meet.jit.si :
-  // Si aucun domaine auto-hébergé personnalisé n'est défini (ou si c'est meet.jit.si),
-  // on bascule automatiquement vers notre salle native interne /wameet sans limite de temps !
+  // Tous les Lives du Campus Privé font appel à notre Thème dédié au Live (/live/:room)
+  // (sauf si le formateur a configuré son propre serveur Jitsi auto-hébergé personnalisé)
   const sanitizedRoom = encodeURIComponent(roomName || 'nana-academy-room');
   const encodedName = encodeURIComponent(studentName);
   const cleanDomain = (serverDomain || '').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
-  const useInternalWaMeet = !cleanDomain || cleanDomain === 'meet.jit.si';
+  const useDedicatedLiveTheme = !cleanDomain || cleanDomain === 'meet.jit.si';
 
-  const embedUrl = useInternalWaMeet
-    ? `/wameet?room=${sanitizedRoom}&embed=1&name=${encodedName}&title=${encodeURIComponent(title || 'Session Live')}`
+  const liveThemePageUrl = `/live/${sanitizedRoom}`;
+  const embedUrl = useDedicatedLiveTheme
+    ? `${liveThemePageUrl}?embed=1&name=${encodedName}&title=${encodeURIComponent(title || 'Session Live')}`
     : `https://${cleanDomain}/${sanitizedRoom}#userInfo.displayName="${encodedName}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true`;
 
   const handleToggleFullscreen = () => {
@@ -72,10 +72,10 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
       {/* Barre d'état supérieure Salle Live */}
       <div className="shrink-0 px-3 sm:px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-3 z-10">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
           <div className="flex items-center gap-2 truncate">
-            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              {useInternalWaMeet ? 'Salle WaMeet • Sans Limite' : `Serveur Privé • ${cleanDomain}`}
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              {useDedicatedLiveTheme ? 'Thème Live Dédié • Direct' : `Serveur Privé • ${cleanDomain}`}
             </span>
             <span className="text-xs font-bold text-white truncate max-w-xs sm:max-w-md">
               {title}
@@ -85,13 +85,14 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
 
         <div className="flex items-center gap-2">
           <a
-            href={embedUrl}
+            href={useDedicatedLiveTheme ? liveThemePageUrl : embedUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
-            title="Ouvrir la salle dans un nouvel onglet"
+            className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] flex items-center gap-1 transition"
+            title="Ouvrir dans notre Thème dédié au Live"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Thème Live</span>
           </a>
 
           {!isCompleted ? (

@@ -614,9 +614,43 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
               {activeChannel?.description || activeGroup?.description || 'Échanges en temps réel synchronisés dans le Cloud.'}
             </p>
           </div>
-          <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Sync Cloud Live</span>
+          <div className="flex items-center gap-2">
+            {activeChannel && !accessLockCode && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/live/launch-theme-session', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        source: 'campus_social',
+                        channelId: activeChannel.id,
+                        courseId: effectiveCourseId,
+                        title: `Live #${activeChannel.name} — ${activeGroup?.name || courseTitle}`,
+                        hostId: effectiveUserId,
+                        hostName: currentUserName
+                      })
+                    });
+                    const json = await res.json().catch(() => null);
+                    const url = json?.liveThemeUrl || `/live/${encodeURIComponent(activeChannel.id)}`;
+                    flashToast('🔴 Session Live ouverte dans le Thème dédié au Live !');
+                    loadChannelMessages();
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  } catch {
+                    window.open(`/live/${encodeURIComponent(activeChannel.id)}`, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-[11px] flex items-center gap-1.5 shadow-md shadow-rose-500/25 cursor-pointer transition"
+              >
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>Live (Thème Live)</span>
+              </button>
+            )}
+            <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Sync Cloud Live</span>
+            </div>
           </div>
         </div>
 
@@ -797,6 +831,61 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
                       </div>
 
                       <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+
+                      {(msg as any).courseCard && (
+                        <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-950/80 to-slate-950 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                              🎓 Formation Officielle • {formatCFA((msg as any).courseCard.price || 0)}
+                            </span>
+                            <h5 className="text-sm font-black text-white truncate mt-0.5">
+                              {(msg as any).courseCard.title}
+                            </h5>
+                            {(msg as any).courseCard.description && (
+                              <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">
+                                {(msg as any).courseCard.description}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={(msg as any).courseCard.campusUrl || '/student/dashboard'}
+                              className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] transition"
+                            >
+                              Ouvrir le Cours
+                            </a>
+                            <a
+                              href={(msg as any).courseCard.liveThemeUrl || `/live/live-${(msg as any).courseCard.courseId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-[11px] transition"
+                            >
+                              🔴 Thème Live
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {(msg as any).liveCard && (
+                        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-950/70 to-slate-950 border border-rose-500/40 flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-rose-300">
+                              🔴 Session Live Active — Thème dédié au Live
+                            </span>
+                            <h5 className="text-sm font-black text-white truncate mt-0.5">
+                              {(msg as any).liveCard.title}
+                            </h5>
+                          </div>
+                          <a
+                            href={(msg as any).liveCard.liveThemeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-md shadow-rose-500/25 transition shrink-0"
+                          >
+                            Rejoindre le Live →
+                          </a>
+                        </div>
+                      )}
 
                       {msg.attachmentUrl && (
                         <img

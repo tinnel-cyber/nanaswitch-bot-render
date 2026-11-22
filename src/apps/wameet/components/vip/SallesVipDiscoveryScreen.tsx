@@ -464,17 +464,43 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        onSelectRoom(room.id);
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#4169E1] hover:bg-[#3154b3] text-white font-black text-xs transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-95"
-                    >
-                      <span>Entrer dans la Salle VIP</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </button>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          playValidationBeep();
+                          try {
+                            await fetch('/api/live/launch-theme-session', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                source: 'vip_room',
+                                roomId: room.id,
+                                title: room.title,
+                                hostName: room.expertName
+                              })
+                            });
+                          } catch {}
+                          window.open(`/live/${encodeURIComponent(room.id)}`, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-rose-500/20 active:scale-95"
+                      >
+                        <Radio className="w-4 h-4 animate-pulse" />
+                        <span>Ouvrir le Live (Thème Live)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          onSelectRoom(room.id);
+                        }}
+                        className="w-full py-2.5 px-4 rounded-xl bg-[#4169E1] hover:bg-[#3154b3] text-white font-black text-xs transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 active:scale-95"
+                      >
+                        <span>Entrer dans la Salle VIP</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

@@ -4966,10 +4966,312 @@ async function startServer() {
       return res.json({
         success: true,
         webinar: webinarRecord,
+        liveThemeUrl: `/live/${encodeURIComponent(cleanId)}`,
         syncedToCourse,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur synchronisation webinaire.' });
+    }
+  });
+
+  // ============================================================================
+  // 2M. PONT DIRECT COURSE FORGE → CAMPUS SOCIAL (SALONS/ROOMS) & SALLES VIP
+  //     + LANCEMENT UNIFIÉ DE TOUS LES LIVES VERS LE THÈME DÉDIÉ (/live/:slug)
+  // ============================================================================
+  const LMS_VIP_ROOM_COURSES_FILE = path.join(DATA_DIR, 'lms_vip_room_courses.json');
+
+  const DEFAULT_VIP_ROOMS_DIRECTORY = [
+    {
+      id: 'salle-vip-fintech-uemoa',
+      title: 'Salle VIP Fintech & Mobile Money UEMOA',
+      category: 'Fintech & Télécoms',
+      liveThemeUrl: '/live/salle-vip-fintech-uemoa',
+    },
+    {
+      id: 'salle-vip-ecommerce-afrique',
+      title: 'Salle VIP E-Commerce & Live Shopping Pro',
+      category: 'E-Commerce & Vente',
+      liveThemeUrl: '/live/salle-vip-ecommerce-afrique',
+    },
+    {
+      id: 'salle-vip-coaching-elite',
+      title: 'Salle VIP Coaching & Mastermind Formateurs',
+      category: 'Coaching & Académie',
+      liveThemeUrl: '/live/salle-vip-coaching-elite',
+    },
+  ];
+
+  // GET /api/lms/social/publish-targets — Retourne tous les Salons/Rooms Campus Social + Salles VIP disponibles
+  app.get('/api/lms/social/publish-targets', async (req, res) => {
+    const courseId = String(req.query?.courseId || 'global').trim();
+    ensureDefaultCampusWorkspace('global');
+    if (courseId && courseId !== 'global') {
+      ensureDefaultCampusWorkspace(courseId);
+    }
+
+    const groups = readJsonArrayFile(CAMPUS_GROUPS_FILE);
+    const groupById = new Map(groups.map((g: any) => [g.id, g]));
+    const channels = readJsonArrayFile(CAMPUS_CHANNELS_FILE).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      groupId: c.groupId,
+      groupName: groupById.get(c.groupId)?.name || 'Campus Social',
+      groupVisibility: groupById.get(c.groupId)?.visibility || 'public',
+      isPremium: Boolean(c.isPremium),
+      subscriptionPrice: Number(c.subscriptionPrice) || 0,
+    }));
+
+    const vipRoomsMap = new Map<string, any>();
+    for (const r of DEFAULT_VIP_ROOMS_DIRECTORY) {
+      vipRoomsMap.set(r.id, r);
+    }
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('live_sessions')
+          .select('id, title, description, status')
+          .limit(30);
+        if (Array.isArray(data)) {
+          for (const row of data) {
+            if (!vipRoomsMap.has(row.id)) {
+              vipRoomsMap.set(row.id, {
+                id: row.id,
+                title: row.title || `Salle VIP ${row.id}`,
+                category: 'Salle VIP Live',
+                liveThemeUrl: `/live/${encodeURIComponent(row.id)}`,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      channels,
+      vipRooms: Array.from(vipRoomsMap.values()),
+    });
+  });
+
+  // POST /api/lms/courses/publish-to-social — Publie un cours depuis Course Forge dans les Salons/Rooms & Salles VIP
+  app.post('/api/lms/courses/publish-to-social', async (req, res) => {
+    try {
+      const {
+        courseId = '',
+        courseTitle = 'Nouvelle Formation',
+        description = '',
+        price = 15000,
+        thumbnailUrl = '',
+        instructorId = 'instructor',
+        instructorName = 'Formateur',
+        announcementText = '',
+        targetChannelIds = [],
+        targetVipRoomIds = [],
+      } = req.body || {};
+
+      const cleanCourseId = String(courseId || '').trim();
+      if (!cleanCourseId) {
+        return res.status(400).json({ success: false, error: 'courseId requis.' });
+      }
+
+      const channelIds: string[] = Array.isArray(targetChannelIds) ? targetChannelIds.map(String) : [];
+      const vipRoomIds: string[] = Array.isArray(targetVipRoomIds) ? targetVipRoomIds.map(String) : [];
+      if (channelIds.length === 0 && vipRoomIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'Sélectionnez au moins un salon ou une Salle VIP.' });
+      }
+
+      const nowIso = new Date().toISOString();
+      const allChannels = readJsonArrayFile(CAMPUS_CHANNELS_FILE);
+      const allMessages = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+      const publishedChannels: string[] = [];
+
+      const courseCard = {
+        courseId: cleanCourseId,
+        title: String(courseTitle).trim(),
+        description: String(description || '').trim(),
+        price: Math.max(0, Number(price) || 0),
+        thumbnailUrl: String(thumbnailUrl || ''),
+        campusUrl: '/student/dashboard',
+        liveThemeUrl: `/live/${encodeURIComponent(`live-${cleanCourseId}`)}`,
+      };
+
+      const messageText =
+        String(announcementText || '').trim() ||
+        `🎓 Nouvelle formation publiée : **${courseCard.title}** ! Cliquez ci-dessous pour découvrir le programme et vous inscrire immédiatement.`;
+
+      for (const chId of channelIds) {
+        const ch = allChannels.find((c: any) => c.id === chId);
+        const msg = {
+          id: `msg_${crypto.randomBytes(5).toString('hex')}`,
+          courseId: ch?.courseId || cleanCourseId,
+          groupId: ch?.groupId || 'global',
+          channelId: chId,
+          authorId: String(instructorId || 'instructor'),
+          authorName: String(instructorName || 'Formateur'),
+          authorRole: 'INSTRUCTOR',
+          authorAvatar: '',
+          content: messageText,
+          topicTag: 'FORMATION',
+          attachmentUrl: courseCard.thumbnailUrl,
+          courseCard,
+          likesCount: 0,
+          likedBy: [],
+          commentsCount: 0,
+          comments: [],
+          isPinned: true,
+          createdAt: nowIso,
+        };
+        allMessages.unshift(msg);
+        publishedChannels.push(chId);
+
+        if (supabaseAdmin) {
+          try {
+            await supabaseAdmin.from('campus_messages').insert({
+              id: msg.id,
+              course_id: msg.courseId,
+              group_id: msg.groupId,
+              channel_id: msg.channelId,
+              author_id: msg.authorId,
+              author_name: msg.authorName,
+              author_role: msg.authorRole,
+              content: msg.content,
+              topic_tag: msg.topicTag,
+              attachment_url: msg.attachmentUrl || null,
+              is_pinned: true,
+              created_at: nowIso,
+            });
+          } catch {}
+        }
+      }
+
+      if (publishedChannels.length > 0) {
+        writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, allMessages);
+      }
+
+      // Publication dans les Salles VIP sélectionnées
+      const vipLinks = readJsonArrayFile(LMS_VIP_ROOM_COURSES_FILE);
+      for (const vipId of vipRoomIds) {
+        const entry = {
+          id: `vipc_${crypto.randomBytes(4).toString('hex')}`,
+          vipRoomId: vipId,
+          courseId: cleanCourseId,
+          courseTitle: courseCard.title,
+          price: courseCard.price,
+          description: courseCard.description,
+          thumbnailUrl: courseCard.thumbnailUrl,
+          instructorName: String(instructorName || 'Formateur'),
+          announcementText: messageText,
+          liveThemeUrl: `/live/${encodeURIComponent(vipId)}`,
+          publishedAt: nowIso,
+        };
+        vipLinks.unshift(entry);
+      }
+      if (vipRoomIds.length > 0) {
+        writeJsonArrayFile(LMS_VIP_ROOM_COURSES_FILE, vipLinks);
+      }
+
+      return res.json({
+        success: true,
+        publishedChannelsCount: publishedChannels.length,
+        publishedVipRoomsCount: vipRoomIds.length,
+        courseCard,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur diffusion cours.' });
+    }
+  });
+
+  // POST /api/live/launch-theme-session — Lance un Live depuis Salle VIP, Campus Social ou Campus Privé
+  // et renvoie toujours l'URL du Thème dédié au Live (/live/:slug)
+  app.post('/api/live/launch-theme-session', async (req, res) => {
+    try {
+      const {
+        source = 'campus_social', // 'vip_room' | 'campus_social' | 'campus_private'
+        roomId = '',
+        channelId = '',
+        courseId = '',
+        title = 'Session Live Interactive',
+        hostId = 'host',
+        hostName = 'Formateur',
+      } = req.body || {};
+
+      const slug =
+        String(roomId || channelId || courseId || `live-${Date.now().toString(36)}`)
+          .trim()
+          .replace(/[^a-zA-Z0-9_-]/g, '-');
+      const liveThemeUrl = `/live/${encodeURIComponent(slug)}`;
+      const nowIso = new Date().toISOString();
+
+      // Enregistre la session dans lms_webinars.json + live_sessions
+      const webinarRecord = {
+        id: slug,
+        merchantId: String(hostId || 'default'),
+        title: String(title).trim(),
+        description: `Session en direct (${source}) animée par ${hostName}.`,
+        scheduledAt: nowIso,
+        durationMinutes: 90,
+        platform: 'live_theme',
+        meetingUrl: liveThemeUrl,
+        liveThemeUrl,
+        source,
+        linkedCourseId: String(courseId || ''),
+        updatedAt: nowIso,
+      };
+      const existing = readJsonArrayFile(LMS_WEBINARS_FILE).filter((w: any) => w.id !== slug);
+      existing.unshift(webinarRecord);
+      writeJsonArrayFile(LMS_WEBINARS_FILE, existing);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('live_sessions').upsert({
+            id: slug,
+            tenant_id: String(hostId || 'default'),
+            host_id: String(hostId || 'host'),
+            title: webinarRecord.title,
+            description: webinarRecord.description,
+            is_live: true,
+            status: 'live',
+            updated_at: nowIso,
+          });
+        } catch {}
+      }
+
+      // Si lancé depuis un salon du Campus Social, publie automatiquement une carte Live cliquable dans le salon
+      if (channelId) {
+        const allMessages = readJsonArrayFile(LMS_CAMPUS_CHAT_FILE);
+        allMessages.unshift({
+          id: `msg_${crypto.randomBytes(5).toString('hex')}`,
+          courseId: String(courseId || 'global'),
+          channelId: String(channelId),
+          authorId: String(hostId || 'host'),
+          authorName: String(hostName || 'Formateur'),
+          authorRole: 'INSTRUCTOR',
+          content: `🔴 **LIVE EN COURS : ${webinarRecord.title}** — Rejoignez la salle en direct dans notre Thème Live !`,
+          topicTag: 'LIVE',
+          liveCard: {
+            slug,
+            title: webinarRecord.title,
+            liveThemeUrl,
+            source,
+          },
+          likesCount: 0,
+          likedBy: [],
+          commentsCount: 0,
+          comments: [],
+          isPinned: true,
+          createdAt: nowIso,
+        });
+        writeJsonArrayFile(LMS_CAMPUS_CHAT_FILE, allMessages);
+      }
+
+      return res.json({
+        success: true,
+        slug,
+        liveThemeUrl,
+        session: webinarRecord,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lancement Thème Live.' });
     }
   });
 

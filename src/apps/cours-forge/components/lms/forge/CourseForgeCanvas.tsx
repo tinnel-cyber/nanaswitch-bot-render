@@ -408,6 +408,65 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   // Toast de confirmation
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
 
+  // Modale de diffusion directe du cours vers Campus Social (Salons/Rooms) & Salles VIP
+  const [isSocialPublishOpen, setIsSocialPublishOpen] = useState(false);
+  const [socialTargets, setSocialTargets] = useState<{ channels: any[]; vipRooms: any[] }>({ channels: [], vipRooms: [] });
+  const [selectedSocialChannels, setSelectedSocialChannels] = useState<string[]>([]);
+  const [selectedVipRooms, setSelectedVipRooms] = useState<string[]>([]);
+  const [socialAnnouncementText, setSocialAnnouncementText] = useState('');
+  const [isPublishingToSocial, setIsPublishingToSocial] = useState(false);
+
+  const handleOpenSocialPublish = async () => {
+    setIsSocialPublishOpen(true);
+    try {
+      const res = await fetch(`/api/lms/social/publish-targets?courseId=${encodeURIComponent(activeCourseId || 'global')}`);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setSocialTargets({
+          channels: Array.isArray(json.channels) ? json.channels : [],
+          vipRooms: Array.isArray(json.vipRooms) ? json.vipRooms : []
+        });
+      }
+    } catch {}
+  };
+
+  const handleConfirmPublishToSocial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedSocialChannels.length === 0 && selectedVipRooms.length === 0) return;
+    setIsPublishingToSocial(true);
+    try {
+      const res = await fetch('/api/lms/courses/publish-to-social', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: activeCourseId,
+          courseTitle: activeCourseTitle,
+          description: (courseGlobalSettings as any)?.description || '',
+          price: Number((courseGlobalSettings as any)?.price) || 15000,
+          thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
+          instructorId: currentUser?.id || 'instructor',
+          instructorName: currentUser?.name || currentUser?.storeName || 'Formateur',
+          announcementText: socialAnnouncementText.trim(),
+          targetChannelIds: selectedSocialChannels,
+          targetVipRoomIds: selectedVipRooms
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setIsSocialPublishOpen(false);
+        setSelectedSocialChannels([]);
+        setSelectedVipRooms([]);
+        setSocialAnnouncementText('');
+        setSavedNotification(
+          `📢 "${activeCourseTitle}" diffusé dans ${json.publishedChannelsCount} salon(s) Campus Social et ${json.publishedVipRoomsCount} Salle(s) VIP !`
+        );
+        setTimeout(() => setSavedNotification(null), 5000);
+      }
+    } finally {
+      setIsPublishingToSocial(false);
+    }
+  };
+
   const handleToggleGlobalBranding = () => {
     const nextVal = !globalHideBranding;
     setGlobalHideBranding(nextVal);
@@ -1295,8 +1354,148 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
             <Sparkles className="w-3.5 h-3.5" />
             <span>Publier (Campus + Vitrine)</span>
           </button>
+
+          {/* Diffusion directe vers Campus Social (Salons/Rooms) & Salles VIP */}
+          <button
+            type="button"
+            onClick={handleOpenSocialPublish}
+            className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>Publier Campus Social &amp; VIP</span>
+          </button>
         </div>
       </div>
+
+      {/* Modale de diffusion vers les Salons / Rooms du Campus Social & Salles VIP */}
+      {isSocialPublishOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleConfirmPublishToSocial}
+            className="w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 max-h-[88vh] overflow-y-auto shadow-2xl text-slate-100"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm font-black text-white">📢 Diffuser le Cours dans le Campus Social &amp; Salles VIP</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Cours : <strong className="text-emerald-300">{activeCourseTitle}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSocialPublishOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                Message d&apos;annonce (optionnel)
+              </label>
+              <textarea
+                rows={2}
+                value={socialAnnouncementText}
+                onChange={(e) => setSocialAnnouncementText(e.target.value)}
+                placeholder={`🎓 Nouvelle formation disponible : ${activeCourseTitle} ! Inscrivez-vous dès maintenant...`}
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white resize-none"
+              />
+            </div>
+
+            {/* Salons & Rooms du Campus Social */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-black uppercase tracking-wider text-indigo-300">
+                Salons &amp; Rooms du Campus Social ({socialTargets.channels.length})
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                {socialTargets.channels.map((ch) => {
+                  const checked = selectedSocialChannels.includes(ch.id);
+                  return (
+                    <label
+                      key={ch.id}
+                      className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 cursor-pointer transition ${
+                        checked
+                          ? 'bg-indigo-600/25 border-indigo-400 text-white'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedSocialChannels((prev) =>
+                            prev.includes(ch.id) ? prev.filter((x) => x !== ch.id) : [...prev, ch.id]
+                          )
+                        }
+                      />
+                      <div className="min-w-0">
+                        <div className="font-bold truncate">
+                          {ch.isPremium ? '👑' : '#'} {ch.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">{ch.groupName}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Salles VIP déjà présentes */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+                👑 Salles VIP déjà présentes ({socialTargets.vipRooms.length})
+              </div>
+              <div className="grid grid-cols-1 gap-2 max-h-36 overflow-y-auto">
+                {socialTargets.vipRooms.map((room) => {
+                  const checked = selectedVipRooms.includes(room.id);
+                  return (
+                    <label
+                      key={room.id}
+                      className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 cursor-pointer transition ${
+                        checked
+                          ? 'bg-amber-500/20 border-amber-400 text-white'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelectedVipRooms((prev) =>
+                              prev.includes(room.id) ? prev.filter((x) => x !== room.id) : [...prev, room.id]
+                            )
+                          }
+                        />
+                        <span className="font-bold truncate">{room.title}</span>
+                      </div>
+                      <span className="text-[10px] text-amber-300 shrink-0">{room.category}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsSocialPublishOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={isPublishingToSocial || (selectedSocialChannels.length === 0 && selectedVipRooms.length === 0)}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 text-white font-black text-xs disabled:opacity-40 cursor-pointer"
+              >
+                {isPublishingToSocial ? 'Diffusion...' : 'Diffuser le Cours maintenant'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Barre de notification temporaire */}
       {savedNotification && (
