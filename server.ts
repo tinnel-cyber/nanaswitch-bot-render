@@ -2674,6 +2674,222 @@ async function startServer() {
     return res.redirect(302, rule.targetPath || `/c/${rule.slug}?drawer=true&minimarket=true&source=comment_dm`);
   });
 
+  // ============================================================================
+  // 2F. POINT 5 : AFFILIATION CO-BRANDÉE (CRÉDIT AUTO COMMISSION) & /api/payments/trigger
+  // ============================================================================
+  const AFFILIATE_COMMISSIONS_FILE = path.join(DATA_DIR, 'affiliate_commissions_ledger.json');
+  const MINIMARKET_ORDERS_FILE = path.join(DATA_DIR, 'minimarket_orders.json');
+
+  const getStoredAffiliateCommissions = (): any[] => {
+    try {
+      if (fs.existsSync(AFFILIATE_COMMISSIONS_FILE)) {
+        const raw = fs.readFileSync(AFFILIATE_COMMISSIONS_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredAffiliateCommissions = (items: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(AFFILIATE_COMMISSIONS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[AffiliateLedger] Erreur sauvegarde:', err);
+    }
+  };
+
+  const getStoredMiniMarketOrders = (): any[] => {
+    try {
+      if (fs.existsSync(MINIMARKET_ORDERS_FILE)) {
+        const raw = fs.readFileSync(MINIMARKET_ORDERS_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredMiniMarketOrders = (orders: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(MINIMARKET_ORDERS_FILE, JSON.stringify(orders.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[MiniMarketOrders] Erreur sauvegarde:', err);
+    }
+  };
+
+  const creditAffiliateCommissionIdempotent = (params: {
+    affiliateHandle: string;
+    orderRef: string;
+    orderTotal: number;
+    commissionRate?: number;
+    tenantId?: string;
+    slug?: string;
+    customerName?: string;
+    operator?: string;
+  }) => {
+    const cleanHandle = String(params.affiliateHandle || '')
+      .trim()
+      .replace(/^@/, '')
+      .toLowerCase();
+    const orderRef = String(params.orderRef || '').trim();
+    const orderTotal = Math.max(0, Number(params.orderTotal) || 0);
+    if (!cleanHandle || !orderRef || orderTotal <= 0) return null;
+
+    const all = getStoredAffiliateCommissions();
+    const existing = all.find(
+      (c: any) =>
+        String(c.orderRef || '') === orderRef &&
+        String(c.affiliateHandle || '').toLowerCase() === cleanHandle
+    );
+    if (existing) return existing;
+
+    const rate = Math.max(1, Math.min(50, Number(params.commissionRate) || 10));
+    const commissionAmount = Math.round((orderTotal * rate) / 100);
+
+    const record = {
+      id: `aff_${crypto.randomBytes(5).toString('hex')}`,
+      affiliateHandle: cleanHandle,
+      orderRef,
+      tenantId: String(params.tenantId || '').trim(),
+      slug: String(params.slug || '').trim(),
+      customerName: String(params.customerName || 'Client').trim(),
+      operator: String(params.operator || 'MOBILE_MONEY'),
+      orderTotal,
+      commissionRate: rate,
+      commissionAmount,
+      currency: 'XOF',
+      status: 'CREDITED',
+      createdAt: new Date().toISOString(),
+    };
+
+    all.unshift(record);
+    saveStoredAffiliateCommissions(all);
+    return record;
+  };
+
+  // POST /api/affiliate/credit-commission — Crédite automatiquement la commission d'un créateur (idempotent)
+  app.post('/api/affiliate/credit-commission', (req, res) => {
+    const {
+      affiliateRef,
+      affiliateHandle,
+      orderRef,
+      orderTotal,
+      commissionRate = 10,
+      tenantId = '',
+      slug = '',
+      customerName = 'Client',
+      operator = 'MOBILE_MONEY',
+    } = req.body || {};
+
+    const handle = String(affiliateHandle || affiliateRef || '').trim();
+    if (!handle || !orderRef) {
+      return res.status(400).json({ success: false, error: 'affiliateRef et orderRef requis' });
+    }
+
+    const record = creditAffiliateCommissionIdempotent({
+      affiliateHandle: handle,
+      orderRef,
+      orderTotal: Number(orderTotal) || 0,
+      commissionRate: Number(commissionRate) || 10,
+      tenantId,
+      slug,
+      customerName,
+      operator,
+    });
+
+    if (!record) {
+      return res.status(400).json({ success: false, error: 'Montant ou paramètres invalides' });
+    }
+
+    return res.json({ success: true, commission: record });
+  });
+
+  // GET /api/affiliate/earnings/:handle — Solde et historique des commissions d'un influenceur
+  app.get('/api/affiliate/earnings/:handle', (req, res) => {
+    const handle = String(req.params.handle || '')
+      .trim()
+      .replace(/^@/, '')
+      .toLowerCase();
+    if (!handle) {
+      return res.status(400).json({ success: false, error: 'handle requis' });
+    }
+    const items = getStoredAffiliateCommissions().filter(
+      (c: any) => String(c.affiliateHandle || '').toLowerCase() === handle
+    );
+    const totalSales = items.reduce((s: number, c: any) => s + (Number(c.orderTotal) || 0), 0);
+    const totalCommission = items.reduce((s: number, c: any) => s + (Number(c.commissionAmount) || 0), 0);
+    const paidCommission = items
+      .filter((c: any) => c.status === 'PAID')
+      .reduce((s: number, c: any) => s + (Number(c.commissionAmount) || 0), 0);
+
+    return res.json({
+      success: true,
+      handle,
+      totalOrders: items.length,
+      totalSales,
+      totalCommission,
+      paidCommission,
+      availableCommission: Math.max(0, totalCommission - paidCommission),
+      currency: 'XOF',
+      recentCommissions: items.slice(0, 20),
+    });
+  });
+
+  // POST /api/payments/trigger — Enregistre la commande Mini-Market / Caisse Express & crédite l'affilié automatiquement
+  app.post('/api/payments/trigger', (req, res) => {
+    const body = req.body || {};
+    const orderId = String(body.order_id || `CMD-${Date.now().toString(36).toUpperCase()}`).trim();
+    const amount = Math.max(0, Number(body.amount) || 0);
+    const affiliateRef = String(body.affiliate_ref || '').trim();
+
+    const orderRecord = {
+      orderId,
+      tenantId: String(body.tenant_id || '').trim(),
+      amount,
+      currency: 'XOF',
+      customerName: String(body.customer_name || 'Client Nanasore').trim(),
+      customerPhone: String(body.customer_phone || '').trim(),
+      customerCity: String(body.customer_city || 'Abidjan').trim(),
+      operator: String(body.operator || 'WAVE').trim(),
+      promoCode: String(body.promo_code || '').trim(),
+      discountPercent: Number(body.discount_percent) || 0,
+      groupBuyId: String(body.group_buy_id || '').trim(),
+      affiliateRef: affiliateRef.replace(/^@/, '').toLowerCase(),
+      deal: body.deal || null,
+      composedItems: Array.isArray(body.composed_items) ? body.composed_items : [],
+      status: 'confirmed',
+      createdAt: new Date().toISOString(),
+    };
+
+    const orders = getStoredMiniMarketOrders();
+    orders.unshift(orderRecord);
+    saveStoredMiniMarketOrders(orders);
+
+    let affiliateCommission = null;
+    if (affiliateRef && amount > 0) {
+      affiliateCommission = creditAffiliateCommissionIdempotent({
+        affiliateHandle: affiliateRef,
+        orderRef: orderId,
+        orderTotal: amount,
+        commissionRate: Number(body.commission_rate) || 10,
+        tenantId: orderRecord.tenantId,
+        customerName: orderRecord.customerName,
+        operator: orderRecord.operator,
+      });
+    }
+
+    return res.json({
+      success: true,
+      orderId,
+      amount,
+      status: 'confirmed',
+      affiliateCommission,
+    });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

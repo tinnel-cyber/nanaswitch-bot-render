@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v32-bioshop-comment-to-dm';
+const CACHE_NAME = 'nanasore-v33-social-commerce-prod';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

@@ -119,6 +119,10 @@ export default function MiniMarketDrawer({
   const [showAffiliateBox, setShowAffiliateBox] = useState(false)
   const [affiliateInput, setAffiliateInput] = useState('')
   const [copiedAffLink, setCopiedAffLink] = useState(false)
+  const [affiliateEarnings, setAffiliateEarnings] = useState<{
+    totalOrders: number
+    availableCommission: number
+  } | null>(null)
   const [hydratedFromUrl, setHydratedFromUrl] = useState(false)
 
   // Achat Groupé Viral (Modèle Pinduoduo : -20% en invitant 2 amis sur WhatsApp)
@@ -544,6 +548,44 @@ export default function MiniMarketDrawer({
                 <span>{copiedAffLink ? 'Copié !' : 'Copier lien'}</span>
               </button>
             </div>
+            {(affiliateInput.trim() || affiliateRef) && (
+              <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-indigo-900">
+                <span>
+                  {affiliateEarnings ? (
+                    <>
+                      Gains crédités <strong>@{affiliateInput.trim() || affiliateRef}</strong> :{' '}
+                      <strong className="text-emerald-700">
+                        {affiliateEarnings.availableCommission.toLocaleString()} FCFA
+                      </strong>{' '}
+                      ({affiliateEarnings.totalOrders} vente{affiliateEarnings.totalOrders > 1 ? 's' : ''})
+                    </>
+                  ) : (
+                    <span>Commission auto 10% créditée sur chaque vente payée</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const h = (affiliateInput.trim() || affiliateRef).replace(/^@/, '')
+                    if (!h) return
+                    fetch(`/api/affiliate/earnings/${encodeURIComponent(h)}`)
+                      .then((r) => r.json())
+                      .then((j) => {
+                        if (j?.success) {
+                          setAffiliateEarnings({
+                            totalOrders: Number(j.totalOrders) || 0,
+                            availableCommission: Number(j.availableCommission) || 0,
+                          })
+                        }
+                      })
+                      .catch(() => {})
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-[10.5px] cursor-pointer shrink-0"
+                >
+                  Voir mes gains
+                </button>
+              </div>
+            )}
           </div>
         )}
 

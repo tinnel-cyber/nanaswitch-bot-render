@@ -15,7 +15,7 @@ import {
   Package,
   Sparkles
 } from 'lucide-react'
-import { CartItem } from './MiniMarketDrawer'
+import { CartItem, MiniMarketCheckoutMeta } from './MiniMarketDrawer'
 
 export type PaymentMethod = 'MOBILE_MONEY' | 'PHYSICAL_POS_TOKEN'
 
@@ -26,15 +26,24 @@ export interface DealProductInfo {
   imageUrl?: string
 }
 
+export interface CheckoutPaymentDetails {
+  totalAmount: number
+  customerPhone: string
+  customerName: string
+  operator: string
+  affiliateRef?: string
+}
+
 export interface CheckoutModalProps {
   isOpen: boolean
   onClose: () => void
   dealProduct: DealProductInfo
   dealQuantity: number
   cartItems: CartItem[]
+  checkoutMeta?: MiniMarketCheckoutMeta | null
   tenantId?: string
   tenantName?: string
-  onPaymentSuccess?: (orderReference: string) => void
+  onPaymentSuccess?: (orderReference: string, details?: CheckoutPaymentDetails) => void
 }
 
 export default function CheckoutModal({
@@ -43,6 +52,7 @@ export default function CheckoutModal({
   dealProduct,
   dealQuantity,
   cartItems,
+  checkoutMeta,
   tenantId,
   tenantName = 'Boutique Nanasore',
   onPaymentSuccess
@@ -59,9 +69,21 @@ export default function CheckoutModal({
 
   if (!isOpen) return null
 
-  const dealTotal = dealProduct.price * dealQuantity
+  const effectiveAffiliateRef = (() => {
+    if (checkoutMeta?.affiliateRef) return checkoutMeta.affiliateRef
+    try {
+      return localStorage.getItem('nana_active_affiliate_ref') || ''
+    } catch {
+      return ''
+    }
+  })()
+
+  const dealTotal = dealQuantity > 0 ? dealProduct.price * dealQuantity : 0
   const miniMarketTotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0)
-  const grandTotal = dealTotal + miniMarketTotal
+  const rawTotal = dealTotal + miniMarketTotal
+  const discountPercent = Number(checkoutMeta?.discountPercent) || 0
+  const discountAmount = discountPercent > 0 ? Math.round((rawTotal * discountPercent) / 100) : 0
+  const grandTotal = Math.max(0, rawTotal - discountAmount)
 
   const handleGeneratePosToken = () => {
     setIsSubmitting(true);
@@ -82,6 +104,9 @@ export default function CheckoutModal({
           dealQuantity,
           dealTotal,
           cartItems,
+          discountPercent,
+          promoCode: checkoutMeta?.promoCode || '',
+          affiliateRef: effectiveAffiliateRef,
           grandTotal,
           createdAt: new Date().toISOString(),
           customerName: customerName || 'Client anonyme',
@@ -107,24 +132,29 @@ export default function CheckoutModal({
       // Déclencheur webhook ou appel API
       const orderRef = `CMD-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
 
-      // Injection dans le système de log ou trigger de paiement
+      // Injection dans le système de log / routeur NanaSwitch + crédit auto commission affilié
       const payload = {
         order_id: orderRef,
         tenant_id: tenantId,
         amount: grandTotal,
-        customer_name: customerName,
+        raw_amount: rawTotal,
+        discount_percent: discountPercent,
+        promo_code: checkoutMeta?.promoCode || '',
+        group_buy_id: checkoutMeta?.groupBuyId || '',
+        affiliate_ref: effectiveAffiliateRef,
+        customer_name: customerName || 'Client Nanasore',
         customer_phone: customerPhone,
         customer_city: customerCity,
         operator: mobileOperator,
-        deal: {
+        deal: dealQuantity > 0 ? {
           id: dealProduct.id,
           title: dealProduct.title,
           quantity: dealQuantity,
           unit_price: dealProduct.price,
           total: dealTotal
-        },
+        } : null,
         composed_items: cartItems,
-        status: 'pending'
+        status: 'confirmed'
       };
 
       try {
@@ -139,7 +169,13 @@ export default function CheckoutModal({
 
       setIsCompleted(true);
       if (onPaymentSuccess) {
-        onPaymentSuccess(orderRef);
+        onPaymentSuccess(orderRef, {
+          totalAmount: grandTotal,
+          customerPhone,
+          customerName: customerName || 'Client Nanasore',
+          operator: mobileOperator,
+          affiliateRef: effectiveAffiliateRef || undefined,
+        });
       }
     } catch (err) {
       console.error('Erreur traitement commande:', err);
@@ -190,25 +226,27 @@ export default function CheckoutModal({
               <span>Montant</span>
             </div>
 
-            {/* Produit Deal Principal */}
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 min-w-0 pr-2">
-                <span className="px-1.5 py-0.5 rounded bg-emerald-600/30 text-emerald-300 font-mono text-[10px] font-bold">
-                  DEAL x{dealQuantity}
+            {/* Produit Deal Principal (masqué si commande 100% Mini-Market) */}
+            {dealQuantity > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-600/30 text-emerald-300 font-mono text-[10px] font-bold">
+                    DEAL x{dealQuantity}
+                  </span>
+                  <span className="font-medium text-slate-200 truncate">{dealProduct.title}</span>
+                </div>
+                <span className="font-mono font-bold text-emerald-400 shrink-0">
+                  {dealTotal.toLocaleString()} FCFA
                 </span>
-                <span className="font-medium text-slate-200 truncate">{dealProduct.title}</span>
               </div>
-              <span className="font-mono font-bold text-emerald-400 shrink-0">
-                {dealTotal.toLocaleString()} FCFA
-              </span>
-            </div>
+            )}
 
             {/* Articles Auto-composés du Mini-Market */}
             {cartItems.length > 0 && (
-              <div className="pt-2 border-t border-slate-800/50 space-y-1.5">
+              <div className={`${dealQuantity > 0 ? 'pt-2 border-t border-slate-800/50' : ''} space-y-1.5`}>
                 <div className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5" />
-                  <span>Suppléments Mini-Market ({cartItems.length} article{cartItems.length > 1 ? 's' : ''}) :</span>
+                  <span>Mini-Market ({cartItems.length} article{cartItems.length > 1 ? 's' : ''}) :</span>
                 </div>
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-[11px] pl-3 text-slate-300">
@@ -220,6 +258,24 @@ export default function CheckoutModal({
                     </span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Remise Promo / Achat Groupé (-20%) & Partenaire Affilié */}
+            {(discountAmount > 0 || effectiveAffiliateRef) && (
+              <div className="pt-2 border-t border-slate-800/50 space-y-1 text-[11px]">
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-amber-300 font-bold">
+                    <span>Remise {checkoutMeta?.promoCode || `-${discountPercent}%`} (-{discountPercent}%)</span>
+                    <span className="font-mono">-{discountAmount.toLocaleString()} FCFA</span>
+                  </div>
+                )}
+                {effectiveAffiliateRef && (
+                  <div className="flex items-center justify-between text-indigo-300 font-semibold">
+                    <span>Recommandé par</span>
+                    <span className="font-mono font-bold">@{effectiveAffiliateRef}</span>
+                  </div>
+                )}
               </div>
             )}
 

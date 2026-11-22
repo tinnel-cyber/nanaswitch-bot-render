@@ -84,6 +84,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [miniMarketCart, setMiniMarketCart] = useState<any[]>([]);
+  const [miniMarketCheckoutMeta, setMiniMarketCheckoutMeta] = useState<any | null>(null);
   // Point 6 : Retargeting Physique → Réseaux Sociaux (CAPI) + Opt-in Club VIP WhatsApp
   const [vipWhatsapp, setVipWhatsapp] = useState('');
   const [vipJoined, setVipJoined] = useState(false);
@@ -1115,6 +1116,7 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         onClose={() => setIsMiniMarketOpen(false)}
         onCheckout={(cart, meta) => {
           setMiniMarketCart(cart);
+          setMiniMarketCheckoutMeta(meta || null);
           setIsMiniMarketOpen(false);
           const cartTotal =
             meta?.discountedTotal ??
@@ -1144,20 +1146,57 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
           price: heroProps.price || activeFunnel.ogMetadata?.priceAmount || 35000,
           imageUrl: activeFunnel.ogMetadata?.imageUrl || heroProps.imageUrl || ''
         }}
-        dealQuantity={1}
+        dealQuantity={miniMarketCart.length > 0 ? 0 : 1}
         cartItems={miniMarketCart}
+        checkoutMeta={miniMarketCheckoutMeta}
         tenantId={activeFunnel.storeId}
         tenantName={activeFunnel.title}
-        onPaymentSuccess={(orderRef) => {
-          const totalPaid =
-            (heroProps.price || 35000) +
-            miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0);
-          fireServerCapiEvent('Purchase', { value: totalPaid });
+        onPaymentSuccess={(orderRef, details) => {
+          const fallbackTotal =
+            miniMarketCart.length > 0
+              ? miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0)
+              : heroProps.price || 35000;
+          const totalPaid = details?.totalAmount ?? fallbackTotal;
+          fireServerCapiEvent('Purchase', {
+            value: totalPaid,
+            customerPhone: details?.customerPhone,
+          });
+
+          // Point 5 : Crédit automatique de la commission influenceur/affilié (idempotent)
+          const activeAff =
+            details?.affiliateRef ||
+            miniMarketCheckoutMeta?.affiliateRef ||
+            (() => {
+              try {
+                return localStorage.getItem('nana_active_affiliate_ref') || '';
+              } catch {
+                return '';
+              }
+            })();
+
+          if (activeAff && totalPaid > 0) {
+            fetch('/api/affiliate/credit-commission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              keepalive: true,
+              body: JSON.stringify({
+                affiliateRef: activeAff,
+                orderRef,
+                orderTotal: totalPaid,
+                commissionRate: 10,
+                tenantId: activeFunnel.storeId || '',
+                slug: activeSlug,
+                customerName: details?.customerName || 'Client Nanasore',
+                operator: details?.operator || 'MOBILE_MONEY',
+              }),
+            }).catch(() => {});
+          }
+
           setCompletedOrder({
             transactionId: orderRef,
-            customerName: 'Client Nanasore',
+            customerName: details?.customerName || 'Client Nanasore',
             totalAmount: totalPaid,
-            provider: 'MOBILE MONEY'
+            provider: details?.operator || 'MOBILE MONEY'
           });
           playCashChime();
         }}
