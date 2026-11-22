@@ -22,7 +22,7 @@ export interface JitsiClassroomPlayerProps {
 }
 
 export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
-  serverDomain = 'meet.jit.si',
+  serverDomain = '',
   roomName,
   title,
   studentName = 'Étudiant NaNa',
@@ -33,12 +33,17 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
   const [isCompleted, setIsCompleted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // URL de l'Iframe Jitsi avec paramètres pré-configurés pour fluidité
+  // Éradique la limite 5 minutes + auth modérateur de meet.jit.si :
+  // Si aucun domaine auto-hébergé personnalisé n'est défini (ou si c'est meet.jit.si),
+  // on bascule automatiquement vers notre salle native interne /wameet sans limite de temps !
   const sanitizedRoom = encodeURIComponent(roomName || 'nana-academy-room');
   const encodedName = encodeURIComponent(studentName);
-  const domain = serverDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  
-  const jitsiEmbedUrl = `https://${domain}/${sanitizedRoom}#userInfo.displayName="${encodedName}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true&config.toolbarButtons=["microphone","camera","closedcaptions","desktop","fullscreen","fodeviceselection","hangup","profile","chat","recording","livestreaming","etherpad","sharedvideo","settings","raisehand","videoquality","filmstrip","feedback","stats","shortcuts","tileview","videobackgroundblur","help","mute-everyone"]`;
+  const cleanDomain = (serverDomain || '').replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+  const useInternalWaMeet = !cleanDomain || cleanDomain === 'meet.jit.si';
+
+  const embedUrl = useInternalWaMeet
+    ? `/wameet?room=${sanitizedRoom}&embed=1&name=${encodedName}&title=${encodeURIComponent(title || 'Session Live')}`
+    : `https://${cleanDomain}/${sanitizedRoom}#userInfo.displayName="${encodedName}"&config.prejoinPageEnabled=false&config.startWithAudioMuted=true&config.disableDeepLinking=true`;
 
   const handleToggleFullscreen = () => {
     playTapBeep();
@@ -64,13 +69,13 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
       ref={containerRef}
       className={`relative w-full h-full bg-slate-950 flex flex-col overflow-hidden select-none ${className}`}
     >
-      {/* Barre d'état supérieure Jitsi */}
+      {/* Barre d'état supérieure Salle Live */}
       <div className="shrink-0 px-3 sm:px-4 py-2 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 flex items-center justify-between gap-3 z-10">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
           <div className="flex items-center gap-2 truncate">
-            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md bg-[#4169E1]/20 text-blue-300 border border-[#4169E1]/30">
-              Salon Wameet • Direct
+            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {useInternalWaMeet ? 'Salle WaMeet • Sans Limite' : `Serveur Privé • ${cleanDomain}`}
             </span>
             <span className="text-xs font-bold text-white truncate max-w-xs sm:max-w-md">
               {title}
@@ -79,6 +84,16 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href={embedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+            title="Ouvrir la salle dans un nouvel onglet"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+
           {!isCompleted ? (
             <button
               type="button"
@@ -111,20 +126,20 @@ export const JitsiClassroomPlayer: React.FC<JitsiClassroomPlayerProps> = ({
       <div className="flex-1 w-full h-full relative bg-slate-950">
         {isLoading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-slate-950">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30 animate-pulse">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 animate-pulse">
               <Radio className="w-6 h-6" />
             </div>
-            <h4 className="text-sm font-bold text-white">Connexion à la salle Jitsi Meet...</h4>
-            <p className="text-xs text-slate-400">Chiffrement de bout en bout &amp; audio sans latence</p>
+            <h4 className="text-sm font-bold text-white">Connexion à la salle WaMeet Direct...</h4>
+            <p className="text-xs text-slate-400">Durée illimitée • Zéro coupure • Audio &amp; vidéo HD</p>
           </div>
         )}
 
         <iframe
-          src={jitsiEmbedUrl}
+          src={embedUrl}
           allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
           onLoad={() => setIsLoading(false)}
           className="w-full h-full border-0 absolute inset-0"
-          title={`Jitsi Meet - ${title}`}
+          title={`Salle Live - ${title}`}
         />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -47,13 +47,30 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
   const [meetingUrl, setMeetingUrl] = useState(initialConfig?.meetingUrl || '');
   const [meetingId, setMeetingId] = useState(initialConfig?.meetingId || '');
   const [passcode, setPasscode] = useState(initialConfig?.passcode || '');
-  const [jitsiServerDomain, setJitsiServerDomain] = useState(initialConfig?.jitsiServerDomain || 'meet.jit.si');
+  const [jitsiServerDomain, setJitsiServerDomain] = useState(
+    initialConfig?.jitsiServerDomain && initialConfig.jitsiServerDomain !== 'meet.jit.si'
+      ? initialConfig.jitsiServerDomain
+      : ''
+  );
   const [jitsiRoomName, setJitsiRoomName] = useState(initialConfig?.jitsiRoomName || '');
   const [isAutoRecord, setIsAutoRecord] = useState(initialConfig?.isAutoRecordEnabled ?? true);
   const [autoMarkCompleted, setAutoMarkCompleted] = useState(initialConfig?.autoMarkCompletedOnEnd ?? true);
+  const [availableWebinars, setAvailableWebinars] = useState<any[]>([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/lms/webinars')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.success && Array.isArray(json.webinars)) {
+          setAvailableWebinars(json.webinars);
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -205,6 +222,39 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
           </div>
 
           <form onSubmit={handleSaveSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+            {/* Import 1-clic d'un Webinaire synchronisé depuis CreateWebinarModal */}
+            {availableWebinars.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                  🔗 Importer un Webinaire déjà programmé ({availableWebinars.length})
+                </label>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const picked = availableWebinars.find((w) => w.id === e.target.value);
+                    if (!picked) return;
+                    playValidationBeep();
+                    setTitle(picked.title || title);
+                    if (picked.scheduledAt) setScheduledAt(String(picked.scheduledAt).slice(0, 16));
+                    if (picked.durationMinutes) setDurationMinutes(Number(picked.durationMinutes) || 60);
+                    setMeetingUrl(picked.meetingUrl || `/wameet?room=${encodeURIComponent(picked.id)}&embed=1`);
+                    setMeetingId(picked.id);
+                    setJitsiRoomName(picked.id);
+                    setJitsiServerDomain('');
+                    setProvider('JITSI');
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-emerald-500/40 text-xs text-white font-bold focus:outline-none"
+                >
+                  <option value="">-- Choisir un webinaire à synchroniser dans ce cours --</option>
+                  {availableWebinars.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      🔴 {w.title} ({w.durationMinutes || 60} min)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Titre de la leçon Live */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -223,14 +273,14 @@ export const LiveSessionConfigModal: React.FC<LiveSessionConfigModalProps> = ({
             {/* Sélecteur de Plateforme Fournisseur */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Fournisseur de Visioconférence (Platform Provider)
+                Fournisseur de Visioconférence (Sans coupure 5 min)
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { id: 'DAILY', label: 'Daily.co (Natif)', icon: <Video className="w-3.5 h-3.5 text-emerald-400" /> },
                   { id: 'ZOOM', label: 'Zoom Video', icon: <Video className="w-3.5 h-3.5 text-blue-400" /> },
                   { id: 'GOOGLE_MEET', label: 'Google Meet', icon: <Globe className="w-3.5 h-3.5 text-teal-400" /> },
-                  { id: 'JITSI', label: 'Jitsi (Iframe)', icon: <Radio className="w-3.5 h-3.5 text-cyan-400" /> },
+                  { id: 'JITSI', label: 'WaMeet (Illimité)', icon: <Radio className="w-3.5 h-3.5 text-cyan-400" /> },
                 ].map((p) => {
                   const isSelected = provider === p.id;
                   return (

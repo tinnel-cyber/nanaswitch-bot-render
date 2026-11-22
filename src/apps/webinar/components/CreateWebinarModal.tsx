@@ -580,8 +580,27 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
           liveId = insertedRow.id;
         }
       } catch (sbCatchErr) {
-        console.warn("[SUPABASE WEBINAR] Mode résilient activé:", sbCatchErr);
+        console.warn("[CLOUD WEBINAR] Mode résilient activé:", sbCatchErr);
       }
+
+      // 2. Synchronisation automatique avec Course Forge & Modules de Cours (POST /api/lms/webinars/sync)
+      fetch('/api/lms/webinars/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webinarId: liveId,
+          merchantId: merchantId || 'default',
+          title: title.trim(),
+          description: description.trim(),
+          scheduledAt: date || new Date().toISOString(),
+          durationMinutes: 60,
+          platform: effectivePlatform,
+          meetingUrl: finalMeetingUrl,
+          streamUrl: finalStreamUrl,
+          isPaid,
+          price: numericPrice
+        })
+      }).catch(() => {});
 
       const liveSessionPayload = {
         id: liveId,

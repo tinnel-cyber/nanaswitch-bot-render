@@ -4846,6 +4846,133 @@ async function startServer() {
     return res.json({ success: true, comment, commentsCount: comments.length });
   });
 
+  // ============================================================================
+  // 2L. CHANTIER 7 : SYNCHRONISATION WEBINAIRES ↔ MODULES DE COURS + SALLE LIVE
+  //     SANS COUPURE 5 MIN (WAMEET NATIF / JITSI AUTO-HÉBERGÉ / ZOOM / MEET)
+  // ============================================================================
+  const LMS_WEBINARS_FILE = path.join(DATA_DIR, 'lms_webinars.json');
+
+  // GET /api/lms/webinars — Liste les webinaires disponibles pour liaison dans Course Forge
+  app.get('/api/lms/webinars', (req, res) => {
+    const merchantId = String(req.query?.merchantId || '').trim();
+    const courseId = String(req.query?.courseId || '').trim();
+    let list = readJsonArrayFile(LMS_WEBINARS_FILE);
+    if (merchantId) {
+      list = list.filter((w: any) => !w.merchantId || w.merchantId === merchantId);
+    }
+    if (courseId) {
+      list = list.filter((w: any) => w.linkedCourseId === courseId);
+    }
+    return res.json({ success: true, webinars: list.slice(0, 50) });
+  });
+
+  // POST /api/lms/webinars/sync — Enregistre un webinaire ET l'injecte dans le cours associé si linkedCourseId fourni
+  app.post('/api/lms/webinars/sync', async (req, res) => {
+    try {
+      const {
+        webinarId = `web_${crypto.randomBytes(4).toString('hex')}`,
+        merchantId = '',
+        title = 'Session Live Interactive',
+        description = '',
+        scheduledAt = new Date().toISOString(),
+        durationMinutes = 60,
+        platform = 'wameet',
+        meetingUrl = '',
+        streamUrl = '',
+        isPaid = false,
+        price = 0,
+        linkedCourseId = '',
+      } = req.body || {};
+
+      const cleanId = String(webinarId).trim();
+      const safeMeetingUrl =
+        String(meetingUrl || '').trim() && !String(meetingUrl).includes('meet.jit.si')
+          ? String(meetingUrl).trim()
+          : `/wameet?room=${encodeURIComponent(cleanId)}&embed=1`;
+
+      const webinarRecord = {
+        id: cleanId,
+        merchantId: String(merchantId || ''),
+        title: String(title).trim(),
+        description: String(description || '').trim(),
+        scheduledAt: String(scheduledAt),
+        durationMinutes: Math.max(15, Number(durationMinutes) || 60),
+        platform: String(platform === 'jitsi' && safeMeetingUrl.startsWith('/wameet') ? 'wameet' : platform),
+        meetingUrl: safeMeetingUrl,
+        streamUrl: String(streamUrl || ''),
+        isPaid: Boolean(isPaid),
+        price: Math.max(0, Number(price) || 0),
+        linkedCourseId: String(linkedCourseId || '').trim(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const existingWebinars = readJsonArrayFile(LMS_WEBINARS_FILE).filter((w: any) => w.id !== cleanId);
+      existingWebinars.unshift(webinarRecord);
+      writeJsonArrayFile(LMS_WEBINARS_FILE, existingWebinars);
+
+      let syncedToCourse = false;
+      if (webinarRecord.linkedCourseId) {
+        const courses = readJsonArrayFile(LMS_COURSES_FILE);
+        const cIdx = courses.findIndex((c: any) => c.id === webinarRecord.linkedCourseId);
+        const liveLesson = {
+          id: `lesson_live_${cleanId}`,
+          title: `🔴 LIVE : ${webinarRecord.title}`,
+          type: 'live',
+          duration: `${webinarRecord.durationMinutes} min`,
+          liveSessionConfig: {
+            provider: webinarRecord.platform.toUpperCase(),
+            webinarId: cleanId,
+            scheduledAt: webinarRecord.scheduledAt,
+            durationMinutes: webinarRecord.durationMinutes,
+            meetingUrl: webinarRecord.meetingUrl,
+            meetingId: cleanId,
+            isAutoRecordEnabled: true,
+            autoMarkCompletedOnEnd: true,
+          },
+        };
+
+        if (cIdx >= 0) {
+          const modules = Array.isArray(courses[cIdx].modules) ? [...courses[cIdx].modules] : [];
+          let liveModIdx = modules.findIndex((m: any) => m.id === 'mod_live_sessions');
+          if (liveModIdx === -1) {
+            modules.push({
+              id: 'mod_live_sessions',
+              title: 'Sessions Live & Webinaires',
+              lessons: [liveLesson],
+            });
+          } else {
+            const lessons = Array.isArray(modules[liveModIdx].lessons)
+              ? modules[liveModIdx].lessons.filter((l: any) => l.id !== liveLesson.id)
+              : [];
+            lessons.unshift(liveLesson);
+            modules[liveModIdx] = { ...modules[liveModIdx], lessons };
+          }
+          courses[cIdx].modules = modules;
+          courses[cIdx].updated_at = new Date().toISOString();
+          writeJsonArrayFile(LMS_COURSES_FILE, courses);
+          syncedToCourse = true;
+
+          if (supabaseAdmin) {
+            try {
+              await supabaseAdmin
+                .from('courses')
+                .update({ modules, updated_at: courses[cIdx].updated_at })
+                .eq('id', webinarRecord.linkedCourseId);
+            } catch {}
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        webinar: webinarRecord,
+        syncedToCourse,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur synchronisation webinaire.' });
+    }
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
