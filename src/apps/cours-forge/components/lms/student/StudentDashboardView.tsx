@@ -855,81 +855,62 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     });
   }, [enrolledCourses]);
 
-  // 2. Section "💬 Messages & Notifications Inter-Campus" (Prompt 4/4)
-  const [interCampusNotifications, setInterCampusNotifications] = useState<InterCampusNotification[]>([
-    {
-      id: 'ic-notif-1',
-      campusId: 'campus-konkobo',
-      campusName: 'Campus : Ibrahim P. Konkobo',
-      courseId: 'telecom-fintech-masterclass',
-      courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
-      lessonTitle: 'Module 4 - Partie 3 : Orchestration des Webhooks Wave & Orange Money',
-      instructorName: 'Ibrahim Pousbila Konkobo',
-      instructorRole: 'Formateur Principal',
-      instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      questionAsked: 'Comment sécuriser la signature HMAC-SHA256 du webhook Wave en environnement serveur sans exposer la clé secrète ?',
-      answerContent: 'Bonjour Ibrahim ! Pour la signature HMAC, conservez impérativement la variable d\'environnement WAVE_WEBHOOK_SECRET sur votre serveur Node/Firebase Functions. Vérifiez l\'en-tête X-Wave-Signature avant de parser le payload brut (raw body). J\'ai également déposé un snippet d\'exemple directement dans les ressources du Module 4.',
-      timestamp: 'Il y a 15 minutes',
-      isUnread: true,
-      replies: []
-    },
-    {
-      id: 'ic-notif-2',
-      campusId: 'campus-pos',
-      campusName: 'Campus : Systèmes POS & Caisses',
-      courseId: 'course-pos-resilience-offline',
-      courseTitle: 'Architecture Caisses Connectées & Mode Déconnecté',
-      lessonTitle: 'Module 3 - Synchronisation Delta IndexedDB vers Firebase Firestore',
-      instructorName: 'Ing. Marc Ouedraogo',
-      instructorRole: 'Ingénieur Systèmes POS',
-      instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
-      questionAsked: 'En cas de reconnexion après 3 jours hors-ligne, quel est l\'ordre de résolution des conflits pour les stocks de caisse ?',
-      answerContent: 'Excellente question. Nous appliquons la stratégie Last-Write-Wins avec un timestamp NTP vectoriel sur les lignes de vente, mais pour les stocks négatifs, le terminal génère un ticket de régularisation automatique d\'inventaire.',
-      timestamp: 'Il y a 2 heures',
-      isUnread: true,
-      replies: []
-    },
-    {
-      id: 'ic-notif-3',
-      campusId: 'campus-live',
-      campusName: 'Campus : Live Shopping & Social Selling',
-      courseId: 'course-live-shopping-mastery',
-      courseTitle: 'Live Shopping & Vente Vidéo Interactive',
-      lessonTitle: 'Module 2 - Partie 3 : Scripting psychologique de l\'offre flash',
-      instructorName: 'Kadiatou Diallo',
-      instructorRole: 'Coach Social Selling',
-      instructorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
-      questionAsked: 'Quel est le délai idéal pour afficher le bouton d\'achat 1-clic pendant le live stream ?',
-      answerContent: 'Bonjour ! Déclenchez l\'apparition de l\'overlay d\'achat exactement entre la 8e et la 12e minute du live, immédiatement après la démonstration produit. Vos taux de conversion doubleront.',
-      timestamp: 'Hier à 16:40',
-      isUnread: false,
-      replies: []
-    },
-    {
-      id: 'ic-notif-4',
-      campusId: 'campus-securite',
-      campusName: 'Campus : Sécurité & Conformité Réglementaire',
-      courseId: 'course-fintech-security-kyc',
-      courseTitle: 'Sécurité des Transactions & Conformité KYC',
-      lessonTitle: 'Module 1 - Partie 2 : Détection des faux SMS de confirmation',
-      instructorName: 'Cabinet Conformité & Risques',
-      instructorRole: 'Auditeur Certifié',
-      instructorAvatar: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=300&q=80',
-      questionAsked: 'Les commerçants de proximité peuvent-ils automatiser la vérification par regex ?',
-      answerContent: 'Oui, l\'application NaNasore intègre désormais un parseur heuristique qui vérifie l\'expéditeur officiel de l\'opérateur ainsi que le solde avant validation du reçu.',
-      timestamp: 'Il y a 3 jours',
-      isUnread: false,
-      replies: []
-    }
-  ]);
+  // 2. Section "💬 Messages & Notifications Inter-Campus" — 100% Cloud réel (zéro fausse notification statique)
+  const [interCampusNotifications, setInterCampusNotifications] = useState<InterCampusNotification[]>([]);
 
-  // Actions pour les Certificats
+  useEffect(() => {
+    let active = true;
+    const courseIds = enrolledCourses.map((c) => c.id).slice(0, 5);
+    const targets = courseIds.length > 0 ? courseIds : ['global'];
+    Promise.all(
+      targets.map((cid) =>
+        fetch(`/api/campus/chat/${encodeURIComponent(cid)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((json) => (Array.isArray(json?.messages) ? json.messages : []))
+          .catch(() => [])
+      )
+    ).then((groups) => {
+      if (!active) return;
+      const flat = groups.flat().slice(0, 20);
+      const mapped: InterCampusNotification[] = flat.map((m: any) => ({
+        id: m.id,
+        campusId: m.courseId || 'global',
+        campusName: enrolledCourses.find((c) => c.id === m.courseId)?.campusName || 'Campus Social',
+        courseId: m.courseId || 'global',
+        courseTitle: enrolledCourses.find((c) => c.id === m.courseId)?.title || 'Campus Social NaNa',
+        lessonTitle: m.topicTag || 'Discussion Campus',
+        instructorName: m.authorName || 'Membre du Campus',
+        instructorRole: m.authorRole === 'INSTRUCTOR' ? 'Formateur' : 'Apprenant',
+        instructorAvatar:
+          m.authorAvatar ||
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
+        questionAsked: m.topicTag ? `[${m.topicTag}] Publication dans le salon` : 'Message du Campus Social',
+        answerContent: m.content || '',
+        timestamp: m.createdAt
+          ? new Date(m.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : 'Récemment',
+        isUnread: false,
+        replies: Array.isArray(m.comments)
+          ? m.comments.map((c: any) => ({
+              id: c.id,
+              sender: c.authorRole === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT',
+              text: c.content,
+              timestamp: c.createdAt ? new Date(c.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''
+            }))
+          : []
+      }));
+      setInterCampusNotifications(mapped);
+    });
+    return () => { active = false; };
+  }, [enrolledCourses]);
+
+  // Actions pour les Certificats — lien public officiel /verify-cert/:id
   const handleShareCertificate = (cert: CertificateItem) => {
     playTapBeep();
-    const shareUrl = `${window.location.origin}/certificat?id=${encodeURIComponent(cert.id)}`;
+    const shareUrl = `${window.location.origin}/verify-cert/${encodeURIComponent(cert.id)}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareUrl).then(() => {
-        setToastMessage(`Lien de vérification copié : ${cert.id}`);
+        setToastMessage(`Lien public de vérification copié : ${shareUrl}`);
         setTimeout(() => setToastMessage(null), 3500);
       });
     } else {

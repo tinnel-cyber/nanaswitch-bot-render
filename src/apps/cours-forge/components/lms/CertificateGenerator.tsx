@@ -151,8 +151,8 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({
   // URL de vérification dynamique
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
   const verificationUrl = useMemo(() => {
-    return `${originUrl}/campus?cert=${encodeURIComponent(certSerialNumber)}&student=${encodeURIComponent(effectiveStudentName)}&course=${encodeURIComponent(courseTitle)}&date=${encodeURIComponent(formattedDate)}&issuer=${encodeURIComponent('Nanasore Academy - ENTREPRISE KONKOBO POUSBILA')}&hash=${verificationHash}`;
-  }, [originUrl, certSerialNumber, effectiveStudentName, courseTitle, formattedDate, verificationHash]);
+    return `${originUrl}/verify-cert/${encodeURIComponent(certSerialNumber)}`;
+  }, [originUrl, certSerialNumber]);
 
   // Génération du QR Code local en Data URL
   useEffect(() => {

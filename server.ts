@@ -4500,6 +4500,75 @@ async function startServer() {
     return res.json({ success: true, certificate: row });
   });
 
+  // GET /api/certificates/verify/:certId — Vérification publique JSON d'un diplôme / certificat (QR Code)
+  const findVerifiedCertificate = async (certId: string) => {
+    const cleanId = decodeURIComponent(String(certId || '')).trim();
+    if (!cleanId) return null;
+    const local = readJsonArrayFile(LMS_CERTIFICATES_FILE).find(
+      (c: any) => String(c.id).toLowerCase() === cleanId.toLowerCase()
+    );
+    if (local) return local;
+
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('student_certificates')
+          .select('*')
+          .eq('id', cleanId)
+          .maybeSingle();
+        if (data) {
+          return {
+            id: data.id,
+            studentId: data.student_id,
+            courseId: data.course_id,
+            courseTitle: data.course_title,
+            studentName: data.student_name,
+            issuedAt: data.issued_at,
+          };
+        }
+      } catch {}
+    }
+    return null;
+  };
+
+  app.get('/api/certificates/verify/:certId', async (req, res) => {
+    const cert = await findVerifiedCertificate(req.params.certId);
+    if (!cert) {
+      return res.status(404).json({
+        success: false,
+        verified: false,
+        error: 'Certificat introuvable ou non valide dans le registre officiel.',
+      });
+    }
+    return res.json({
+      success: true,
+      verified: true,
+      message: `Diplôme Authentique délivré à ${cert.studentName} pour ${cert.courseTitle}`,
+      certificate: cert,
+    });
+  });
+
+  // GET /verify-cert/:certId — Page publique instantanée de vérification QR Code pour employeurs
+  app.get('/verify-cert/:certId', async (req, res) => {
+    const esc = (s: any) =>
+      String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const cert = await findVerifiedCertificate(req.params.certId);
+
+    if (!cert) {
+      return res.status(404).send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Vérification de Certificat</title></head><body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;"><div style="max-width:480px;width:100%;background:#1e293b;border:1px solid #ef4444;border-radius:24px;padding:32px;text-align:center;"><div style="font-size:48px;margin-bottom:12px;">❌</div><h1 style="margin:0 0 8px;font-size:22px;color:#fca5a5;">Certificat Introuvable</h1><p style="margin:0;font-size:14px;color:#cbd5e1;line-height:1.6;">L'identifiant <strong>${esc(req.params.certId)}</strong> ne correspond à aucun diplôme officiel enregistré dans le Cloud.</p></div></body></html>`);
+    }
+
+    const issuedDate = cert.issuedAt
+      ? new Date(cert.issuedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+      : 'Récemment';
+
+    return res.status(200).send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Diplôme Authentique — ${esc(cert.studentName)}</title></head><body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#020617,#0f172a);color:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;"><div style="max-width:540px;width:100%;background:#0f172a;border:2px solid #10b981;border-radius:28px;padding:36px;box-shadow:0 25px 60px rgba(0,0,0,0.5);text-align:center;"><div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;font-size:12px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:18px;">✅ Diplôme Authentique &amp; Vérifié</div><h1 style="margin:0 0 8px;font-size:24px;line-height:1.3;color:#ffffff;">Diplôme Authentique délivré à <span style="color:#34d399;">${esc(cert.studentName)}</span></h1><p style="margin:8px 0 24px;font-size:15px;color:#cbd5e1;">Pour la formation certifiante :<br/><strong style="color:#ffffff;font-size:17px;">${esc(cert.courseTitle)}</strong></p><div style="background:#1e293b;border-radius:16px;padding:16px;text-align:left;font-size:13px;color:#cbd5e1;display:grid;gap:8px;"><div><strong>N° de Certificat :</strong> <code style="color:#38bdf8;">${esc(cert.id)}</code></div><div><strong>Date de délivrance :</strong> ${esc(issuedDate)}</div><div><strong>Registre :</strong> Vérification cryptographique Cloud NaNa Academy</div></div></div></body></html>`);
+  });
+
   // GET & POST /api/campus/chat/:courseId — Chat multi-utilisateurs réel du Campus Privé
   app.get('/api/campus/chat/:courseId', (req, res) => {
     const courseId = String(req.params.courseId || '').trim();
