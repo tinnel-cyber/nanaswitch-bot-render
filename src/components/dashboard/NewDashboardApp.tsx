@@ -3817,7 +3817,7 @@ function TabTransactions({ app, showToast }: { app?: NanaMerchantApp; showToast?
               {loading ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400 font-semibold">
-                    Chargement des transactions depuis Supabase...
+                    Chargement des transactions depuis le Cloud...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
@@ -4990,7 +4990,7 @@ function TabCustomers({ app }: { app?: NanaMerchantApp }) {
 
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm">
         {loading ? (
-          <div className="py-12 text-center text-slate-400 text-xs font-semibold">Chargement des clients depuis Supabase...</div>
+          <div className="py-12 text-center text-slate-400 text-xs font-semibold">Chargement des clients depuis le Cloud...</div>
         ) : filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-400 space-y-2">
             <Users className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
@@ -6230,7 +6230,7 @@ function TabDisputes({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Litiges & Chargebacks</h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">Réclamations clients et contestations d'opérateurs enregistrées sur Supabase.</p>
+          <p className="text-xs text-slate-500 font-medium mt-1">Réclamations clients et contestations d'opérateurs enregistrées dans le Cloud.</p>
         </div>
         <button
           type="button"

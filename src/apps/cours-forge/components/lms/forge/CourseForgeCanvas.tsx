@@ -431,7 +431,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     // Persistance Firestore du module
     updateModuleBranding(activeCourseId, 'module-core', nextVal);
     setSavedNotification(nextVal 
-      ? 'Mode Furtif YouTube activé sur tous les modules (Firestore synchronisé)' 
+      ? 'Mode Furtif YouTube activé sur tous les modules (Cloud synchronisé)' 
       : 'Mode Furtif désactivé'
     );
     setTimeout(() => setSavedNotification(null), 3500);
@@ -441,7 +441,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   const handleReorderModules = (newModules: CourseModule[]) => {
     setModules(newModules);
     saveCourseStructure(activeCourseId, newModules, nodes, edges);
-    setSavedNotification('Ordre hiérarchique enregistré dans Firestore !');
+    setSavedNotification('Ordre hiérarchique enregistré dans le Cloud !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
@@ -623,7 +623,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
   const handleSaveAdvancedSettings = (newSettings: any) => {
     setCourseSettings(newSettings);
     saveCourseGlobalSettings(activeCourseId, newSettings);
-    setSavedNotification('Paramètres avancés & accès enregistrés dans Firestore !');
+    setSavedNotification('Paramètres avancés & accès enregistrés dans le Cloud !');
     setTimeout(() => setSavedNotification(null), 3000);
   };
 
@@ -1257,7 +1257,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
                 title: activeCourseTitle,
                 tenantId: currentUser?.storeId,
               });
-              setSavedNotification(`Architecture du cours "${activeCourseTitle}" enregistrée dans Supabase !`);
+              setSavedNotification(`Architecture du cours "${activeCourseTitle}" enregistrée dans le Cloud !`);
               onSaveSuccess?.(activeCourseId);
               setTimeout(() => setSavedNotification(null), 3500);
             }}
