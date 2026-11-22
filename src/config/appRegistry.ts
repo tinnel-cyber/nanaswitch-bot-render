@@ -36,6 +36,8 @@ export interface CanonicalModule {
   requiredRoles?: string[];   // Rôles requis (ex: vendor, admin)
   permissions?: string[];     // Permissions requises pour l'accès
   isUnderConstruction?: boolean; // Module en construction (ne répond pas aux appels marchands)
+  isFrozen?: boolean;         // Module gelé (désactivé temporairement)
+  hiddenFromOmnibar?: boolean; // Masqué de l'Omnibar et des suggestions de recherche
 }
 
 // Rétro-compatibilité pour les composants existants
@@ -113,11 +115,13 @@ export const APPLICATIONS_BLOCK: CanonicalModule[] = [
     name: 'Wameet',
     route: '/wameet',
     category: 'Réseau & Social',
-    description: 'Réseau social professionnel, messagerie & stories marchands (En construction).',
+    description: 'Réseau social professionnel, messagerie & stories marchands (Gelé).',
     type: 'APPLICATION',
     taxonomy: 'APPLICATION',
     defaultActive: false,
     isUnderConstruction: true,
+    isFrozen: true,
+    hiddenFromOmnibar: true,
     view: 'WAMEET',
     icon: 'MessageSquare',
     keywords: ['wameet', 'social', 'reseau', 'messagerie', 'stories'],
@@ -408,11 +412,13 @@ export const SERVICES_BLOCK: CanonicalModule[] = [
     name: 'NaNa Switch Cloud (Multi-Comptes)',
     route: '/dashboard/switch',
     category: 'Communication & Réseau',
-    description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter (En construction).',
+    description: 'Basculez instantanément entre vos boutiques et comptes sans vous reconnecter (Gelé).',
     type: 'SERVICE',
     taxonomy: 'SERVICE',
     defaultActive: false,
     isUnderConstruction: true,
+    isFrozen: true,
+    hiddenFromOmnibar: true,
     view: 'NANA_SWITCH',
     icon: 'Repeat',
     keywords: ['switch', 'cloud', 'multi-comptes', 'boutiques'],

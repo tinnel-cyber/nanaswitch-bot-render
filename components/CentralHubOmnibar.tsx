@@ -1850,7 +1850,26 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       });
     }
 
-    const isCardExcluded = (_idLower: string, _titleLower: string) => false;
+    const isCardExcluded = (idLower: string, titleLower: string) => {
+      const cleanId = String(idLower || '').toLowerCase().trim();
+      const cleanTitle = String(titleLower || '').toLowerCase().trim();
+      const matched = getOfficialModuleById(cleanId);
+      if (matched?.hiddenFromOmnibar || matched?.isFrozen) return true;
+      if (
+        cleanId === 'wameet' ||
+        cleanId === 'app-wameet' ||
+        cleanId === 'wameet-network' ||
+        cleanId === 'nana-switch' ||
+        cleanId === 'srv-nana-switch' ||
+        cleanTitle === 'wameet' ||
+        cleanTitle.includes('wameet') ||
+        cleanTitle.includes('nana switch cloud') ||
+        cleanTitle.includes('nanaswitch cloud')
+      ) {
+        return true;
+      }
+      return false;
+    };
 
     // 1. Source de vérité primaire : Les modules canoniques d'OFFICIAL_MODULES (src/config/appRegistry.ts)
     const officialCatalogCards: any[] = [];
@@ -1858,7 +1877,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
       const idLower = String(official.id || '').toLowerCase();
       const titleLower = String(official.name || '').toLowerCase().trim();
 
-      if (isCardExcluded(idLower, titleLower)) {
+      if (official.hiddenFromOmnibar || official.isFrozen || isCardExcluded(idLower, titleLower)) {
         return;
       }
 
@@ -2491,22 +2510,42 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     ))}
                   </div>
 
-                  {/* Catalogue dynamique des 27 solutions officielles Nanasore synchronisées Firebase RTDB */}
+                  {/* Catalogue dynamique des solutions officielles Nanasore (hors modules gelés) */}
+                  {(() => {
+                    const visibleDynamicModules = dynamicModules.filter((m) => {
+                      const officialMod = getOfficialModuleById(m.id);
+                      const idL = String(m.id || '').toLowerCase();
+                      const nameL = String(m.name || '').toLowerCase();
+                      if (officialMod?.hiddenFromOmnibar || officialMod?.isFrozen) return false;
+                      if (
+                        idL === 'wameet' ||
+                        idL === 'app-wameet' ||
+                        idL === 'nana-switch' ||
+                        idL === 'srv-nana-switch' ||
+                        nameL.includes('wameet') ||
+                        nameL.includes('nana switch cloud') ||
+                        nameL.includes('nanaswitch cloud')
+                      ) {
+                        return false;
+                      }
+                      return true;
+                    });
+                    return (
                   <div className="w-full mt-8 text-left">
                     <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
                       <div className="flex items-center gap-2">
                         <Boxes className="w-4 h-4 text-[#4169E1]" />
                         <h5 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                          Catalogue Officiel Nanasore ({dynamicModules.length} Solutions : Applications, Services, Modules & Outils)
+                          Catalogue Officiel Nanasore ({visibleDynamicModules.length} Solutions : Applications, Services, Modules & Outils)
                         </h5>
                       </div>
                       <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                        {activeModules.length} / {dynamicModules.length} Actif(s)
+                        {activeModules.filter(id => visibleDynamicModules.some(vm => vm.id === id)).length} / {visibleDynamicModules.length} Actif(s)
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {dynamicModules.map((m) => {
+                      {visibleDynamicModules.map((m) => {
                         const active = m.enabled;
                         const access = evaluateClientModuleAccess(m.id, licenseState);
                         const official = getOfficialModuleById(m.id);
@@ -2654,6 +2693,8 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                       })}
                     </div>
                   </div>
+                    );
+                  })()}
                 </div>
               ) : !structuredOutput ? (
                 /* Aucun résultat pour la recherche tapée */
