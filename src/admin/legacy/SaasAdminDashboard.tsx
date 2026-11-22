@@ -34,6 +34,11 @@ import {
   playCancelSound 
 } from '../../utils/audio';
 import {
+  fetchAdminAffiliateWithdrawals,
+  updateAdminAffiliateWithdrawalStatus,
+  updateAffiliateStudioSettings,
+} from '../../services/affiliateTrackingService';
+import {
   updateStoreApprovalStatus,
   updateStoreSubscription,
   persistAdminPaymentLog,
@@ -474,9 +479,30 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   // Cash Requests list (zéro mock hardcodé)
   const [cashRequests, setCashRequests] = useState<AdminCashRequest[]>([]);
 
-  // Affiliation State (zéro mock hardcodé)
+  // Affiliation State (zéro mock hardcodé — chargé depuis serveur & Cloud)
   const [affiliateCommissionRate, setAffiliateCommissionRate] = useState<number>(15);
   const [affiliateWithdrawals, setAffiliateWithdrawals] = useState<AffiliateWithdrawal[]>([]);
+  const [isSavingAffiliateRate, setIsSavingAffiliateRate] = useState<boolean>(false);
+
+  const loadAdminAffiliateData = useCallback(async () => {
+    const res = await fetchAdminAffiliateWithdrawals();
+    if (Array.isArray(res.withdrawals)) {
+      setAffiliateWithdrawals(res.withdrawals as any);
+    }
+    if (res.settings?.starterRate) {
+      setAffiliateCommissionRate(res.settings.starterRate);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAdminAffiliateData();
+  }, [loadAdminAffiliateData]);
+
+  useEffect(() => {
+    if (adminActiveTab === 'AFFILIATION') {
+      loadAdminAffiliateData();
+    }
+  }, [adminActiveTab, loadAdminAffiliateData]);
 
   // =========================================================================
   // GESTION DES PAIEMENTS EN ATTENTE & CAISSE POS (SUPABASE REALTIME LIVE)
@@ -1487,11 +1513,18 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     }
   };
 
-  // Mark Affiliate Withdrawal as Paid
+  // Mark Affiliate Withdrawal as Paid (serveur + Cloud)
   const handleProcessWithdrawal = async (withdrawalId: string) => {
     playTapBeep();
     try {
-      await markWithdrawalPaid(withdrawalId, currentUser?.id || 'admin');
+      await updateAdminAffiliateWithdrawalStatus(
+        withdrawalId,
+        'PAID',
+        `Validé par ${currentUser?.name || currentUser?.id || 'Super-Admin'}`
+      );
+      try {
+        await markWithdrawalPaid(withdrawalId, currentUser?.id || 'admin');
+      } catch {}
       setAffiliateWithdrawals((prev) =>
         prev.map((w) => (w.id === withdrawalId ? { ...w, status: 'PAID', processedAt: Date.now() } : w))
       );
@@ -1499,6 +1532,20 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
       showToast('✓ Retrait d\'affiliation validé et marqué comme viré par Mobile Money !');
     } catch (e) {
       console.warn('Erreur retrait :', e);
+    }
+  };
+
+  const handleSaveAffiliateRate = async () => {
+    playTapBeep();
+    setIsSavingAffiliateRate(true);
+    try {
+      const updated = await updateAffiliateStudioSettings({ starterRate: affiliateCommissionRate });
+      if (updated) {
+        playValidationBeep();
+        showToast(`✓ Taux d'affiliation Starter sauvegardé (${updated.starterRate}%) dans le Cloud !`);
+      }
+    } finally {
+      setIsSavingAffiliateRate(false);
     }
   };
 
@@ -4061,6 +4108,14 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                 />
                 <span className="text-sm font-black text-amber-400">%</span>
               </div>
+              <button
+                type="button"
+                disabled={isSavingAffiliateRate}
+                onClick={handleSaveAffiliateRate}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs cursor-pointer transition-colors"
+              >
+                {isSavingAffiliateRate ? '...' : 'Enregistrer'}
+              </button>
             </div>
           </div>
         </div>

@@ -155,6 +155,12 @@ import { getSafeStoreSlug } from './utils/slugEngine';
 import { ensureAndPersistTenantSlug } from './utils/slugService';
 import { THEME_PREFIX_REGEX, extractPublicStoreRouteParams } from './utils/themeRoutePrefix';
 import { NanasoreLogo } from './components/common/NanasoreLogo';
+import { captureSaasReferralFromUrl } from './services/affiliateTrackingService';
+
+// Capture immédiate des liens de parrainage (?ref=CODE / ?aff=CODE / ?parrain=CODE) dès l'arrivée sur le site
+if (typeof window !== 'undefined') {
+  captureSaasReferralFromUrl();
+}
 
 // 3. LoadingScreen ultra-léger et Cyber-Premium pour transition fluide en Code Splitting / Lazy Loading
 export const LoadingScreen: React.FC<{ message?: string; label?: string }> = ({ message, label }) => {

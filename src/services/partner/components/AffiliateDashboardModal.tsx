@@ -10,6 +10,13 @@ import {
   persistAffiliateProfile, 
   requestAffiliateWithdrawal 
 } from '../../../utils/firestoreService';
+import {
+  fetchUnifiedAffiliateHub,
+  submitAffiliateWithdrawalRequest,
+  transferAffiliateToNanaWallet,
+  type AffiliateChannel,
+  type UnifiedAffiliateCommission,
+} from '../../../services/affiliateTrackingService';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../utils/audio';
 import {
   Users,
@@ -43,7 +50,13 @@ import {
   ChevronRight,
   Flame,
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw,
+  Layers,
+  GraduationCap,
+  ShoppingBag,
+  Compass,
+  ArrowRightLeft
 } from 'lucide-react';
 
 export interface AffiliateDashboardModalProps {
@@ -53,7 +66,7 @@ export interface AffiliateDashboardModalProps {
   isModal?: boolean;
 }
 
-type ActiveTab = 'OVERVIEW' | 'STORES' | 'WALLET' | 'MARKETING_KIT' | 'SIMULATOR';
+type ActiveTab = 'OVERVIEW' | 'COMMISSIONS' | 'STORES' | 'WALLET' | 'MARKETING_KIT' | 'SIMULATOR';
 
 interface MarketingTemplate {
   id: string;
@@ -178,6 +191,109 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
       console.warn('Withdrawals save error', e);
     }
   }, [withdrawals, storageWithdrawalsKey]);
+
+  // Synchronisation Cloud / Serveur unifiée (4 canaux : SaaS + Produits + Tunnels + Formations)
+  const [isSyncingHub, setIsSyncingHub] = useState(false);
+  const [unifiedCommissions, setUnifiedCommissions] = useState<UnifiedAffiliateCommission[]>([]);
+  const [channelBreakdown, setChannelBreakdown] = useState<
+    Record<AffiliateChannel, { count: number; sales: number; commission: number }>
+  >({
+    SAAS: { count: 0, sales: 0, commission: 0 },
+    PRODUCT: { count: 0, sales: 0, commission: 0 },
+    FUNNEL: { count: 0, sales: 0, commission: 0 },
+    COURSE: { count: 0, sales: 0, commission: 0 },
+  });
+  const [channelFilter, setChannelFilter] = useState<'ALL' | AffiliateChannel>('ALL');
+  const [copiedChannelLink, setCopiedChannelLink] = useState<AffiliateChannel | null>(null);
+  const [isTransferringWallet, setIsTransferringWallet] = useState(false);
+  const [walletTransferAmount, setWalletTransferAmount] = useState<number>(1000);
+  const [walletTransferFeedback, setWalletTransferFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const channelLinks = useMemo(
+    () => ({
+      SAAS: `${siteOrigin}/register?ref=${affiliateCode}`,
+      PRODUCT: `${siteOrigin}/?ref=${affiliateCode}`,
+      FUNNEL: `${siteOrigin}/?ref=${affiliateCode}&source=funnel`,
+      COURSE: `${siteOrigin}/academie?ref=${affiliateCode}`,
+    }),
+    [siteOrigin, affiliateCode]
+  );
+
+  const syncFromHub = useCallback(async () => {
+    setIsSyncingHub(true);
+    try {
+      const hub = await fetchUnifiedAffiliateHub(affiliateCode);
+      if (hub && hub.success) {
+        setUnifiedCommissions(hub.commissions || []);
+        if (hub.byChannel) setChannelBreakdown(hub.byChannel);
+        if (Array.isArray(hub.withdrawals)) {
+          setWithdrawals(hub.withdrawals as any);
+        }
+        setProfile((prev) => ({
+          ...prev,
+          affiliateCode: hub.affiliateCode || prev.affiliateCode,
+          commissionRate: hub.tier?.rate || prev.commissionRate,
+          availableBalance: hub.availableBalance,
+          totalEarned: hub.totalEarned,
+          referredStores: (hub.referredStores || []) as ReferredStore[],
+          referredStoresCount: (hub.referredStores || []).length,
+        }));
+      }
+    } finally {
+      setIsSyncingHub(false);
+    }
+  }, [affiliateCode]);
+
+  useEffect(() => {
+    if (isOpen) {
+      syncFromHub();
+    }
+  }, [isOpen, syncFromHub]);
+
+  const handleCopyChannelLink = async (channel: AffiliateChannel) => {
+    playTapBeep();
+    const url = channelLinks[channel];
+    try {
+      await navigator.clipboard?.writeText(url);
+    } catch {}
+    setCopiedChannelLink(channel);
+    setTimeout(() => setCopiedChannelLink(null), 2200);
+  };
+
+  const handleTransferToNanaWallet = async () => {
+    setWalletTransferFeedback(null);
+    const amount = Math.round(Number(walletTransferAmount) || 0);
+    if (amount < 1000) {
+      setWalletTransferFeedback({ type: 'err', text: 'Montant minimum de transfert Wallet : 1 000 FCFA.' });
+      return;
+    }
+    if (amount > profile.availableBalance) {
+      setWalletTransferFeedback({ type: 'err', text: 'Montant supérieur à votre solde affilié disponible.' });
+      return;
+    }
+    setIsTransferringWallet(true);
+    playTapBeep();
+    const res = await transferAffiliateToNanaWallet({
+      affiliateCode,
+      universeId: safeStoreId,
+      affiliateName: profile.name,
+      amount,
+    });
+    setIsTransferringWallet(false);
+    if (res.success) {
+      playValidationBeep();
+      setWalletTransferFeedback({
+        type: 'ok',
+        text: `${formatCFA(amount)} transférés instantanément vers votre NaNa Wallet Marchand !`,
+      });
+      await syncFromHub();
+    } else {
+      setWalletTransferFeedback({
+        type: 'err',
+        text: res.error || 'Impossible de transférer vers NaNa Wallet.',
+      });
+    }
+  };
 
   // Dynamic Tier Calculation
   const partnerTier = useMemo(() => {
@@ -383,7 +499,23 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
 
     playTapBeep();
 
-    const newWithdrawal: AffiliateWithdrawal = {
+    // 1. Validation et persistance sécurisée côté serveur & Cloud
+    const apiRes = await submitAffiliateWithdrawalRequest({
+      affiliateCode,
+      affiliateId: profile.id,
+      affiliateName: profile.name,
+      phone: withdrawPhone.trim(),
+      amount: withdrawAmount,
+      provider: withdrawProvider,
+      accountName: withdrawAccountName || profile.name,
+    });
+
+    if (!apiRes.success) {
+      setWithdrawError(apiRes.error || 'Impossible de valider cette demande de retrait.');
+      return;
+    }
+
+    const newWithdrawal: AffiliateWithdrawal = (apiRes.withdrawal as any) || {
       id: `WITH-${Date.now().toString(36).toUpperCase()}`,
       affiliateId: profile.id,
       affiliateName: profile.name,
@@ -392,45 +524,41 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
       provider: withdrawProvider,
       status: 'PENDING',
       createdAt: Date.now(),
-      adminNotes: `Bénéficiaire : ${withdrawAccountName || profile.name}. En attente de transfert.`
+      adminNotes: `Bénéficiaire : ${withdrawAccountName || profile.name}. En attente de transfert.`,
     };
 
     try {
       await requestAffiliateWithdrawal(newWithdrawal);
-      playValidationBeep();
+    } catch {}
 
-      const updatedBalance = profile.availableBalance - withdrawAmount;
-      const updatedProfile = {
-        ...profile,
-        availableBalance: updatedBalance,
-      };
-
-      setProfile(updatedProfile);
-      setWithdrawals(prev => [newWithdrawal, ...prev]);
+    playValidationBeep();
+    const updatedBalance =
+      typeof apiRes.availableBalance === 'number'
+        ? apiRes.availableBalance
+        : Math.max(0, profile.availableBalance - withdrawAmount);
+    const updatedProfile = { ...profile, availableBalance: updatedBalance };
+    setProfile(updatedProfile);
+    setWithdrawals((prev) => [newWithdrawal, ...prev.filter((w) => w.id !== newWithdrawal.id)]);
+    try {
       await persistAffiliateProfile(updatedProfile);
+    } catch {}
 
-      setWithdrawSuccess(true);
-      setTimeout(() => {
-        setWithdrawSuccess(false);
-        setIsWithdrawOpen(false);
-      }, 2500);
-    } catch (err) {
-      console.warn('Erreur demande retrait :', err);
-      // Mode secours local si hors-ligne
-      playValidationBeep();
-      const updatedBalance = profile.availableBalance - withdrawAmount;
-      setProfile(prev => ({ ...prev, availableBalance: updatedBalance }));
-      setWithdrawals(prev => [newWithdrawal, ...prev]);
-      setWithdrawSuccess(true);
-      setTimeout(() => {
-        setWithdrawSuccess(false);
-        setIsWithdrawOpen(false);
-      }, 2500);
-    }
+    setWithdrawSuccess(true);
+    setTimeout(() => {
+      setWithdrawSuccess(false);
+      setIsWithdrawOpen(false);
+      syncFromHub();
+    }, 2200);
   };
 
-  const getProviderBadge = (provider: MobileMoneyProvider) => {
+  const getProviderBadge = (provider: MobileMoneyProvider | 'NANA_WALLET') => {
     switch (provider) {
+      case 'NANA_WALLET':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> NaNa Wallet
+          </span>
+        );
       case 'WAVE':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-sky-500/20 text-sky-400 border border-sky-500/30">
@@ -518,6 +646,18 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
           </div>
 
           <div className="flex items-center gap-2 self-end md:self-center">
+            {/* Synchroniser le Hub Cloud */}
+            <button
+              type="button"
+              onClick={() => { playTapBeep(); syncFromHub(); }}
+              disabled={isSyncingHub}
+              className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+              title="Actualiser vos commissions et retraits depuis le Cloud"
+            >
+              <RefreshCw className={`w-4 h-4 text-sky-400 ${isSyncingHub ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isSyncingHub ? 'Sync...' : 'Actualiser'}</span>
+            </button>
+
             {/* Quick Share Buttons in Header */}
             <button
               onClick={() => { playTapBeep(); setIsQrModalOpen(true); }}
@@ -572,7 +712,24 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
             }`}
           >
             <TrendingUp className="w-4 h-4" />
-            Aperçu & Performances
+            Aperçu &amp; 4 Canaux
+          </button>
+
+          <button
+            onClick={() => { playTapBeep(); setActiveTab('COMMISSIONS'); }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'COMMISSIONS'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-black'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            Commissions
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              activeTab === 'COMMISSIONS' ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {unifiedCommissions.length}
+            </span>
           </button>
 
           <button
@@ -797,6 +954,103 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
 
               </div>
 
+              {/* 4 TYPES D'AFFILIATION UNIFIÉS (SAAS + PRODUITS + TUNNELS + FORMATIONS) */}
+              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-black text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-emerald-400" />
+                      Vos 4 Canaux d&apos;Affiliation Actifs
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Un seul code (<span className="font-mono text-emerald-400 font-bold">{affiliateCode}</span>), quatre sources de commissions centralisées dans votre solde.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { playTapBeep(); setActiveTab('COMMISSIONS'); }}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer self-start sm:self-center"
+                  >
+                    Voir toutes les commissions <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {([
+                    {
+                      key: 'SAAS' as AffiliateChannel,
+                      title: 'SaaS & Boutiques',
+                      rateText: `${partnerTier.rate}% récurrent à vie`,
+                      desc: 'Parrainez des commerçants & formateurs sur Nanasore.',
+                      icon: Store,
+                      accent: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+                    },
+                    {
+                      key: 'PRODUCT' as AffiliateChannel,
+                      title: 'Produits & Catalogue',
+                      rateText: '1% à 80% / vente',
+                      desc: 'Partagez les produits avec affiliation activée (suivi 30j).',
+                      icon: ShoppingBag,
+                      accent: 'text-sky-400 border-sky-500/30 bg-sky-500/10',
+                    },
+                    {
+                      key: 'FUNNEL' as AffiliateChannel,
+                      title: 'Tunnels & Mini-Market',
+                      rateText: '1% à 50% co-brandé',
+                      desc: 'Partagez des tunnels de vente avec crédit automatique.',
+                      icon: Compass,
+                      accent: 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10',
+                    },
+                    {
+                      key: 'COURSE' as AffiliateChannel,
+                      title: 'Formations & Académies',
+                      rateText: '15% par défaut',
+                      desc: 'Recommandez des formations et encaissez à chaque inscription.',
+                      icon: GraduationCap,
+                      accent: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+                    },
+                  ]).map((ch) => {
+                    const Icon = ch.icon;
+                    const stat = channelBreakdown[ch.key] || { count: 0, sales: 0, commission: 0 };
+                    const isCopied = copiedChannelLink === ch.key;
+                    return (
+                      <div
+                        key={ch.key}
+                        className="bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-2xl p-3.5 flex flex-col justify-between gap-3 transition-colors"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center ${ch.accent}`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <span className="text-[10px] font-black text-slate-300 bg-slate-800 px-2 py-0.5 rounded-full">
+                              {ch.rateText}
+                            </span>
+                          </div>
+                          <div className="text-xs font-black text-white">{ch.title}</div>
+                          <p className="text-[11px] text-slate-400 mt-1 leading-snug">{ch.desc}</p>
+                        </div>
+
+                        <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-400">{stat.count} vente(s)</span>
+                            <span className="font-black text-emerald-400">+{formatCFA(stat.commission)}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyChannelLink(ch.key)}
+                            className="w-full py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {isCopied ? 'Lien copié !' : 'Copier le lien'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* SECTION RETRAIT RAPIDE & EXPLICATION EN 3 ÉTAPES */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 
@@ -895,6 +1149,127 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
 
               </div>
 
+            </div>
+          )}
+
+          {/* -----------------------------------------------------------------------
+              TAB 1B : COMMISSIONS UNIFIÉES (4 CANAUX : SAAS, PRODUITS, TUNNELS, FORMATIONS)
+             ----------------------------------------------------------------------- */}
+          {activeTab === 'COMMISSIONS' && (
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800 rounded-2xl p-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-wider mr-1">Canal :</span>
+                  {([
+                    { id: 'ALL', label: `Tous (${unifiedCommissions.length})` },
+                    { id: 'SAAS', label: `SaaS (${channelBreakdown.SAAS.count})` },
+                    { id: 'PRODUCT', label: `Produits (${channelBreakdown.PRODUCT.count})` },
+                    { id: 'FUNNEL', label: `Tunnels (${channelBreakdown.FUNNEL.count})` },
+                    { id: 'COURSE', label: `Formations (${channelBreakdown.COURSE.count})` },
+                  ] as const).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => { playTapBeep(); setChannelFilter(f.id); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                        channelFilter === f.id
+                          ? 'bg-emerald-500 text-slate-950 font-black'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { playTapBeep(); syncFromHub(); }}
+                  disabled={isSyncingHub}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isSyncingHub ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </button>
+              </div>
+
+              {unifiedCommissions.filter((c) => channelFilter === 'ALL' || c.channel === channelFilter).length === 0 ? (
+                <div className="bg-slate-950 border border-slate-800 rounded-3xl p-8 sm:p-12 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400">
+                    <Layers className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-base font-bold text-white">Aucune commission enregistrée sur ce canal</h4>
+                  <p className="text-xs text-slate-400 max-w-md mx-auto">
+                    Partagez vos liens SaaS, Produits, Tunnels ou Formations avec votre code <span className="font-mono text-emerald-400 font-bold">{affiliateCode}</span>. Chaque vente confirmée apparaît ici automatiquement.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-3.5 px-4">Canal</th>
+                          <th className="py-3.5 px-4">Produit / Abonnement</th>
+                          <th className="py-3.5 px-4">Client &amp; Réf.</th>
+                          <th className="py-3.5 px-4 text-right">Vente</th>
+                          <th className="py-3.5 px-4 text-right">Commission</th>
+                          <th className="py-3.5 px-4">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {unifiedCommissions
+                          .filter((c) => channelFilter === 'ALL' || c.channel === channelFilter)
+                          .map((c) => {
+                            const badgeStyle =
+                              c.channel === 'SAAS'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : c.channel === 'PRODUCT'
+                                  ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                                  : c.channel === 'COURSE'
+                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                    : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30';
+                            const label =
+                              c.channel === 'SAAS'
+                                ? 'SaaS'
+                                : c.channel === 'PRODUCT'
+                                  ? 'Produit'
+                                  : c.channel === 'COURSE'
+                                    ? 'Formation'
+                                    : 'Tunnel';
+                            return (
+                              <tr key={c.id} className="hover:bg-slate-900/40 transition-colors">
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-black border ${badgeStyle}`}>
+                                    {label}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-white">{c.productName}</td>
+                                <td className="py-3.5 px-4 text-slate-400">
+                                  <div>{c.customerName || 'Client'}</div>
+                                  <div className="font-mono text-[10px] text-slate-500">{c.orderRef}</div>
+                                </td>
+                                <td className="py-3.5 px-4 text-right text-slate-300 whitespace-nowrap">
+                                  {formatCFA(c.orderTotal)}
+                                </td>
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  <div className="font-black text-emerald-400">+{formatCFA(c.commissionAmount)}</div>
+                                  <div className="text-[10px] text-slate-500">{c.commissionRate}%</div>
+                                </td>
+                                <td className="py-3.5 px-4 text-slate-400 text-[11px] whitespace-nowrap">
+                                  {new Date(c.createdAt).toLocaleDateString('fr-FR', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1129,6 +1504,54 @@ export const AffiliateDashboardModal: React.FC<AffiliateDashboardModalProps> = (
                   <div className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5" /> 100% de fiabilité de versement
                   </div>
+                </div>
+              </div>
+
+              {/* TRANSFERT INSTANTANÉ VERS NANA WALLET MARCHAND */}
+              <div className="bg-gradient-to-r from-indigo-950/60 via-slate-950 to-emerald-950/40 border border-indigo-500/30 rounded-3xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2.5 py-0.5 rounded-full">
+                    <ArrowRightLeft className="w-3 h-3" /> Pont NaNa Wallet Marchand • Instantané &amp; 0 F
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-white">
+                    Transférez vos commissions directement dans votre NaNa Wallet
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Utilisez immédiatement vos gains d&apos;affiliation pour payer vos modules Pay-As-You-Go, crédits IA ou recharges (dès 1 000 FCFA).
+                  </p>
+                  {walletTransferFeedback && (
+                    <p
+                      className={`text-xs font-bold pt-1 ${
+                        walletTransferFeedback.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {walletTransferFeedback.text}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1000}
+                      max={Math.max(1000, profile.availableBalance)}
+                      step={500}
+                      value={walletTransferAmount}
+                      onChange={(e) => setWalletTransferAmount(Number(e.target.value) || 0)}
+                      className="w-full sm:w-40 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-indigo-400"
+                      placeholder="Montant FCFA"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isTransferringWallet || profile.availableBalance < 1000}
+                    onClick={handleTransferToNanaWallet}
+                    className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    {isTransferringWallet ? 'Transfert...' : 'Transférer vers NaNa Wallet'}
+                  </button>
                 </div>
               </div>
 

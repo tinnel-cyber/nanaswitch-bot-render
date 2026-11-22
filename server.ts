@@ -2682,10 +2682,56 @@ async function startServer() {
   });
 
   // ============================================================================
-  // 2F. POINT 5 : AFFILIATION CO-BRANDÉE (CRÉDIT AUTO COMMISSION) & /api/payments/trigger
+  // 2F. POINT 5 : STUDIO D'AFFILIATION UNIFIÉ (SAAS + PRODUITS + TUNNELS + FORMATIONS) & /api/payments/trigger
   // ============================================================================
   const AFFILIATE_COMMISSIONS_FILE = path.join(DATA_DIR, 'affiliate_commissions_ledger.json');
+  const AFFILIATE_REFERRALS_FILE = path.join(DATA_DIR, 'affiliate_referrals_ledger.json');
+  const AFFILIATE_WITHDRAWALS_FILE = path.join(DATA_DIR, 'affiliate_withdrawals_ledger.json');
+  const AFFILIATE_SETTINGS_FILE = path.join(DATA_DIR, 'affiliate_settings.json');
   const MINIMARKET_ORDERS_FILE = path.join(DATA_DIR, 'minimarket_orders.json');
+
+  type AffiliateChannel = 'SAAS' | 'PRODUCT' | 'FUNNEL' | 'COURSE';
+
+  const DEFAULT_AFFILIATE_SETTINGS = {
+    starterRate: 15,      // 0 - 4 boutiques actives
+    proRate: 18,          // 5 - 9 boutiques actives
+    proThreshold: 5,
+    eliteRate: 20,        // 10+ boutiques actives
+    eliteThreshold: 10,
+    defaultProductRate: 10,
+    defaultFunnelRate: 10,
+    defaultCourseRate: 15,
+    minWithdrawalXof: 5000,
+    minWalletTransferXof: 1000,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const getStoredAffiliateSettings = () => {
+    try {
+      if (fs.existsSync(AFFILIATE_SETTINGS_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(AFFILIATE_SETTINGS_FILE, 'utf-8'));
+        if (parsed && typeof parsed === 'object') {
+          return { ...DEFAULT_AFFILIATE_SETTINGS, ...parsed };
+        }
+      }
+    } catch {}
+    return { ...DEFAULT_AFFILIATE_SETTINGS };
+  };
+
+  const saveStoredAffiliateSettings = (settings: any) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(AFFILIATE_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[AffiliateSettings] Erreur sauvegarde:', err);
+    }
+  };
+
+  const normalizeAffiliateKey = (raw: string): string =>
+    String(raw || '')
+      .trim()
+      .replace(/^@/, '')
+      .toUpperCase();
 
   const getStoredAffiliateCommissions = (): any[] => {
     try {
@@ -2704,6 +2750,44 @@ async function startServer() {
       fs.writeFileSync(AFFILIATE_COMMISSIONS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
     } catch (err) {
       console.warn('[AffiliateLedger] Erreur sauvegarde:', err);
+    }
+  };
+
+  const getStoredAffiliateReferrals = (): any[] => {
+    try {
+      if (fs.existsSync(AFFILIATE_REFERRALS_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(AFFILIATE_REFERRALS_FILE, 'utf-8'));
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredAffiliateReferrals = (items: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(AFFILIATE_REFERRALS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[AffiliateReferrals] Erreur sauvegarde:', err);
+    }
+  };
+
+  const getStoredAffiliateWithdrawals = (): any[] => {
+    try {
+      if (fs.existsSync(AFFILIATE_WITHDRAWALS_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(AFFILIATE_WITHDRAWALS_FILE, 'utf-8'));
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredAffiliateWithdrawals = (items: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(AFFILIATE_WITHDRAWALS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[AffiliateWithdrawals] Erreur sauvegarde:', err);
     }
   };
 
@@ -2727,11 +2811,35 @@ async function startServer() {
     }
   };
 
+  const computeAffiliateTier = (activeStoresCount: number, settings = getStoredAffiliateSettings()) => {
+    if (activeStoresCount >= settings.eliteThreshold) {
+      return { name: 'Partenaire Élite', rate: settings.eliteRate, nextTier: null, neededForNext: 0, progress: 100 };
+    }
+    if (activeStoresCount >= settings.proThreshold) {
+      return {
+        name: 'Partenaire Pro',
+        rate: settings.proRate,
+        nextTier: `Partenaire Élite (${settings.eliteRate}%)`,
+        neededForNext: settings.eliteThreshold - activeStoresCount,
+        progress: Math.round((activeStoresCount / settings.eliteThreshold) * 100),
+      };
+    }
+    return {
+      name: 'Partenaire Starter',
+      rate: settings.starterRate,
+      nextTier: `Partenaire Pro (${settings.proRate}%)`,
+      neededForNext: settings.proThreshold - activeStoresCount,
+      progress: Math.round((activeStoresCount / settings.proThreshold) * 100),
+    };
+  };
+
   const creditAffiliateCommissionIdempotent = (params: {
     affiliateHandle: string;
     orderRef: string;
     orderTotal: number;
     commissionRate?: number;
+    channel?: AffiliateChannel;
+    productName?: string;
     tenantId?: string;
     slug?: string;
     customerName?: string;
@@ -2741,6 +2849,7 @@ async function startServer() {
       .trim()
       .replace(/^@/, '')
       .toLowerCase();
+    const cleanCodeUpper = cleanHandle.toUpperCase();
     const orderRef = String(params.orderRef || '').trim();
     const orderTotal = Math.max(0, Number(params.orderTotal) || 0);
     if (!cleanHandle || !orderRef || orderTotal <= 0) return null;
@@ -2753,12 +2862,19 @@ async function startServer() {
     );
     if (existing) return existing;
 
-    const rate = Math.max(1, Math.min(50, Number(params.commissionRate) || 10));
+    const channel: AffiliateChannel = (['SAAS', 'PRODUCT', 'FUNNEL', 'COURSE'].includes(String(params.channel || '').toUpperCase())
+      ? String(params.channel).toUpperCase()
+      : 'FUNNEL') as AffiliateChannel;
+
+    const rate = Math.max(1, Math.min(80, Number(params.commissionRate) || 10));
     const commissionAmount = Math.round((orderTotal * rate) / 100);
 
     const record = {
       id: `aff_${crypto.randomBytes(5).toString('hex')}`,
       affiliateHandle: cleanHandle,
+      referrerCode: cleanCodeUpper,
+      channel,
+      productName: String(params.productName || (channel === 'SAAS' ? 'Abonnement Boutique' : channel === 'COURSE' ? 'Formation Académie' : 'Commande Boutique')).trim(),
       orderRef,
       tenantId: String(params.tenantId || '').trim(),
       slug: String(params.slug || '').trim(),
@@ -2774,8 +2890,596 @@ async function startServer() {
 
     all.unshift(record);
     saveStoredAffiliateCommissions(all);
+
+    // Persistance Cloud asynchrone (résilience redémarrages)
+    if (supabaseAdmin) {
+      Promise.resolve(
+        supabaseAdmin.from('affiliate_commissions').insert({
+          merchant_id: record.tenantId || 'platform',
+          product_name: `[${record.channel}] ${record.productName}`,
+          referrer_code: cleanCodeUpper,
+          buyer_name: record.customerName,
+          order_amount: record.orderTotal,
+          commission_percent: record.commissionRate,
+          commission_amount: record.commissionAmount,
+          currency: 'XOF',
+          transaction_id: record.orderRef,
+          status: 'pending',
+        })
+      ).catch(() => {});
+    }
+
     return record;
   };
+
+  const loadUnifiedAffiliateHubData = async (rawCode: string) => {
+    const cleanUpper = normalizeAffiliateKey(rawCode);
+    const cleanLower = cleanUpper.toLowerCase();
+    const settings = getStoredAffiliateSettings();
+
+    // 1. Charger les filleuls SaaS (local + Cloud si dispo)
+    let referrals = getStoredAffiliateReferrals().filter(
+      (r: any) => normalizeAffiliateKey(r.referrerCode) === cleanUpper
+    );
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('affiliate_referrals')
+          .select('*')
+          .ilike('referrer_code', cleanUpper)
+          .limit(500);
+        if (Array.isArray(data) && data.length > 0) {
+          const mapByStore = new Map<string, any>();
+          for (const r of referrals) mapByStore.set(String(r.storeId), r);
+          for (const row of data) {
+            const sid = String(row.store_id || row.id);
+            mapByStore.set(sid, {
+              storeId: sid,
+              storeName: row.store_name || 'Boutique Partenaire',
+              ownerName: row.owner_name || 'Commerçant',
+              ownerEmail: row.owner_email || '',
+              referrerCode: normalizeAffiliateKey(row.referrer_code),
+              registeredAt: row.registered_at ? new Date(row.registered_at).getTime() : Date.now(),
+              status: row.status || 'TRIAL',
+              commissionGenerated: Number(row.commission_generated) || 0,
+            });
+          }
+          referrals = Array.from(mapByStore.values());
+        }
+      } catch {}
+    }
+
+    // 2. Charger toutes les commissions multi-canaux (local + Cloud `affiliate_commissions`)
+    const localComms = getStoredAffiliateCommissions().filter(
+      (c: any) =>
+        String(c.affiliateHandle || '').toLowerCase() === cleanLower ||
+        normalizeAffiliateKey(c.referrerCode || '') === cleanUpper
+    );
+    const mergedMap = new Map<string, any>();
+    for (const c of localComms) {
+      const dedupKey = `${c.orderRef || c.id}_${cleanUpper}`;
+      mergedMap.set(dedupKey, {
+        ...c,
+        channel: (['SAAS', 'PRODUCT', 'FUNNEL', 'COURSE'].includes(String(c.channel || '').toUpperCase())
+          ? String(c.channel).toUpperCase()
+          : 'FUNNEL') as AffiliateChannel,
+      });
+    }
+
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('affiliate_commissions')
+          .select('*')
+          .ilike('referrer_code', cleanUpper)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (Array.isArray(data)) {
+          for (const row of data) {
+            const txRef = String(row.transaction_id || row.id);
+            const dedupKey = `${txRef}_${cleanUpper}`;
+            if (mergedMap.has(dedupKey)) continue;
+            const rawName = String(row.product_name || 'Vente Produit');
+            let detectedChannel: AffiliateChannel = 'PRODUCT';
+            if (rawName.startsWith('[SAAS]')) detectedChannel = 'SAAS';
+            else if (rawName.startsWith('[COURSE]')) detectedChannel = 'COURSE';
+            else if (rawName.startsWith('[FUNNEL]')) detectedChannel = 'FUNNEL';
+            mergedMap.set(dedupKey, {
+              id: String(row.id),
+              affiliateHandle: cleanLower,
+              referrerCode: cleanUpper,
+              channel: detectedChannel,
+              productName: rawName.replace(/^\[(SAAS|PRODUCT|FUNNEL|COURSE)\]\s*/, ''),
+              orderRef: txRef,
+              tenantId: String(row.merchant_id || ''),
+              customerName: String(row.buyer_name || 'Client'),
+              orderTotal: Number(row.order_amount) || 0,
+              commissionRate: Number(row.commission_percent) || 10,
+              commissionAmount: Number(row.commission_amount) || 0,
+              currency: row.currency || 'XOF',
+              status: row.status === 'paid' ? 'PAID' : 'CREDITED',
+              createdAt: row.created_at || new Date().toISOString(),
+            });
+          }
+        }
+      } catch {}
+    }
+
+    const commissions = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    // 3. Charger les retraits affiliés (local + Cloud)
+    let withdrawals = getStoredAffiliateWithdrawals().filter(
+      (w: any) =>
+        normalizeAffiliateKey(w.affiliateCode || w.affiliateId || '') === cleanUpper ||
+        String(w.affiliateId || '').toLowerCase() === `aff_${cleanLower}`
+    );
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('affiliate_withdrawals')
+          .select('*')
+          .ilike('affiliate_code', cleanUpper)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (Array.isArray(data) && data.length > 0) {
+          const wMap = new Map<string, any>();
+          for (const w of withdrawals) wMap.set(String(w.id), w);
+          for (const row of data) {
+            wMap.set(String(row.id), {
+              id: String(row.id),
+              affiliateId: String(row.affiliate_id || cleanUpper),
+              affiliateCode: normalizeAffiliateKey(row.affiliate_code || cleanUpper),
+              affiliateName: String(row.affiliate_name || 'Partenaire'),
+              phone: String(row.phone || ''),
+              amount: Number(row.amount) || 0,
+              provider: row.provider || 'WAVE',
+              status: row.status || 'PENDING',
+              createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+              processedAt: row.processed_at ? new Date(row.processed_at).getTime() : undefined,
+              adminNotes: row.admin_notes || '',
+            });
+          }
+          withdrawals = Array.from(wMap.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        }
+      } catch {}
+    }
+
+    const byChannel: Record<AffiliateChannel, { count: number; sales: number; commission: number }> = {
+      SAAS: { count: 0, sales: 0, commission: 0 },
+      PRODUCT: { count: 0, sales: 0, commission: 0 },
+      FUNNEL: { count: 0, sales: 0, commission: 0 },
+      COURSE: { count: 0, sales: 0, commission: 0 },
+    };
+
+    let totalEarned = 0;
+    for (const c of commissions) {
+      const ch: AffiliateChannel = byChannel[c.channel as AffiliateChannel] ? c.channel : 'FUNNEL';
+      const amt = Number(c.commissionAmount) || 0;
+      const sale = Number(c.orderTotal) || 0;
+      byChannel[ch].count += 1;
+      byChannel[ch].sales += sale;
+      byChannel[ch].commission += amt;
+      totalEarned += amt;
+    }
+
+    const withdrawnPaid = withdrawals
+      .filter((w: any) => w.status === 'PAID')
+      .reduce((s: number, w: any) => s + (Number(w.amount) || 0), 0);
+    const pendingWithdrawals = withdrawals
+      .filter((w: any) => w.status === 'PENDING')
+      .reduce((s: number, w: any) => s + (Number(w.amount) || 0), 0);
+    const availableBalance = Math.max(0, totalEarned - withdrawnPaid - pendingWithdrawals);
+
+    const activeStoresCount = referrals.filter((r: any) => r.status === 'ACTIVE').length;
+    const tier = computeAffiliateTier(activeStoresCount, settings);
+
+    return {
+      affiliateCode: cleanUpper,
+      tier,
+      settings,
+      totalEarned,
+      withdrawnPaid,
+      pendingWithdrawals,
+      availableBalance,
+      byChannel,
+      referredStores: referrals,
+      commissions: commissions.slice(0, 100),
+      withdrawals,
+    };
+  };
+
+  // GET /api/affiliate/settings — Règles et paliers officiels du Studio d'Affiliation
+  app.get('/api/affiliate/settings', async (_req, res) => {
+    let settings = getStoredAffiliateSettings();
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('affiliate_settings')
+          .select('*')
+          .eq('id', 'global')
+          .maybeSingle();
+        if (data) {
+          settings = {
+            ...settings,
+            starterRate: Number(data.starter_rate) || settings.starterRate,
+            proRate: Number(data.pro_rate) || settings.proRate,
+            eliteRate: Number(data.elite_rate) || settings.eliteRate,
+            defaultProductRate: Number(data.default_product_rate) || settings.defaultProductRate,
+            defaultCourseRate: Number(data.default_course_rate) || settings.defaultCourseRate,
+          };
+        }
+      } catch {}
+    }
+    return res.json({ success: true, settings });
+  });
+
+  // POST /api/affiliate/settings — Mise à jour des taux par le Super-Admin
+  app.post('/api/affiliate/settings', async (req, res) => {
+    const body = req.body || {};
+    const prev = getStoredAffiliateSettings();
+    const updated = {
+      ...prev,
+      starterRate: Math.max(1, Math.min(50, Number(body.starterRate ?? prev.starterRate) || 15)),
+      proRate: Math.max(1, Math.min(50, Number(body.proRate ?? prev.proRate) || 18)),
+      eliteRate: Math.max(1, Math.min(50, Number(body.eliteRate ?? prev.eliteRate) || 20)),
+      defaultProductRate: Math.max(1, Math.min(80, Number(body.defaultProductRate ?? prev.defaultProductRate) || 10)),
+      defaultFunnelRate: Math.max(1, Math.min(50, Number(body.defaultFunnelRate ?? prev.defaultFunnelRate) || 10)),
+      defaultCourseRate: Math.max(1, Math.min(50, Number(body.defaultCourseRate ?? prev.defaultCourseRate) || 15)),
+      minWithdrawalXof: Math.max(1000, Number(body.minWithdrawalXof ?? prev.minWithdrawalXof) || 5000),
+      updatedAt: new Date().toISOString(),
+    };
+    saveStoredAffiliateSettings(updated);
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('affiliate_settings').upsert({
+          id: 'global',
+          starter_rate: updated.starterRate,
+          pro_rate: updated.proRate,
+          elite_rate: updated.eliteRate,
+          default_product_rate: updated.defaultProductRate,
+          default_course_rate: updated.defaultCourseRate,
+          updated_at: updated.updatedAt,
+        });
+      } catch {}
+    }
+    return res.json({ success: true, settings: updated });
+  });
+
+  // POST /api/affiliate/register-referral — Rattachement réel d'une nouvelle boutique/compte à son parrain SaaS
+  app.post('/api/affiliate/register-referral', async (req, res) => {
+    const {
+      referrerCode,
+      storeId,
+      storeName = 'Nouvelle Boutique',
+      ownerName = 'Commerçant',
+      ownerEmail = '',
+    } = req.body || {};
+
+    const cleanRef = normalizeAffiliateKey(referrerCode);
+    const cleanStoreId = String(storeId || ownerEmail || '').trim();
+    if (!cleanRef || !cleanStoreId) {
+      return res.status(400).json({ success: false, error: 'referrerCode et storeId requis' });
+    }
+    // Anti auto-parrainage
+    if (normalizeAffiliateKey(cleanStoreId) === cleanRef || normalizeAffiliateKey(cleanStoreId.replace('store-', 'AMB-')) === cleanRef) {
+      return res.status(400).json({ success: false, error: 'Auto-parrainage non autorisé' });
+    }
+
+    const all = getStoredAffiliateReferrals();
+    const existing = all.find(
+      (r: any) =>
+        String(r.storeId || '') === cleanStoreId ||
+        (ownerEmail && String(r.ownerEmail || '').toLowerCase() === String(ownerEmail).toLowerCase())
+    );
+    if (existing) {
+      return res.json({ success: true, referral: existing, alreadyRegistered: true });
+    }
+
+    const referral = {
+      storeId: cleanStoreId,
+      storeName: String(storeName).trim() || 'Nouvelle Boutique',
+      ownerName: String(ownerName).trim() || 'Commerçant',
+      ownerEmail: String(ownerEmail).trim().toLowerCase(),
+      referrerCode: cleanRef,
+      registeredAt: Date.now(),
+      status: 'TRIAL',
+      commissionGenerated: 0,
+    };
+
+    all.unshift(referral);
+    saveStoredAffiliateReferrals(all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('affiliate_referrals').upsert({
+          store_id: referral.storeId,
+          store_name: referral.storeName,
+          owner_name: referral.ownerName,
+          owner_email: referral.ownerEmail,
+          referrer_code: referral.referrerCode,
+          status: 'TRIAL',
+          commission_generated: 0,
+          registered_at: new Date(referral.registeredAt).toISOString(),
+        });
+      } catch {}
+    }
+
+    return res.json({ success: true, referral });
+  });
+
+  // GET /api/affiliate/hub/:code — Vue unifiée temps réel du Studio d'Affiliation (4 canaux + retraits + filleuls)
+  app.get('/api/affiliate/hub/:code', async (req, res) => {
+    const code = normalizeAffiliateKey(req.params.code || '');
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Code affilié requis' });
+    }
+    const hub = await loadUnifiedAffiliateHubData(code);
+    return res.json({ success: true, ...hub });
+  });
+
+  // POST /api/affiliate/withdrawals/request — Demande de retrait Mobile Money sécurisée côté serveur
+  app.post('/api/affiliate/withdrawals/request', async (req, res) => {
+    const {
+      affiliateCode,
+      affiliateId = '',
+      affiliateName = 'Partenaire',
+      phone = '',
+      amount = 0,
+      provider = 'WAVE',
+      accountName = '',
+    } = req.body || {};
+
+    const cleanCode = normalizeAffiliateKey(affiliateCode || affiliateId);
+    const cleanAmount = Math.round(Number(amount) || 0);
+    const settings = getStoredAffiliateSettings();
+
+    if (!cleanCode) {
+      return res.status(400).json({ success: false, error: 'Code affilié requis.' });
+    }
+    if (cleanAmount < settings.minWithdrawalXof) {
+      return res.status(400).json({ success: false, error: `Montant minimum de retrait : ${settings.minWithdrawalXof} FCFA.` });
+    }
+    if (!String(phone).trim() || String(phone).trim().length < 8) {
+      return res.status(400).json({ success: false, error: 'Numéro Mobile Money valide requis.' });
+    }
+
+    const hub = await loadUnifiedAffiliateHubData(cleanCode);
+    if (cleanAmount > hub.availableBalance) {
+      return res.status(400).json({
+        success: false,
+        error: `Solde insuffisant. Disponible : ${hub.availableBalance} FCFA.`,
+        availableBalance: hub.availableBalance,
+      });
+    }
+
+    const withdrawal = {
+      id: `WITH-${Date.now().toString(36).toUpperCase()}`,
+      affiliateId: affiliateId || `aff_${cleanCode.toLowerCase()}`,
+      affiliateCode: cleanCode,
+      affiliateName: String(affiliateName || 'Partenaire').trim(),
+      phone: String(phone).trim(),
+      amount: cleanAmount,
+      provider: String(provider || 'WAVE').toUpperCase(),
+      status: 'PENDING',
+      createdAt: Date.now(),
+      adminNotes: `Bénéficiaire : ${String(accountName || affiliateName || 'Partenaire').trim()}. En attente de transfert.`,
+    };
+
+    const all = getStoredAffiliateWithdrawals();
+    all.unshift(withdrawal);
+    saveStoredAffiliateWithdrawals(all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('affiliate_withdrawals').insert({
+          id: withdrawal.id,
+          affiliate_id: withdrawal.affiliateId,
+          affiliate_code: withdrawal.affiliateCode,
+          affiliate_name: withdrawal.affiliateName,
+          phone: withdrawal.phone,
+          amount: withdrawal.amount,
+          provider: withdrawal.provider,
+          status: 'PENDING',
+          admin_notes: withdrawal.adminNotes,
+          created_at: new Date(withdrawal.createdAt).toISOString(),
+        });
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      withdrawal,
+      availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
+    });
+  });
+
+  // POST /api/affiliate/transfer-to-wallet — Transfert instantané des commissions vers NaNa Wallet Marchand
+  app.post('/api/affiliate/transfer-to-wallet', async (req, res) => {
+    const {
+      affiliateCode,
+      universeId,
+      affiliateName = 'Partenaire',
+      amount = 0,
+    } = req.body || {};
+
+    const cleanCode = normalizeAffiliateKey(affiliateCode);
+    const cleanUniverseId = String(universeId || '').trim();
+    const cleanAmount = Math.round(Number(amount) || 0);
+    const settings = getStoredAffiliateSettings();
+
+    if (!cleanCode || !cleanUniverseId) {
+      return res.status(400).json({ success: false, error: 'affiliateCode et universeId requis.' });
+    }
+    if (cleanAmount < settings.minWalletTransferXof) {
+      return res.status(400).json({ success: false, error: `Montant minimum de transfert Wallet : ${settings.minWalletTransferXof} FCFA.` });
+    }
+
+    const hub = await loadUnifiedAffiliateHubData(cleanCode);
+    if (cleanAmount > hub.availableBalance) {
+      return res.status(400).json({
+        success: false,
+        error: `Solde affilié insuffisant (${hub.availableBalance} FCFA disponibles).`,
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const txId = `WAL-AFF-${Date.now().toString(36).toUpperCase()}`;
+
+    // 1. Marquer la sortie du solde affilié (statut PAID vers NANA_WALLET)
+    const withdrawal = {
+      id: txId,
+      affiliateId: `aff_${cleanCode.toLowerCase()}`,
+      affiliateCode: cleanCode,
+      affiliateName: String(affiliateName || 'Partenaire').trim(),
+      phone: `WALLET:${cleanUniverseId}`,
+      amount: cleanAmount,
+      provider: 'NANA_WALLET',
+      status: 'PAID',
+      createdAt: Date.now(),
+      processedAt: Date.now(),
+      adminNotes: `Transfert instantané vers NaNa Wallet Marchand (${cleanUniverseId})`,
+    };
+    const allW = getStoredAffiliateWithdrawals();
+    allW.unshift(withdrawal);
+    saveStoredAffiliateWithdrawals(allW);
+
+    // 2. Créditer NaNa Wallet Marchand (universes.balances & merchants.balances + wallet_transactions)
+    let newWalletBalanceXof: number | null = null;
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('affiliate_withdrawals').insert({
+          id: withdrawal.id,
+          affiliate_id: withdrawal.affiliateId,
+          affiliate_code: withdrawal.affiliateCode,
+          affiliate_name: withdrawal.affiliateName,
+          phone: withdrawal.phone,
+          amount: withdrawal.amount,
+          provider: 'NANA_WALLET',
+          status: 'PAID',
+          admin_notes: withdrawal.adminNotes,
+          created_at: nowIso,
+          processed_at: nowIso,
+        });
+      } catch {}
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: txId,
+          universe_id: cleanUniverseId,
+          type: 'AFFILIATE_TRANSFER',
+          amount: cleanAmount,
+          status: 'COMPLETED',
+          metadata: {
+            currency: 'XOF',
+            source: 'affiliate_studio',
+            affiliate_code: cleanCode,
+            created_at: nowIso,
+          },
+          created_at: nowIso,
+        });
+      } catch {}
+      try {
+        const { data: uRow } = await supabaseAdmin
+          .from('universes')
+          .select('balances')
+          .eq('id', cleanUniverseId)
+          .maybeSingle();
+        const prevBal = uRow?.balances && typeof uRow.balances === 'object' ? uRow.balances : { XOF: 0 };
+        const updatedBalances = { ...prevBal, XOF: (Number(prevBal.XOF) || 0) + cleanAmount };
+        newWalletBalanceXof = updatedBalances.XOF;
+        await Promise.allSettled([
+          supabaseAdmin.from('universes').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', cleanUniverseId),
+          supabaseAdmin.from('merchants').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', cleanUniverseId),
+        ]);
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      transfer: withdrawal,
+      availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
+      newWalletBalanceXof,
+    });
+  });
+
+  // GET /api/admin/affiliate/withdrawals — Liste complète pour le Super-Admin
+  app.get('/api/admin/affiliate/withdrawals', async (_req, res) => {
+    const localList = getStoredAffiliateWithdrawals();
+    const map = new Map<string, any>();
+    for (const w of localList) map.set(String(w.id), w);
+
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('affiliate_withdrawals')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+        if (Array.isArray(data)) {
+          for (const row of data) {
+            map.set(String(row.id), {
+              id: String(row.id),
+              affiliateId: String(row.affiliate_id || row.affiliate_code || ''),
+              affiliateCode: normalizeAffiliateKey(row.affiliate_code || ''),
+              affiliateName: String(row.affiliate_name || 'Partenaire'),
+              phone: String(row.phone || ''),
+              amount: Number(row.amount) || 0,
+              provider: row.provider || 'WAVE',
+              status: row.status || 'PENDING',
+              createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+              processedAt: row.processed_at ? new Date(row.processed_at).getTime() : undefined,
+              adminNotes: row.admin_notes || '',
+            });
+          }
+        }
+      } catch {}
+    }
+
+    const withdrawals = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return res.json({ success: true, withdrawals, settings: getStoredAffiliateSettings() });
+  });
+
+  // POST /api/admin/affiliate/withdrawals/:id/status — Validation / Rejet d'un retrait affilié par le Super-Admin
+  app.post('/api/admin/affiliate/withdrawals/:id/status', async (req, res) => {
+    const withdrawalId = String(req.params.id || '').trim();
+    const nextStatus = String(req.body?.status || 'PAID').toUpperCase();
+    const adminNotes = String(req.body?.adminNotes || '').trim();
+    if (!withdrawalId || !['PAID', 'REJECTED', 'PENDING'].includes(nextStatus)) {
+      return res.status(400).json({ success: false, error: 'ID ou statut invalide (PAID/REJECTED/PENDING).' });
+    }
+
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const all = getStoredAffiliateWithdrawals();
+    const idx = all.findIndex((w: any) => String(w.id) === withdrawalId);
+    let updated: any = null;
+    if (idx !== -1) {
+      all[idx] = {
+        ...all[idx],
+        status: nextStatus,
+        processedAt: nowMs,
+        adminNotes: adminNotes || all[idx].adminNotes || (nextStatus === 'PAID' ? 'Viré par Mobile Money' : 'Rejeté par administrateur'),
+      };
+      updated = all[idx];
+      saveStoredAffiliateWithdrawals(all);
+    }
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('affiliate_withdrawals')
+          .update({
+            status: nextStatus,
+            processed_at: nowIso,
+            ...(adminNotes ? { admin_notes: adminNotes } : {}),
+          })
+          .eq('id', withdrawalId);
+      } catch {}
+    }
+
+    return res.json({ success: true, withdrawalId, status: nextStatus, withdrawal: updated });
+  });
 
   // POST /api/affiliate/credit-commission — Crédite automatiquement la commission d'un créateur (idempotent)
   app.post('/api/affiliate/credit-commission', (req, res) => {
@@ -2785,6 +3489,8 @@ async function startServer() {
       orderRef,
       orderTotal,
       commissionRate = 10,
+      channel = 'FUNNEL',
+      productName = '',
       tenantId = '',
       slug = '',
       customerName = 'Client',
@@ -2801,6 +3507,8 @@ async function startServer() {
       orderRef,
       orderTotal: Number(orderTotal) || 0,
       commissionRate: Number(commissionRate) || 10,
+      channel: channel as AffiliateChannel,
+      productName,
       tenantId,
       slug,
       customerName,
@@ -2815,7 +3523,7 @@ async function startServer() {
   });
 
   // GET /api/affiliate/earnings/:handle — Solde et historique des commissions d'un influenceur
-  app.get('/api/affiliate/earnings/:handle', (req, res) => {
+  app.get('/api/affiliate/earnings/:handle', async (req, res) => {
     const handle = String(req.params.handle || '')
       .trim()
       .replace(/^@/, '')
@@ -2823,25 +3531,20 @@ async function startServer() {
     if (!handle) {
       return res.status(400).json({ success: false, error: 'handle requis' });
     }
-    const items = getStoredAffiliateCommissions().filter(
-      (c: any) => String(c.affiliateHandle || '').toLowerCase() === handle
-    );
-    const totalSales = items.reduce((s: number, c: any) => s + (Number(c.orderTotal) || 0), 0);
-    const totalCommission = items.reduce((s: number, c: any) => s + (Number(c.commissionAmount) || 0), 0);
-    const paidCommission = items
-      .filter((c: any) => c.status === 'PAID')
-      .reduce((s: number, c: any) => s + (Number(c.commissionAmount) || 0), 0);
+    const hub = await loadUnifiedAffiliateHubData(handle);
+    const totalSales = hub.commissions.reduce((s: number, c: any) => s + (Number(c.orderTotal) || 0), 0);
 
     return res.json({
       success: true,
       handle,
-      totalOrders: items.length,
+      totalOrders: hub.commissions.length,
       totalSales,
-      totalCommission,
-      paidCommission,
-      availableCommission: Math.max(0, totalCommission - paidCommission),
+      totalCommission: hub.totalEarned,
+      paidCommission: hub.withdrawnPaid,
+      availableCommission: hub.availableBalance,
+      byChannel: hub.byChannel,
       currency: 'XOF',
-      recentCommissions: items.slice(0, 20),
+      recentCommissions: hub.commissions.slice(0, 20),
     });
   });
 
@@ -2881,7 +3584,9 @@ async function startServer() {
         affiliateHandle: affiliateRef,
         orderRef: orderId,
         orderTotal: amount,
-        commissionRate: Number(body.commission_rate) || 10,
+        commissionRate: Number(body.commission_rate) || getStoredAffiliateSettings().defaultFunnelRate,
+        channel: 'FUNNEL',
+        productName: body.deal?.title || 'Commande Tunnel / Mini-Market',
         tenantId: orderRecord.tenantId,
         customerName: orderRecord.customerName,
         operator: orderRecord.operator,
@@ -3155,7 +3860,56 @@ async function startServer() {
       } catch {}
     }
 
-    return res.json({ success: true, subscription: record });
+    // Affiliation SaaS : si cette boutique a un parrain enregistré, on active son statut et crédite la commission récurrente
+    let saasAffiliateCommission = null;
+    if (record.amount > 0) {
+      const referrals = getStoredAffiliateReferrals();
+      const refIdx = referrals.findIndex(
+        (r: any) =>
+          String(r.storeId || '') === String(record.universeId) ||
+          (req.body?.customerEmail &&
+            String(r.ownerEmail || '').toLowerCase() === String(req.body.customerEmail).trim().toLowerCase())
+      );
+      if (refIdx !== -1) {
+        const refEntry = referrals[refIdx];
+        const referrerCode = normalizeAffiliateKey(refEntry.referrerCode);
+        refEntry.status = 'ACTIVE';
+        const activeCountForReferrer = referrals.filter(
+          (r: any) => normalizeAffiliateKey(r.referrerCode) === referrerCode && r.status === 'ACTIVE'
+        ).length;
+        const tier = computeAffiliateTier(activeCountForReferrer);
+        saasAffiliateCommission = creditAffiliateCommissionIdempotent({
+          affiliateHandle: referrerCode,
+          orderRef: record.transactionId,
+          orderTotal: record.amount,
+          commissionRate: tier.rate,
+          channel: 'SAAS',
+          productName: `Abonnement ${record.planName} (${record.billingCycle})`,
+          tenantId: record.universeId,
+          customerName: refEntry.storeName || record.universeId,
+          operator: record.paymentMethod,
+        });
+        if (saasAffiliateCommission) {
+          refEntry.commissionGenerated =
+            (Number(refEntry.commissionGenerated) || 0) + (Number(saasAffiliateCommission.commissionAmount) || 0);
+        }
+        referrals[refIdx] = refEntry;
+        saveStoredAffiliateReferrals(referrals);
+        if (supabaseAdmin) {
+          Promise.resolve(
+            supabaseAdmin
+              .from('affiliate_referrals')
+              .update({
+                status: 'ACTIVE',
+                commission_generated: refEntry.commissionGenerated,
+              })
+              .eq('store_id', refEntry.storeId)
+          ).catch(() => {});
+        }
+      }
+    }
+
+    return res.json({ success: true, subscription: record, saasAffiliateCommission });
   });
 
   // 2H.2 Recharge Pay-as-you-go réelle (après paiement confirmé via UltimateCheckout — Mobile Money uniquement)
@@ -4144,6 +4898,28 @@ async function startServer() {
       } catch {}
     }
 
+    // Affiliation Formations (LMS) : créditer l'affilié si un code parrain est transmis sur une inscription payante
+    let courseAffiliateCommission = null;
+    const rawCourseAffRef = String(req.body?.affiliateRef || req.body?.affiliate_ref || '').trim();
+    const courseAmount = Math.max(0, Number(enrollment.amount) || 0);
+    if (rawCourseAffRef && courseAmount > 0) {
+      const courseCommRate =
+        Number(req.body?.commissionRate) ||
+        Number(publishedCourse?.affiliateCommissionPercent) ||
+        getStoredAffiliateSettings().defaultCourseRate;
+      courseAffiliateCommission = creditAffiliateCommissionIdempotent({
+        affiliateHandle: rawCourseAffRef,
+        orderRef: txKey,
+        orderTotal: courseAmount,
+        commissionRate: courseCommRate,
+        channel: 'COURSE',
+        productName: enrollment.courseTitle || cleanCourseId,
+        tenantId: String(publishedCourse?.instructorId || publishedCourse?.tenantId || 'academy'),
+        customerName: student.fullName || 'Étudiant',
+        operator: enrollment.paymentMethod,
+      });
+    }
+
     const token = signStudentToken({
       studentId: student.id,
       email: student.email,
@@ -4151,7 +4927,13 @@ async function startServer() {
     });
 
     const { passwordHash: _ignored, ...safeStudent } = student;
-    return res.json({ success: true, token, student: safeStudent, enrollment });
+    return res.json({
+      success: true,
+      token,
+      student: safeStudent,
+      enrollment,
+      courseAffiliateCommission,
+    });
   });
 
   // POST /api/student/enrollments/renew — Renouvellement sécurisé d'un abonnement de cours (Jour/Semaine/Mois/Année)

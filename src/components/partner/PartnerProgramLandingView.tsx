@@ -36,10 +36,11 @@ export const PartnerProgramLandingView: React.FC<PartnerProgramLandingViewProps>
   onOpenLogin,
   onOpenInternalPartner
 }) => {
-  // Simulateur de gains interactif
+  // Simulateur de gains interactif (paliers officiels unifiés : 15% Starter, 18% Pro dès 5, 20% Élite dès 10)
   const [storesCount, setStoresCount] = useState<number>(15);
   const averageMonthlySubFCFA = 10000; // Plan Starter / Pro moyen
-  const commissionRate = storesCount >= 30 ? 0.20 : 0.15; // 15% standard, 20% au-delà de 30 boutiques
+  const commissionRate = storesCount >= 10 ? 0.20 : storesCount >= 5 ? 0.18 : 0.15;
+  const tierLabel = storesCount >= 10 ? 'Palier Élite (20%)' : storesCount >= 5 ? 'Palier Pro (18%)' : 'Palier Starter (15%)';
   const monthlyEarnings = Math.round(storesCount * averageMonthlySubFCFA * commissionRate);
   const annualEarnings = monthlyEarnings * 12;
 
@@ -307,7 +308,7 @@ export const PartnerProgramLandingView: React.FC<PartnerProgramLandingViewProps>
                   {Math.round(commissionRate * 100)}%
                 </span>
                 <span className="text-[10px] text-slate-500">
-                  {storesCount >= 30 ? 'Palier VIP Élite (20%)' : 'Palier Standard (15%)'}
+                  {tierLabel}
                 </span>
               </div>
 

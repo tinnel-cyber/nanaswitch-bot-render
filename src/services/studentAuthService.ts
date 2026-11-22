@@ -525,8 +525,20 @@ export function recordCourseEnrollment(params: {
 
   saveStudents(students);
 
-  // Appel serveur sécurisé POST /api/student/enroll (émet un jeton HMAC signé)
+  // Appel serveur sécurisé POST /api/student/enroll (émet un jeton HMAC signé + crédite l'affilié formation si ?ref= présent)
   const existingToken = getStudentToken();
+  let activeCourseAffRef = '';
+  try {
+    if (typeof window !== 'undefined') {
+      const urlRef = new URLSearchParams(window.location.search).get('ref') || new URLSearchParams(window.location.search).get('aff') || '';
+      if (urlRef.trim()) {
+        activeCourseAffRef = urlRef.trim();
+      } else {
+        const storedSaas = localStorage.getItem('nana_saas_referral_attribution_v1');
+        if (storedSaas) activeCourseAffRef = JSON.parse(storedSaas)?.code || '';
+      }
+    }
+  } catch {}
   fetch('/api/student/enroll', {
     method: 'POST',
     headers: {
@@ -544,6 +556,7 @@ export function recordCourseEnrollment(params: {
       paymentMethod: params.paymentMethod || 'MOBILE_MONEY',
       transactionId: params.transactionId || '',
       source: params.source || 'marketplace',
+      affiliateRef: activeCourseAffRef || undefined,
     }),
   })
     .then((r) => r.json())
