@@ -38,7 +38,9 @@ import {
   ChevronRight,
   Hand,
   Camera,
-  Circle
+  Circle,
+  Settings,
+  RefreshCw
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -79,12 +81,25 @@ import {
   ProScreenRecorderSession,
   captureOneShotScreenPng,
   isScreenCaptureSupported,
+  listAvailableMediaDevices,
   triggerDirectDownload,
   type RecorderMode,
   type RecorderQuality,
   type CamBubbleConfig,
   type RecordedMediaResult
 } from '../../../services/screenRecorderService';
+import {
+  loadVideoStudioSettings,
+  saveVideoStudioSettings,
+  resetVideoStudioSettings,
+  type VideoStudioSettings,
+  type CaptureAngleMode,
+  type RecorderFps,
+  type RecorderCountdownSec,
+  type RecorderOutputFormat,
+  type StudioAspectRatio,
+  type SubtitleLangCode
+} from '../../../services/studioSettingsService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -100,7 +115,7 @@ export interface SocialVideoMontageStudioProps {
 type SocialFormatId = '9:16' | '1:1' | '16:9';
 type ExportResolutionId = '480p' | '720p' | '1080p';
 type ExportContainerId = 'mp4' | 'webm';
-type StudioPanelTab = 'RECORD' | 'EDIT' | 'SUBTITLES' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
+type StudioPanelTab = 'RECORD' | 'EDIT' | 'SUBTITLES' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH' | 'SETTINGS';
 type SocialNetworkId = 'tiktok_reels' | 'whatsapp_status' | 'facebook_youtube';
 type MotionDesignId =
   | 'classic'
@@ -278,14 +293,15 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   whatsappPhone = '',
   publicLink = ''
 }) => {
+  const [studioSettings, setStudioSettings] = useState<VideoStudioSettings>(() => loadVideoStudioSettings());
   const [activePanel, setActivePanel] = useState<StudioPanelTab>('EDIT');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>(initialVideoUrl);
   const [videoDuration, setVideoDuration] = useState<number>(30);
   const [maxDurationSec, setMaxDurationSec] = useState<number>(30);
 
-  // Paramètres de montage, Motion Design & Animations
-  const [socialFormat, setSocialFormat] = useState<SocialFormatId>('9:16');
+  // Paramètres de montage, Motion Design & Animations (initialisés depuis les paramètres persistés)
+  const [socialFormat, setSocialFormat] = useState<SocialFormatId>(() => loadVideoStudioSettings().defaultSocialFormat);
   const [selectedFilterId, setSelectedFilterId] = useState<string>('vivid');
   const [motionDesignId, setMotionDesignId] = useState<MotionDesignId>('lower_third_glass');
   const [motionAnimId, setMotionAnimId] = useState<MotionAnimId>('slide_up_spring');
@@ -1005,19 +1021,24 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   // =========================================================================
   const screenCaptureAvailable = useMemo(() => isScreenCaptureSupported(), []);
   const [recorderMode, setRecorderMode] = useState<RecorderMode>(() =>
-    isScreenCaptureSupported() ? 'screen' : 'camera'
+    !isScreenCaptureSupported() ? 'camera' : studioSettings.defaultRecorderMode
   );
-  const [recorderQuality, setRecorderQuality] = useState<RecorderQuality>('720p');
-  const [recIncludeMic, setRecIncludeMic] = useState<boolean>(true);
-  const [recIncludeSystemAudio, setRecIncludeSystemAudio] = useState<boolean>(true);
+  const [recorderQuality, setRecorderQuality] = useState<RecorderQuality>(() => studioSettings.recorderQuality);
+  const [recIncludeMic, setRecIncludeMic] = useState<boolean>(() => studioSettings.includeMic);
+  const [recIncludeSystemAudio, setRecIncludeSystemAudio] = useState<boolean>(() => studioSettings.includeSystemAudio);
   const [recFacingMode, setRecFacingMode] = useState<'user' | 'environment'>('user');
-  const [camBubble, setCamBubble] = useState<CamBubbleConfig>({
-    enabled: true,
-    shape: 'circle',
-    corner: 'bottom-right',
-    sizePct: 20,
-    mirror: true
-  });
+  const [camBubble, setCamBubble] = useState<CamBubbleConfig>(() => ({
+    enabled: studioSettings.bubbleEnabled,
+    shape: studioSettings.bubbleShape,
+    corner: studioSettings.bubbleCorner,
+    sizePct: studioSettings.bubbleSizePct,
+    mirror: studioSettings.bubbleMirror
+  }));
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [availableMics, setAvailableMics] = useState<MediaDeviceInfo[]>([]);
+  const [isScanningDevices, setIsScanningDevices] = useState<boolean>(false);
+  const [settingsSavedBanner, setSettingsSavedBanner] = useState<boolean>(false);
+  const [recCountdownValue, setRecCountdownValue] = useState<number | null>(null);
   const [isScreenRecording, setIsScreenRecording] = useState<boolean>(false);
   const [isScreenRecPaused, setIsScreenRecPaused] = useState<boolean>(false);
   const [recElapsedSec, setRecElapsedSec] = useState<number>(0);
@@ -1028,9 +1049,95 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   const recorderSessionRef = useRef<ProScreenRecorderSession | null>(null);
   const recorderPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Mise à jour live de la bulle caméra (rond/carré, coin, taille, ON/OFF) même pendant l'enregistrement
+  const updateStudioSetting = <K extends keyof VideoStudioSettings>(key: K, value: VideoStudioSettings[K]) => {
+    setStudioSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      saveVideoStudioSettings(next);
+      return next;
+    });
+    // Synchronisation immédiate avec les contrôles actifs du studio
+    if (key === 'defaultRecorderMode') setRecorderMode(value as RecorderMode);
+    if (key === 'recorderQuality') setRecorderQuality(value as RecorderQuality);
+    if (key === 'includeMic') setRecIncludeMic(Boolean(value));
+    if (key === 'includeSystemAudio') setRecIncludeSystemAudio(Boolean(value));
+    if (key === 'bubbleEnabled') setCamBubble((b) => ({ ...b, enabled: Boolean(value) }));
+    if (key === 'bubbleShape') setCamBubble((b) => ({ ...b, shape: value as any }));
+    if (key === 'bubbleCorner') setCamBubble((b) => ({ ...b, corner: value as any }));
+    if (key === 'bubbleSizePct') setCamBubble((b) => ({ ...b, sizePct: Number(value) }));
+    if (key === 'bubbleMirror') setCamBubble((b) => ({ ...b, mirror: Boolean(value) }));
+    if (key === 'defaultSocialFormat') setSocialFormat(value as SocialFormatId);
+    if (key === 'defaultExportResolution') setExportResolution(value as ExportResolutionId);
+    if (key === 'defaultExportContainer') setExportContainer(value as ExportContainerId);
+
+    setSettingsSavedBanner(true);
+    setTimeout(() => setSettingsSavedBanner(false), 1800);
+  };
+
+  const handleResetAllStudioSettings = () => {
+    playTapBeep();
+    const fresh = resetVideoStudioSettings();
+    setStudioSettings(fresh);
+    setRecorderMode(isScreenCaptureSupported() ? fresh.defaultRecorderMode : 'camera');
+    setRecorderQuality(fresh.recorderQuality);
+    setRecIncludeMic(fresh.includeMic);
+    setRecIncludeSystemAudio(fresh.includeSystemAudio);
+    setCamBubble({
+      enabled: fresh.bubbleEnabled,
+      shape: fresh.bubbleShape,
+      corner: fresh.bubbleCorner,
+      sizePct: fresh.bubbleSizePct,
+      mirror: fresh.bubbleMirror
+    });
+    setSocialFormat(fresh.defaultSocialFormat);
+    setExportResolution(fresh.defaultExportResolution);
+    setExportContainer(fresh.defaultExportContainer);
+    playValidationBeep();
+    setSettingsSavedBanner(true);
+    setTimeout(() => setSettingsSavedBanner(false), 2000);
+  };
+
+  const handleScanMediaDevices = async (requestPermission = true) => {
+    setIsScanningDevices(true);
+    try {
+      const lists = await listAvailableMediaDevices(requestPermission);
+      setAvailableCameras(lists.cameras);
+      setAvailableMics(lists.microphones);
+    } finally {
+      setIsScanningDevices(false);
+    }
+  };
+
+  // Détection initiale silencieuse des périphériques audio/vidéo à l'ouverture des Paramètres
+  useEffect(() => {
+    if (activePanel === 'SETTINGS' && availableCameras.length === 0 && availableMics.length === 0) {
+      handleScanMediaDevices(false);
+    }
+  }, [activePanel]);
+
+  // Mise à jour live de la bulle caméra (rond/carré, coin, taille, ON/OFF) même pendant l'enregistrement + persistance
   useEffect(() => {
     recorderSessionRef.current?.updateBubbleConfig(camBubble);
+    setStudioSettings((prev) => {
+      if (
+        prev.bubbleEnabled === camBubble.enabled &&
+        prev.bubbleShape === camBubble.shape &&
+        prev.bubbleCorner === camBubble.corner &&
+        prev.bubbleSizePct === camBubble.sizePct &&
+        prev.bubbleMirror === camBubble.mirror
+      ) {
+        return prev;
+      }
+      const next = {
+        ...prev,
+        bubbleEnabled: camBubble.enabled,
+        bubbleShape: camBubble.shape,
+        bubbleCorner: camBubble.corner,
+        bubbleSizePct: camBubble.sizePct,
+        bubbleMirror: camBubble.mirror
+      };
+      saveVideoStudioSettings(next);
+      return next;
+    });
   }, [camBubble]);
 
   // Chronomètre REC
@@ -1058,12 +1165,31 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setRecErrorMsg(null);
     setRecStatusMsg(null);
     playTapBeep();
+
+    // Compte à rebours configurable (0s / 3s / 5s)
+    if (studioSettings.countdownSec > 0) {
+      for (let c = studioSettings.countdownSec; c >= 1; c--) {
+        setRecCountdownValue(c);
+        playTapBeep();
+        await new Promise((r) => setTimeout(r, 850));
+      }
+      setRecCountdownValue(null);
+    }
+
     try {
       const session = new ProScreenRecorderSession({
         mode: recorderMode,
         quality: recorderQuality,
+        aspectRatio: studioSettings.recorderAspectRatio,
+        fps: studioSettings.recorderFps,
+        outputFormat: studioSettings.recorderOutputFormat,
+        hideBrowserAddressBar: studioSettings.hideBrowserAddressBar,
+        captureAngle: studioSettings.captureAngle,
+        autoDownload: studioSettings.autoDownloadOnStop,
         includeMic: recIncludeMic,
         includeSystemAudio: recIncludeSystemAudio,
+        cameraDeviceId: studioSettings.selectedCameraDeviceId || undefined,
+        micDeviceId: studioSettings.selectedMicDeviceId || undefined,
         facingMode: recFacingMode,
         bubble: camBubble,
         previewCanvas: recorderPreviewCanvasRef.current,
@@ -1074,8 +1200,22 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           recorderSessionRef.current = null;
           playValidationBeep();
           setRecStatusMsg(
-            `✅ Enregistrement terminé (${result.durationSec}s) et téléchargé directement sur votre appareil !`
+            studioSettings.autoDownloadOnStop
+              ? `✅ Enregistrement terminé (${result.durationSec}s) et téléchargé directement sur votre appareil !`
+              : `✅ Enregistrement terminé (${result.durationSec}s) — prêt à télécharger ou monter.`
           );
+          if (studioSettings.autoLoadIntoTimeline) {
+            setSourceFile(result.file);
+            setEncodeResult(null);
+            setEncodeError(null);
+            setTimelineClips([]);
+            setSelectedClipId('');
+            setHistoryPast([]);
+            setHistoryFuture([]);
+            setCurrentVideoTime(0);
+            setPreviewUrl(result.url);
+            setActivePanel('EDIT');
+          }
         },
         onError: (msg) => {
           setRecErrorMsg(msg);
@@ -1093,11 +1233,14 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       setRecElapsedSec(0);
       setIsScreenRecording(true);
       setIsScreenRecPaused(false);
-      setRecStatusMsg('🔴 Enregistrement en cours... Vous pouvez activer/désactiver la bulle caméra en direct.');
+      setRecStatusMsg(
+        `🔴 Enregistrement ${studioSettings.recorderAspectRatio} (${recorderQuality} • ${studioSettings.recorderFps}fps) en cours...`
+      );
     } catch (err: any) {
       recorderSessionRef.current?.stop();
       recorderSessionRef.current = null;
       setIsScreenRecording(false);
+      setRecCountdownValue(null);
       setRecErrorMsg(err?.message || 'Partage d\'écran annulé ou autorisation caméra/micro refusée.');
       playCancelSound();
     }
@@ -1855,8 +1998,28 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           >
             <Circle className="w-3 h-3 fill-current" />
             <span className="hidden sm:inline">
-              {isScreenRecording ? `REC ${formatRecTimer(recElapsedSec)}` : 'Enregistrer Écran'}
+              {isScreenRecording
+                ? studioSettings.showLiveTimerBadge
+                  ? `REC ${formatRecTimer(recElapsedSec)}`
+                  : 'REC'
+                : 'Enregistrer Écran'}
             </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              setActivePanel('SETTINGS');
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border transition ${
+              activePanel === 'SETTINGS'
+                ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title="Paramètres persistants du Studio, Monteur Pro & Enregistreur"
+          >
+            <Settings className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Paramètres</span>
           </button>
           <button
             type="button"
@@ -2323,6 +2486,413 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               })}
             </div>
 
+            {/* PANNEAU PARAMÈTRES DÉDIÉ : STUDIO, MONTEUR PRO & ENREGISTREUR (PERSISTANT) */}
+            {activePanel === 'SETTINGS' && (
+              <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-amber-400" />
+                      <span>Paramètres du Studio, Monteur Pro &amp; Enregistreur</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Tous vos réglages sont sauvegardés automatiquement sur votre appareil et appliqués dès la prochaine ouverture.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {settingsSavedBanner && (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10.5px] font-black text-emerald-300">
+                        ✓ Sauvegardé
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleResetAllStudioSettings}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-bold cursor-pointer"
+                    >
+                      ↺ Réinitialiser
+                    </button>
+                  </div>
+                </div>
+
+                {/* 1. CAMÉRA, MICRO & PÉRIPHÉRIQUES RÉELS */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-black text-white">1. Caméras &amp; Microphones (Périphériques)</span>
+                    <button
+                      type="button"
+                      onClick={() => handleScanMediaDevices(true)}
+                      disabled={isScanningDevices}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/40 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isScanningDevices ? 'animate-spin' : ''}`} />
+                      <span>{isScanningDevices ? 'Détection...' : 'Détecter mes caméras & micros'}</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Caméra à utiliser (Webcam / USB / Virtuelle)</label>
+                      <select
+                        value={studioSettings.selectedCameraDeviceId}
+                        onChange={(e) => updateStudioSetting('selectedCameraDeviceId', e.target.value)}
+                        className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="">Caméra par défaut du système</option>
+                        {availableCameras.map((cam, idx) => (
+                          <option key={cam.deviceId || idx} value={cam.deviceId}>
+                            {cam.label || `Caméra #${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Microphone à utiliser (Intégré / USB / Casque)</label>
+                      <select
+                        value={studioSettings.selectedMicDeviceId}
+                        onChange={(e) => updateStudioSetting('selectedMicDeviceId', e.target.value)}
+                        className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="">Microphone par défaut du système</option>
+                        {availableMics.map((mic, idx) => (
+                          <option key={mic.deviceId || idx} value={mic.deviceId}>
+                            {mic.label || `Microphone #${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => updateStudioSetting('bubbleEnabled', !studioSettings.bubbleEnabled)}
+                      className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                        studioSettings.bubbleEnabled
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {studioSettings.bubbleEnabled ? '✓ Activer la caméra (Bulle ON)' : 'Caméra désactivée (OFF)'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStudioSetting('includeMic', !studioSettings.includeMic)}
+                      className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                        studioSettings.includeMic
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {studioSettings.includeMic ? '🎙️ Micro actif par défaut' : '🔇 Micro coupé par défaut'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStudioSetting('includeSystemAudio', !studioSettings.includeSystemAudio)}
+                      className={`px-3 py-1.5 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                        studioSettings.includeSystemAudio
+                          ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                          : 'bg-slate-900 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {studioSettings.includeSystemAudio ? '🔊 Audio écran inclus' : '🔇 Audio écran coupé'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. CAPTURE D'ÉCRAN, BARRE D'ADRESSE, ANGLE & BULLE */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3.5">
+                  <span className="text-xs font-black text-white block">2. Cadrage Écran, Barre d&apos;adresse, Angle &amp; Bulle Caméra</span>
+
+                  {/* Barre d'adresse navigateur */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div>
+                      <div className="text-xs font-bold text-white">Capturer sans la barre d&apos;adresse &amp; onglets</div>
+                      <div className="text-[10.5px] text-slate-400">
+                        Rogne proprement le bandeau supérieur (~10%) pour une vidéo de formation plus professionnelle.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateStudioSetting('hideBrowserAddressBar', !studioSettings.hideBrowserAddressBar)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black border cursor-pointer shrink-0 ${
+                        studioSettings.hideBrowserAddressBar
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-300'
+                          : 'bg-slate-950 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {studioSettings.hideBrowserAddressBar ? 'Sans barre d\'adresse' : 'Avec barre d\'adresse'}
+                    </button>
+                  </div>
+
+                  {/* Angle de capture */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10.5px] font-bold text-slate-400">Angle / Zone de capture :</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {([
+                        { id: 'full', label: '🖥️ Écran complet' },
+                        { id: 'zoom_center', label: '🔍 Zoom Centre' },
+                        { id: 'left_half', label: '◧ Moitié Gauche' },
+                        { id: 'right_half', label: '◨ Moitié Droite' }
+                      ] as Array<{ id: CaptureAngleMode; label: string }>).map((ang) => (
+                        <button
+                          key={ang.id}
+                          type="button"
+                          onClick={() => updateStudioSetting('captureAngle', ang.id)}
+                          className={`py-2 px-2 rounded-xl border text-[11px] font-bold cursor-pointer ${
+                            studioSettings.captureAngle === ang.id
+                              ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {ang.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Réglages Bulle Caméra */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Forme de la bulle :</span>
+                      <div className="grid grid-cols-2 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updateStudioSetting('bubbleShape', 'circle')}
+                          className={`py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                            studioSettings.bubbleShape === 'circle'
+                              ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          ⚪ Rond
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStudioSetting('bubbleShape', 'square')}
+                          className={`py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                            studioSettings.bubbleShape === 'square'
+                              ? 'bg-indigo-600/30 border-indigo-400 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          🟦 Carré
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Coin par défaut :</span>
+                      <select
+                        value={studioSettings.bubbleCorner}
+                        onChange={(e) => updateStudioSetting('bubbleCorner', e.target.value as any)}
+                        className="w-full p-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="bottom-right">↘ Bas-Droite</option>
+                        <option value="bottom-left">↙ Bas-Gauche</option>
+                        <option value="top-right">↗ Haut-Droite</option>
+                        <option value="top-left">↖ Haut-Gauche</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10.5px]">
+                        <span className="font-bold text-slate-400">Taille bulle</span>
+                        <span className="font-mono font-bold text-indigo-300">{studioSettings.bubbleSizePct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={14}
+                        max={34}
+                        step={1}
+                        value={studioSettings.bubbleSizePct}
+                        onChange={(e) => updateStudioSetting('bubbleSizePct', Number(e.target.value))}
+                        className="w-full accent-indigo-500 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. FORMAT D'ENREGISTREMENT, SORTIE, COMPTE À REBOURS & COMPTEUR */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3.5">
+                  <span className="text-xs font-black text-white block">3. Format (16:9 / 9:16 / 1:1), Sortie, Démarrage &amp; Compteur</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Format Enregistrement :</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {(['16:9', '9:16', '1:1'] as StudioAspectRatio[]).map((ratio) => (
+                          <button
+                            key={ratio}
+                            type="button"
+                            onClick={() => updateStudioSetting('recorderAspectRatio', ratio)}
+                            className={`py-1.5 rounded-lg border text-[11px] font-black cursor-pointer ${
+                              studioSettings.recorderAspectRatio === ratio
+                                ? 'bg-amber-500 text-slate-950 border-amber-300'
+                                : 'bg-slate-900 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {ratio}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Images / sec (FPS) :</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {([24, 30, 60] as RecorderFps[]).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => updateStudioSetting('recorderFps', f)}
+                            className={`py-1.5 rounded-lg border text-[11px] font-black cursor-pointer ${
+                              studioSettings.recorderFps === f
+                                ? 'bg-indigo-600 text-white border-indigo-400'
+                                : 'bg-slate-900 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {f}fps
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Format de sortie :</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {(['auto', 'mp4', 'webm'] as RecorderOutputFormat[]).map((fmt) => (
+                          <button
+                            key={fmt}
+                            type="button"
+                            onClick={() => updateStudioSetting('recorderOutputFormat', fmt)}
+                            className={`py-1.5 rounded-lg border text-[10.5px] font-black uppercase cursor-pointer ${
+                              studioSettings.recorderOutputFormat === fmt
+                                ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                                : 'bg-slate-900 border-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {fmt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Démarrage : Compte à rebours + Compteur REC + Auto-actions */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Compte à rebours au démarrage :</span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {([
+                          { v: 0, label: 'Aucun (0s)' },
+                          { v: 3, label: '3 sec' },
+                          { v: 5, label: '5 sec' }
+                        ] as Array<{ v: RecorderCountdownSec; label: string }>).map((cd) => (
+                          <button
+                            key={cd.v}
+                            type="button"
+                            onClick={() => updateStudioSetting('countdownSec', cd.v)}
+                            className={`py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                              studioSettings.countdownSec === cd.v
+                                ? 'bg-rose-600/30 border-rose-400 text-white'
+                                : 'bg-slate-900 border-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {cd.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[10.5px] font-bold text-slate-400">Compteur &amp; Automatisation :</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => updateStudioSetting('showLiveTimerBadge', !studioSettings.showLiveTimerBadge)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[10.5px] font-bold cursor-pointer ${
+                            studioSettings.showLiveTimerBadge
+                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {studioSettings.showLiveTimerBadge ? '⏱️ Compteur REC ON' : '⏱️ Compteur OFF'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStudioSetting('autoDownloadOnStop', !studioSettings.autoDownloadOnStop)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[10.5px] font-bold cursor-pointer ${
+                            studioSettings.autoDownloadOnStop
+                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {studioSettings.autoDownloadOnStop ? '⬇️ Téléch. auto ON' : '⬇️ Manuel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStudioSetting('autoLoadIntoTimeline', !studioSettings.autoLoadIntoTimeline)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[10.5px] font-bold cursor-pointer ${
+                            studioSettings.autoLoadIntoTimeline
+                              ? 'bg-indigo-600/30 border-indigo-400 text-indigo-200'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {studioSettings.autoLoadIntoTimeline ? '🎬 Ouvrir auto Timeline' : '🎬 Timeline manuelle'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. PRÉFÉRENCES MONTEUR PRO & EXPORT PAR DÉFAUT */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <span className="text-xs font-black text-white block">4. Monteur Pro &amp; Export par défaut</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Format Montage par défaut</label>
+                      <select
+                        value={studioSettings.defaultSocialFormat}
+                        onChange={(e) => updateStudioSetting('defaultSocialFormat', e.target.value as StudioAspectRatio)}
+                        className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="9:16">9:16 Vertical (TikTok / Reels)</option>
+                        <option value="16:9">16:9 Paysage (YouTube / Cours)</option>
+                        <option value="1:1">1:1 Carré (Instagram / FB)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Qualité Export par défaut</label>
+                      <select
+                        value={studioSettings.defaultExportResolution}
+                        onChange={(e) => updateStudioSetting('defaultExportResolution', e.target.value as ExportResolutionId)}
+                        className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="480p">480p Éco (WhatsApp)</option>
+                        <option value="720p">720p HD (Standard Pro)</option>
+                        <option value="1080p">1080p Full HD (YouTube)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10.5px] font-bold text-slate-400 block">Langue Sous-Titres IA</label>
+                      <select
+                        value={studioSettings.defaultSubtitleLanguage}
+                        onChange={(e) => updateStudioSetting('defaultSubtitleLanguage', e.target.value as SubtitleLangCode)}
+                        className="w-full p-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="fr">🇫🇷 Français</option>
+                        <option value="en">🇬🇧 Anglais</option>
+                        <option value="es">🇪🇸 Espagnol</option>
+                        <option value="ar">🇸🇦 Arabe</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* PANNEAU 0 : ENREGISTREUR D'ÉCRAN & CAPTURE IMAGE PRO (BULLE CAMÉRA ROND/CARRÉ, 0 CLOUD) */}
             {activePanel === 'RECORD' && (
               <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
@@ -2333,19 +2903,35 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       <span>Enregistreur d&apos;Écran &amp; Capture Image Pro</span>
                     </h3>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Enregistrez vos cours et tutoriels avec bulle caméra (rond/carré) ou capturez une image `.PNG` — téléchargement direct sur votre appareil (0 stockage Cloud).
+                      Format actif : <strong className="text-amber-300">{studioSettings.recorderAspectRatio}</strong> • {recorderQuality} • {studioSettings.recorderFps}fps {studioSettings.hideBrowserAddressBar ? '• Sans barre d\'adresse' : ''}
                     </p>
                   </div>
-                  {isScreenRecording && (
-                    <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-xs font-mono font-black flex items-center gap-1.5 animate-pulse">
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                      {isScreenRecPaused ? 'PAUSE' : 'REC'} {formatRecTimer(recElapsedSec)}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('SETTINGS')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>Paramètres</span>
+                    </button>
+                    {isScreenRecording && studioSettings.showLiveTimerBadge && (
+                      <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white text-xs font-mono font-black flex items-center gap-1.5 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-white" />
+                        {isScreenRecPaused ? 'PAUSE' : 'REC'} {formatRecTimer(recElapsedSec)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Aperçu Live de l'Enregistrement */}
+                {/* Aperçu Live de l'Enregistrement (+ Compte à rebours visuel géant) */}
                 <div className="relative rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden aspect-video flex items-center justify-center">
+                  {recCountdownValue !== null && (
+                    <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                      <span className="text-6xl font-black text-amber-400 animate-ping">{recCountdownValue}</span>
+                      <span className="text-xs font-bold text-slate-300">Préparez votre écran...</span>
+                    </div>
+                  )}
                   <canvas
                     ref={recorderPreviewCanvasRef}
                     width={640}

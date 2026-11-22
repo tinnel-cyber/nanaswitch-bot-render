@@ -24,8 +24,16 @@ export interface CamBubbleConfig {
 export interface ScreenRecorderOptions {
   mode: RecorderMode;
   quality: RecorderQuality;
+  aspectRatio?: '16:9' | '9:16' | '1:1';
+  fps?: 24 | 30 | 60;
+  outputFormat?: 'auto' | 'mp4' | 'webm';
+  hideBrowserAddressBar?: boolean;
+  captureAngle?: 'full' | 'zoom_center' | 'left_half' | 'right_half';
+  autoDownload?: boolean;
   includeMic: boolean;
   includeSystemAudio: boolean;
+  cameraDeviceId?: string;
+  micDeviceId?: string;
   facingMode?: 'user' | 'environment';
   bubble: CamBubbleConfig;
   previewCanvas?: HTMLCanvasElement | null;
@@ -40,6 +48,37 @@ export interface RecordedMediaResult {
   mimeType: string;
   durationSec: number;
   sizeBytes: number;
+}
+
+export interface MediaDeviceLists {
+  cameras: MediaDeviceInfo[];
+  microphones: MediaDeviceInfo[];
+}
+
+export async function listAvailableMediaDevices(requestPermissionIfNeeded = false): Promise<MediaDeviceLists> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+    return { cameras: [], microphones: [] };
+  }
+  if (requestPermissionIfNeeded && navigator.mediaDevices.getUserMedia) {
+    try {
+      const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      tmp.getTracks().forEach((t) => t.stop());
+    } catch {
+      try {
+        const tmpAudio = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tmpAudio.getTracks().forEach((t) => t.stop());
+      } catch {}
+    }
+  }
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return {
+      cameras: devices.filter((d) => d.kind === 'videoinput'),
+      microphones: devices.filter((d) => d.kind === 'audioinput')
+    };
+  } catch {
+    return { cameras: [], microphones: [] };
+  }
 }
 
 export function isScreenCaptureSupported(): boolean {
@@ -64,6 +103,20 @@ export function triggerDirectDownload(blobOrUrl: Blob | string, filename: string
   }
 }
 
+function resolveRecorderCanvasSize(
+  quality: RecorderQuality,
+  aspectRatio: '16:9' | '9:16' | '1:1' = '16:9'
+): { width: number; height: number } {
+  const baseShort = quality === '1080p' ? 1080 : 720;
+  if (aspectRatio === '9:16') {
+    return { width: baseShort, height: quality === '1080p' ? 1920 : 1280 };
+  }
+  if (aspectRatio === '1:1') {
+    return { width: baseShort, height: baseShort };
+  }
+  return { width: quality === '1080p' ? 1920 : 1280, height: baseShort };
+}
+
 export class ProScreenRecorderSession {
   private screenStream: MediaStream | null = null;
   private camStream: MediaStream | null = null;
@@ -83,6 +136,13 @@ export class ProScreenRecorderSession {
   private stopped = false;
   private bubbleConfig: CamBubbleConfig;
   private mode: RecorderMode;
+  private fps: number;
+  private outputFormat: 'auto' | 'mp4' | 'webm';
+  private hideBrowserAddressBar: boolean;
+  private captureAngle: 'full' | 'zoom_center' | 'left_half' | 'right_half';
+  private autoDownload: boolean;
+  private cameraDeviceId?: string;
+  private micDeviceId?: string;
   private onStopCb?: (result: RecordedMediaResult) => void;
   private onErrorCb?: (message: string) => void;
 
@@ -90,12 +150,20 @@ export class ProScreenRecorderSession {
     this.mode = options.mode;
     this.bubbleConfig = { ...options.bubble };
     this.previewCanvas = options.previewCanvas || null;
+    this.fps = options.fps || 30;
+    this.outputFormat = options.outputFormat || 'auto';
+    this.hideBrowserAddressBar = Boolean(options.hideBrowserAddressBar);
+    this.captureAngle = options.captureAngle || 'full';
+    this.autoDownload = options.autoDownload !== false;
+    this.cameraDeviceId = options.cameraDeviceId || undefined;
+    this.micDeviceId = options.micDeviceId || undefined;
     this.onStopCb = options.onStop;
     this.onErrorCb = options.onError;
 
+    const dims = resolveRecorderCanvasSize(options.quality, options.aspectRatio || '16:9');
     this.canvas = document.createElement('canvas');
-    this.canvas.width = options.quality === '1080p' ? 1920 : 1280;
-    this.canvas.height = options.quality === '1080p' ? 1080 : 720;
+    this.canvas.width = dims.width;
+    this.canvas.height = dims.height;
     const ctx = this.canvas.getContext('2d', { alpha: false });
     if (!ctx) throw new Error('Contexte Canvas 2D indisponible.');
     this.ctx = ctx;
@@ -103,7 +171,6 @@ export class ProScreenRecorderSession {
 
   public updateBubbleConfig(patch: Partial<CamBubbleConfig>): void {
     this.bubbleConfig = { ...this.bubbleConfig, ...patch };
-    // Si l'utilisateur active la bulle caméra en cours de route et qu'elle n'est pas encore démarrée
     if (this.bubbleConfig.enabled && !this.camStream && !this.stopped && this.mode === 'screen') {
       this.startCameraBubble().catch(() => {});
     }
@@ -116,12 +183,12 @@ export class ProScreenRecorderSession {
   private async startCameraBubble(facingMode: 'user' | 'environment' = 'user'): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) return;
     try {
+      const videoConstraint: MediaTrackConstraints = this.cameraDeviceId
+        ? { deviceId: { ideal: this.cameraDeviceId }, width: { ideal: 640 }, height: { ideal: 640 } }
+        : { facingMode, width: { ideal: 640 }, height: { ideal: 640 } };
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 640 },
-          height: { ideal: 640 }
-        },
+        video: videoConstraint,
         audio: false
       });
       this.camStream = stream;
@@ -146,9 +213,9 @@ export class ProScreenRecorderSession {
       }
       this.screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
         video: {
-          frameRate: { ideal: 30, max: 30 },
-          width: { ideal: this.canvas.width },
-          height: { ideal: this.canvas.height }
+          frameRate: { ideal: this.fps, max: this.fps },
+          width: { ideal: Math.max(1280, this.canvas.width) },
+          height: { ideal: Math.max(720, this.canvas.height) }
         },
         audio: Boolean(options.includeSystemAudio)
       });
@@ -160,7 +227,6 @@ export class ProScreenRecorderSession {
       await screenVid.play().catch(() => {});
       this.screenVideo = screenVid;
 
-      // Arrêt propre si l'utilisateur clique "Arrêter le partage" dans la barre du navigateur
       const primaryTrack = this.screenStream?.getVideoTracks()[0];
       if (primaryTrack) {
         primaryTrack.onended = () => {
@@ -172,16 +238,22 @@ export class ProScreenRecorderSession {
         await this.startCameraBubble(options.facingMode || 'user');
       }
     } else {
-      // Mode Caméra directe (idéal téléphone / facecam)
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Caméra non disponible sur cet appareil.');
       }
+      const videoConstraint: MediaTrackConstraints = this.cameraDeviceId
+        ? {
+            deviceId: { ideal: this.cameraDeviceId },
+            width: { ideal: this.canvas.width },
+            height: { ideal: this.canvas.height }
+          }
+        : {
+            facingMode: options.facingMode || 'user',
+            width: { ideal: this.canvas.width },
+            height: { ideal: this.canvas.height }
+          };
       this.screenStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: options.facingMode || 'user',
-          width: { ideal: this.canvas.width },
-          height: { ideal: this.canvas.height }
-        },
+        video: videoConstraint,
         audio: false
       });
       const camMain = document.createElement('video');
@@ -192,16 +264,18 @@ export class ProScreenRecorderSession {
       this.screenVideo = camMain;
     }
 
-    // 2. Mixage Audio (Micro + Audio système)
+    // 2. Mixage Audio (Micro sélectionné + Audio système)
     const audioTracks: MediaStreamTrack[] = [];
     if (options.includeMic && navigator.mediaDevices?.getUserMedia) {
       try {
+        const audioConstraint: MediaTrackConstraints = {
+          ...(this.micDeviceId ? { deviceId: { ideal: this.micDeviceId } } : {}),
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        };
         this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          },
+          audio: audioConstraint,
           video: false
         });
       } catch (err) {
@@ -232,7 +306,7 @@ export class ProScreenRecorderSession {
       audioTracks.push(...sysAudioTracks);
     }
 
-    // 3. Démarrer la boucle de rendu Canvas (Écran + Bulle Caméra PiP Rond/Carré)
+    // 3. Démarrer la boucle de rendu Canvas (Écran + Angle + Masquage barre d'adresse + Bulle Caméra)
     const renderLoop = () => {
       if (this.stopped) return;
       this.drawFrame();
@@ -242,19 +316,19 @@ export class ProScreenRecorderSession {
     this.rafId = requestAnimationFrame(renderLoop);
 
     // 4. Lancer MediaRecorder sur le flux composité
-    const canvasStream = this.canvas.captureStream(30);
+    const canvasStream = this.canvas.captureStream(this.fps);
     const composedStream = new MediaStream([
       ...canvasStream.getVideoTracks(),
       ...audioTracks
     ]);
 
-    const mimeCandidates = [
-      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-      'video/mp4',
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm'
-    ];
+    const mp4Candidates = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'];
+    const webmCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mimeCandidates =
+      this.outputFormat === 'webm'
+        ? [...webmCandidates, ...mp4Candidates]
+        : [...mp4Candidates, ...webmCandidates];
+
     const mimeType =
       mimeCandidates.find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) ||
       'video/webm';
@@ -266,7 +340,7 @@ export class ProScreenRecorderSession {
 
     const rec = new MediaRecorder(composedStream, {
       mimeType,
-      videoBitsPerSecond: this.canvas.width >= 1920 ? 5_000_000 : 3_000_000
+      videoBitsPerSecond: Math.max(this.canvas.width, this.canvas.height) >= 1920 ? 5_200_000 : 3_200_000
     });
     this.recorder = rec;
 
@@ -289,8 +363,9 @@ export class ProScreenRecorderSession {
       const file = new File([blob], filename, { type: cleanMime });
       const url = URL.createObjectURL(blob);
 
-      // Téléchargement direct immédiat sur l'ordinateur ou le téléphone (0 stockage Cloud)
-      triggerDirectDownload(blob, filename);
+      if (this.autoDownload) {
+        triggerDirectDownload(blob, filename);
+      }
 
       this.cleanup();
       this.onStopCb?.({
@@ -319,14 +394,40 @@ export class ProScreenRecorderSession {
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, W, H);
 
-    // 1. Source principale (fit cover/contain sans déformation)
+    // 1. Source principale avec gestion du masquage barre d'adresse & de l'angle de capture
     const mainVid = this.screenVideo;
     if (mainVid && mainVid.readyState >= 2 && mainVid.videoWidth > 0 && mainVid.videoHeight > 0) {
       const vw = mainVid.videoWidth;
       const vh = mainVid.videoHeight;
-      const scale = Math.min(W / vw, H / vh);
-      const dw = vw * scale;
-      const dh = vh * scale;
+
+      // Rognage haut optionnel (~10%) pour masquer la barre d'adresse / onglets du navigateur
+      const topCropPx = this.mode === 'screen' && this.hideBrowserAddressBar ? Math.round(vh * 0.1) : 0;
+      let sx = 0;
+      let sy = topCropPx;
+      let sw = vw;
+      let sh = Math.max(100, vh - topCropPx);
+
+      // Angle de capture
+      if (this.captureAngle === 'zoom_center') {
+        const zoom = 1.28;
+        const newW = sw / zoom;
+        const newH = sh / zoom;
+        sx += (sw - newW) / 2;
+        sy += (sh - newH) / 2;
+        sw = newW;
+        sh = newH;
+      } else if (this.captureAngle === 'left_half') {
+        sw = sw / 2;
+      } else if (this.captureAngle === 'right_half') {
+        sx += sw / 2;
+        sw = sw / 2;
+      }
+
+      // Adaptation propre (contain pour 16:9, cover élégant si angle zoomé ou format vertical/carré)
+      const useCover = this.canvas.width <= this.canvas.height || this.captureAngle !== 'full';
+      const scale = useCover ? Math.max(W / sw, H / sh) : Math.min(W / sw, H / sh);
+      const dw = sw * scale;
+      const dh = sh * scale;
       const dx = (W - dw) / 2;
       const dy = (H - dh) / 2;
 
@@ -335,7 +436,7 @@ export class ProScreenRecorderSession {
         ctx.translate(W, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(mainVid, dx, dy, dw, dh);
+      ctx.drawImage(mainVid, sx, sy, sw, sh, dx, dy, dw, dh);
       ctx.restore();
     }
 
