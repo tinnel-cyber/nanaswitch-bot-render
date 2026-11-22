@@ -7529,6 +7529,76 @@ async function startServer() {
   app.all('/aws-lambda*', forwardToAwsLambda);
   app.post('/api/ai/lambda', forwardToAwsLambda);
 
+  // POST /api/ai/backdrop-generate — Utilise Gemini déjà présent pour concevoir un décor Studio YouTubeur
+  // photoréaliste (bokeh doux, sans personnage) puis génère l'arrière-plan via Lambda sans stockage Cloud.
+  app.post('/api/ai/backdrop-generate', async (req, res) => {
+    try {
+      const rawPrompt = String(req.body?.prompt || '').trim();
+      const aspectRatio = String(req.body?.aspectRatio || '9:16').trim();
+      if (!rawPrompt) {
+        return res.status(400).json({ success: false, error: 'Décrivez l\'arrière-plan souhaité.' });
+      }
+
+      let refinedPrompt = `Photorealistic professional YouTube studio backdrop: ${rawPrompt}. Empty background with NO people, NO text, soft cinematic bokeh depth of field, balanced studio lighting, ultra clean 4k.`;
+
+      try {
+        const ai = getGeminiClient();
+        if (ai) {
+          const gemRes = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents:
+              `Transforme cette idée d'arrière-plan vidéo en un prompt anglais court (max 45 mots) ultra photoréaliste pour un fond de vidéo YouTube/Studio pro. ` +
+              `Règles strictes : AUCUNE personne, AUCUN texte, léger flou d'arrière-plan (bokeh) pour ne pas dénaturer le présentateur devant la caméra. ` +
+              `Idée : "${rawPrompt}"`
+          });
+          const candidate = String((gemRes as any)?.text || '').trim();
+          if (candidate.length > 15) {
+            refinedPrompt = candidate.replace(/^["']|["']$/g, '');
+          }
+        }
+      } catch (gemErr) {
+        console.warn('[BACKDROP GEMINI] Fallback prompt studio:', gemErr);
+      }
+
+      const lambdaUrl =
+        process.env.AWS_LAMBDA_URL ||
+        process.env.LAMBDA_URL ||
+        process.env.VITE_AWS_LAMBDA_URL ||
+        'https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/';
+
+      const lambdaRes = await fetch(lambdaUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'image',
+          prompt: refinedPrompt,
+          aspect_ratio: aspectRatio
+        })
+      });
+
+      const data: any = await lambdaRes.json().catch(() => null);
+      const imageUrl = Array.isArray(data?.output)
+        ? data.output[0]
+        : (data?.output || data?.imageUrl || data?.url || '');
+
+      if (!lambdaRes.ok || !imageUrl) {
+        return res.status(502).json({
+          success: false,
+          refinedPrompt,
+          error: data?.error || 'Impossible de générer le décor IA pour le moment.'
+        });
+      }
+
+      return res.json({
+        success: true,
+        imageUrl,
+        refinedPrompt
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur génération décor IA.' });
+    }
+  });
+
   // ============================================================================
   // PROXY ROUTER & ROTATION IP STATIQUE FIXIE MULTI-AGRÉGATEURS (Sebpay / SasPay)
   // ============================================================================

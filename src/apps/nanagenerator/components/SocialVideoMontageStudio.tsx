@@ -26,7 +26,8 @@ import {
   Wand2,
   Volume2,
   AudioWaveform,
-  Layers
+  Layers,
+  Image as ImageIcon
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -34,6 +35,13 @@ import {
   VOICE_EQ_PRESETS,
   VoiceDspSettings
 } from '../../../services/voiceEnhancerService';
+import {
+  ChromaKeyConfig,
+  DEFAULT_CHROMA_CONFIG,
+  STUDIO_BACKDROP_PRESETS,
+  renderChromaKeyFrame,
+  BackdropKeyMode
+} from '../../../services/chromaKeyStudioService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -47,7 +55,7 @@ export interface SocialVideoMontageStudioProps {
 }
 
 type SocialFormatId = '9:16' | '1:1' | '16:9';
-type StudioPanelTab = 'EDIT' | 'MOTION' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
+type StudioPanelTab = 'EDIT' | 'MOTION' | 'BACKDROP' | 'AUDIO' | 'PARTNERS' | 'PUBLISH';
 type SocialNetworkId = 'tiktok_reels' | 'whatsapp_status' | 'facebook_youtube';
 type MotionDesignId =
   | 'classic'
@@ -266,10 +274,139 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const voiceFileInputRef = useRef<HTMLInputElement | null>(null);
+  const bgFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Fond Vert / Fond Bleu YCbCr + Remplacement d'Arrière-Plan IA Gemini
+  const [chromaConfig, setChromaConfig] = useState<ChromaKeyConfig>(DEFAULT_CHROMA_CONFIG);
+  const [selectedBackdropId, setSelectedBackdropId] = useState<string>('yt_neon');
+  const [customBackdropUrl, setCustomBackdropUrl] = useState<string>('');
+  const [geminiBackdropPrompt, setGeminiBackdropPrompt] = useState<string>('');
+  const [isGeneratingBackdrop, setIsGeneratingBackdrop] = useState<boolean>(false);
+  const [backdropStatusMsg, setBackdropStatusMsg] = useState<string | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgImageObjRef = useRef<HTMLImageElement | null>(null);
 
   // Kit Publication Réseaux Sociaux
   const [targetNetwork, setTargetNetwork] = useState<SocialNetworkId>('tiktok_reels');
   const [copiedPost, setCopiedPost] = useState<boolean>(false);
+
+  const activeBackdropUrl = useMemo(() => {
+    if (customBackdropUrl) return customBackdropUrl;
+    const preset = STUDIO_BACKDROP_PRESETS.find(p => p.id === selectedBackdropId);
+    return preset?.type === 'image' ? preset.value : '';
+  }, [customBackdropUrl, selectedBackdropId]);
+
+  const activeBackdropGradient = useMemo(() => {
+    if (customBackdropUrl) return '';
+    const preset = STUDIO_BACKDROP_PRESETS.find(p => p.id === selectedBackdropId);
+    return preset?.type === 'gradient' ? preset.value : '';
+  }, [customBackdropUrl, selectedBackdropId]);
+
+  // Chargement image d'arrière-plan pour le canvas Chroma Key
+  useEffect(() => {
+    if (!activeBackdropUrl) {
+      bgImageObjRef.current = null;
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      bgImageObjRef.current = img;
+    };
+    img.src = activeBackdropUrl;
+  }, [activeBackdropUrl]);
+
+  // Boucle de rendu Live Chroma Key YCbCr + Anti-Spill sur le Canvas quand activé
+  useEffect(() => {
+    if (chromaConfig.mode === 'none' || !previewUrl) return;
+    let rafId = 0;
+    const offscreen = document.createElement('canvas');
+    const offCtx = offscreen.getContext('2d', { willReadFrequently: true });
+
+    const loop = () => {
+      const video = videoPreviewRef.current;
+      const canvas = chromaCanvasRef.current;
+      if (video && canvas && offCtx && video.readyState >= 2) {
+        const fmt = SOCIAL_FORMATS[socialFormat];
+        const renderW = Math.min(480, fmt.width);
+        const renderH = Math.round(renderW * (fmt.height / fmt.width));
+        if (canvas.width !== renderW || canvas.height !== renderH) {
+          canvas.width = renderW;
+          canvas.height = renderH;
+          offscreen.width = renderW;
+          offscreen.height = renderH;
+        }
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          try {
+            renderChromaKeyFrame(
+              ctx,
+              offCtx,
+              video,
+              renderW,
+              renderH,
+              chromaConfig,
+              bgImageObjRef.current,
+              activeBackdropGradient,
+              VIDEO_FILTERS.find(f => f.id === selectedFilterId)?.css || ''
+            );
+          } catch {}
+        }
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [chromaConfig, previewUrl, socialFormat, activeBackdropGradient, selectedFilterId]);
+
+  const handleGenerateGeminiBackdrop = async () => {
+    if (!geminiBackdropPrompt.trim()) {
+      setEncodeError('Décrivez le décor d\'arrière-plan souhaité (ex: Studio YouTube néon bleu).');
+      return;
+    }
+    setIsGeneratingBackdrop(true);
+    setEncodeError(null);
+    setBackdropStatusMsg('Gemini IA prépare le décor Studio photoréaliste...');
+    try {
+      const res = await fetch('/api/ai/backdrop-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: geminiBackdropPrompt.trim(),
+          aspectRatio: socialFormat
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json.imageUrl) {
+        throw new Error(json?.error || 'Impossible de générer le décor IA.');
+      }
+      setCustomBackdropUrl(json.imageUrl);
+      if (chromaConfig.mode === 'none') {
+        setChromaConfig(c => ({ ...c, mode: 'green_screen' }));
+      }
+      playValidationBeep();
+      setBackdropStatusMsg('✅ Décor généré par Gemini IA et appliqué en direct !');
+    } catch (err: any) {
+      playCancelSound();
+      setEncodeError(err?.message || 'Erreur lors de la génération du décor IA.');
+      setBackdropStatusMsg(null);
+    } finally {
+      setIsGeneratingBackdrop(false);
+    }
+  };
+
+  const handleCustomBgImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    playTapBeep();
+    setCustomBackdropUrl(URL.createObjectURL(file));
+    if (chromaConfig.mode === 'none') {
+      setChromaConfig(c => ({ ...c, mode: 'green_screen' }));
+    }
+    setBackdropStatusMsg(`✅ Photo de fond chargée : ${file.name}`);
+  };
 
   useEffect(() => {
     if (initialVideoUrl && !sourceFile) {
@@ -359,6 +496,85 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     const fmt = SOCIAL_FORMATS[socialFormat];
     setIsEncoding(true);
     setEncodeProgress(10);
+
+    // Si incrustation Fond Vert / Décor IA active : enregistrer le Canvas composé (YCbCr + Anti-Spill + Décor + Audio)
+    if (chromaConfig.mode !== 'none' && videoPreviewRef.current && chromaCanvasRef.current && typeof MediaRecorder !== 'undefined') {
+      try {
+        const videoEl = videoPreviewRef.current;
+        const canvasEl = chromaCanvasRef.current;
+        const targetSec = Math.min(maxDurationSec, Math.max(2, Math.round(videoEl.duration || maxDurationSec)));
+
+        const canvasStream = canvasEl.captureStream(24);
+        const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
+        try {
+          const vStream = (videoEl as any).captureStream?.() || (videoEl as any).mozCaptureStream?.();
+          if (vStream) {
+            vStream.getAudioTracks().forEach((t: MediaStreamTrack) => tracks.push(t));
+          }
+        } catch {}
+
+        const combinedStream = new MediaStream(tracks);
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+          ? 'video/webm;codecs=vp9,opus'
+          : 'video/webm';
+        const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 1_800_000 });
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (ev) => {
+          if (ev.data.size > 0) chunks.push(ev.data);
+        };
+
+        const recordedBlob = await new Promise<Blob>((resolve, reject) => {
+          recorder.onerror = () => reject(new Error('Erreur enregistrement vidéo Fond Vert.'));
+          recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+
+          videoEl.currentTime = 0;
+          recorder.start(250);
+          videoEl.play().catch(() => {});
+
+          const startTime = Date.now();
+          const tick = setInterval(() => {
+            const elapsed = (Date.now() - startTime) / 1000;
+            setEncodeProgress(Math.min(98, Math.round((elapsed / targetSec) * 100)));
+            if (elapsed >= targetSec || videoEl.ended) {
+              clearInterval(tick);
+              videoEl.pause();
+              if (recorder.state !== 'inactive') recorder.stop();
+            }
+          }, 150);
+        });
+
+        const outFile = new File([recordedBlob], `nana-chroma-${socialFormat.replace(':', 'x')}-${Date.now()}.webm`, { type: mimeType });
+        setEncodeProgress(100);
+        setEncodeResult({
+          file: outFile,
+          originalSizeBytes: inputBlob.size,
+          encodedSizeBytes: outFile.size,
+          savingsPercent: 0,
+          durationSec: targetSec,
+          width: canvasEl.width,
+          height: canvasEl.height,
+          elapsedMs: targetSec * 1000,
+          engine: 'webcodecs-hardware'
+        });
+        playValidationBeep();
+
+        const dlUrl = URL.createObjectURL(outFile);
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = outFile.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(dlUrl), 15000);
+        setIsEncoding(false);
+        return;
+      } catch (chromaErr: any) {
+        playCancelSound();
+        setEncodeError(chromaErr?.message || 'Erreur lors de la compilation Fond Vert.');
+        setIsEncoding(false);
+        return;
+      }
+    }
 
     try {
       const result = await encodeVideo(inputBlob, {
@@ -620,7 +836,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               {previewUrl ? (
                 <div className={`relative w-full ${SOCIAL_FORMATS[socialFormat].aspectClass} bg-black rounded-2xl overflow-hidden border border-slate-700 shadow-2xl mx-auto flex items-center justify-center`}>
                   <video
+                    ref={videoPreviewRef}
                     src={previewUrl}
+                    crossOrigin="anonymous"
                     controls
                     playsInline
                     onLoadedMetadata={(e) => {
@@ -628,9 +846,22 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       setVideoDuration(d);
                       setMaxDurationSec(Math.min(d, SOCIAL_FORMATS[socialFormat].maxRecommendedSec));
                     }}
-                    style={{ filter: activeFilterCss }}
-                    className="w-full h-full object-cover"
+                    style={{ filter: chromaConfig.mode === 'none' ? activeFilterCss : undefined }}
+                    className={`w-full h-full object-cover ${chromaConfig.mode !== 'none' ? 'opacity-0' : ''}`}
                   />
+                  {chromaConfig.mode !== 'none' && (
+                    <canvas
+                      ref={chromaCanvasRef}
+                      onClick={() => {
+                        const v = videoPreviewRef.current;
+                        if (!v) return;
+                        if (v.paused) v.play().catch(() => {});
+                        else v.pause();
+                      }}
+                      className="absolute inset-0 w-full h-full object-cover cursor-pointer"
+                      title="Cliquez pour Lecture / Pause (Fond Vert YCbCr + Anti-Spill actif)"
+                    />
+                  )}
 
                   {/* Motion Design & Animation Live Overlay */}
                   {(overlayHeadline.trim() || overlayPrice.trim() || overlayContact.trim()) && (
@@ -721,12 +952,13 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
             </button>
           </div>
 
-          {/* COLONNE DROITE : 5 ONGLETS COMPLETS */}
+          {/* COLONNE DROITE : 6 ONGLETS COMPLETS */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="grid grid-cols-5 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
               {[
                 { id: 'EDIT' as StudioPanelTab, label: 'Montage', icon: Scissors },
                 { id: 'MOTION' as StudioPanelTab, label: 'Motion', icon: Layers },
+                { id: 'BACKDROP' as StudioPanelTab, label: 'Fond / IA', icon: ImageIcon },
                 { id: 'AUDIO' as StudioPanelTab, label: 'Voix DSP', icon: AudioWaveform },
                 { id: 'PARTNERS' as StudioPanelTab, label: 'CapCut', icon: Wand2 },
                 { id: 'PUBLISH' as StudioPanelTab, label: 'Publier', icon: Share2 }
@@ -751,6 +983,203 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                 );
               })}
             </div>
+
+            {/* PANNEAU FOND VERT / FOND BLEU YCbCr + DÉCOR IA GEMINI (SECRET YOUTUBEURS) */}
+            {activePanel === 'BACKDROP' && (
+              <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-emerald-400" />
+                      <span>Suppression &amp; Remplacement d'Arrière-Plan (Chroma Key YCbCr + Gemini IA)</span>
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Méthode plateau TV / YouTubeurs : découpe chromatique YCbCr + suppression du reflet vert sur la peau (Anti-Spill) pour remplacer votre fond par un décor généré par <strong>Gemini IA</strong> sans jamais dénaturer le présentateur.
+                  </p>
+
+                  {/* Sélection du mode Chroma Key */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    {([
+                      { id: 'none', label: 'Désactivé', desc: 'Fond original' },
+                      { id: 'green_screen', label: '🟩 Fond Vert', desc: 'Standard YouTube' },
+                      { id: 'blue_screen', label: '🟦 Fond Bleu', desc: 'Plateau TV' },
+                      { id: 'custom_color', label: '🎨 Couleur Mur', desc: 'Mur uni perso' }
+                    ] as Array<{ id: BackdropKeyMode; label: string; desc: string }>).map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          setChromaConfig(c => ({ ...c, mode: m.id }));
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                          chromaConfig.mode === m.id
+                            ? 'bg-emerald-600/20 border-emerald-400 text-white'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="block text-xs font-black">{m.label}</span>
+                        <span className="block text-[10px] text-slate-400">{m.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {chromaConfig.mode === 'custom_color' && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <label className="text-xs font-bold text-slate-300">Couleur exacte à supprimer :</label>
+                      <input
+                        type="color"
+                        value={chromaConfig.keyColorHex}
+                        onChange={(e) => setChromaConfig(c => ({ ...c, keyColorHex: e.target.value }))}
+                        className="w-10 h-8 rounded cursor-pointer bg-transparent border-0"
+                      />
+                      <span className="text-xs font-mono text-slate-400">{chromaConfig.keyColorHex}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Réglages précis YCbCr + Anti-Spill + Bokeh */}
+                {chromaConfig.mode !== 'none' && (
+                  <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-400">Tolérance Chroma</span>
+                        <span className="font-mono font-bold text-emerald-300">{Math.round(chromaConfig.similarity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.15}
+                        max={0.65}
+                        step={0.01}
+                        value={chromaConfig.similarity}
+                        onChange={(e) => setChromaConfig(c => ({ ...c, similarity: Number(e.target.value) }))}
+                        className="w-full accent-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-400">Douceur contours / cheveux</span>
+                        <span className="font-mono font-bold text-indigo-300">{Math.round(chromaConfig.smoothness * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.02}
+                        max={0.30}
+                        step={0.01}
+                        value={chromaConfig.smoothness}
+                        onChange={(e) => setChromaConfig(c => ({ ...c, smoothness: Number(e.target.value) }))}
+                        className="w-full accent-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-400">Anti-Spill (zéro halo vert)</span>
+                        <span className="font-mono font-bold text-amber-300">{Math.round(chromaConfig.spillSuppression * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={chromaConfig.spillSuppression}
+                        onChange={(e) => setChromaConfig(c => ({ ...c, spillSuppression: Number(e.target.value) }))}
+                        className="w-full accent-amber-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-400">Flou Bokeh du décor</span>
+                        <span className="font-mono font-bold text-sky-300">{chromaConfig.bgBlurPx} px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={12}
+                        step={1}
+                        value={chromaConfig.bgBlurPx}
+                        onChange={(e) => setChromaConfig(c => ({ ...c, bgBlurPx: Number(e.target.value) }))}
+                        className="w-full accent-sky-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Générateur de Décor d'Arrière-Plan par IA Gemini */}
+                <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/35 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Générer un Arrière-Plan sur-mesure avec Gemini IA</span>
+                    </h4>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={geminiBackdropPrompt}
+                      onChange={(e) => setGeminiBackdropPrompt(e.target.value)}
+                      placeholder="Ex: Studio YouTube moderne avec néons bleus, étagères design et éclairage doux..."
+                      className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateGeminiBackdrop}
+                      disabled={isGeneratingBackdrop}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 disabled:opacity-60 text-white text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {isGeneratingBackdrop ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>{isGeneratingBackdrop ? 'Création...' : 'Générer Décor IA'}</span>
+                    </button>
+                  </div>
+                  {backdropStatusMsg && (
+                    <p className="text-[11px] text-emerald-300 font-semibold">{backdropStatusMsg}</p>
+                  )}
+                </div>
+
+                {/* Décors Studio prêts en 1 clic + Import Photo Perso */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-white">Décors YouTubeurs &amp; Studio Prêts en 1 Clic</h4>
+                    <button
+                      type="button"
+                      onClick={() => bgFileInputRef.current?.click()}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>Ma photo</span>
+                    </button>
+                    <input ref={bgFileInputRef} type="file" accept="image/*" onChange={handleCustomBgImport} className="hidden" />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {STUDIO_BACKDROP_PRESETS.map(preset => {
+                      const active = !customBackdropUrl && selectedBackdropId === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            setCustomBackdropUrl('');
+                            setSelectedBackdropId(preset.id);
+                            if (chromaConfig.mode === 'none') {
+                              setChromaConfig(c => ({ ...c, mode: 'green_screen' }));
+                            }
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer space-y-1 ${
+                            active
+                              ? 'bg-indigo-950/60 border-indigo-400 text-white'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <span className="block text-[10px] font-bold text-amber-300">{preset.badge}</span>
+                          <span className="block text-xs font-black truncate">{preset.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* PANNEAU 1 : MONTAGE (TRIM, TEXTE COMMERCIAL, FILTRES) */}
             {activePanel === 'EDIT' && (
