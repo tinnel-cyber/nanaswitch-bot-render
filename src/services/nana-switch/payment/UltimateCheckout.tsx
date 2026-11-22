@@ -78,10 +78,11 @@ export interface PaymentSuccessDetails {
   customerName?: string;
   deliveryAddress?: string;
   customerEmail?: string;
-  paymentMethod: 'CASH_ON_DELIVERY' | 'MOBILE_MONEY' | string;
+  paymentMethod: 'CASH_ON_DELIVERY' | 'MOBILE_MONEY' | 'PHYSICAL_POS_TOKEN' | string;
   timestamp: number;
   status: string;
   orderId?: string;
+  posToken?: string;
 }
 
 export interface UltimateCheckoutProps {
@@ -109,6 +110,8 @@ export interface UltimateCheckoutProps {
   onCancel?: () => void;
   onBackToStore?: () => void;
   initialStep?: 'STEP_1' | 'STEP_2B' | 'STEP_3';
+  /** Active l'option "Ticket Caisse Physique (TK-...)" UNIQUEMENT pour le Mini-Market (jamais pour abonnements/digital) */
+  enablePhysicalPosToken?: boolean;
 }
 
 export interface OperatorOption {
@@ -247,7 +250,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   onSuccess,
   onCancel,
   onBackToStore,
-  initialStep
+  initialStep,
+  enablePhysicalPosToken = false
 }) => {
   const effectiveStoreName = storeName || storeConfig?.storeName || 'NaNa Store';
   const effectiveWPhone = wPhone || whatsappPhone || storeConfig?.whatsappPhone || '+22665565805';
@@ -360,8 +364,12 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number; discountAmount: number } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
 
-  // Le Choix Crucial : Option A (Paiement à la livraison) vs Option B (Mobile Money)
-  const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO'>(() => {
+  // Option Caisse Physique STRICTEMENT réservée au Mini-Market (jamais pour abonnements ou produits numériques)
+  const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isDigitalProduct);
+  const [copiedPosToken, setCopiedPosToken] = useState(false);
+
+  // Le Choix Crucial : Option A (Paiement à la livraison), Option B (Mobile Money), Option C (Ticket Caisse Physique si Mini-Market)
+  const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO' | 'POS_TOKEN'>(() => {
     const savedMethod = typeof window !== 'undefined' ? localStorage.getItem('nana_customer_payment_method') : '';
     return savedMethod === 'cod' ? 'COD' : 'MOMO';
   });
@@ -515,7 +523,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     if (!deliveryPhone.trim() || deliveryPhone.trim().length < 6) {
       errors.phone = 'Veuillez saisir un numéro de téléphone valide';
     }
-    if (!deliveryAddress.trim()) {
+    if (paymentChoice !== 'POS_TOKEN' && !deliveryAddress.trim()) {
       errors.address = 'Veuillez renseigner votre adresse ou quartier';
     }
 
@@ -611,6 +619,79 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       playCashChime();
       if (onSuccess) onSuccess(details);
     }, 600);
+  };
+
+  // =============================================================================
+  // FLUX ÉTAPE 2C (MINI-MARKET UNIQUEMENT) : TICKET CAISSE PHYSIQUE (TK-...)
+  // =============================================================================
+  const handleConfirmPosTokenOrder = async () => {
+    if (!validateStep1()) return;
+
+    playTapBeep();
+    setIsProcessingPayment(true);
+    persistCustomerData();
+
+    const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const prefix = merchantId ? merchantId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'NANA' : 'NANA';
+    const token = `TK-${prefix}-${randomCode}`;
+
+    const details: PaymentSuccessDetails = {
+      transactionId: token,
+      posToken: token,
+      orderId,
+      amount: finalTotal,
+      currency,
+      customerName: customerName.trim(),
+      phoneNumber: deliveryPhone.trim(),
+      deliveryAddress: 'Retrait & Paiement au Comptoir Boutique',
+      customerEmail: customerEmail.trim() || undefined,
+      paymentMethod: 'PHYSICAL_POS_TOKEN',
+      country: selectedCountry,
+      operator: { id: 'pos_token', name: 'Ticket Caisse Physique (Comptoir)' },
+      timestamp: Date.now(),
+      status: 'PENDING_POS_COUNTER'
+    };
+
+    try {
+      const storedOrders = JSON.parse(localStorage.getItem('nanasore_tokens') || '[]');
+      storedOrders.unshift({
+        token,
+        tenantId: merchantId || '',
+        dealTitle: resolvedProduct.name,
+        cartItems: resolvedProduct.items || [],
+        grandTotal: finalTotal,
+        createdAt: new Date().toISOString(),
+        customerName: details.customerName,
+        customerPhone: details.phoneNumber,
+      });
+      localStorage.setItem('nanasore_tokens', JSON.stringify(storedOrders.slice(0, 50)));
+    } catch {}
+
+    try {
+      fetch('/api/payments/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          order_id: token,
+          tenant_id: merchantId || '',
+          amount: finalTotal,
+          customer_name: details.customerName,
+          customer_phone: details.phoneNumber,
+          operator: 'PHYSICAL_POS_TOKEN',
+          composed_items: resolvedProduct.items || [],
+          status: 'pending_pos_counter',
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    setTimeout(() => {
+      setIsProcessingPayment(false);
+      setCompletedDetails(details);
+      setCurrentStep('STEP_3');
+      playValidationBeep();
+      if (onSuccess) onSuccess(details);
+    }, 450);
   };
 
   // Passage à l'Étape 2B (Mobile Money)
@@ -1358,12 +1439,82 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                     </div>
                   </div>
 
+                  {/* OPTION C (STRICTEMENT MINI-MARKET) : Ticket Caisse Physique (Payer au Comptoir Boutique) */}
+                  {showPhysicalPosOption && (
+                    <div
+                      onClick={() => {
+                        playTapBeep();
+                        setPaymentChoice('POS_TOKEN');
+                      }}
+                      className={`sm:col-span-2 p-4.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative hover:scale-[1.01] active:scale-[0.99] ${
+                        paymentChoice === 'POS_TOKEN'
+                          ? 'border-emerald-600 bg-emerald-50/70 shadow-md ring-2 ring-emerald-500/20'
+                          : 'border-slate-300 hover:border-emerald-400 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
+                            paymentChoice === 'POS_TOKEN'
+                              ? 'bg-emerald-600 text-white font-black shadow-md shadow-emerald-600/30'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}>
+                            <Store className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-sm sm:text-base font-black text-slate-950">
+                              Payer en Boutique (Ticket Caisse Physique)
+                            </div>
+                            <div className="text-xs sm:text-sm text-slate-700 font-semibold">
+                              Générez un code TK-... à présenter au caissier au comptoir
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 ${
+                          paymentChoice === 'POS_TOKEN'
+                            ? 'border-emerald-600 bg-emerald-600'
+                            : 'border-slate-400 bg-white'
+                        }`}>
+                          {paymentChoice === 'POS_TOKEN' && (
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs font-black text-emerald-800 bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-300 w-fit">
+                        <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>En boutique • Aucune adresse requise • Retrait immédiat</span>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
 
               {/* ÉTAPE 2A : BOUTON D'ACTION SELON L'OPTION */}
               <div className="pt-3">
-                {paymentChoice === 'COD' ? (
+                {paymentChoice === 'POS_TOKEN' && showPhysicalPosOption ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmPosTokenOrder}
+                    disabled={isProcessingPayment}
+                    className="w-full py-4.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-base sm:text-lg shadow-xl shadow-emerald-600/30 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Génération du Ticket Caisse...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Store className="w-5 h-5" />
+                        <span>Générer mon Ticket Caisse • {formatCFA(finalTotal)}</span>
+                        <ArrowRight className="w-5 h-5 ml-1" />
+                      </>
+                    )}
+                  </button>
+                ) : paymentChoice === 'COD' ? (
                   /* SI PAIEMENT À LA LIVRAISON : LE PARCOURS S'ARRÊTE ICI AVEC CE GRAND CTA */
                   <button
                     type="button"
@@ -1813,8 +1964,33 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               </span>
             </div>
 
+            {/* Ticket Caisse Physique (Mini-Market uniquement) à présenter au caissier */}
+            {completedDetails?.paymentMethod === 'PHYSICAL_POS_TOKEN' && completedDetails.posToken && (
+              <div className="p-4 rounded-2xl bg-slate-950 text-white border-2 border-emerald-500/60 text-center space-y-2 mb-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase tracking-wider">
+                  <Store className="w-3.5 h-3.5" />
+                  À présenter à la caisse physique
+                </span>
+                <div className="text-2xl font-mono font-black tracking-[0.18em] text-emerald-400">
+                  {completedDetails.posToken}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(completedDetails.posToken || '').catch(() => {});
+                    setCopiedPosToken(true);
+                    setTimeout(() => setCopiedPosToken(false), 2000);
+                  }}
+                  className="mx-auto px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedPosToken ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedPosToken ? 'Ticket copié !' : 'Copier le code caisse'}</span>
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-between items-center text-slate-700 font-semibold">
-              <span>Total réglé :</span>
+              <span>{completedDetails?.paymentMethod === 'PHYSICAL_POS_TOKEN' ? 'Total à régler en boutique :' : 'Total réglé :'}</span>
               <span className="font-mono font-black text-lg text-emerald-600">
                 {formatCFA(finalTotal)}
               </span>
@@ -1823,7 +1999,9 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             <div className="flex justify-between items-center text-slate-700 font-semibold">
               <span>Mode de paiement :</span>
               <span className="font-black text-slate-950">
-                {completedDetails?.paymentMethod === 'CASH_ON_DELIVERY'
+                {completedDetails?.paymentMethod === 'PHYSICAL_POS_TOKEN'
+                  ? 'Ticket Caisse Physique (Comptoir)'
+                  : completedDetails?.paymentMethod === 'CASH_ON_DELIVERY'
                   ? 'Paiement à la livraison (Espèces)'
                   : selectedOperator.name}
               </span>

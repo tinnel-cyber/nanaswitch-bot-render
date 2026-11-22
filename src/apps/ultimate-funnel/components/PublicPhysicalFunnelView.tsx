@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import MiniMarketDrawer from '../../../components/funnel/MiniMarketDrawer';
-import CheckoutModal from '@/components/public-deal/CheckoutModal';
+import UltimateCheckout from '../../../components/payment/UltimateCheckout';
 const QuickQrScannerModal = React.lazy(() => import('../../../components/funnel/QuickQrScannerModal'));
 
 interface PublicPhysicalFunnelViewProps {
@@ -1153,71 +1153,87 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
         }}
       />
 
-      {/* Modale de Paiement Mobile Money & Token Caisse Réelle */}
-      <CheckoutModal
-        isOpen={isCheckoutModalOpen}
-        onClose={() => setIsCheckoutModalOpen(false)}
-        dealProduct={{
-          id: activeFunnel.productId || activeFunnel.id,
-          title: activeFunnel.title,
-          price: heroProps.price || activeFunnel.ogMetadata?.priceAmount || 35000,
-          imageUrl: activeFunnel.ogMetadata?.imageUrl || heroProps.imageUrl || ''
-        }}
-        dealQuantity={miniMarketCart.length > 0 ? 0 : 1}
-        cartItems={miniMarketCart}
-        checkoutMeta={miniMarketCheckoutMeta}
-        tenantId={activeFunnel.storeId}
-        tenantName={activeFunnel.title}
-        onPaymentSuccess={(orderRef, details) => {
-          const fallbackTotal =
-            miniMarketCart.length > 0
-              ? miniMarketCart.reduce((s, i) => s + i.price * i.quantity, 0)
-              : heroProps.price || 35000;
-          const totalPaid = details?.totalAmount ?? fallbackTotal;
-          fireServerCapiEvent('Purchase', {
-            value: totalPaid,
-            customerPhone: details?.customerPhone,
-          });
+      {/* Caisse Fintech Réelle UltimateCheckout (Routeur NanaSwitch + Ticket Caisse Physique Mini-Market) */}
+      {isCheckoutModalOpen && (() => {
+        const rawMiniTotal = miniMarketCart.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
+        const computedAmount =
+          miniMarketCheckoutMeta?.discountedTotal ??
+          (rawMiniTotal > 0 ? rawMiniTotal : (heroProps.price || activeFunnel.ogMetadata?.priceAmount || 35000));
+        const checkoutSummaryName =
+          miniMarketCart.length === 1
+            ? miniMarketCart[0].name
+            : miniMarketCart.length > 1
+            ? `Panier Mini-Market (${miniMarketCart.reduce((s, i) => s + (i.quantity || 1), 0)} articles)`
+            : activeFunnel.title;
 
-          // Point 5 : Crédit automatique de la commission influenceur/affilié (idempotent)
-          const activeAff =
-            details?.affiliateRef ||
-            miniMarketCheckoutMeta?.affiliateRef ||
-            (() => {
-              try {
-                return localStorage.getItem('nana_active_affiliate_ref') || '';
-              } catch {
-                return '';
+        return (
+          <UltimateCheckout
+            isModal={true}
+            isOpen={isCheckoutModalOpen}
+            onClose={() => setIsCheckoutModalOpen(false)}
+            enablePhysicalPosToken={true}
+            amount={computedAmount}
+            currency="FCFA"
+            storeName={activeFunnel.title}
+            merchantId={activeFunnel.storeId}
+            whatsappPhone={activeFunnel.merchantWhatsapp}
+            product={{
+              id: activeFunnel.productId || activeFunnel.id,
+              name: checkoutSummaryName,
+              price: computedAmount,
+              originalPrice: rawMiniTotal > computedAmount ? rawMiniTotal : undefined,
+              imageUrl: miniMarketCart[0]?.image || activeFunnel.ogMetadata?.imageUrl || heroProps.imageUrl || '',
+              items: miniMarketCart.map((i) => ({
+                id: i.id,
+                name: i.name,
+                price: Number(i.price) || 0,
+                quantity: Number(i.quantity) || 1,
+                imageUrl: i.image,
+              })),
+            }}
+            onSuccess={(details) => {
+              const totalPaid = Number(details?.amount) || computedAmount;
+              const orderRef = details?.transactionId || details?.orderId || `CMD-${Date.now().toString(36).toUpperCase()}`;
+
+              fireServerCapiEvent('Purchase', {
+                value: totalPaid,
+                customerPhone: details?.phoneNumber,
+              });
+
+              // Point 5 : Crédit automatique de la commission influenceur/affilié (idempotent)
+              const activeAff =
+                miniMarketCheckoutMeta?.affiliateRef ||
+                (() => {
+                  try {
+                    return localStorage.getItem('nana_active_affiliate_ref') || '';
+                  } catch {
+                    return '';
+                  }
+                })();
+
+              if (activeAff && totalPaid > 0 && details?.paymentMethod !== 'PHYSICAL_POS_TOKEN') {
+                fetch('/api/affiliate/credit-commission', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  keepalive: true,
+                  body: JSON.stringify({
+                    affiliateRef: activeAff,
+                    orderRef,
+                    orderTotal: totalPaid,
+                    commissionRate: 10,
+                    tenantId: activeFunnel.storeId || '',
+                    slug: activeSlug,
+                    customerName: details?.customerName || 'Client Nanasore',
+                    operator: details?.operator?.name || details?.paymentMethod || 'MOBILE_MONEY',
+                  }),
+                }).catch(() => {});
               }
-            })();
 
-          if (activeAff && totalPaid > 0) {
-            fetch('/api/affiliate/credit-commission', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              keepalive: true,
-              body: JSON.stringify({
-                affiliateRef: activeAff,
-                orderRef,
-                orderTotal: totalPaid,
-                commissionRate: 10,
-                tenantId: activeFunnel.storeId || '',
-                slug: activeSlug,
-                customerName: details?.customerName || 'Client Nanasore',
-                operator: details?.operator || 'MOBILE_MONEY',
-              }),
-            }).catch(() => {});
-          }
-
-          setCompletedOrder({
-            transactionId: orderRef,
-            customerName: details?.customerName || 'Client Nanasore',
-            totalAmount: totalPaid,
-            provider: details?.operator || 'MOBILE MONEY'
-          });
-          playCashChime();
-        }}
-      />
+              playCashChime();
+            }}
+          />
+        );
+      })()}
 
       {/* 3. Toast FOMO social proof connecté à Firestore (Preuve Sociale Réelle TrustPulse) */}
       <SocialProofToast

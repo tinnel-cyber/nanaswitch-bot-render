@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v34-live-magic-code';
+const CACHE_NAME = 'nanasore-v35-minimarket-ultimate-checkout';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

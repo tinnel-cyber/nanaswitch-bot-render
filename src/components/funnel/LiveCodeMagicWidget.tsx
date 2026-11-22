@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, X, ArrowRight, Loader2, Hash, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import MiniMarketDrawer from './MiniMarketDrawer';
-import CheckoutModal, { CheckoutPaymentDetails } from '@/components/public-deal/CheckoutModal';
+import UltimateCheckout, { PaymentSuccessDetails } from '../payment/UltimateCheckout';
 import { playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 
 const PublicPhysicalFunnelView = React.lazy(() =>
@@ -317,29 +317,63 @@ export const LiveCodeMagicWidget: React.FC<LiveCodeMagicWidgetProps> = ({
         </div>
       )}
 
-      {/* Checkout Mobile Money direct depuis le Mini-Market du Code Magique */}
-      {activeLiveStore && isCheckoutOpen && (
-        <CheckoutModal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          dealProduct={{
-            id: activeLiveStore.slug,
-            title: activeLiveStore.title,
-            price: 0,
-          }}
-          dealQuantity={0}
-          cartItems={checkoutCart}
-          checkoutMeta={checkoutMeta}
-          tenantId={activeLiveStore.storeId}
-          tenantName={activeLiveStore.title}
-          onPaymentSuccess={(_orderRef: string, _details?: CheckoutPaymentDetails) => {
-            playCashChime();
-            setTimeout(() => {
-              handleCloseAll();
-            }, 2500);
-          }}
-        />
-      )}
+      {/* Caisse Fintech Réelle UltimateCheckout (Routeur NanaSwitch + Ticket Caisse Physique Mini-Market) */}
+      {activeLiveStore && isCheckoutOpen && (() => {
+        const rawTotal = checkoutCart.reduce((s, i) => s + Number(i.price || 0) * Number(i.quantity || 1), 0);
+        const computedAmount = checkoutMeta?.discountedTotal ?? rawTotal;
+        const summaryName =
+          checkoutCart.length === 1
+            ? checkoutCart[0].name
+            : `Panier Live #${activeLiveStore.code} (${checkoutCart.reduce((s, i) => s + (i.quantity || 1), 0)} articles)`;
+
+        return (
+          <UltimateCheckout
+            isModal={true}
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            enablePhysicalPosToken={true}
+            amount={computedAmount}
+            currency="FCFA"
+            storeName={activeLiveStore.title}
+            merchantId={activeLiveStore.storeId}
+            product={{
+              id: activeLiveStore.slug,
+              name: summaryName,
+              price: computedAmount,
+              originalPrice: rawTotal > computedAmount ? rawTotal : undefined,
+              imageUrl: checkoutCart[0]?.image || '',
+              items: checkoutCart.map((i) => ({
+                id: i.id,
+                name: i.name,
+                price: Number(i.price) || 0,
+                quantity: Number(i.quantity) || 1,
+                imageUrl: i.image,
+              })),
+            }}
+            onSuccess={(details: PaymentSuccessDetails) => {
+              const activeAff = checkoutMeta?.affiliateRef || '';
+              if (activeAff && details?.amount > 0 && details?.paymentMethod !== 'PHYSICAL_POS_TOKEN') {
+                fetch('/api/affiliate/credit-commission', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  keepalive: true,
+                  body: JSON.stringify({
+                    affiliateRef: activeAff,
+                    orderRef: details.transactionId || details.orderId || `LIVE-${Date.now()}`,
+                    orderTotal: details.amount,
+                    commissionRate: 10,
+                    tenantId: activeLiveStore.storeId || '',
+                    slug: activeLiveStore.slug,
+                    customerName: details.customerName || 'Client Live',
+                    operator: details.operator?.name || details.paymentMethod || 'MOBILE_MONEY',
+                  }),
+                }).catch(() => {});
+              }
+              playCashChime();
+            }}
+          />
+        );
+      })()}
     </>
   );
 };
