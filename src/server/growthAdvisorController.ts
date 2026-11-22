@@ -273,7 +273,9 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
         process.env.VITE_GEMINI_API_KEY ||
         process.env.GOOGLE_API_KEY ||
         ''
-      ).trim();
+      )
+        .replace(/^["'\s]+|["'\s]+$/g, '')
+        .trim();
       const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
 
       // Si pas de clé API ou tentative d'extraction de sécurité, repli déterministe immédiat
@@ -288,7 +290,7 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
         return;
       }
 
-      // Appel direct API REST officielle Google Gemini (zéro souci de version SDK, multi-tours natif jusqu'à 16 tours)
+      // Appel direct API REST officielle Google Gemini (multi-tours natif jusqu'à 16 tours)
       const topProductsSummary = Array.isArray(merchantContext?.topProducts) && merchantContext.topProducts.length > 0
         ? merchantContext.topProducts
             .slice(0, 6)
@@ -319,7 +321,6 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
         const text = sanitizeSensitiveContent(String(m?.text || m?.content || '')).trim();
         if (!text) continue;
         const role: 'user' | 'model' = m?.sender === 'user' || m?.role === 'user' ? 'user' : 'model';
-        // Ignorer le message d'accueil initial s'il précède le premier message utilisateur
         if (contents.length === 0 && role === 'model') continue;
         if (contents.length > 0 && contents[contents.length - 1].role === role) {
           contents[contents.length - 1].parts[0].text += `\n${text}`;
@@ -343,26 +344,36 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
       let modelUsed = '';
       const modelErrors: string[] = [];
 
-      const tryCallGeminiModel = async (model: string): Promise<string> => {
+      const tryCallGeminiModel = async (model: string, apiVersion: 'v1beta' | 'v1' = 'v1beta'): Promise<string> => {
         const cleanModel = model.replace(/^models\//, '');
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const payload: any = {
+          contents,
+          generationConfig: {
+            temperature: 0.55,
+            maxOutputTokens: 2048
+          }
+        };
+        if (apiVersion === 'v1beta') {
+          payload.systemInstruction = { parts: [{ text: dynamicSystemInstruction }] };
+        } else {
+          // v1 compatibility: prepend system instruction in first user turn
+          payload.contents = [
+            { role: 'user', parts: [{ text: `[CONSIGNES SYSTÈME]\n${dynamicSystemInstruction}\n\n[DEMANDE]\n${contents[0]?.parts?.[0]?.text || sanitizedCurrentQuery}` }] },
+            ...contents.slice(1)
+          ];
+        }
+
         const apiRes = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: dynamicSystemInstruction }] },
-            contents,
-            generationConfig: {
-              temperature: 0.55,
-              maxOutputTokens: 2048
-            }
-          })
+          body: JSON.stringify(payload)
         });
 
         if (!apiRes.ok) {
           const errJson: any = await apiRes.json().catch(() => ({}));
           const errMsg = errJson?.error?.status || errJson?.error?.message || `HTTP ${apiRes.status}`;
-          const info = `${cleanModel}: ${apiRes.status} ${String(errMsg).slice(0, 65)}`;
+          const info = `${cleanModel}(${apiVersion}): ${apiRes.status} ${String(errMsg).slice(0, 55)}`;
           modelErrors.push(info);
           console.warn(`[GROWTH_ADVISOR] ${info}`);
           return '';
@@ -383,48 +394,64 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
 
       for (const model of candidateModels) {
         try {
-          const text = await tryCallGeminiModel(model);
+          const text = await tryCallGeminiModel(model, 'v1beta');
           if (text) {
             rawText = text;
             modelUsed = model;
             break;
           }
         } catch (modelErr: any) {
-          const info = `${model}: ${String(modelErr?.message || 'NETWORK_ERR').slice(0, 60)}`;
+          const info = `${model}: ${String(modelErr?.message || 'NETWORK_ERR').slice(0, 55)}`;
           modelErrors.push(info);
           console.warn(`[GROWTH_ADVISOR] Erreur réseau ${info}`);
         }
       }
 
-      // Auto-découverte dynamique si aucun modèle standard n'a répondu (ex: nouveau nom de modèle Google)
-      if (!rawText && modelErrors.some((e) => e.includes('404'))) {
-        try {
-          const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
-          if (listRes.ok) {
+      // Auto-découverte dynamique sur v1beta puis v1 si les noms standards renvoient 404
+      if (!rawText) {
+        for (const ver of ['v1beta', 'v1'] as const) {
+          try {
+            const listRes = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${encodeURIComponent(apiKey)}`);
+            if (!listRes.ok) {
+              const lj: any = await listRes.json().catch(() => ({}));
+              modelErrors.push(`list(${ver}): ${listRes.status} ${String(lj?.error?.status || lj?.error?.message || '').slice(0, 45)}`);
+              continue;
+            }
             const listJson: any = await listRes.json();
             const available: string[] = (listJson?.models || [])
               .filter((m: any) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
               .map((m: any) => String(m.name || '').replace(/^models\//, ''))
-              .filter((n: string) => n && !candidateModels.includes(n));
-            const preferred = available.find((n) => n.includes('flash')) || available[0];
-            if (preferred) {
-              const text = await tryCallGeminiModel(preferred);
+              .filter(Boolean);
+
+            // Prioriser les modèles flash / pro récents
+            const ranked = [
+              ...available.filter((n) => n.includes('flash') && !n.includes('vision') && !n.includes('image') && !n.includes('tts')),
+              ...available.filter((n) => n.includes('pro') && !n.includes('vision')),
+              ...available
+            ].filter((v, i, a) => a.indexOf(v) === i);
+
+            for (const discovered of ranked.slice(0, 3)) {
+              const text = await tryCallGeminiModel(discovered, ver);
               if (text) {
                 rawText = text;
-                modelUsed = preferred;
+                modelUsed = discovered;
+                break;
               }
             }
-          }
-        } catch {}
+            if (rawText) break;
+          } catch {}
+        }
       }
 
       if (!rawText) {
         const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false, messages);
-        const primaryErr = modelErrors[0] || 'UNKNOWN';
+        const summaryErr = modelErrors.length > 1
+          ? `${modelErrors[0]} | ${modelErrors[modelErrors.length - 1]}`
+          : (modelErrors[0] || 'UNKNOWN');
         res.json({
           reply: sanitizeSensitiveContent(fallback.reply),
           internalThought: fallback.thought,
-          source: `nsore-fallback (${primaryErr})`
+          source: `nsore-fallback (${summaryErr})`
         });
         return;
       }
