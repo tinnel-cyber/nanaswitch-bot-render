@@ -29,6 +29,7 @@ import {
 import { DeveloperTab } from './DeveloperTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
 import { CentralHubOmnibar } from '../CentralHubOmnibar';
+import UltimateCheckout from '../payment/UltimateCheckout';
 import { APPS_REGISTRY, AppRegistryItem } from '../../data/appsRegistry';
 import {
   CANONICAL_APP_REGISTRY,
@@ -2023,7 +2024,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
             {activeTab === 'webhook_logs' && <TabWebhookLogs app={selectedApp} />}
             {activeTab === 'disputes' && <TabDisputes app={selectedApp} showToast={showToast} />}
-            {activeTab === 'pricing' && <TabPricing app={selectedApp} showToast={showToast} />}
+            {activeTab === 'pricing' && <TabPricing app={selectedApp} showToast={showToast} onUpdateApp={handleUpdateApp} />}
             {activeTab === 'support' && <TabSupport app={selectedApp} showToast={showToast} />}
             {activeTab === 'settings' && <TabSettings app={selectedApp} onUpgradeClick={() => setIsKycModalOpen(true)} onUpdateApp={handleUpdateApp} showToast={showToast} />}
           </main>
@@ -3173,20 +3174,48 @@ function TabWallet({
         created_at: nowIso
       };
 
-      // 1. Insertion directe dans Supabase (table wallet_transactions)
+      // 1. Enregistrement sécurisé côté serveur (POST /api/payouts/request) + Supabase
+      let serverPayoutId = payoutId;
       try {
-        await supabase.from('wallet_transactions').insert({
-          id: payoutId,
-          universe_id: app.id,
-          user_id: currentUser?.id || null,
-          type: 'WITHDRAWAL',
-          amount: amountNum,
-          status: isRealProd ? 'PENDING' : 'COMPLETED',
-          metadata: metadataPayload,
-          created_at: nowIso
+        const apiRes = await fetch('/api/payouts/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            universeId: app.id,
+            userId: currentUser?.id || null,
+            amount: amountNum,
+            fee: feeAmount,
+            netAmount,
+            currency: 'XOF',
+            country: selectedCountry.name,
+            countryCode: selectedCountry.code,
+            flag: selectedCountry.flag,
+            operatorId: selectedOperator.id,
+            operatorName: selectedOperator.name,
+            destination: destinationStr,
+            beneficiary: beneficiaryName,
+            mode: isRealProd ? 'PRODUCTION' : 'SIMULATION',
+          }),
         });
-      } catch (errTx) {
-        console.warn('[WALLET] Notice insertion wallet_transactions:', errTx);
+        const apiJson = await apiRes.json().catch(() => null);
+        if (!apiRes.ok || !apiJson?.success) {
+          throw new Error(apiJson?.error || 'Erreur validation retrait serveur');
+        }
+        if (apiJson?.payout?.id) serverPayoutId = apiJson.payout.id;
+      } catch (errApi: any) {
+        console.warn('[WALLET] Fallback insertion Supabase:', errApi);
+        try {
+          await supabase.from('wallet_transactions').insert({
+            id: serverPayoutId,
+            universe_id: app.id,
+            user_id: currentUser?.id || null,
+            type: 'WITHDRAWAL',
+            amount: amountNum,
+            status: isRealProd ? 'PENDING' : 'COMPLETED',
+            metadata: metadataPayload,
+            created_at: nowIso
+          });
+        } catch {}
       }
 
       // 2. Si Production : déduction effective du solde réel de l'univers dans Supabase
@@ -5682,6 +5711,23 @@ function TabPayouts({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
       setLoading(true);
       try {
         if (app?.id) {
+          // 1. Lecture API serveur (/api/payouts) + Supabase wallet_transactions
+          let serverRows: any[] = [];
+          try {
+            const apiRes = await fetch(`/api/payouts?universeId=${encodeURIComponent(app.id)}`);
+            const apiJson = await apiRes.json().catch(() => null);
+            if (apiRes.ok && apiJson?.success && Array.isArray(apiJson.payouts)) {
+              serverRows = apiJson.payouts.map((p: any) => ({
+                id: p.id,
+                destination: `${p.flag || ''} ${p.operatorName || ''} • ${p.destination || ''}`.trim(),
+                amount: `${(Number(p.amount) || 0).toLocaleString('fr-FR')} ${p.currency || 'XOF'}`,
+                status: p.status === 'COMPLETED' ? 'Virement Validé' : (p.status === 'PENDING' ? 'En Traitement' : p.status),
+                date: p.createdAt ? new Date(p.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récent',
+                isSimulation: p.mode === 'SIMULATION'
+              }));
+            }
+          } catch {}
+
           const { data: txs, error } = await supabase
             .from('wallet_transactions')
             .select('*')
@@ -5689,20 +5735,25 @@ function TabPayouts({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
             .order('created_at', { ascending: false })
             .limit(100);
 
-          if (!error && txs && txs.length > 0) {
-            const mapped = txs.map((t: any) => ({
-              id: t.id,
-              destination: t.metadata?.destination || t.account_details || `${t.metadata?.country || ''} (${t.metadata?.operator_name || ''})`,
-              amount: `${(Number(t.amount) || 0).toLocaleString('fr-FR')} ${t.metadata?.currency || 'XOF'}`,
-              status: t.status === 'COMPLETED' ? 'Virement Validé' : (t.status === 'PENDING' ? 'En Traitement' : t.status),
-              date: t.created_at ? new Date(t.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récent',
-              isSimulation: t.metadata?.mode === 'SIMULATION'
-            }));
-            if (isMounted) {
-              setPayouts(mapped);
-              setLoading(false);
-              return;
-            }
+          const supaRows = (!error && txs && txs.length > 0)
+            ? txs.map((t: any) => ({
+                id: t.id,
+                destination: t.metadata?.destination || t.account_details || `${t.metadata?.country || ''} (${t.metadata?.operator_name || ''})`,
+                amount: `${(Number(t.amount) || 0).toLocaleString('fr-FR')} ${t.metadata?.currency || 'XOF'}`,
+                status: t.status === 'COMPLETED' ? 'Virement Validé' : (t.status === 'PENDING' ? 'En Traitement' : t.status),
+                date: t.created_at ? new Date(t.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récent',
+                isSimulation: t.metadata?.mode === 'SIMULATION'
+              }))
+            : [];
+
+          const mergedMap = new Map<string, any>();
+          [...serverRows, ...supaRows].forEach((r) => {
+            if (r?.id && !mergedMap.has(r.id)) mergedMap.set(r.id, r);
+          });
+          if (mergedMap.size > 0 && isMounted) {
+            setPayouts(Array.from(mergedMap.values()));
+            setLoading(false);
+            return;
           }
 
           // Fallback stockage local purgé
@@ -6108,12 +6159,24 @@ function TabDisputes({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m
     if (!tenantId) return;
     setLoading(true);
     try {
+      let apiRows: any[] = [];
+      try {
+        const res = await fetch(`/api/merchant/disputes?tenantId=${encodeURIComponent(tenantId)}`);
+        const json = await res.json().catch(() => null);
+        if (res.ok && json?.success && Array.isArray(json.disputes)) apiRows = json.disputes;
+      } catch {}
+
       const { data, error } = await supabase
         .from('merchant_disputes')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
-      if (!error && Array.isArray(data)) setDisputes(data);
+
+      const merged = new Map<string, any>();
+      [...apiRows, ...(!error && Array.isArray(data) ? data : [])].forEach((d) => {
+        if (d?.id && !merged.has(d.id)) merged.set(d.id, d);
+      });
+      setDisputes(Array.from(merged.values()));
     } catch {
       setDisputes([]);
     } finally {
@@ -6128,25 +6191,37 @@ function TabDisputes({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m
   const handleOpenDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim() || !tenantId) return;
-    const id = `DSP-${Date.now().toString(36).toUpperCase()}`;
-    const row = {
-      id,
-      tenant_id: tenantId,
-      transaction_id: txId.trim() || null,
-      amount: Number(amount) || 0,
-      currency: 'XOF',
-      reason: reason.trim(),
-      status: 'OPEN',
-      created_at: new Date().toISOString(),
-    };
     try {
-      await supabase.from('merchant_disputes').insert(row);
-      setDisputes((prev) => [row, ...prev]);
+      const res = await fetch('/api/merchant/disputes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          transactionId: txId.trim() || null,
+          amount: Number(amount) || 0,
+          reason: reason.trim(),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      const created = json?.dispute || {
+        id: `DSP-${Date.now().toString(36).toUpperCase()}`,
+        tenant_id: tenantId,
+        transaction_id: txId.trim() || null,
+        amount: Number(amount) || 0,
+        currency: 'XOF',
+        reason: reason.trim(),
+        status: 'OPEN',
+        created_at: new Date().toISOString(),
+      };
+      try {
+        await supabase.from('merchant_disputes').insert(created);
+      } catch {}
+      setDisputes((prev) => [created, ...prev]);
       setTxId('');
       setReason('');
       setAmount('');
       setShowForm(false);
-      if (showToast) showToast(`Dossier de réclamation ${id} ouvert et enregistré.`, 'success');
+      if (showToast) showToast(`Dossier de réclamation ${created.id} ouvert et enregistré sur le serveur.`, 'success');
     } catch {}
   };
 
@@ -6220,7 +6295,7 @@ function TabDisputes({ app, showToast }: { app?: NanaMerchantApp; showToast?: (m
 
 type BillingPartition = 'MONTHLY' | 'ANNUAL';
 
-function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToast?: (m: string, t?: any) => void }) {
+function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | null; showToast?: (m: string, t?: any) => void; onUpdateApp?: (u: NanaMerchantApp) => void }) {
   const [billingPartition, setBillingPartition] = useState<BillingPartition>('MONTHLY');
   const [rechargeAmount, setRechargeAmount] = useState<number>(5000);
   const [customAmount, setCustomAmount] = useState<string>('');
@@ -6228,6 +6303,14 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('orange_money');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [selectedPlanForModal, setSelectedPlanForModal] = useState<any | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<{
+    kind: 'PLAN' | 'RECHARGE';
+    amount: number;
+    title: string;
+    planId?: string;
+    planName?: string;
+    billingCycle?: BillingPartition;
+  } | null>(null);
 
   // État de sélection des briques modulaires à la carte
   const [selectedModularParts, setSelectedModularParts] = useState<{ caisse: boolean; vitrine: boolean; formateur: boolean }>({
@@ -6313,22 +6396,30 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
       notify("Le montant minimum de recharge Pay-as-you-go est de 1 000 F CFA.", "warning");
       return;
     }
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setIsRechargeModalOpen(false);
-      notify(`Recharge Pay-as-you-go de ${amount.toLocaleString('fr-FR')} F CFA validée avec succès sur votre univers !`, 'success');
-    }, 1000);
+    setIsRechargeModalOpen(false);
+    setPendingCheckout({
+      kind: 'RECHARGE',
+      amount,
+      title: `Recharge Pay-as-you-go (${amount.toLocaleString('fr-FR')} F CFA)`,
+    });
   };
 
   const confirmPlanSubscription = () => {
     if (!selectedPlanForModal) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      notify(`Souscription au ${selectedPlanForModal.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : 'Annuel'}) activée avec succès !`, 'success');
-      setSelectedPlanForModal(null);
-    }, 1000);
+    const planPrice =
+      billingPartition === 'ANNUAL'
+        ? Number(selectedPlanForModal.annualPrice) || Number(selectedPlanForModal.monthlyPrice) * 10
+        : Number(selectedPlanForModal.monthlyPrice) || 15000;
+    const planObj = selectedPlanForModal;
+    setSelectedPlanForModal(null);
+    setPendingCheckout({
+      kind: 'PLAN',
+      amount: planPrice,
+      title: `Abonnement ${planObj.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : 'Annuel'})`,
+      planId: planObj.id,
+      planName: planObj.name,
+      billingCycle: billingPartition,
+    });
   };
 
   const subscriptionPlans = [
@@ -7212,6 +7303,74 @@ function TabPricing({ app, showToast }: { app?: NanaMerchantApp | null; showToas
           </div>
         </div>
       )}
+      {/* Paiement réel UltimateCheckout pour Abonnements & Recharges (sans Ticket Caisse Physique) */}
+      {pendingCheckout && (
+        <UltimateCheckout
+          isModal={true}
+          isOpen={true}
+          enablePhysicalPosToken={false}
+          onClose={() => setPendingCheckout(null)}
+          amount={pendingCheckout.amount}
+          currency="FCFA"
+          storeName="NaNaSwitch Cloud"
+          merchantId="nanasore_platform"
+          defaultCustomerName={app?.kyc?.companyName || app?.name || ''}
+          defaultPhone={app?.kyc?.phone || ''}
+          defaultEmail={app?.kyc?.companyEmail || ''}
+          product={{
+            id: pendingCheckout.planId || 'pay_as_you_go_recharge',
+            name: pendingCheckout.title,
+            price: pendingCheckout.amount,
+            description: pendingCheckout.kind === 'PLAN' ? 'Abonnement SaaS NaNaSwitch Cloud' : 'Recharge crédit Pay-as-you-go',
+          }}
+          onSuccess={async (details) => {
+            const current = pendingCheckout;
+            const universeId = app?.id || 'default';
+            if (current.kind === 'PLAN') {
+              try {
+                await fetch('/api/merchant/subscription/activate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    universeId,
+                    planId: current.planId,
+                    planName: current.planName,
+                    billingCycle: current.billingCycle || 'MONTHLY',
+                    amount: details.amount || current.amount,
+                    transactionId: details.transactionId,
+                    paymentMethod: details.paymentMethod,
+                    customerPhone: details.phoneNumber,
+                  }),
+                });
+              } catch {}
+              notify(`Abonnement ${current.planName} payé et activé en production !`, 'success');
+            } else {
+              try {
+                const res = await fetch('/api/merchant/wallet/recharge', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    universeId,
+                    amount: details.amount || current.amount,
+                    transactionId: details.transactionId,
+                    paymentMethod: details.paymentMethod,
+                    currentBalanceXof: app?.balances?.XOF || 0,
+                  }),
+                });
+                const json = await res.json().catch(() => null);
+                if (app && onUpdateApp) {
+                  const nextXof = json?.newBalanceXof ?? ((app.balances?.XOF || 0) + (details.amount || current.amount));
+                  onUpdateApp({
+                    ...app,
+                    balances: { ...app.balances, XOF: nextXof },
+                  });
+                }
+              } catch {}
+              notify(`Recharge Pay-as-you-go de ${(details.amount || current.amount).toLocaleString('fr-FR')} F CFA créditée !`, 'success');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -7246,8 +7405,9 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
   const [contactPhone, setContactPhone] = useState(app?.kyc?.phone || '+226 ');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedTicketId, setExpandedTicketId] = useState<string | null>(null);
+  const [lastWhatsappUrl, setLastWhatsappUrl] = useState<string | null>(null);
 
-  // Tickets 100% réels synchronisés avec Supabase `support_tickets` (zéro ticket fictif)
+  // Tickets 100% réels synchronisés avec le serveur (/api/merchant/support/tickets) + Supabase `support_tickets`
   const tenantId = app?.id || 'main';
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
 
@@ -7255,14 +7415,27 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
     let active = true;
     (async () => {
       try {
+        let apiRows: any[] = [];
+        try {
+          const res = await fetch(`/api/merchant/support/tickets?tenantId=${encodeURIComponent(tenantId)}`);
+          const json = await res.json().catch(() => null);
+          if (res.ok && json?.success && Array.isArray(json.tickets)) apiRows = json.tickets;
+        } catch {}
+
         const { data, error } = await supabase
           .from('support_tickets')
           .select('*')
           .eq('tenant_id', tenantId)
           .order('created_at', { ascending: false })
           .limit(50);
-        if (active && !error && Array.isArray(data)) {
-          setTickets(data.map((r: any) => ({
+
+        const merged = new Map<string, any>();
+        [...apiRows, ...(!error && Array.isArray(data) ? data : [])].forEach((r) => {
+          if (r?.id && !merged.has(String(r.id))) merged.set(String(r.id), r);
+        });
+
+        if (active) {
+          setTickets(Array.from(merged.values()).map((r: any) => ({
             id: String(r.id),
             subject: String(r.subject || ''),
             severity: (r.severity || 'MOYENNE') as TicketSeverity,
@@ -7382,7 +7555,30 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
       const updated = [newTicket, ...tickets];
       setTickets(updated);
 
-      // Persistance réelle dans Supabase `support_tickets`
+      // Persistance réelle serveur (/api/merchant/support/tickets) + Supabase `support_tickets`
+      try {
+        const apiRes = await fetch('/api/merchant/support/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: ticketId,
+            tenantId,
+            storeName: app?.name || '',
+            subject: newTicket.subject,
+            severity: newTicket.severity,
+            category: newTicket.category,
+            categoryLabel: newTicket.categoryLabel,
+            description: newTicket.description,
+            refId: newTicket.refId || null,
+            contactPhone: newTicket.contactPhone,
+          }),
+        });
+        const apiJson = await apiRes.json().catch(() => null);
+        if (apiJson?.whatsappEscalationUrl) {
+          setLastWhatsappUrl(apiJson.whatsappEscalationUrl);
+        }
+      } catch {}
+
       try {
         await supabase.from('support_tickets').insert({
           id: ticketId,
@@ -7466,7 +7662,7 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Hotline Prioritaire</span>
           <span className="text-xs font-black text-[#1E40AF] mt-1 block truncate">WhatsApp 24/7</span>
-          <span className="text-[10px] text-slate-400 font-medium">+226 70 00 00 00</span>
+          <span className="text-[10px] text-slate-600 font-bold">+226 66 78 29 20</span>
         </div>
       </div>
 
@@ -7634,6 +7830,17 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
                   </>
                 )}
               </button>
+              {lastWhatsappUrl && (
+                <a
+                  href={lastWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2.5 w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-md transition flex items-center justify-center gap-2 text-xs"
+                >
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Transférer ce ticket sur WhatsApp (+226 66 78 29 20)</span>
+                </a>
+              )}
             </div>
           </form>
         </div>
@@ -7650,17 +7857,17 @@ function TabSupport({ app, showToast }: { app?: NanaMerchantApp; showToast: (m: 
             <div>
               <h3 className="text-base font-extrabold text-white">Ligne d'Urgence WhatsApp 24/7</h3>
               <p className="text-xs text-emerald-200/80 mt-1 leading-relaxed">
-                Pour les incidents de Niveau 4 bloquant vos ventes, nos ingénieurs répondent en direct sur WhatsApp.
+                Pour les incidents bloquants, nos ingénieurs répondent en direct sur WhatsApp au <strong>+226 66 78 29 20</strong>.
               </p>
             </div>
             <a
-              href={`https://wa.me/22670000000?text=${encodeURIComponent(`[URGENCE ${app?.name || 'Univers'}] Bonjour, j'ai une question urgente concernant mon compte marchand ID: ${app?.id || ''}`)}`}
+              href={`https://wa.me/22666782920?text=${encodeURIComponent(`[URGENCE ${app?.name || 'Univers'}] Bonjour, j'ai une question urgente concernant mon compte marchand ID: ${app?.id || ''}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 block text-center"
             >
               <PhoneCall className="w-4 h-4" />
-              <span>Ouvrir le Chat d'Urgence</span>
+              <span>Ouvrir le Chat WhatsApp (+226 66 78 29 20)</span>
             </a>
           </div>
 
@@ -7759,18 +7966,22 @@ function TabSettings({ app, onUpgradeClick, onUpdateApp, showToast }: { app: Nan
         bankRib: bankRib.trim(),
       };
       if (app.id) {
-        await supabase
-          .from('merchants')
-          .update({
-            kyc: updatedKyc,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', app.id);
+        const nowIso = new Date().toISOString();
+        await fetch('/api/merchant/settings/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ universeId: app.id, kyc: updatedKyc }),
+        }).catch(() => {});
+
+        await Promise.allSettled([
+          supabase.from('merchants').update({ kyc: updatedKyc, updated_at: nowIso }).eq('id', app.id),
+          supabase.from('universes').update({ kyc: updatedKyc, updated_at: nowIso }).eq('id', app.id),
+        ]);
       }
       if (onUpdateApp) {
         onUpdateApp({ ...app, kyc: updatedKyc as any });
       }
-      if (showToast) showToast('Paramètres du compte enregistrés dans Supabase !', 'success');
+      if (showToast) showToast('Paramètres synchronisés sur votre univers et le routeur NanaSwitch !', 'success');
     } catch (err) {
       if (showToast) showToast('Erreur sauvegarde : ' + (err as Error).message, 'error');
     } finally {

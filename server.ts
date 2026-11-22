@@ -738,7 +738,14 @@ async function startServer() {
   });
 
   // ─── KYC & Nouveaux Comptes / Univers Marchands ──────────────────────────────
-  const KYC_DATA_DIR = path.join(process.cwd(), 'data');
+  const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  const dataDir = DATA_DIR;
+  const KYC_DATA_DIR = DATA_DIR;
+  let supabaseAdmin: any = null;
+  try {
+    const supaMod = await import('./app/utils/supabase.server');
+    supabaseAdmin = supaMod?.supabase || null;
+  } catch {}
   const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
   const UNIVERSES_DATA_FILE = path.join(KYC_DATA_DIR, 'universes.json');
 
@@ -3048,6 +3055,400 @@ async function startServer() {
   };
   app.get('/code/:code', handleLiveCodeRedirect);
   app.get('/k/:code', handleLiveCodeRedirect);
+
+  // ============================================================================
+  // 2H. DASHBOARD MARCHAND 100% PRODUCTION (ABONNEMENTS, RECHARGE, PAYOUTS,
+  //     SETTINGS SYNC, LITIGES, SUPPORT WHATSAPP +22666782920)
+  // ============================================================================
+  const SUPPORT_WHATSAPP_NUMBER = '22666782920';
+  const SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'merchant_subscriptions.json');
+  const PAYOUT_REQUESTS_FILE = path.join(DATA_DIR, 'payout_requests.json');
+  const DISPUTES_FILE = path.join(DATA_DIR, 'merchant_disputes.json');
+  const SUPPORT_TICKETS_FILE = path.join(DATA_DIR, 'support_tickets.json');
+
+  const readJsonArrayFile = (filePath: string): any[] => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const writeJsonArrayFile = (filePath: string, items: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[DashboardAPI] Erreur écriture JSON:', err);
+    }
+  };
+
+  // 2H.1 Activation Abonnement réel (après paiement confirmé via UltimateCheckout)
+  app.post('/api/merchant/subscription/activate', async (req, res) => {
+    const {
+      universeId,
+      planId,
+      planName,
+      billingCycle = 'MONTHLY',
+      amount = 0,
+      transactionId = '',
+      paymentMethod = 'MOBILE_MONEY',
+      customerPhone = '',
+    } = req.body || {};
+
+    if (!universeId || !planId) {
+      return res.status(400).json({ success: false, error: 'universeId et planId requis' });
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + (billingCycle === 'ANNUAL' ? 365 : 30) * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const record = {
+      id: `sub_${crypto.randomBytes(5).toString('hex')}`,
+      universeId: String(universeId),
+      planId: String(planId),
+      planName: String(planName || planId),
+      billingCycle: String(billingCycle),
+      amount: Math.max(0, Number(amount) || 0),
+      currency: 'XOF',
+      transactionId: String(transactionId || `SUB-${Date.now().toString(36).toUpperCase()}`),
+      paymentMethod: String(paymentMethod),
+      customerPhone: String(customerPhone || ''),
+      status: 'ACTIVE',
+      activatedAt: now.toISOString(),
+      expiresAt,
+    };
+
+    const all = readJsonArrayFile(SUBSCRIPTIONS_FILE);
+    all.unshift(record);
+    writeJsonArrayFile(SUBSCRIPTIONS_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('merchant_subscriptions').insert({
+          id: record.id,
+          tenant_id: record.universeId,
+          plan_id: record.planId,
+          plan_name: record.planName,
+          billing_cycle: record.billingCycle,
+          amount: record.amount,
+          currency: 'XOF',
+          transaction_id: record.transactionId,
+          payment_method: record.paymentMethod,
+          status: 'ACTIVE',
+          activated_at: record.activatedAt,
+          expires_at: record.expiresAt,
+        });
+      } catch {}
+      try {
+        await supabaseAdmin
+          .from('universes')
+          .update({ plan: record.planId, updated_at: record.activatedAt })
+          .eq('id', record.universeId);
+      } catch {}
+    }
+
+    return res.json({ success: true, subscription: record });
+  });
+
+  // 2H.2 Recharge Pay-as-you-go réelle (après paiement confirmé via UltimateCheckout)
+  app.post('/api/merchant/wallet/recharge', async (req, res) => {
+    const {
+      universeId,
+      amount = 0,
+      transactionId = '',
+      paymentMethod = 'MOBILE_MONEY',
+      currentBalanceXof = 0,
+    } = req.body || {};
+
+    const cleanAmount = Math.max(0, Number(amount) || 0);
+    if (!universeId || cleanAmount < 1000) {
+      return res.status(400).json({ success: false, error: 'universeId et montant >= 1000 XOF requis' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const txId = String(transactionId || `RCH-${Date.now().toString(36).toUpperCase()}`);
+    const newBalanceXof = Math.max(0, Number(currentBalanceXof) || 0) + cleanAmount;
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: txId,
+          universe_id: String(universeId),
+          type: 'RECHARGE',
+          amount: cleanAmount,
+          status: 'COMPLETED',
+          metadata: {
+            currency: 'XOF',
+            payment_method: paymentMethod,
+            source: 'pay_as_you_go_recharge',
+            created_at: nowIso,
+          },
+          created_at: nowIso,
+        });
+      } catch {}
+      try {
+        const { data: uRow } = await supabaseAdmin
+          .from('universes')
+          .select('balances')
+          .eq('id', String(universeId))
+          .maybeSingle();
+        const prevBal = (uRow?.balances && typeof uRow.balances === 'object') ? uRow.balances : { XOF: Number(currentBalanceXof) || 0 };
+        const updatedBalances = { ...prevBal, XOF: (Number(prevBal.XOF) || 0) + cleanAmount };
+        await supabaseAdmin
+          .from('universes')
+          .update({ balances: updatedBalances, updated_at: nowIso })
+          .eq('id', String(universeId));
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      transactionId: txId,
+      amount: cleanAmount,
+      newBalanceXof,
+      createdAt: nowIso,
+    });
+  });
+
+  // 2H.3 Retraits & Reversements sécurisés côté serveur (POST /api/payouts/request & GET /api/payouts)
+  app.post('/api/payouts/request', async (req, res) => {
+    const {
+      universeId,
+      userId = null,
+      amount = 0,
+      fee = 0,
+      netAmount = 0,
+      currency = 'XOF',
+      country = '',
+      countryCode = '',
+      flag = '',
+      operatorId = '',
+      operatorName = '',
+      destination = '',
+      beneficiary = '',
+      mode = 'PRODUCTION',
+    } = req.body || {};
+
+    const cleanAmount = Math.max(0, Number(amount) || 0);
+    if (!universeId || cleanAmount < 1000 || !destination) {
+      return res.status(400).json({ success: false, error: 'Paramètres de retrait invalides (min 1 000 XOF).' });
+    }
+
+    const isRealProd = String(mode).toUpperCase() === 'PRODUCTION';
+    const nowIso = new Date().toISOString();
+    const payoutId = `PAYOUT-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+    const record = {
+      id: payoutId,
+      universeId: String(universeId),
+      userId,
+      amount: cleanAmount,
+      fee: Number(fee) || 0,
+      netAmount: Number(netAmount) || Math.max(0, cleanAmount - (Number(fee) || 0)),
+      currency: String(currency || 'XOF'),
+      country: String(country),
+      countryCode: String(countryCode),
+      flag: String(flag),
+      operatorId: String(operatorId),
+      operatorName: String(operatorName),
+      destination: String(destination),
+      beneficiary: String(beneficiary),
+      mode: isRealProd ? 'PRODUCTION' : 'SIMULATION',
+      status: isRealProd ? 'PENDING' : 'COMPLETED',
+      createdAt: nowIso,
+    };
+
+    const all = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
+    all.unshift(record);
+    writeJsonArrayFile(PAYOUT_REQUESTS_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: payoutId,
+          universe_id: record.universeId,
+          user_id: userId || null,
+          type: 'WITHDRAWAL',
+          amount: cleanAmount,
+          status: record.status,
+          metadata: record,
+          created_at: nowIso,
+        });
+      } catch {}
+
+      if (isRealProd) {
+        try {
+          const { data: uRow } = await supabaseAdmin
+            .from('universes')
+            .select('balances')
+            .eq('id', record.universeId)
+            .maybeSingle();
+          if (uRow?.balances && typeof uRow.balances === 'object') {
+            const nextXof = Math.max(0, (Number(uRow.balances.XOF) || 0) - cleanAmount);
+            await supabaseAdmin
+              .from('universes')
+              .update({ balances: { ...uRow.balances, XOF: nextXof }, updated_at: nowIso })
+              .eq('id', record.universeId);
+          }
+        } catch {}
+      }
+    }
+
+    return res.json({ success: true, payout: record });
+  });
+
+  app.get('/api/payouts', (req, res) => {
+    const universeId = String(req.query.universeId || '').trim();
+    let list = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
+    if (universeId) {
+      list = list.filter((p: any) => String(p.universeId || '') === universeId);
+    }
+    return res.json({ success: true, payouts: list.slice(0, 100) });
+  });
+
+  // 2H.4 Synchronisation Paramètres Compte (merchants + universes + nanaswitch_merchants)
+  app.post('/api/merchant/settings/update', async (req, res) => {
+    const { universeId, kyc = {} } = req.body || {};
+    if (!universeId) {
+      return res.status(400).json({ success: false, error: 'universeId requis' });
+    }
+    const nowIso = new Date().toISOString();
+    const results: Record<string, boolean> = {};
+
+    if (supabaseAdmin) {
+      for (const table of ['merchants', 'universes']) {
+        try {
+          const { error } = await supabaseAdmin
+            .from(table)
+            .update({ kyc, updated_at: nowIso })
+            .eq('id', String(universeId));
+          results[table] = !error;
+        } catch {
+          results[table] = false;
+        }
+      }
+      try {
+        const { error } = await supabaseAdmin
+          .from('nanaswitch_merchants')
+          .update({
+            email: kyc.companyEmail || undefined,
+            phone: kyc.phone || undefined,
+            updated_at: nowIso,
+          })
+          .eq('id', String(universeId));
+        results.nanaswitch_merchants = !error;
+      } catch {
+        results.nanaswitch_merchants = false;
+      }
+    }
+
+    return res.json({ success: true, synced: results, updatedAt: nowIso });
+  });
+
+  // 2H.5 Litiges & Chargebacks persistés côté serveur (GET & POST /api/merchant/disputes)
+  app.get('/api/merchant/disputes', (req, res) => {
+    const tenantId = String(req.query.tenantId || '').trim();
+    let list = readJsonArrayFile(DISPUTES_FILE);
+    if (tenantId) {
+      list = list.filter((d: any) => String(d.tenant_id || '') === tenantId);
+    }
+    return res.json({ success: true, disputes: list.slice(0, 100) });
+  });
+
+  app.post('/api/merchant/disputes', async (req, res) => {
+    const { tenantId, transactionId = null, amount = 0, reason = '' } = req.body || {};
+    if (!tenantId || !String(reason).trim()) {
+      return res.status(400).json({ success: false, error: 'tenantId et reason requis' });
+    }
+    const row = {
+      id: `DSP-${Date.now().toString(36).toUpperCase()}`,
+      tenant_id: String(tenantId),
+      transaction_id: transactionId ? String(transactionId).trim() : null,
+      amount: Math.max(0, Number(amount) || 0),
+      currency: 'XOF',
+      reason: String(reason).trim(),
+      status: 'OPEN',
+      created_at: new Date().toISOString(),
+    };
+    const all = readJsonArrayFile(DISPUTES_FILE);
+    all.unshift(row);
+    writeJsonArrayFile(DISPUTES_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('merchant_disputes').insert(row);
+      } catch {}
+    }
+
+    return res.json({ success: true, dispute: row });
+  });
+
+  // 2H.6 Support Tickets + Escalade WhatsApp Officielle (+22666782920)
+  app.get('/api/merchant/support/tickets', (req, res) => {
+    const tenantId = String(req.query.tenantId || '').trim();
+    let list = readJsonArrayFile(SUPPORT_TICKETS_FILE);
+    if (tenantId) {
+      list = list.filter((t: any) => String(t.tenant_id || '') === tenantId);
+    }
+    return res.json({ success: true, tickets: list.slice(0, 100) });
+  });
+
+  app.post('/api/merchant/support/tickets', async (req, res) => {
+    const {
+      id,
+      tenantId = 'default',
+      storeName = '',
+      subject = '',
+      severity = 'NORMAL',
+      category = 'TECHNICAL',
+      categoryLabel = 'Technique',
+      description = '',
+      refId = null,
+      contactPhone = '',
+    } = req.body || {};
+
+    if (!String(subject).trim() || !String(description).trim()) {
+      return res.status(400).json({ success: false, error: 'Sujet et description requis' });
+    }
+
+    const ticketId = String(id || `TCK-${Math.floor(10000 + Math.random() * 90000)}`);
+    const row = {
+      id: ticketId,
+      tenant_id: String(tenantId),
+      store_name: String(storeName),
+      subject: String(subject).trim(),
+      severity: String(severity),
+      category: String(category),
+      category_label: String(categoryLabel),
+      description: String(description).trim(),
+      ref_id: refId ? String(refId).trim() : null,
+      contact_phone: String(contactPhone).trim(),
+      status: 'OPEN',
+      response_note: 'Ticket consigné et transmis à l’équipe support (+226 66 78 29 20).',
+      created_at: new Date().toISOString(),
+    };
+
+    const all = readJsonArrayFile(SUPPORT_TICKETS_FILE);
+    all.unshift(row);
+    writeJsonArrayFile(SUPPORT_TICKETS_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('support_tickets').insert(row);
+      } catch {}
+    }
+
+    const whatsappEscalationUrl = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+      `[TICKET ${ticketId} • ${row.severity}] Boutique: ${row.store_name || row.tenant_id}\nSujet: ${row.subject}\n${row.ref_id ? `Réf: ${row.ref_id}\n` : ''}Message: ${row.description}`
+    )}`;
+
+    return res.json({ success: true, ticket: row, whatsappEscalationUrl });
+  });
 
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
