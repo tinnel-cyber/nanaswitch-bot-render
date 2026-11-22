@@ -5541,6 +5541,331 @@ async function startServer() {
     }
   });
 
+  // ============================================================================
+  // 2N. SÉLECTEUR PERSISTANT DE DESTINATIONS, THÈMES DIGITAUX GÉNÉRÉS,
+  //     RÉORIENTATION TRAÇABLE (/r/course/:code) & ANALYTIQUE PAR CANAL
+  // ============================================================================
+  const COURSE_DESTINATIONS_FILE = path.join(DATA_DIR, 'course_destinations.json');
+  const COURSE_DEST_EVENTS_FILE = path.join(DATA_DIR, 'course_destination_events.json');
+  const GENERATED_DIGITAL_THEMES_FILE = path.join(DATA_DIR, 'generated_digital_themes.json');
+
+  // GET /api/lms/courses/:courseId/destinations — Charge les destinations persistées + analytique + catalogue thèmes (y compris thèmes digitaux générés)
+  app.get('/api/lms/courses/:courseId/destinations', async (req, res) => {
+    const courseId = String(req.params.courseId || '').trim();
+    if (!courseId) {
+      return res.status(400).json({ success: false, error: 'courseId requis.' });
+    }
+
+    ensureDefaultCampusWorkspace('global');
+
+    // 1. Destinations déjà reliées et persistées pour ce cours
+    const saved = readJsonArrayFile(COURSE_DESTINATIONS_FILE)
+      .filter((d: any) => d.courseId === courseId)
+      .map((d: any) => ({
+        ...d,
+        trackingUrl: `/r/course/${encodeURIComponent(d.trackingCode)}`,
+        conversionRate:
+          d.clicksCount > 0 ? Math.round((Number(d.enrollmentsCount || 0) / Number(d.clicksCount)) * 1000) / 10 : 0,
+      }));
+
+    // 2. Thèmes officiels + Thèmes digitaux générés par le Constructeur de Thèmes
+    const availableThemes: any[] = [
+      {
+        destinationType: 'theme_digital_pro',
+        destinationId: 'theme_digital_pro',
+        destinationLabel: 'Thème Digital Pro (Officiel)',
+        themeSlug: 'digital-pro',
+        targetUrl: `/boutique?theme=digital-pro&course=${encodeURIComponent(courseId)}`,
+        badge: 'Thème Officiel',
+      },
+      {
+        destinationType: 'theme_live',
+        destinationId: 'theme_live_stream_pro',
+        destinationLabel: 'Thème Live Stream Pro (Webinaires & Directs)',
+        themeSlug: 'live-stream-pro',
+        targetUrl: `/live/${encodeURIComponent(`live-${courseId}`)}`,
+        badge: 'Thème Live',
+      },
+    ];
+
+    // Chargement des thèmes digitaux générés/personnalisés (fichier Cloud + table Supabase store_themes / stores)
+    const seenThemeIds = new Set(availableThemes.map((t) => t.destinationId));
+    for (const gt of readJsonArrayFile(GENERATED_DIGITAL_THEMES_FILE)) {
+      const tid = `custom_theme_${gt.slug || gt.id}`;
+      if (!seenThemeIds.has(tid)) {
+        seenThemeIds.add(tid);
+        availableThemes.push({
+          destinationType: 'custom_digital_theme',
+          destinationId: tid,
+          destinationLabel: gt.name || `Thème Digital : ${gt.slug}`,
+          themeSlug: gt.slug || gt.id,
+          targetUrl: `/boutique/${encodeURIComponent(gt.slug || gt.id)}?course=${encodeURIComponent(courseId)}`,
+          badge: 'Thème Digital Généré',
+        });
+      }
+    }
+
+    if (supabaseAdmin) {
+      try {
+        const { data: stores } = await supabaseAdmin
+          .from('stores')
+          .select('id, slug, name, theme_id')
+          .limit(30);
+        if (Array.isArray(stores)) {
+          for (const st of stores) {
+            const slug = st.slug || st.id;
+            const tid = `custom_theme_${slug}`;
+            if (slug && !seenThemeIds.has(tid)) {
+              seenThemeIds.add(tid);
+              availableThemes.push({
+                destinationType: 'custom_digital_theme',
+                destinationId: tid,
+                destinationLabel: `${st.name || slug} (Thème Boutique / Digital)`,
+                themeSlug: slug,
+                targetUrl: `/boutique/${encodeURIComponent(slug)}?course=${encodeURIComponent(courseId)}`,
+                badge: 'Constructeur de Thèmes',
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Lieux de l'écosystème (Marketplace, Campus Privé, Salons Campus Social, Salles VIP)
+    const groups = readJsonArrayFile(CAMPUS_GROUPS_FILE);
+    const groupById = new Map(groups.map((g: any) => [g.id, g]));
+    const socialChannels = readJsonArrayFile(CAMPUS_CHANNELS_FILE).map((c: any) => ({
+      destinationType: 'social_channel',
+      destinationId: `social_channel_${c.id}`,
+      destinationLabel: `${c.isPremium ? '👑' : '#'} ${c.name} (${groupById.get(c.groupId)?.name || 'Campus Social'})`,
+      themeSlug: c.id,
+      targetUrl: `/student/dashboard?tab=MESSAGES&channel=${encodeURIComponent(c.id)}`,
+      badge: c.isPremium ? 'Room Premium' : 'Campus Social',
+    }));
+
+    const availablePlaces: any[] = [
+      {
+        destinationType: 'marketplace',
+        destinationId: 'marketplace_academy',
+        destinationLabel: 'Marketplace NaNa Academy (Catalogue Public)',
+        themeSlug: 'catalog',
+        targetUrl: `/catalog?course=${encodeURIComponent(courseId)}`,
+        badge: 'Marketplace',
+      },
+      {
+        destinationType: 'campus_private',
+        destinationId: 'campus_private',
+        destinationLabel: 'Campus Privé & Tableau de Bord Étudiant',
+        themeSlug: 'campus',
+        targetUrl: `/student/dashboard?course=${encodeURIComponent(courseId)}`,
+        badge: 'Campus Privé',
+      },
+      ...DEFAULT_VIP_ROOMS_DIRECTORY.map((r) => ({
+        destinationType: 'vip_room',
+        destinationId: `vip_room_${r.id}`,
+        destinationLabel: `👑 ${r.title}`,
+        themeSlug: r.id,
+        targetUrl: r.liveThemeUrl,
+        badge: 'Salle VIP',
+      })),
+      ...socialChannels,
+    ];
+
+    const summary = saved.reduce(
+      (acc: any, d: any) => {
+        if (d.isActive) acc.activeCount += 1;
+        acc.totalClicks += Number(d.clicksCount || 0);
+        acc.totalEnrollments += Number(d.enrollmentsCount || 0);
+        acc.totalRevenueFcfa += Number(d.revenueFcfa || 0);
+        return acc;
+      },
+      { activeCount: 0, totalClicks: 0, totalEnrollments: 0, totalRevenueFcfa: 0 }
+    );
+
+    return res.json({
+      success: true,
+      courseId,
+      destinations: saved,
+      summary,
+      catalog: {
+        themes: availableThemes,
+        places: availablePlaces,
+      },
+    });
+  });
+
+  // POST /api/lms/courses/:courseId/destinations — Sauvegarde persistante des destinations + création thèmes digitaux générés
+  app.post('/api/lms/courses/:courseId/destinations', async (req, res) => {
+    try {
+      const courseId = String(req.params.courseId || '').trim();
+      const { destinations = [], customDigitalTheme } = req.body || {};
+      if (!courseId) {
+        return res.status(400).json({ success: false, error: 'courseId requis.' });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // Si le formateur enregistre un nouveau Thème Digital généré par le Constructeur de Thèmes
+      if (customDigitalTheme && String(customDigitalTheme.name || '').trim()) {
+        const rawName = String(customDigitalTheme.name).trim();
+        const slug =
+          String(customDigitalTheme.slug || rawName)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '') || `theme-${Date.now().toString(36)}`;
+        const themes = readJsonArrayFile(GENERATED_DIGITAL_THEMES_FILE).filter((t: any) => t.slug !== slug);
+        themes.unshift({ id: `thm_${slug}`, name: rawName, slug, createdAt: nowIso });
+        writeJsonArrayFile(GENERATED_DIGITAL_THEMES_FILE, themes);
+      }
+
+      const allExisting = readJsonArrayFile(COURSE_DESTINATIONS_FILE);
+      const otherCourses = allExisting.filter((d: any) => d.courseId !== courseId);
+      const prevForCourse = allExisting.filter((d: any) => d.courseId === courseId);
+      const prevByDestId = new Map(prevForCourse.map((d: any) => [d.destinationId, d]));
+
+      const incoming: any[] = Array.isArray(destinations) ? destinations : [];
+      const updatedForCourse: any[] = incoming.map((item: any) => {
+        const destId = String(item.destinationId || '').trim();
+        const prev: any = prevByDestId.get(destId);
+        const trackingCode = prev?.trackingCode || `TRK-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+        return {
+          id: prev?.id || `cdest_${crypto.randomBytes(5).toString('hex')}`,
+          courseId,
+          destinationType: String(item.destinationType || 'custom_digital_theme'),
+          destinationId: destId,
+          destinationLabel: String(item.destinationLabel || destId),
+          themeSlug: String(item.themeSlug || ''),
+          trackingCode,
+          targetUrl: String(item.targetUrl || `/boutique?course=${encodeURIComponent(courseId)}`),
+          isActive: item.isActive !== false,
+          clicksCount: Number(prev?.clicksCount || 0),
+          enrollmentsCount: Number(prev?.enrollmentsCount || 0),
+          revenueFcfa: Number(prev?.revenueFcfa || 0),
+          createdAt: prev?.createdAt || nowIso,
+          updatedAt: nowIso,
+        };
+      });
+
+      writeJsonArrayFile(COURSE_DESTINATIONS_FILE, [...updatedForCourse, ...otherCourses]);
+
+      if (supabaseAdmin) {
+        for (const d of updatedForCourse) {
+          try {
+            await supabaseAdmin.from('course_destinations').upsert({
+              id: d.id,
+              course_id: d.courseId,
+              destination_type: d.destinationType,
+              destination_id: d.destinationId,
+              destination_label: d.destinationLabel,
+              theme_slug: d.themeSlug || null,
+              tracking_code: d.trackingCode,
+              target_url: d.targetUrl,
+              is_active: d.isActive,
+              clicks_count: d.clicksCount,
+              enrollments_count: d.enrollmentsCount,
+              revenue_fcfa: d.revenueFcfa,
+              created_at: d.createdAt,
+              updated_at: d.updatedAt,
+            });
+          } catch {}
+        }
+      }
+
+      return res.json({
+        success: true,
+        courseId,
+        destinations: updatedForCourse.map((d) => ({
+          ...d,
+          trackingUrl: `/r/course/${encodeURIComponent(d.trackingCode)}`,
+          conversionRate: d.clicksCount > 0 ? Math.round((d.enrollmentsCount / d.clicksCount) * 1000) / 10 : 0,
+        })),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur sauvegarde destinations.' });
+    }
+  });
+
+  // GET /r/course/:trackingCode — Lien court de réorientation traçable (incrémente clics + redirige vers la destination)
+  app.get('/r/course/:trackingCode', async (req, res) => {
+    const code = String(req.params.trackingCode || '').trim().toUpperCase();
+    const all = readJsonArrayFile(COURSE_DESTINATIONS_FILE);
+    const idx = all.findIndex((d: any) => String(d.trackingCode || '').toUpperCase() === code && d.isActive !== false);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Lien de destination introuvable ou désactivé.' });
+    }
+
+    const dest = all[idx];
+    dest.clicksCount = Number(dest.clicksCount || 0) + 1;
+    dest.updatedAt = new Date().toISOString();
+    all[idx] = dest;
+    writeJsonArrayFile(COURSE_DESTINATIONS_FILE, all);
+
+    const events = readJsonArrayFile(COURSE_DEST_EVENTS_FILE);
+    events.unshift({
+      id: `ev_${crypto.randomBytes(5).toString('hex')}`,
+      trackingCode: dest.trackingCode,
+      courseId: dest.courseId,
+      destinationId: dest.destinationId,
+      eventType: 'click',
+      amountFcfa: 0,
+      referrer: String(req.headers.referer || ''),
+      createdAt: dest.updatedAt,
+    });
+    writeJsonArrayFile(COURSE_DEST_EVENTS_FILE, events.slice(0, 500));
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('course_destinations')
+          .update({ clicks_count: dest.clicksCount, updated_at: dest.updatedAt })
+          .eq('tracking_code', dest.trackingCode);
+      } catch {}
+    }
+
+    const sep = dest.targetUrl.includes('?') ? '&' : '?';
+    const finalUrl = `${dest.targetUrl}${sep}utm_source=nana_course_router&trk=${encodeURIComponent(dest.trackingCode)}`;
+    return res.redirect(302, finalUrl);
+  });
+
+  // POST /api/lms/destinations/track-conversion — Enregistre une inscription / vente attribuée à une destination traçable
+  app.post('/api/lms/destinations/track-conversion', async (req, res) => {
+    const code = String(req.body?.trackingCode || '').trim().toUpperCase();
+    const amountFcfa = Math.max(0, Number(req.body?.amountFcfa || req.body?.amount || 0));
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'trackingCode requis.' });
+    }
+
+    const all = readJsonArrayFile(COURSE_DESTINATIONS_FILE);
+    const idx = all.findIndex((d: any) => String(d.trackingCode || '').toUpperCase() === code);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'trackingCode introuvable.' });
+    }
+
+    const dest = all[idx];
+    dest.enrollmentsCount = Number(dest.enrollmentsCount || 0) + 1;
+    dest.revenueFcfa = Number(dest.revenueFcfa || 0) + amountFcfa;
+    dest.updatedAt = new Date().toISOString();
+    all[idx] = dest;
+    writeJsonArrayFile(COURSE_DESTINATIONS_FILE, all);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('course_destinations')
+          .update({
+            enrollments_count: dest.enrollmentsCount,
+            revenue_fcfa: dest.revenueFcfa,
+            updated_at: dest.updatedAt,
+          })
+          .eq('tracking_code', dest.trackingCode);
+      } catch {}
+    }
+
+    return res.json({ success: true, destination: dest });
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

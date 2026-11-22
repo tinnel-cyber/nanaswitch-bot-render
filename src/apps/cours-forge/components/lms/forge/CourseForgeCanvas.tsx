@@ -68,6 +68,7 @@ import { ModuleDeliverySettingsModal } from './ModuleDeliverySettingsModal';
 import { AdvancedCourseSettingsModal } from './AdvancedCourseSettingsModal';
 import { exportCourseToJson, parseAndValidateCourseJson } from '../../../../../services/courseImportExport';
 import { updateModuleBranding, saveCourseStructure, saveCourseGlobalSettings, publishCourseToStorefront } from '../../../../../services/lmsService';
+import { CourseDestinationSelectorModal } from './CourseDestinationSelectorModal';
 
 // Modules initiaux structurés pour le Drag-and-Drop & Drip
 const INITIAL_MODULES: CourseModule[] = [
@@ -469,6 +470,20 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
 
   // Modale de Publication & Choix du Modèle de Tarification (À vie / Abonnement / Cours Live Direct)
   const [isPublishPricingOpen, setIsPublishPricingOpen] = useState(false);
+  const [isDestinationsModalOpen, setIsDestinationsModalOpen] = useState(false);
+  const [activeDestinationsCount, setActiveDestinationsCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!activeCourseId) return;
+    fetch(`/api/lms/courses/${encodeURIComponent(activeCourseId)}/destinations`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.success && json.summary) {
+          setActiveDestinationsCount(Number(json.summary.activeCount) || 0);
+        }
+      })
+      .catch(() => {});
+  }, [activeCourseId]);
   const [publishPrice, setPublishPrice] = useState<string>('15000');
   const [publishPricingModel, setPublishPricingModel] = useState<'lifetime' | 'subscription' | 'live_event'>('lifetime');
   const [publishBillingInterval, setPublishBillingInterval] = useState<'day' | 'week' | 'month' | 'year'>('month');
@@ -1567,6 +1582,25 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
             <Radio className="w-3.5 h-3.5" />
             <span>Publier Campus Social &amp; VIP</span>
           </button>
+
+          {/* Sélecteur Persistant de Destinations, Thèmes Digitaux Générés & Analytique */}
+          <button
+            type="button"
+            onClick={() => setIsDestinationsModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50 font-black text-xs transition flex items-center gap-1.5 cursor-pointer"
+            title="Choisir les thèmes (y compris thèmes digitaux générés) et lieux reliés, et suivre les clics & conversions"
+          >
+            <Globe className="w-3.5 h-3.5 text-amber-300" />
+            <span>Destinations ({activeDestinationsCount})</span>
+          </button>
+
+          <CourseDestinationSelectorModal
+            isOpen={isDestinationsModalOpen}
+            courseId={activeCourseId}
+            courseTitle={activeCourseTitle}
+            onClose={() => setIsDestinationsModalOpen(false)}
+            onDestinationsUpdated={(cnt) => setActiveDestinationsCount(cnt)}
+          />
         </div>
       </div>
 
