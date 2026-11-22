@@ -3964,22 +3964,81 @@ async function startServer() {
     });
   });
 
-  // POST /api/student/quizzes — Persistance Cloud réelle d'un résultat de quiz
+  // GET /api/student/quizzes — Lecture Cloud réelle des résultats de quiz & simulations vocales
+  app.get('/api/student/quizzes', async (req, res) => {
+    const session = extractStudentSession(req);
+    const studentId = session?.studentId || String(req.query?.studentId || '').trim();
+    const courseIdFilter = String(req.query?.courseId || '').trim();
+    if (!studentId) {
+      return res.status(401).json({ success: false, error: 'Session étudiant requise.' });
+    }
+
+    let list = readJsonArrayFile(LMS_QUIZZES_FILE).filter(
+      (q: any) => q.studentId === studentId && (!courseIdFilter || q.courseId === courseIdFilter)
+    );
+
+    if (supabaseAdmin) {
+      try {
+        let query = supabaseAdmin
+          .from('student_quizzes')
+          .select('*')
+          .eq('student_id', studentId)
+          .order('completed_at', { ascending: false })
+          .limit(100);
+        if (courseIdFilter) {
+          query = query.eq('course_id', courseIdFilter);
+        }
+        const { data } = await query;
+        if (Array.isArray(data) && data.length > 0) {
+          const seen = new Set(list.map((x: any) => x.id));
+          for (const d of data) {
+            if (!seen.has(d.id)) {
+              list.push({
+                id: d.id,
+                studentId: d.student_id,
+                courseId: d.course_id,
+                lessonId: d.lesson_id || '',
+                quizTitle: d.quiz_title || 'Quiz',
+                evaluationType: d.evaluation_type || 'quiz',
+                score: Number(d.score) || 0,
+                maxScore: Number(d.max_score) || 100,
+                correctCount: Number(d.correct_count) || 0,
+                totalQuestions: Number(d.total_questions) || 0,
+                answers: d.answers || {},
+                passed: Boolean(d.passed),
+                completedAt: d.completed_at,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return res.json({ success: true, quizzes: list });
+  });
+
+  // POST /api/student/quizzes — Persistance Cloud & SQL réelle d'un résultat de quiz ou simulation vocale
   app.post('/api/student/quizzes', async (req, res) => {
     const session = extractStudentSession(req);
     const studentId = session?.studentId || String(req.body?.studentId || '').trim();
     if (!studentId) {
       return res.status(401).json({ success: false, error: 'Session étudiant requise.' });
     }
+    const minScore = Number(req.body?.minScoreToPass ?? req.body?.passingScore ?? 60);
+    const score = Number(req.body?.score) || 0;
     const row = {
       id: `qz_${crypto.randomBytes(5).toString('hex')}`,
       studentId,
       courseId: String(req.body?.courseId || ''),
-      lessonId: String(req.body?.lessonId || ''),
-      quizTitle: String(req.body?.quizTitle || 'Quiz'),
-      score: Number(req.body?.score) || 0,
+      lessonId: String(req.body?.lessonId || req.body?.quizId || ''),
+      quizTitle: String(req.body?.quizTitle || req.body?.title || 'Quiz'),
+      evaluationType: String(req.body?.evaluationType || 'quiz'),
+      score,
       maxScore: Number(req.body?.maxScore) || 100,
-      passed: Boolean(req.body?.passed ?? (Number(req.body?.score) || 0) >= 60),
+      correctCount: Number(req.body?.correctCount) || 0,
+      totalQuestions: Number(req.body?.totalQuestions) || 0,
+      answers: req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : {},
+      passed: Boolean(req.body?.passed ?? score >= minScore),
       completedAt: new Date().toISOString(),
     };
     const all = readJsonArrayFile(LMS_QUIZZES_FILE);
@@ -3994,8 +4053,12 @@ async function startServer() {
           course_id: row.courseId,
           lesson_id: row.lessonId,
           quiz_title: row.quizTitle,
+          evaluation_type: row.evaluationType,
           score: row.score,
           max_score: row.maxScore,
+          correct_count: row.correctCount,
+          total_questions: row.totalQuestions,
+          answers: row.answers,
           passed: row.passed,
           completed_at: row.completedAt,
         });
@@ -6066,6 +6129,47 @@ Votre réplique immédiate :`;
 
       const passingScore = scenario?.passingScore || 70;
 
+      const persistVoiceEval = async (reportObj: any) => {
+        try {
+          const row = {
+            id: reportObj.submissionId || `vs_${crypto.randomBytes(5).toString('hex')}`,
+            studentId: String(reportObj.studentId || studentId || 'student-guest'),
+            courseId: String(reportObj.courseId || courseId || 'course-default'),
+            lessonId: String(reportObj.lessonId || lessonId || 'lesson-default'),
+            quizTitle: String(scenario?.title || 'Simulation Vocale IA'),
+            evaluationType: 'voice_simulation',
+            score: Number(reportObj.score) || 0,
+            maxScore: 100,
+            correctCount: reportObj.passed ? 1 : 0,
+            totalQuestions: 1,
+            answers: { rubrics: reportObj.rubrics || {}, summary: reportObj.summary || '' },
+            passed: Boolean(reportObj.passed),
+            completedAt: new Date().toISOString(),
+          };
+          const all = readJsonArrayFile(LMS_QUIZZES_FILE);
+          all.unshift(row);
+          writeJsonArrayFile(LMS_QUIZZES_FILE, all);
+
+          if (supabaseAdmin) {
+            await supabaseAdmin.from('student_quizzes').insert({
+              id: row.id,
+              student_id: row.studentId,
+              course_id: row.courseId,
+              lesson_id: row.lessonId,
+              quiz_title: row.quizTitle,
+              evaluation_type: row.evaluationType,
+              score: row.score,
+              max_score: row.maxScore,
+              correct_count: row.correctCount,
+              total_questions: row.totalQuestions,
+              answers: row.answers,
+              passed: row.passed,
+              completed_at: row.completedAt,
+            });
+          }
+        } catch {}
+      };
+
       if (genAI && scenario && conversationHistory?.length > 0) {
         const historyText = conversationHistory
           .map((t: any) => `${t.role === 'user' ? 'Apprenant' : 'IA'}: ${t.text}`)
@@ -6115,6 +6219,7 @@ Fournis une évaluation impartiale et bienveillante au format JSON STRICT suivan
               createdAt: Date.now(),
               ...parsed
             };
+            await persistVoiceEval(report);
             return res.json({ success: true, report, ...report });
           } catch (pe) {
             console.error('JSON parse error in voice eval:', pe);
@@ -6154,6 +6259,8 @@ Fournis une évaluation impartiale et bienveillante au format JSON STRICT suivan
         },
         createdAt: Date.now()
       };
+
+      await persistVoiceEval(fallbackReport);
 
       res.json({
         success: true,

@@ -32,11 +32,20 @@ CREATE TABLE IF NOT EXISTS public.student_quizzes (
   course_id TEXT NOT NULL,
   lesson_id TEXT DEFAULT '',
   quiz_title TEXT NOT NULL,
+  evaluation_type TEXT NOT NULL DEFAULT 'quiz',
   score NUMERIC NOT NULL DEFAULT 0,
   max_score NUMERIC NOT NULL DEFAULT 100,
+  correct_count INTEGER NOT NULL DEFAULT 0,
+  total_questions INTEGER NOT NULL DEFAULT 0,
+  answers JSONB DEFAULT '{}'::jsonb,
   passed BOOLEAN NOT NULL DEFAULT FALSE,
   completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.student_quizzes ADD COLUMN IF NOT EXISTS evaluation_type TEXT NOT NULL DEFAULT 'quiz';
+ALTER TABLE public.student_quizzes ADD COLUMN IF NOT EXISTS correct_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.student_quizzes ADD COLUMN IF NOT EXISTS total_questions INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.student_quizzes ADD COLUMN IF NOT EXISTS answers JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_student_quizzes_student ON public.student_quizzes (student_id, completed_at DESC);
 

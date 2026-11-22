@@ -148,11 +148,13 @@ export const VoiceSimulationArena: React.FC<VoiceSimulationArenaProps> = ({
           </div>
         </div>
 
-        {/* Not Supported Fallback Alert */}
+        {/* Not Supported Fallback Alert (iOS Safari / WebViews TikTok & Instagram) */}
         {!isSupported && (
-          <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-3 flex items-center gap-2 text-amber-300 text-xs">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>Votre navigateur ne supporte pas l'API Web Speech de manière native. Utilisez Google Chrome ou Edge pour une expérience optimale.</span>
+          <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-3 flex items-center gap-2 text-amber-200 text-xs">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+            <span>
+              <strong>Mode Clavier Interactif activé automatiquement</strong> : le micro navigateur est limité sur iOS Safari / WebView. Tapez vos réponses ci-dessous, l&apos;IA vous répond et vous évalue en temps réel !
+            </span>
           </div>
         )}
 

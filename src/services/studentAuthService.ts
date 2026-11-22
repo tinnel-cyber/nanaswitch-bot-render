@@ -356,11 +356,19 @@ export async function fetchStudentDashboardCloud(): Promise<{
 }
 
 export async function saveStudentQuizCloud(payload: {
+  studentId?: string;
   courseId: string;
   lessonId?: string;
-  quizTitle: string;
+  quizId?: string;
+  quizTitle?: string;
+  title?: string;
+  evaluationType?: 'quiz' | 'voice_simulation';
   score: number;
   maxScore?: number;
+  correctCount?: number;
+  totalQuestions?: number;
+  answers?: Record<string, any>;
+  minScoreToPass?: number;
   passed?: boolean;
 }): Promise<boolean> {
   const token = getStudentToken();
@@ -376,6 +384,22 @@ export async function saveStudentQuizCloud(payload: {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+export async function fetchStudentQuizzesCloud(courseId?: string): Promise<any[]> {
+  const token = getStudentToken();
+  if (!token) return [];
+  try {
+    const qs = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
+    const res = await fetch(`/api/student/quizzes${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.quizzes) ? json.quizzes : [];
+  } catch {
+    return [];
   }
 }
 

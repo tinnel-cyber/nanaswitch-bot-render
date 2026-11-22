@@ -551,11 +551,32 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
       });
 
       const score = Math.round((correctCount / questions.length) * 100);
+      const passedQuiz = score >= activeLesson.quiz!.passingScorePercentage;
       setQuizScore(score);
       setQuizSubmitted(true);
       setIsAiGradingQuiz(false);
 
-      if (score >= activeLesson.quiz!.passingScorePercentage) {
+      // Persistance Cloud & SQL réelle du résultat du quiz (POST /api/student/quizzes)
+      import('../../../../services/studentAuthService')
+        .then(({ saveStudentQuizCloud }) => {
+          saveStudentQuizCloud({
+            studentId: currentUser?.id || enrollment.studentId,
+            courseId: course.id,
+            lessonId: activeLesson.id,
+            quizTitle: activeLesson.title || 'Quiz de leçon',
+            evaluationType: 'quiz',
+            score,
+            maxScore: 100,
+            correctCount,
+            totalQuestions: questions.length,
+            answers: selectedAnswers,
+            minScoreToPass: activeLesson.quiz!.passingScorePercentage,
+            passed: passedQuiz
+          });
+        })
+        .catch(() => {});
+
+      if (passedQuiz) {
         setAiGradingFeedback({
           status: 'EXCELLENT',
           summary: `Évaluation validée avec succès (${score}%). L'étudiant respecte rigoureusement les critères d'excellence pédagogique attendus.`,
