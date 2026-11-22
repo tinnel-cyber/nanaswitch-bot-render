@@ -19,7 +19,8 @@ import {
   CreditCard,
   MessageCircle,
   Trash2,
-  Send
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { PhysicalFunnelConfig } from '../../../../types/physicalFunnel';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
@@ -45,6 +46,16 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
   const [isWritingNfc, setIsWritingNfc] = useState(false);
   const [customCallToAction, setCustomCallToAction] = useState('Scannez pour commander en 1-Clic');
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  // Code Magique Live (généré automatiquement au moment de la génération du QR Code)
+  const [liveMagicCode, setLiveMagicCode] = useState<{
+    code: string;
+    shortUrl: string;
+    usesCount: number;
+  } | null>(null);
+  const [customLiveCodeInput, setCustomLiveCodeInput] = useState('');
+  const [liveCodeStatus, setLiveCodeStatus] = useState('');
+  const [isUpdatingLiveCode, setIsUpdatingLiveCode] = useState(false);
 
   // Point 1 & 2 : Bio-Shop TikTok/Instagram & Comment-to-MiniMarket
   const [commentRules, setCommentRules] = useState<any[]>([]);
@@ -81,6 +92,58 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
     navigator.clipboard?.writeText(value).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/live-codes/ensure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: slugSafe,
+        storeId: funnel.storeId || '',
+        title: funnel.title || 'Mini-Market Live',
+      }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json?.success && json.liveCode) {
+          setLiveMagicCode(json.liveCode);
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, slugSafe, funnel.storeId, funnel.title]);
+
+  const handleUpdateLiveCode = async (opts: { customCode?: string; regenerate?: boolean }) => {
+    if (isUpdatingLiveCode) return;
+    setIsUpdatingLiveCode(true);
+    setLiveCodeStatus('');
+    try {
+      const res = await fetch('/api/live-codes/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: slugSafe,
+          storeId: funnel.storeId || '',
+          title: funnel.title || 'Mini-Market Live',
+          customCode: opts.customCode || '',
+          regenerate: !!opts.regenerate,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        setLiveCodeStatus(json?.error || 'Impossible de mettre à jour le code.');
+        return;
+      }
+      setLiveMagicCode(json.liveCode);
+      setCustomLiveCodeInput('');
+      setLiveCodeStatus(`✅ Nouveau Code Magique actif : ${json.liveCode.code}`);
+      playValidationBeep();
+    } catch {
+      setLiveCodeStatus('Erreur réseau.');
+    } finally {
+      setIsUpdatingLiveCode(false);
+    }
   };
 
   useEffect(() => {
@@ -639,6 +702,90 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
               </div>
             </div>
 
+            {/* Code Magique Live (généré automatiquement avec le QR Code) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-teal-950/80 border border-emerald-500/40 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 font-black text-xs text-emerald-300">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>Code Magique Live</span>
+                </div>
+                {liveMagicCode && (
+                  <span className="text-[10px] font-bold text-slate-300">
+                    {liveMagicCode.usesCount || 0} ouverture{(liveMagicCode.usesCount || 0) > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-snug">
+                Dictez ce code en plein Live : vos clients le tapent sur <strong>nsore.shop</strong> et votre Mini-Market s&apos;ouvre en popup direct !
+              </p>
+
+              <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-emerald-500/30">
+                <span className="text-xl font-mono font-black tracking-[0.2em] text-emerald-400">
+                  {liveMagicCode?.code || '....'}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={!liveMagicCode}
+                    onClick={() => liveMagicCode && copyText('live_code', liveMagicCode.code)}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedKey === 'live_code' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedKey === 'live_code' ? 'Copié' : 'Code'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isUpdatingLiveCode}
+                    onClick={() => handleUpdateLiveCode({ regenerate: true })}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                    title="Générer un nouveau code à 4 chiffres"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingLiveCode ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {liveMagicCode && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyText(
+                      'live_phrase',
+                      `Allez sur nsore.shop et tapez le code ${liveMagicCode.code} (ou cliquez ici : ${liveMagicCode.shortUrl}) pour ouvrir mon Mini-Market !`
+                    )
+                  }
+                  className="w-full py-1.5 px-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-[10.5px] flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {copiedKey === 'live_phrase' ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+                  <span>{copiedKey === 'live_phrase' ? 'Phrase Live copiée !' : 'Copier la phrase à dicter / épingler en Live'}</span>
+                </button>
+              )}
+
+              {/* Personnalisation optionnelle du code */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <input
+                  type="text"
+                  value={customLiveCodeInput}
+                  onChange={(e) => setCustomLiveCodeInput(e.target.value.toUpperCase())}
+                  placeholder="Personnaliser (ex: AMINA24)"
+                  maxLength={14}
+                  className="flex-1 px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-[11px] uppercase focus:outline-none focus:border-emerald-400"
+                />
+                <button
+                  type="button"
+                  disabled={!customLiveCodeInput.trim() || isUpdatingLiveCode}
+                  onClick={() => handleUpdateLiveCode({ customCode: customLiveCodeInput })}
+                  className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] cursor-pointer disabled:opacity-50"
+                >
+                  OK
+                </button>
+              </div>
+              {liveCodeStatus && (
+                <p className="text-[10.5px] text-emerald-300 font-semibold">{liveCodeStatus}</p>
+              )}
+            </div>
+
             {/* Infos techniques d'assurance */}
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-2">
               <div className="flex items-center gap-1.5 font-black text-xs">
@@ -710,8 +857,20 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
                   </div>
                 </div>
 
+                {/* Badge Code Magique Live imprimé sous le QR Code */}
+                {liveMagicCode && (
+                  <div className="mt-4 px-4 py-2 rounded-2xl bg-slate-950 text-white text-center shadow-md border border-slate-800">
+                    <span className="block text-[9.5px] uppercase tracking-widest text-emerald-400 font-black">
+                      Ou tapez le Code Magique sur nsore.shop
+                    </span>
+                    <span className="text-xl font-mono font-black tracking-[0.22em]">
+                      {liveMagicCode.code}
+                    </span>
+                  </div>
+                )}
+
                 {/* Indication visuelle Smartphone */}
-                <div className="flex items-center gap-2 mt-4 text-xs font-black text-slate-800">
+                <div className="flex items-center gap-2 mt-3 text-xs font-black text-slate-800">
                   <Smartphone className="w-4 h-4 text-slate-900" />
                   <span>Pointez votre appareil photo ou WhatsApp</span>
                 </div>

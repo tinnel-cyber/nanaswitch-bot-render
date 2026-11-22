@@ -2890,6 +2890,165 @@ async function startServer() {
     });
   });
 
+  // ============================================================================
+  // 2G. CODES MAGIQUES LIVE (4–6 CHIFFRES OU PERSONNALISÉ → OUVERTURE MINIMARKET)
+  // ============================================================================
+  const LIVE_MAGIC_CODES_FILE = path.join(DATA_DIR, 'live_magic_codes.json');
+
+  const getStoredLiveCodes = (): any[] => {
+    try {
+      if (fs.existsSync(LIVE_MAGIC_CODES_FILE)) {
+        const raw = fs.readFileSync(LIVE_MAGIC_CODES_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+
+  const saveStoredLiveCodes = (items: any[]) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(LIVE_MAGIC_CODES_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[LiveMagicCodes] Erreur sauvegarde:', err);
+    }
+  };
+
+  const generateUniqueNumericLiveCode = (existingCodes: Set<string>): string => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const num = String(Math.floor(1000 + Math.random() * 9000));
+      if (!existingCodes.has(num)) return num;
+    }
+    return String(Math.floor(100000 + Math.random() * 900000));
+  };
+
+  // POST /api/live-codes/ensure — Génère ou récupère le Code Magique Live d'un tunnel / vendeur
+  app.post('/api/live-codes/ensure', (req, res) => {
+    const {
+      slug = 'vente',
+      storeId = '',
+      title = 'Boutique Express',
+      customCode = '',
+      regenerate = false,
+    } = req.body || {};
+
+    const cleanSlug = String(slug || 'vente').toLowerCase().trim().replace(/[^a-z0-9-]/g, '') || 'vente';
+    const all = getStoredLiveCodes();
+    const existingSet = new Set(all.map((c: any) => String(c.code || '').toUpperCase()));
+    const existingIdx = all.findIndex((c: any) => String(c.slug || '').toLowerCase() === cleanSlug);
+
+    const hostBase = `${req.protocol || 'https'}://${req.get('host') || 'nsore.shop'}`;
+
+    // Cas 1 : le vendeur personnalise son code (ex: AMINA24 ou 7788)
+    const normalizedCustom = String(customCode || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 14);
+
+    if (normalizedCustom) {
+      if (normalizedCustom.length < 3) {
+        return res.status(400).json({ success: false, error: 'Le code doit contenir au moins 3 caractères.' });
+      }
+      const conflict = all.find(
+        (c: any) =>
+          String(c.code || '').toUpperCase() === normalizedCustom &&
+          String(c.slug || '').toLowerCase() !== cleanSlug
+      );
+      if (conflict) {
+        return res.status(409).json({ success: false, error: `Le code "${normalizedCustom}" est déjà utilisé.` });
+      }
+    }
+
+    if (existingIdx !== -1 && !regenerate && !normalizedCustom) {
+      const existing = all[existingIdx];
+      const targetPath = `/c/${cleanSlug}?drawer=true&minimarket=true&source=live_code&code=${encodeURIComponent(existing.code)}`;
+      return res.json({
+        success: true,
+        liveCode: {
+          ...existing,
+          shortUrl: `${hostBase}/code/${existing.code}`,
+          targetPath,
+        },
+      });
+    }
+
+    const finalCode = normalizedCustom || generateUniqueNumericLiveCode(existingSet);
+    const targetPath = `/c/${cleanSlug}?drawer=true&minimarket=true&source=live_code&code=${encodeURIComponent(finalCode)}`;
+
+    const record = {
+      code: finalCode,
+      slug: cleanSlug,
+      storeId: String(storeId || (existingIdx !== -1 ? all[existingIdx].storeId : '')).trim(),
+      title: String(title || (existingIdx !== -1 ? all[existingIdx].title : 'Mini-Market Live')).trim(),
+      shortUrl: `${hostBase}/code/${finalCode}`,
+      targetPath,
+      usesCount: existingIdx !== -1 ? Number(all[existingIdx].usesCount) || 0 : 0,
+      createdAt: existingIdx !== -1 ? all[existingIdx].createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (existingIdx !== -1) {
+      all[existingIdx] = record;
+    } else {
+      all.unshift(record);
+    }
+    saveStoredLiveCodes(all);
+
+    return res.json({ success: true, liveCode: record });
+  });
+
+  // GET /api/live-codes/:code — Résout un Code Magique Live (pour ouverture popup instantanée)
+  app.get('/api/live-codes/:code', (req, res) => {
+    const cleanCode = String(req.params.code || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (!cleanCode) {
+      return res.status(400).json({ success: false, error: 'Code requis' });
+    }
+    const all = getStoredLiveCodes();
+    const idx = all.findIndex((c: any) => String(c.code || '').toUpperCase() === cleanCode);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: `Code "${cleanCode}" introuvable.` });
+    }
+    all[idx] = {
+      ...all[idx],
+      usesCount: (Number(all[idx].usesCount) || 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    };
+    saveStoredLiveCodes(all);
+    return res.json({ success: true, liveCode: all[idx] });
+  });
+
+  // GET /code/:code & /k/:code — Redirection directe vers le Mini-Market popup du vendeur
+  const handleLiveCodeRedirect = (req: any, res: any) => {
+    const cleanCode = String(req.params.code || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const all = getStoredLiveCodes();
+    const idx = all.findIndex((c: any) => String(c.code || '').toUpperCase() === cleanCode);
+    if (idx === -1) {
+      return res.redirect(302, '/');
+    }
+    const item = all[idx];
+    all[idx] = {
+      ...item,
+      usesCount: (Number(item.usesCount) || 0) + 1,
+      lastUsedAt: new Date().toISOString(),
+    };
+    saveStoredLiveCodes(all);
+    return res.redirect(
+      302,
+      item.targetPath || `/c/${item.slug}?drawer=true&minimarket=true&source=live_code&code=${encodeURIComponent(item.code)}`
+    );
+  };
+  app.get('/code/:code', handleLiveCodeRedirect);
+  app.get('/k/:code', handleLiveCodeRedirect);
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {

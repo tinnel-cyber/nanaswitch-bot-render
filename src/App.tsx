@@ -106,6 +106,7 @@ const LiveIncomingCallAlert = React.lazy(() => import('./components/live/LiveInc
 const SmartCheckoutPage = React.lazy(() => import('./components/funnel/SmartCheckoutPage').then(m => ({ default: m.SmartCheckoutPage })));
 const PublicDealPageView = React.lazy(() => import('./components/funnel/PublicDealPageView').then(m => ({ default: m.PublicDealPageView })));
 const PublicPhysicalFunnelView = React.lazy(() => import('./components/funnel/PublicPhysicalFunnelView').then(m => ({ default: m.PublicPhysicalFunnelView || m.default })));
+const LiveCodeMagicWidget = React.lazy(() => import('./components/funnel/LiveCodeMagicWidget').then(m => ({ default: m.LiveCodeMagicWidget || m.default })));
 const PublicModularTunnelView = React.lazy(() => import('./components/funnel/PublicModularTunnelView').then(m => ({ default: m.PublicModularTunnelView || m.default })));
 const WelcomeShowcaseScreen = React.lazy(() => import('./components/WelcomeShowcaseScreen'));
 const WelcomeAuthScreen = React.lazy(() => import('./components/WelcomeAuthScreen').then(m => ({ default: m.WelcomeAuthScreen })));
@@ -8513,6 +8514,11 @@ export default function App() {
             masterPinHashOrCode={currentUser?.masterPin || currentUser?.pinCode}
           />
         )}
+
+        {/* Bouton Flottant « ✨ Code Live » → Mini-Market Popup Dépliable instantané */}
+        <React.Suspense fallback={null}>
+          <LiveCodeMagicWidget />
+        </React.Suspense>
 
         {/* =========================================================================
             TIROIR LATÉRAL NANA ACADÉMIE, MINI-LECTEUR & ASSISTANT SARAH

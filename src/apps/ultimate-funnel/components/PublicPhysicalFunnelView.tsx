@@ -58,7 +58,12 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
   const [isFromPhysicalQr, setIsFromPhysicalQr] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const search = new URLSearchParams(window.location.search);
-      return search.get('source') === 'physical_pos_qr' || search.get('drawer') === 'true' || search.get('minimarket') === 'true';
+      return (
+        search.get('source') === 'physical_pos_qr' ||
+        search.get('source') === 'live_code' ||
+        search.get('drawer') === 'true' ||
+        search.get('minimarket') === 'true'
+      );
     }
     return false;
   });
@@ -418,6 +423,18 @@ export const PublicPhysicalFunnelView: React.FC<PublicPhysicalFunnelViewProps> =
               <Phone className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">WhatsApp</span>
             </a>
+          )}
+
+          {isFromPhysicalQr && onBackToStore && (
+            <button
+              type="button"
+              onClick={onBackToStore}
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer active:scale-95"
+              title="Fermer / décrocher le tunnel"
+              aria-label="Fermer le tunnel"
+            >
+              <span className="block w-4 h-4 leading-4 text-center font-black text-sm">×</span>
+            </button>
           )}
         </div>
       </header>
