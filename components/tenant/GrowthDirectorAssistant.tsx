@@ -214,7 +214,7 @@ export function GrowthDirectorAssistant({
             id: `ai-${Date.now()}`,
             sender: 'ai',
             text: data.reply,
-            internalThought: data.internalThought,
+            internalThought: data.source ? `Moteur : ${data.source}` : data.internalThought,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }
         ]);

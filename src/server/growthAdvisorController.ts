@@ -268,16 +268,21 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
       }
 
       const isLeakAttempt = detectCredentialLeakAttempt(currentQuery);
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = (
+        process.env.GEMINI_API_KEY ||
+        process.env.VITE_GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        ''
+      ).trim();
       const firstName = extractFirstName(merchantContext?.userFullName || merchantContext?.userName);
 
       // Si pas de clé API ou tentative d'extraction de sécurité, repli déterministe immédiat
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '' || isLeakAttempt) {
+      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || isLeakAttempt) {
         const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, isLeakAttempt, messages);
         res.json({
           reply: sanitizeSensitiveContent(fallback.reply),
           internalThought: fallback.thought,
-          source: 'nsore-strategic-engine',
+          source: isLeakAttempt ? 'security-guard' : 'nsore-local-no-key',
           isLeakPrevented: isLeakAttempt
         });
         return;
@@ -335,13 +340,14 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
         }
       }
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
       let rawText = '';
       let modelUsed = '';
+      let lastModelError = '';
 
       for (const model of candidateModels) {
         try {
-          const response = await ai.models.generateContent({
+          const response: any = await ai.models.generateContent({
             model,
             contents,
             config: {
@@ -350,13 +356,19 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
               maxOutputTokens: 2048,
             }
           });
-          if (response?.text && response.text.trim()) {
-            rawText = response.text.trim();
+          const extracted =
+            (typeof response?.text === 'string' ? response.text : '') ||
+            (Array.isArray(response?.candidates?.[0]?.content?.parts)
+              ? response.candidates[0].content.parts.map((p: any) => p?.text || '').join('')
+              : '');
+          if (extracted && extracted.trim()) {
+            rawText = extracted.trim();
             modelUsed = model;
             break;
           }
         } catch (modelErr: any) {
-          console.warn(`[GROWTH_ADVISOR] Modèle ${model} indisponible:`, modelErr?.message || modelErr);
+          lastModelError = String(modelErr?.status || modelErr?.message || 'ERR').slice(0, 80);
+          console.warn(`[GROWTH_ADVISOR] Modèle ${model} indisponible:`, lastModelError);
         }
       }
 
@@ -365,7 +377,7 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
         res.json({
           reply: sanitizeSensitiveContent(fallback.reply),
           internalThought: fallback.thought,
-          source: 'nsore-strategic-engine'
+          source: lastModelError ? `nsore-fallback (${lastModelError})` : 'nsore-strategic-engine'
         });
         return;
       }

@@ -178,8 +178,13 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 // Lazy initialize Gemini API client to prevent crashing if GEMINI_API_KEY is not set
 let aiClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey.trim() === '') {
+  const apiKey = (
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    ''
+  ).trim();
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     return null;
   }
   if (!aiClient) {
@@ -205,7 +210,7 @@ async function callGeminiWithRetry(
     config?: any;
   }
 ): Promise<{ text?: string; modelUsed: string } | null> {
-  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
   for (const model of candidateModels) {
     for (let attempt = 0; attempt < 2; attempt++) {
