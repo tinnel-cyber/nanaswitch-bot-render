@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -68,6 +68,7 @@ import { ModuleDeliverySettingsModal } from './ModuleDeliverySettingsModal';
 import { AdvancedCourseSettingsModal } from './AdvancedCourseSettingsModal';
 import { exportCourseToJson, parseAndValidateCourseJson } from '../../../../../services/courseImportExport';
 import { updateModuleBranding, saveCourseStructure, saveCourseGlobalSettings, publishCourseToStorefront } from '../../../../../services/lmsService';
+import { subscribeStudioMediaTransfer } from '../../../../../services/studioMediaBridgeService';
 import { CourseDestinationSelectorModal } from './CourseDestinationSelectorModal';
 
 // Modules initiaux structurés pour le Drag-and-Drop & Drip
@@ -408,6 +409,71 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
 
   // Toast de confirmation
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
+
+  // Réception directe d'une vidéo montée depuis le Studio Montage Vidéo (100% local navigateur)
+  useEffect(() => {
+    return subscribeStudioMediaTransfer('COURSE', (payload) => {
+      if (!payload?.url) return;
+
+      let targetLessonId = activeEditingNodeId;
+      let targetLessonTitle = '';
+
+      setModules((prevModules) => {
+        if (!targetLessonId) {
+          const firstVideoLesson = prevModules.flatMap((m) => m.lessons || []).find((l) => !!l.videoUrl)
+            || prevModules.flatMap((m) => m.lessons || [])[0];
+          targetLessonId = firstVideoLesson?.id || null;
+        }
+        if (!targetLessonId) return prevModules;
+
+        const nextModules = prevModules.map((m) => ({
+          ...m,
+          lessons: (m.lessons || []).map((l) => {
+            if (l.id === targetLessonId) {
+              targetLessonTitle = l.title;
+              return {
+                ...l,
+                videoUrl: payload.url,
+                durationMinutes: payload.durationSec
+                  ? Math.max(1, Math.round(payload.durationSec / 60))
+                  : l.durationMinutes
+              };
+            }
+            return l;
+          })
+        }));
+
+        setNodes((prevNodes) => {
+          const nextNodes = prevNodes.map((n) => {
+            if (n.id === targetLessonId) {
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  videoConfig: {
+                    ...(n.data?.videoConfig as Record<string, any> | undefined),
+                    mode: 'MANUAL_UPLOAD',
+                    manualVideoUrl: payload.url,
+                    title: (n.data?.title as string) || payload.title
+                  }
+                }
+              };
+            }
+            return n;
+          });
+          saveCourseStructure(activeCourseId, nextModules, nextNodes, edges);
+          return nextNodes;
+        });
+
+        return nextModules;
+      });
+
+      setSavedNotification(
+        `🎬 Vidéo montée « ${payload.title} » injectée dans ${targetLessonTitle ? `« ${targetLessonTitle} »` : 'la leçon active du cours'} !`
+      );
+      setTimeout(() => setSavedNotification(null), 5500);
+    });
+  }, [activeCourseId, activeEditingNodeId, edges]);
 
   // Modale de diffusion directe du cours vers Campus Social (Salons/Rooms) & Salles VIP
   const [isSocialPublishOpen, setIsSocialPublishOpen] = useState(false);

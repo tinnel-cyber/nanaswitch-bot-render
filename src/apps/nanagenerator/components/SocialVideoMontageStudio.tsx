@@ -40,7 +40,11 @@ import {
   Camera,
   Circle,
   Settings,
-  RefreshCw
+  RefreshCw,
+  GraduationCap,
+  ShoppingBag,
+  Palette,
+  Send
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -100,6 +104,10 @@ import {
   type StudioAspectRatio,
   type SubtitleLangCode
 } from '../../../services/studioSettingsService';
+import {
+  sendMountedVideoToTarget,
+  type StudioTransferTarget
+} from '../../../services/studioMediaBridgeService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -319,6 +327,41 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   const [encodeProgress, setEncodeProgress] = useState<number>(0);
   const [encodeResult, setEncodeResult] = useState<VideoEncodeResult | null>(null);
   const [encodeError, setEncodeError] = useState<string | null>(null);
+  const [transferNotice, setTransferNotice] = useState<{ target: StudioTransferTarget; message: string } | null>(null);
+
+  const handleSendMountedVideo = (target: StudioTransferTarget) => {
+    const resolvedFile = encodeResult?.file || lastRecordedMedia?.file || sourceFile || null;
+    const resolvedUrl = encodeResult?.file
+      ? URL.createObjectURL(encodeResult.file)
+      : (lastRecordedMedia?.url || previewUrl || '');
+
+    if (!resolvedFile && !resolvedUrl) {
+      playCancelSound();
+      setEncodeError('Importez, enregistrez ou compilez d’abord une vidéo avant de l’envoyer.');
+      return;
+    }
+
+    setEncodeError(null);
+    sendMountedVideoToTarget(target, {
+      file: resolvedFile,
+      url: resolvedUrl,
+      title: overlayHeadline.trim() || resolvedFile?.name || 'Vidéo montée Studio',
+      durationSec: encodeResult?.durationSec || lastRecordedMedia?.durationSec || videoDuration,
+      width: encodeResult?.width || resolvedExportDimensions.width,
+      height: encodeResult?.height || resolvedExportDimensions.height
+    });
+
+    playValidationBeep();
+    const targetLabels: Record<StudioTransferTarget, string> = {
+      COURSE: '🎓 Vidéo envoyée vers le Cours en cours de création ! (Appliquée automatiquement à la leçon active dès ouverture ou en temps réel).',
+      PRODUCT: '🛍️ Vidéo envoyée vers les Paramètres du Produit en cours de création ! (Section Vidéo Démo / Routine pré-remplie).',
+      THEME: '🎨 Vidéo envoyée vers le Thème en cours de personnalisation ! (Appliquée en vidéo Hero du thème actif).'
+    };
+    setTransferNotice({ target, message: targetLabels[target] });
+    setTimeout(() => {
+      setTransferNotice((prev) => (prev?.target === target ? null : prev));
+    }, 6500);
+  };
 
   // Studio Voix Off Micro + DSP Réel (Égaliseur 3 Bandes + Suppression de Bruit + Amélioration Broadcast)
   const [isRecordingVoice, setIsRecordingVoice] = useState<boolean>(false);
@@ -2405,6 +2448,58 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                 <p className="text-[11px] text-emerald-200/80">
                   Format {encodeResult.width}×{encodeResult.height} • Taille finale : {formatBytes(encodeResult.encodedSizeBytes)} ({encodeResult.engine})
                 </p>
+              </div>
+            )}
+
+            {/* ENVOI DIRECT APRÈS MONTAGE VERS COURS / PRODUIT / THÈME */}
+            {(encodeResult || previewUrl || sourceFile || lastRecordedMedia) && (
+              <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-indigo-500/35 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5" />
+                    Envoyer directement la vidéo montée vers
+                  </span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    1-clic • Local
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSendMountedVideo('COURSE')}
+                    className="py-2 px-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-100 text-[11px] font-black flex items-center justify-center gap-1.5 cursor-pointer transition"
+                    title="Injecter directement dans la leçon active du cours en cours de création"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                    <span>Cours en création</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendMountedVideo('PRODUCT')}
+                    className="py-2 px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/40 text-amber-100 text-[11px] font-black flex items-center justify-center gap-1.5 cursor-pointer transition"
+                    title="Injecter dans la section vidéo des paramètres du produit en cours de création"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span>Paramètres Produit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendMountedVideo('THEME')}
+                    className="py-2 px-2.5 rounded-xl bg-fuchsia-600/20 hover:bg-fuchsia-600/35 border border-fuchsia-500/40 text-fuchsia-100 text-[11px] font-black flex items-center justify-center gap-1.5 cursor-pointer transition"
+                    title="Appliquer en vidéo Hero dans le thème en cours de création ou personnalisation"
+                  >
+                    <Palette className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" />
+                    <span>Thème en cours</span>
+                  </button>
+                </div>
+
+                {transferNotice && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-200 text-[11px] font-semibold flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{transferNotice.message}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -5284,9 +5379,56 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               </div>
             )}
 
-            {/* PANNEAU 5 : KIT PUBLICATION RÉSEAUX SOCIAUX */}
+            {/* PANNEAU 5 : KIT PUBLICATION RÉSEAUX SOCIAUX & ENVOI DIRECT */}
             {activePanel === 'PUBLISH' && (
               <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-950/90 border border-indigo-500/35 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-black text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Send className="w-4 h-4" />
+                      Envoyer la vidéo montée vers vos créations en cours
+                    </h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      Transfert local instantané
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Injectez directement votre vidéo montée dans votre cours en création, dans les paramètres du produit ou dans le thème en cours de personnalisation.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSendMountedVideo('COURSE')}
+                      className="py-2.5 px-3 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/45 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+                    >
+                      <GraduationCap className="w-4 h-4 text-indigo-300 shrink-0" />
+                      <span>Cours en création</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSendMountedVideo('PRODUCT')}
+                      className="py-2.5 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/45 text-amber-100 text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+                    >
+                      <ShoppingBag className="w-4 h-4 text-amber-300 shrink-0" />
+                      <span>Paramètres Produit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSendMountedVideo('THEME')}
+                      className="py-2.5 px-3 rounded-xl bg-fuchsia-600/25 hover:bg-fuchsia-600/40 border border-fuchsia-500/45 text-fuchsia-100 text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition"
+                    >
+                      <Palette className="w-4 h-4 text-fuchsia-300 shrink-0" />
+                      <span>Thème en cours</span>
+                    </button>
+                  </div>
+                  {transferNotice && (
+                    <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-200 text-[11px] font-semibold flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{transferNotice.message}</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {[
                     { id: 'tiktok_reels' as SocialNetworkId, label: 'TikTok / Reels' },
