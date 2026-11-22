@@ -288,9 +288,7 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
         return;
       }
 
-      // Appel Google GenAI avec VRAI historique multi-tours natif (jusqu'à 16 tours)
-      const ai = new GoogleGenAI({ apiKey });
-
+      // Appel direct API REST officielle Google Gemini (zéro souci de version SDK, multi-tours natif jusqu'à 16 tours)
       const topProductsSummary = Array.isArray(merchantContext?.topProducts) && merchantContext.topProducts.length > 0
         ? merchantContext.topProducts
             .slice(0, 6)
@@ -347,28 +345,44 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
 
       for (const model of candidateModels) {
         try {
-          const response: any = await ai.models.generateContent({
-            model,
-            contents,
-            config: {
-              systemInstruction: dynamicSystemInstruction,
-              temperature: 0.55,
-              maxOutputTokens: 2048,
-            }
+          const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+          const apiRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: dynamicSystemInstruction }] },
+              contents,
+              generationConfig: {
+                temperature: 0.55,
+                maxOutputTokens: 2048
+              }
+            })
           });
-          const extracted =
-            (typeof response?.text === 'string' ? response.text : '') ||
-            (Array.isArray(response?.candidates?.[0]?.content?.parts)
-              ? response.candidates[0].content.parts.map((p: any) => p?.text || '').join('')
-              : '');
+
+          if (!apiRes.ok) {
+            const errJson: any = await apiRes.json().catch(() => ({}));
+            const errMsg = errJson?.error?.status || errJson?.error?.message || `HTTP ${apiRes.status}`;
+            lastModelError = `${model}: ${apiRes.status} ${String(errMsg).slice(0, 60)}`;
+            console.warn(`[GROWTH_ADVISOR] ${lastModelError}`);
+            continue;
+          }
+
+          const data: any = await apiRes.json();
+          const parts = data?.candidates?.[0]?.content?.parts;
+          const extracted = Array.isArray(parts)
+            ? parts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).join('')
+            : '';
+
           if (extracted && extracted.trim()) {
             rawText = extracted.trim();
             modelUsed = model;
             break;
+          } else {
+            lastModelError = `${model}: EMPTY_CANDIDATE (${data?.candidates?.[0]?.finishReason || 'UNKNOWN'})`;
           }
         } catch (modelErr: any) {
-          lastModelError = String(modelErr?.status || modelErr?.message || 'ERR').slice(0, 80);
-          console.warn(`[GROWTH_ADVISOR] Modèle ${model} indisponible:`, lastModelError);
+          lastModelError = `${model}: ${String(modelErr?.message || 'NETWORK_ERR').slice(0, 60)}`;
+          console.warn(`[GROWTH_ADVISOR] Erreur réseau ${lastModelError}`);
         }
       }
 

@@ -303,7 +303,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
         {/* Global AI status badge */}
         <div className="hidden sm:flex items-center gap-1.5 bg-indigo-950/60 border border-indigo-500/30 px-2 py-1 rounded-lg">
           <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[11px] font-medium text-indigo-200">Gemini 3.8 Flash</span>
+          <span className="text-[11px] font-medium text-indigo-200">Gemini 2.5 Flash</span>
         </div>
       </header>
 
