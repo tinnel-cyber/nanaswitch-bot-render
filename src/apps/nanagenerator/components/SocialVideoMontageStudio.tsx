@@ -316,6 +316,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   );
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [subtitleTemplateId, setSubtitleTemplateId] = useState<SubtitleTemplateId>('hormozi_viral');
+  const [subtitleCustomColor, setSubtitleCustomColor] = useState<string>('');
   const [currentVideoTime, setCurrentVideoTime] = useState<number>(0);
   const [isAutoTranscribing, setIsAutoTranscribing] = useState<boolean>(false);
   const [subtitleStatusMsg, setSubtitleStatusMsg] = useState<string | null>(null);
@@ -324,6 +325,8 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     () => SUBTITLE_TEXT_TEMPLATES.find(t => t.id === subtitleTemplateId) || SUBTITLE_TEXT_TEMPLATES[0],
     [subtitleTemplateId]
   );
+
+  const resolvedSubtitleColor = subtitleCustomColor || activeSubtitleTemplate.textColor;
 
   const activeSubtitleCue = useMemo(() => {
     if (subtitleCues.length === 0) return null;
@@ -678,7 +681,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           filterCss: activeFilterCss || undefined,
           text: overlayTextForExport,
           textPosition,
-          textColor: activeSubtitleCue && !combinedOverlayText ? activeSubtitleTemplate.textColor : textColor
+          textColor: activeSubtitleCue && !combinedOverlayText ? resolvedSubtitleColor : textColor
         },
         onProgress: (pct) => setEncodeProgress(Math.min(99, Math.max(10, Math.round(pct))))
       });
@@ -957,10 +960,13 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     />
                   )}
 
-                  {/* Sous-Titres Live Synchronisés (Modèle Viral sélectionné) */}
+                  {/* Sous-Titres Live Synchronisés (Modèle Viral sélectionné + Couleur personnalisée) */}
                   {activeSubtitleCue && (
                     <div className="pointer-events-none absolute inset-x-4 bottom-24 flex justify-center text-center z-20">
-                      <span className={`inline-block max-w-full ${activeSubtitleTemplate.previewClass}`}>
+                      <span
+                        className={`inline-block max-w-full ${activeSubtitleTemplate.previewClass}`}
+                        style={{ color: resolvedSubtitleColor }}
+                      >
                         {activeSubtitleCue.text}
                       </span>
                     </div>
@@ -1291,6 +1297,49 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                       );
                     })}
                   </div>
+
+                  {/* Personnalisation de la couleur du texte des sous-titres */}
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-300">Couleur du texte :</span>
+                      {['#FFFFFF', '#FDE047', '#34D399', '#38BDF8', '#FB7185', '#F97316', '#C084FC', '#000000'].map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            setSubtitleCustomColor(hex);
+                          }}
+                          className={`w-6 h-6 rounded-full border-2 cursor-pointer transition ${
+                            resolvedSubtitleColor.toLowerCase() === hex.toLowerCase()
+                              ? 'border-white scale-115 shadow-md'
+                              : 'border-slate-700'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                          title={hex}
+                        />
+                      ))}
+                      <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[10.5px] font-bold text-slate-200 cursor-pointer hover:border-indigo-400">
+                        <input
+                          type="color"
+                          value={resolvedSubtitleColor}
+                          onChange={(e) => setSubtitleCustomColor(e.target.value)}
+                          className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
+                        />
+                        <span>Libre</span>
+                      </label>
+                    </div>
+
+                    {subtitleCustomColor && (
+                      <button
+                        type="button"
+                        onClick={() => setSubtitleCustomColor('')}
+                        className="text-[10.5px] font-bold text-indigo-300 hover:text-white cursor-pointer"
+                      >
+                        ↺ Couleur du modèle
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* 3. Éditeur de segments horodatés */}
@@ -1611,7 +1660,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                         </button>
                       ))}
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[11px] text-slate-400">Couleur :</span>
                       {TEXT_COLORS.map((c) => (
                         <button
@@ -1619,12 +1668,21 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                           type="button"
                           onClick={() => setTextColor(c.id)}
                           className={`w-6 h-6 rounded-full border-2 cursor-pointer ${
-                            textColor === c.id ? 'border-white scale-110' : 'border-slate-700'
+                            textColor.toLowerCase() === c.id.toLowerCase() ? 'border-white scale-110' : 'border-slate-700'
                           }`}
                           style={{ backgroundColor: c.id }}
                           title={c.label}
                         />
                       ))}
+                      <label className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-700 text-[10.5px] font-bold text-slate-200 cursor-pointer hover:border-indigo-400">
+                        <input
+                          type="color"
+                          value={textColor}
+                          onChange={(e) => setTextColor(e.target.value)}
+                          className="w-4 h-4 rounded cursor-pointer bg-transparent border-0 p-0"
+                        />
+                        <span>Libre</span>
+                      </label>
                     </div>
                   </div>
                 </div>
