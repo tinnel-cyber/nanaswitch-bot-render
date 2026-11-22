@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v47-course-social-vip-live-theme';
+const CACHE_NAME = 'nanasore-v48-course-pricing-models-subscriptions';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';

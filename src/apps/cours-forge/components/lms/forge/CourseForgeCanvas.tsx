@@ -467,6 +467,53 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
     }
   };
 
+  // Modale de Publication & Choix du Modèle de Tarification (À vie / Abonnement / Cours Live Direct)
+  const [isPublishPricingOpen, setIsPublishPricingOpen] = useState(false);
+  const [publishPrice, setPublishPrice] = useState<string>('15000');
+  const [publishPricingModel, setPublishPricingModel] = useState<'lifetime' | 'subscription' | 'live_event'>('lifetime');
+  const [publishBillingInterval, setPublishBillingInterval] = useState<'day' | 'week' | 'month' | 'year'>('month');
+  const [publishLiveEndsAt, setPublishLiveEndsAt] = useState<string>(
+    new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 16)
+  );
+  const [isPublishingCourse, setIsPublishingCourse] = useState(false);
+
+  const handleConfirmPublishWithPricing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPublishingCourse(true);
+    try {
+      const res = await publishCourseToStorefront({
+        courseId: activeCourseId,
+        title: activeCourseTitle,
+        price: Math.max(0, Number(publishPrice) || 0),
+        description: (courseGlobalSettings as any)?.description || '',
+        thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
+        tenantId: currentUser?.storeId || '',
+        pricingModel: publishPricingModel,
+        billingInterval: publishPricingModel === 'subscription' ? publishBillingInterval : undefined,
+        liveEndsAt: publishPricingModel === 'live_event' ? publishLiveEndsAt : undefined,
+        modules,
+        nodes,
+        edges,
+      });
+      setIsPublishPricingOpen(false);
+      const modelLabel =
+        publishPricingModel === 'subscription'
+          ? `Abonnement (${publishBillingInterval === 'day' ? 'Jour' : publishBillingInterval === 'week' ? 'Semaine' : publishBillingInterval === 'year' ? 'Année' : 'Mois'})`
+          : publishPricingModel === 'live_event'
+            ? 'Cours Direct en Live (expiration automatique fin du Live)'
+            : 'Paiement direct à vie';
+      setSavedNotification(
+        res.success
+          ? `🚀 "${activeCourseTitle}" publié [${modelLabel}] dans le Campus & votre vitrine Digital Pro !`
+          : `Erreur de publication : ${res.error || 'réessayez'}`
+      );
+      onSaveSuccess?.(activeCourseId);
+      setTimeout(() => setSavedNotification(null), 5000);
+    } finally {
+      setIsPublishingCourse(false);
+    }
+  };
+
   const handleToggleGlobalBranding = () => {
     const nextVal = !globalHideBranding;
     setGlobalHideBranding(nextVal);
@@ -1326,34 +1373,190 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
             <span>Sauvegarder</span>
           </button>
 
-          {/* Publication directe Campus + Vitrine Digital Pro */}
+          {/* Publication directe Campus + Vitrine Digital Pro avec choix du modèle de tarification */}
           <button
             type="button"
-            onClick={async () => {
-              const res = await publishCourseToStorefront({
-                courseId: activeCourseId,
-                title: activeCourseTitle,
-                price: Number((courseGlobalSettings as any)?.price) || 15000,
-                description: (courseGlobalSettings as any)?.description || '',
-                thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
-                tenantId: currentUser?.storeId || '',
-                modules,
-                nodes,
-                edges,
-              });
-              setSavedNotification(
-                res.success
-                  ? `🚀 "${activeCourseTitle}" publié dans le Campus ET synchronisé dans votre vitrine Digital Pro !`
-                  : `Erreur de publication : ${res.error || 'réessayez'}`
-              );
-              onSaveSuccess?.(activeCourseId);
-              setTimeout(() => setSavedNotification(null), 4500);
+            onClick={() => {
+              setPublishPrice(String(Number((courseGlobalSettings as any)?.price) || 15000));
+              setIsPublishPricingOpen(true);
             }}
             className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Publier (Campus + Vitrine)</span>
           </button>
+
+          {/* Modale de Publication & Modèle de Tarification */}
+          {isPublishPricingOpen && (
+            <div className="fixed inset-0 z-[125] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <form
+                onSubmit={handleConfirmPublishWithPricing}
+                className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl text-slate-100"
+              >
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div>
+                    <h4 className="text-sm font-black text-white">🚀 Publier le Cours &amp; Choisir la Tarification</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{activeCourseTitle}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPublishPricingOpen(false)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">Prix du cours (FCFA)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={publishPrice}
+                    onChange={(e) => setPublishPrice(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-black text-emerald-300"
+                  />
+                </div>
+
+                {/* 3 Modèles de Tarification au choix */}
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Modèle d&apos;accès &amp; Facturation
+                  </label>
+
+                  {/* 1. Paiement direct à vie */}
+                  <label
+                    className={`p-3 rounded-2xl border flex items-start gap-3 cursor-pointer transition ${
+                      publishPricingModel === 'lifetime'
+                        ? 'bg-emerald-500/15 border-emerald-400 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="pricingModel"
+                      checked={publishPricingModel === 'lifetime'}
+                      onChange={() => setPublishPricingModel('lifetime')}
+                      className="mt-1"
+                    />
+                    <div>
+                      <div className="text-xs font-black">💎 Paiement Direct à Vie</div>
+                      <div className="text-[11px] text-slate-400">
+                        Un seul paiement Mobile Money : l&apos;étudiant conserve un accès illimité à vie.
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* 2. Abonnement renouvelable */}
+                  <label
+                    className={`p-3 rounded-2xl border flex items-start gap-3 cursor-pointer transition ${
+                      publishPricingModel === 'subscription'
+                        ? 'bg-indigo-500/15 border-indigo-400 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="pricingModel"
+                      checked={publishPricingModel === 'subscription'}
+                      onChange={() => setPublishPricingModel('subscription')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <div className="text-xs font-black">🔄 Abonnement Renouvelable (Expiration Serveur)</div>
+                        <div className="text-[11px] text-slate-400">
+                          L&apos;accès expire automatiquement à l&apos;échéance jusqu&apos;au renouvellement.
+                        </div>
+                      </div>
+                      {publishPricingModel === 'subscription' && (
+                        <div className="grid grid-cols-4 gap-1.5 pt-1">
+                          {(
+                            [
+                              { id: 'day', label: 'Jour' },
+                              { id: 'week', label: 'Semaine' },
+                              { id: 'month', label: 'Mois' },
+                              { id: 'year', label: 'Année' },
+                            ] as const
+                          ).map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setPublishBillingInterval(opt.id)}
+                              className={`py-1.5 rounded-lg text-[11px] font-black border cursor-pointer ${
+                                publishBillingInterval === opt.id
+                                  ? 'bg-indigo-600 border-indigo-400 text-white'
+                                  : 'bg-slate-900 border-slate-700 text-slate-300'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* 3. Cours d'acquisition directe en Live */}
+                  <label
+                    className={`p-3 rounded-2xl border flex items-start gap-3 cursor-pointer transition ${
+                      publishPricingModel === 'live_event'
+                        ? 'bg-rose-500/15 border-rose-400 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="pricingModel"
+                      checked={publishPricingModel === 'live_event'}
+                      onChange={() => setPublishPricingModel('live_event')}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <div className="text-xs font-black">🔴 Cours d&apos;Acquisition Directe en Live</div>
+                        <div className="text-[11px] text-slate-400">
+                          Accès valable uniquement pendant la session Live : révoqué automatiquement à la fin du cours / Live.
+                        </div>
+                      </div>
+                      {publishPricingModel === 'live_event' && (
+                        <div className="space-y-1.5 pt-1">
+                          <label className="block text-[10px] font-bold text-rose-200">
+                            Date &amp; heure de fin automatique du Live
+                          </label>
+                          <input
+                            type="datetime-local"
+                            required
+                            value={publishLiveEndsAt}
+                            onChange={(e) => setPublishLiveEndsAt(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-rose-500/40 text-xs text-white"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsPublishPricingOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isPublishingCourse}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isPublishingCourse ? 'Publication...' : 'Confirmer & Publier le Cours'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           {/* Diffusion directe vers Campus Social (Salons/Rooms) & Salles VIP */}
           <button

@@ -502,6 +502,33 @@ export function recordCourseEnrollment(params: {
   return student;
 }
 
+export async function renewCourseSubscription(params: {
+  courseId: string;
+  paymentMethod?: string;
+  transactionId?: string;
+  amount?: number;
+}): Promise<{ success: boolean; expiresAt?: string; error?: string }> {
+  const token = getStudentToken();
+  if (!token) return { success: false, error: 'Session étudiant requise.' };
+  try {
+    const res = await fetch('/api/student/enrollments/renew', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(params),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) {
+      return { success: false, error: json?.error || 'Impossible de renouveler.' };
+    }
+    return { success: true, expiresAt: json.expiresAt };
+  } catch {
+    return { success: false, error: 'Erreur de connexion au Cloud.' };
+  }
+}
+
 // Redirection fluide vers le tableau de bord étudiant
 export function navigateToStudentDashboard(): void {
   if (typeof window === 'undefined') return;

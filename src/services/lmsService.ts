@@ -379,6 +379,9 @@ export async function publishCourseToStorefront(params: {
   thumbnailUrl?: string;
   category?: string;
   tenantId?: string;
+  pricingModel?: 'lifetime' | 'subscription' | 'live_event';
+  billingInterval?: 'day' | 'week' | 'month' | 'year';
+  liveEndsAt?: string;
   modules?: CourseModule[];
   nodes?: any[];
   edges?: any[];

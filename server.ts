@@ -3462,7 +3462,8 @@ async function startServer() {
   // ============================================================================
   const LMS_COURSES_FILE = path.join(DATA_DIR, 'lms_published_courses.json');
 
-  // POST /api/lms/courses/publish — Publie le cours dans Supabase `courses` ET le synchronise dans `products` (Thème Digital Pro)
+  // POST /api/lms/courses/publish — Publie le cours dans `courses` ET le synchronise dans `products` (Thème Digital Pro)
+  // Supporte 3 modèles de tarification : 'lifetime' (à vie), 'subscription' (day/week/month/year), 'live_event' (fin à la fin du Live)
   app.post('/api/lms/courses/publish', async (req, res) => {
     const {
       courseId,
@@ -3472,6 +3473,9 @@ async function startServer() {
       thumbnailUrl = '',
       category = 'Formation',
       tenantId = '',
+      pricingModel = 'lifetime',
+      billingInterval = 'month',
+      liveEndsAt = '',
       modules = [],
       nodes = [],
       edges = [],
@@ -3482,8 +3486,28 @@ async function startServer() {
       return res.status(400).json({ success: false, error: 'courseId requis' });
     }
 
+    const validModel = ['lifetime', 'subscription', 'live_event'].includes(String(pricingModel))
+      ? String(pricingModel)
+      : 'lifetime';
+    const validInterval = ['day', 'week', 'month', 'year'].includes(String(billingInterval))
+      ? String(billingInterval)
+      : 'month';
+    const intervalLabels: Record<string, string> = {
+      day: '/jour',
+      week: '/semaine',
+      month: '/mois',
+      year: '/an',
+    };
+    const pricingBadge =
+      validModel === 'subscription'
+        ? `Abonnement ${intervalLabels[validInterval]}`
+        : validModel === 'live_event'
+          ? 'Cours Live Direct'
+          : 'Accès à vie';
+
     const nowIso = new Date().toISOString();
     const cleanPrice = Math.max(0, Number(price) || 0);
+    const cleanLiveEndsAt = validModel === 'live_event' && liveEndsAt ? new Date(liveEndsAt).toISOString() : null;
     const slug = String(title || cleanId)
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -3500,6 +3524,10 @@ async function startServer() {
       thumbnail_url: String(thumbnailUrl || ''),
       category: String(category || 'Formation'),
       tenant_id: String(tenantId || ''),
+      pricingModel: validModel,
+      billingInterval: validModel === 'subscription' ? validInterval : null,
+      liveEndsAt: cleanLiveEndsAt,
+      pricingBadge,
       status: 'published',
       is_published: true,
       modules,
@@ -3524,11 +3552,22 @@ async function startServer() {
           description: record.description,
           price: record.price,
           thumbnail_url: record.thumbnail_url || null,
+          pricing_model: record.pricingModel,
+          billing_interval: record.billingInterval,
+          live_ends_at: record.liveEndsAt,
           status: 'published',
           modules,
           nodes,
           edges,
-          settings: { modules, nodes, edges, updatedAt: Date.now() },
+          settings: {
+            modules,
+            nodes,
+            edges,
+            pricingModel: record.pricingModel,
+            billingInterval: record.billingInterval,
+            liveEndsAt: record.liveEndsAt,
+            updatedAt: Date.now(),
+          },
           ...(record.tenant_id ? { tenant_id: record.tenant_id } : {}),
           updated_at: nowIso,
         });
@@ -3541,7 +3580,7 @@ async function startServer() {
           id: record.storefrontProductId,
           title: record.title,
           name: record.title,
-          description: record.description || `Accès complet au Campus Privé : ${record.title}`,
+          description: record.description || `Accès au Campus Privé : ${record.title}`,
           price: record.price,
           category: record.category || 'Formation',
           thumbnail_url: record.thumbnail_url || null,
@@ -3552,6 +3591,10 @@ async function startServer() {
             course_id: cleanId,
             is_lms_course: true,
             source: 'course_forge_publish',
+            pricing_model: record.pricingModel,
+            billing_interval: record.billingInterval,
+            live_ends_at: record.liveEndsAt,
+            pricing_badge: record.pricingBadge,
           },
           updated_at: nowIso,
         };
@@ -3568,6 +3611,45 @@ async function startServer() {
       storefrontProductId: record.storefrontProductId,
       synced,
     });
+  });
+
+  // POST /api/lms/courses/:courseId/end-live — Clôture un cours 'live_event' et révoque immédiatement les accès live
+  app.post('/api/lms/courses/:courseId/end-live', async (req, res) => {
+    const cleanId = String(req.params.courseId || '').trim();
+    if (!cleanId) {
+      return res.status(400).json({ success: false, error: 'courseId requis' });
+    }
+    const nowIso = new Date().toISOString();
+    const courses = readJsonArrayFile(LMS_COURSES_FILE);
+    const cIdx = courses.findIndex((c: any) => c.id === cleanId);
+    if (cIdx >= 0) {
+      courses[cIdx].liveEndsAt = nowIso;
+      courses[cIdx].updated_at = nowIso;
+      writeJsonArrayFile(LMS_COURSES_FILE, courses);
+    }
+
+    let revokedCount = 0;
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE).map((e: any) => {
+      if (e.courseId === cleanId && e.pricingModel === 'live_event' && e.status === 'ACTIVE') {
+        revokedCount++;
+        return { ...e, status: 'EXPIRED', expiresAt: nowIso };
+      }
+      return e;
+    });
+    writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('courses').update({ live_ends_at: nowIso, updated_at: nowIso }).eq('id', cleanId);
+        await supabaseAdmin
+          .from('enrollments')
+          .update({ status: 'EXPIRED', expires_at: nowIso })
+          .eq('course_id', cleanId)
+          .eq('pricing_model', 'live_event');
+      } catch {}
+    }
+
+    return res.json({ success: true, courseId: cleanId, endedAt: nowIso, revokedCount });
   });
 
   // GET /api/lms/courses/published — Liste les cours publiés du Campus Privé prêts pour le Thème Digital Pro
@@ -3831,7 +3913,33 @@ async function startServer() {
     });
   });
 
-  // POST /api/student/enroll — Inscription sécurisée (Marketplace, Thème Digital Pro, Live Formations)
+  const INTERVAL_MS: Record<string, number> = {
+    day: 24 * 60 * 60 * 1000,
+    week: 7 * 24 * 60 * 60 * 1000,
+    month: 30 * 24 * 60 * 60 * 1000,
+    year: 365 * 24 * 60 * 60 * 1000,
+  };
+
+  const computeEnrollmentExpiry = (
+    pricingModel: string,
+    billingInterval?: string | null,
+    liveEndsAt?: string | null,
+    baseMs: number = Date.now()
+  ): string | null => {
+    if (pricingModel === 'subscription') {
+      const dur = INTERVAL_MS[String(billingInterval || 'month')] || INTERVAL_MS.month;
+      return new Date(baseMs + dur).toISOString();
+    }
+    if (pricingModel === 'live_event') {
+      if (liveEndsAt && !Number.isNaN(new Date(liveEndsAt).getTime())) {
+        return new Date(liveEndsAt).toISOString();
+      }
+      return new Date(baseMs + 3 * 60 * 60 * 1000).toISOString();
+    }
+    return null; // 'lifetime' = accès à vie
+  };
+
+  // POST /api/student/enroll — Inscription sécurisée avec calcul serveur expiresAt (À vie / Abonnement / Live)
   app.post('/api/student/enroll', async (req, res) => {
     const {
       courseId,
@@ -3843,6 +3951,9 @@ async function startServer() {
       paymentMethod = 'MOBILE_MONEY',
       transactionId = '',
       source = 'marketplace',
+      pricingModel: reqPricingModel,
+      billingInterval: reqBillingInterval,
+      liveEndsAt: reqLiveEndsAt,
     } = req.body || {};
 
     const cleanCourseId = String(courseId || '').trim();
@@ -3852,6 +3963,18 @@ async function startServer() {
     if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY') {
       return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les formations.' });
     }
+
+    // Résolution du modèle de tarification depuis le cours publié (priorité serveur)
+    const publishedCourse = readJsonArrayFile(LMS_COURSES_FILE).find((c: any) => c.id === cleanCourseId);
+    const pricingModel = String(publishedCourse?.pricingModel || reqPricingModel || 'lifetime');
+    const billingInterval =
+      pricingModel === 'subscription'
+        ? String(publishedCourse?.billingInterval || reqBillingInterval || 'month')
+        : null;
+    const liveEndsAt =
+      pricingModel === 'live_event'
+        ? String(publishedCourse?.liveEndsAt || reqLiveEndsAt || '')
+        : null;
 
     const session = extractStudentSession(req);
     const cleanEmail = String(email || session?.email || '').trim().toLowerCase();
@@ -3867,7 +3990,8 @@ async function startServer() {
         (phoneDigits.length >= 6 && normalizePhoneKey(s.phoneNumber) === phoneDigits)
     );
 
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
     if (!student) {
       student = {
         id: session?.studentId || `std_${crypto.randomBytes(6).toString('hex')}`,
@@ -3881,12 +4005,14 @@ async function startServer() {
       writeJsonArrayFile(LMS_STUDENTS_FILE, students);
     }
 
-    // Enregistrement de l'inscription (idempotent par studentId + courseId)
+    // Enregistrement ou renouvellement de l'inscription avec calcul expiresAt côté serveur
     const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE);
-    let enrollment = enrollments.find(
+    const existingIdx = enrollments.findIndex(
       (e: any) => e.studentId === student.id && e.courseId === cleanCourseId
     );
-    if (!enrollment) {
+    let enrollment: any;
+    if (existingIdx === -1) {
+      const expiresAt = computeEnrollmentExpiry(pricingModel, billingInterval, liveEndsAt, nowMs);
       enrollment = {
         id: `enr_${crypto.randomBytes(5).toString('hex')}`,
         studentId: student.id,
@@ -3894,11 +4020,14 @@ async function startServer() {
         studentEmail: student.email,
         studentPhone: student.phoneNumber,
         courseId: cleanCourseId,
-        courseTitle: String(courseTitle || cleanCourseId),
+        courseTitle: String(courseTitle || publishedCourse?.title || cleanCourseId),
         amount: Math.max(0, Number(amount) || 0),
         paymentMethod: String(paymentMethod),
         transactionId: String(transactionId || `ENR-${Date.now().toString(36).toUpperCase()}`),
         source: String(source),
+        pricingModel,
+        billingInterval,
+        expiresAt,
         status: 'ACTIVE',
         progressPercentage: 0,
         completedLessons: [],
@@ -3906,11 +4035,30 @@ async function startServer() {
       };
       enrollments.unshift(enrollment);
       writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
+    } else {
+      // Si abonnement déjà existant, on prolonge depuis max(now, previousExpiresAt)
+      const prev = enrollments[existingIdx];
+      const prevExpMs = prev.expiresAt ? new Date(prev.expiresAt).getTime() : nowMs;
+      const baseExtendMs = Math.max(nowMs, Number.isNaN(prevExpMs) ? nowMs : prevExpMs);
+      const nextExpiresAt =
+        pricingModel === 'subscription'
+          ? computeEnrollmentExpiry('subscription', billingInterval, null, baseExtendMs)
+          : prev.expiresAt || computeEnrollmentExpiry(pricingModel, billingInterval, liveEndsAt, nowMs);
+      enrollment = {
+        ...prev,
+        pricingModel,
+        billingInterval,
+        expiresAt: nextExpiresAt,
+        status: 'ACTIVE',
+        lastRenewedAt: nowIso,
+      };
+      enrollments[existingIdx] = enrollment;
+      writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
     }
 
     // Enregistrement de l'achat dans l'historique étudiant
     const purchases = readJsonArrayFile(LMS_PURCHASES_FILE);
-    const txKey = enrollment.transactionId;
+    const txKey = String(transactionId || enrollment.transactionId);
     if (!purchases.some((p: any) => p.transactionId === txKey)) {
       purchases.unshift({
         id: `pur_${crypto.randomBytes(4).toString('hex')}`,
@@ -3922,6 +4070,9 @@ async function startServer() {
         paymentMethod: enrollment.paymentMethod,
         transactionId: txKey,
         source: enrollment.source,
+        pricingModel: enrollment.pricingModel,
+        billingInterval: enrollment.billingInterval,
+        expiresAt: enrollment.expiresAt,
         status: 'PAID',
         createdAt: nowIso,
       });
@@ -3937,10 +4088,14 @@ async function startServer() {
           student_name: student.fullName,
           student_email: student.email || null,
           student_phone: student.phoneNumber || null,
+          pricing_model: enrollment.pricingModel,
+          billing_interval: enrollment.billingInterval,
+          expires_at: enrollment.expiresAt,
           status: 'ACTIVE',
           progress_percentage: enrollment.progressPercentage || 0,
           completed_lessons: enrollment.completedLessons || [],
-          enrolled_at: nowIso,
+          enrolled_at: enrollment.enrolledAt || nowIso,
+          last_renewed_at: enrollment.lastRenewedAt || null,
         });
       } catch {}
     }
@@ -3955,7 +4110,74 @@ async function startServer() {
     return res.json({ success: true, token, student: safeStudent, enrollment });
   });
 
-  // GET /api/student/enrollments/verify?courseId=... — Contrôle d'accès réel côté serveur (anti-bypass localStorage)
+  // POST /api/student/enrollments/renew — Renouvellement sécurisé d'un abonnement de cours (Jour/Semaine/Mois/Année)
+  app.post('/api/student/enrollments/renew', async (req, res) => {
+    const session = extractStudentSession(req);
+    const { courseId, paymentMethod = 'MOBILE_MONEY', transactionId = '', amount = 0 } = req.body || {};
+    const cleanCourseId = String(courseId || '').trim();
+    if (!session || !cleanCourseId) {
+      return res.status(401).json({ success: false, error: 'Session étudiant et courseId requis.' });
+    }
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY') {
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour le renouvellement.' });
+    }
+
+    const enrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE);
+    const idx = enrollments.findIndex((e: any) => e.studentId === session.studentId && e.courseId === cleanCourseId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Inscription introuvable pour ce cours.' });
+    }
+
+    const enr = enrollments[idx];
+    if (enr.pricingModel !== 'subscription') {
+      return res.status(400).json({ success: false, error: "Ce cours n'est pas un abonnement renouvelable." });
+    }
+
+    const nowMs = Date.now();
+    const prevExpMs = enr.expiresAt ? new Date(enr.expiresAt).getTime() : nowMs;
+    const baseMs = Math.max(nowMs, Number.isNaN(prevExpMs) ? nowMs : prevExpMs);
+    const nextExpiresAt = computeEnrollmentExpiry('subscription', enr.billingInterval || 'month', null, baseMs);
+    const nowIso = new Date(nowMs).toISOString();
+
+    enrollments[idx] = {
+      ...enr,
+      status: 'ACTIVE',
+      expiresAt: nextExpiresAt,
+      lastRenewedAt: nowIso,
+    };
+    writeJsonArrayFile(LMS_ENROLLMENTS_FILE, enrollments);
+
+    const purchases = readJsonArrayFile(LMS_PURCHASES_FILE);
+    purchases.unshift({
+      id: `pur_${crypto.randomBytes(4).toString('hex')}`,
+      studentId: session.studentId,
+      courseId: cleanCourseId,
+      title: `Renouvellement : ${enr.courseTitle}`,
+      amount: Math.max(0, Number(amount) || enr.amount || 0),
+      currency: 'XOF',
+      paymentMethod: String(paymentMethod),
+      transactionId: String(transactionId || `REN-${Date.now().toString(36).toUpperCase()}`),
+      source: 'subscription_renewal',
+      expiresAt: nextExpiresAt,
+      status: 'PAID',
+      createdAt: nowIso,
+    });
+    writeJsonArrayFile(LMS_PURCHASES_FILE, purchases);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('enrollments')
+          .update({ status: 'ACTIVE', expires_at: nextExpiresAt, last_renewed_at: nowIso })
+          .eq('course_id', cleanCourseId)
+          .eq('student_id', session.studentId);
+      } catch {}
+    }
+
+    return res.json({ success: true, enrollment: enrollments[idx], expiresAt: nextExpiresAt });
+  });
+
+  // GET /api/student/enrollments/verify?courseId=... — Contrôle d'accès & expiration expires_at strict côté serveur
   app.get('/api/student/enrollments/verify', async (req, res) => {
     const courseId = String(req.query.courseId || '').trim();
     if (!courseId) {
@@ -3967,17 +4189,48 @@ async function startServer() {
     }
 
     const phoneDigits = normalizePhoneKey(session.phone);
-    const localMatch = readJsonArrayFile(LMS_ENROLLMENTS_FILE).find(
+    const allEnrollments = readJsonArrayFile(LMS_ENROLLMENTS_FILE);
+    const matchIdx = allEnrollments.findIndex(
       (e: any) =>
         e.courseId === courseId &&
-        e.status === 'ACTIVE' &&
         (e.studentId === session.studentId ||
           (session.email && e.studentEmail === session.email) ||
           (phoneDigits.length >= 6 && normalizePhoneKey(e.studentPhone) === phoneDigits))
     );
 
-    if (localMatch) {
-      return res.json({ success: true, hasAccess: true, enrollment: localMatch });
+    if (matchIdx >= 0) {
+      const localMatch = allEnrollments[matchIdx];
+      const expTime = localMatch.expiresAt ? new Date(localMatch.expiresAt).getTime() : null;
+      const isExpired =
+        localMatch.status === 'EXPIRED' ||
+        (expTime !== null && !Number.isNaN(expTime) && expTime <= Date.now());
+
+      if (isExpired) {
+        if (localMatch.status !== 'EXPIRED') {
+          allEnrollments[matchIdx] = { ...localMatch, status: 'EXPIRED' };
+          writeJsonArrayFile(LMS_ENROLLMENTS_FILE, allEnrollments);
+        }
+        return res.json({
+          success: true,
+          hasAccess: false,
+          expired: true,
+          reason: localMatch.pricingModel === 'live_event' ? 'LIVE_ENDED' : 'SUBSCRIPTION_EXPIRED',
+          expiresAt: localMatch.expiresAt,
+          pricingModel: localMatch.pricingModel || 'lifetime',
+          billingInterval: localMatch.billingInterval || null,
+          canRenew: localMatch.pricingModel === 'subscription',
+        });
+      }
+
+      return res.json({
+        success: true,
+        hasAccess: true,
+        expired: false,
+        expiresAt: localMatch.expiresAt || null,
+        pricingModel: localMatch.pricingModel || 'lifetime',
+        billingInterval: localMatch.billingInterval || null,
+        enrollment: localMatch,
+      });
     }
 
     if (supabaseAdmin) {
@@ -3989,7 +4242,20 @@ async function startServer() {
           .eq('student_id', session.studentId)
           .maybeSingle();
         if (data) {
-          return res.json({ success: true, hasAccess: true, enrollment: data });
+          const expTime = data.expires_at ? new Date(data.expires_at).getTime() : null;
+          if (data.status === 'EXPIRED' || (expTime !== null && expTime <= Date.now())) {
+            return res.json({
+              success: true,
+              hasAccess: false,
+              expired: true,
+              reason: data.pricing_model === 'live_event' ? 'LIVE_ENDED' : 'SUBSCRIPTION_EXPIRED',
+              expiresAt: data.expires_at,
+              pricingModel: data.pricing_model || 'lifetime',
+              billingInterval: data.billing_interval || null,
+              canRenew: data.pricing_model === 'subscription',
+            });
+          }
+          return res.json({ success: true, hasAccess: true, expired: false, enrollment: data });
         }
       } catch {}
     }
