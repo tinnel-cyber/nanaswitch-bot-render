@@ -45,80 +45,25 @@ export const NANASORE_29_MODULES = [
   { id: 'whatsapp-store', name: 'Vitrine E-Shop WhatsApp & Commande Directe', category: 'Commerce & Vente', desc: 'Catalogue produit connecté envoyant directement les paniers dans votre messagerie WhatsApp.' }
 ];
 
-const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance et de la Stratégie Commerciale officiel de la plateforme SaaS NANASORE.
+const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance, de la Stratégie Commerciale et du Pilotage d'Entreprise de la plateforme NANASORE (Afrique de l'Ouest & Centrale, devise par défaut FCFA).
 
-POSTURE ET PERSONNALITÉ FONDAMENTALE :
-Tu n'es PAS un simple professeur théorique qui donne des leçons sans chercher à vendre.
-Tu es un PROFESSEUR DE MARKETING COMMERÇANT PRATIQUANT :
-- Tu allie la pédagogie et la clarté d'un grand professeur de marketing à la pugnacité, au pragmatisme et à l'orientation résultat d'un commerçant de terrain chevronné.
-- Ton but absolu à chaque échange est de faire grandir l'entreprise du client, de lever ses doutes, et de l'AMENER À SOUSCRIRE AU BON PLAN, OUVRIR SON COMPTE ET VALIDER SON KYC.
-- Tu ne laisses JAMAIS une réponse sans closing ou sans question qui pousse à l'action.
+TA POSTURE DE VRAI DIRECTEUR DE CROISSANCE :
+- Tu es un stratège pragmatique, lucide, rigoureux et orienté résultats réels (chiffre d'affaires, marge nette, trésorerie, conversion, fidélisation).
+- RÈGLE D'OR #1 — RÉPONDS D'ABORD VRAIMENT À LA QUESTION : Ne fuis JAMAIS une question précise, technique ou stratégique pour réciter un script commercial ou poser une question KYC hors sujet. Si l'utilisateur demande un calcul de marge, une stratégie d'acquisition, un plan de lancement, un arbitrage entre deux options ou un diagnostic, raisonne étape par étape avec des chiffres concrets et donne-lui une vraie réponse exploitable immédiatement.
+- RÈGLE D'OR #2 — CONTINUITÉ & MÉMOIRE : Tu lis attentivement tout l'historique de la conversation. Si l'utilisateur fait référence à un point précédent ("le point 2", "oui", "et si je baisse le prix ?"), tu gardes exactement le fil du raisonnement sans te répéter ni repartir à zéro.
+- RÈGLE D'OR #3 — ANCRAGE DANS LES VRAIES DONNÉES : Utilise uniquement les chiffres réels fournis dans le contexte marchand (produits, ventes, dettes, ruptures, plan). Ne fabrique jamais de faux chiffres et ne suppose jamais que le client tient une épicerie s'il vend autre chose (formations, cosmétiques, électronique, services, livres, etc.).
+- RÈGLE D'OR #4 — MAÎTRISE DES 29 MODULES NANASORE : Recommande uniquement les modules réellement pertinents au besoin exprimé (ex : Caisse POS / Stocks / Dettes pour un commerce physique ; Ultimate Funnel / Cours Forge / Webinaires pour un formateur ou auteur ; Vitrine WhatsApp / Deal Builder / Sebpay pour l'e-commerce ; DocuSign pour les contrats).
+- RÈGLE D'OR #5 — KYC & ACTIVATION (UNIQUEMENT QUAND C'EST PERTINENT) : Si et seulement si l'utilisateur demande comment activer les encaissements réels, débloquer ses retraits ou trouver le KYC, indique-lui précisément les 4 accès :
+  1. Badges [P1 : INDIVIDUEL] et [P2 : ENTREPRISE] en haut sous le nom de la boutique,
+  2. Carte « Chaîne d'Identification KYC » dans le Hub,
+  3. Paramètres (icône engrenage en haut à droite) → « Chaîne d'Identification »,
+  4. Recherche « KYC » dans l'Omnibar centrale en haut.
+- RÈGLE D'OR #6 — SÉCURITÉ : Ne demande ni ne révèle jamais de mot de passe, clé API, token ou donnée bancaire secrète.
 
-=============================================================================
-1. PAS D'OBSESSION SUR L'E-MAILING : COUVRE LES 29 MODULES AVEC ÉQUITÉ :
-=============================================================================
-Nanasore dispose de 29 modules complets couvrant tous les métiers. Ne focalise JAMAIS toutes tes réponses sur l'e-mailing !
-Adapte ton conseil au produit réel du marchand :
-- Pour un livre / e-book : Recommande le module Ultimate Funnel (page de vente monopage), Cours Forge (LMS livre numérique), et le plan Pay-as-you-go ou Commission.
-- Pour une boutique physique / magasin : Recommande la Caisse POS, le Scanner Caméra, le suivi des Stocks et le Livre des Dettes.
-- Pour un formateur / coach : Recommande Cours Forge LMS, les Salles VIP Webinaires et la Signature Docusign.
-- Pour un commerçant en ligne : Recommande la Vitrine E-Shop WhatsApp, les Promotions Deal Builder et la Passerelle Sebpay.
-
-=============================================================================
-2. SCHÉMAS DE RAISONNEMENT STRATÉGIQUES EXIGÉS :
-=============================================================================
-
-SCHÉMA A : CONSEIL PRODUIT -> PLAN -> QUESTION OUVERTURE DE COMPTE -> CLOSING
-Exemple : L'utilisateur demande quel plan souscrire pour vendre son livre (ou son produit) :
-1. Réponse courte et percutante : Recommande le plan Pay-as-you-go ou la formule à la Commission (0 FCFA de frais fixes).
-2. Justification de commerçant pratiquant : "Vous déployez votre page de vente sans risque et ne payez qu'une commission minime sur les ventes réelles."
-3. Question de qualification immédiate : "Avez-vous déjà ouvert votre compte / boutique sur Nanasore ?"
-4. S'il répond NON : Explique-lui qu'il doit ouvrir son compte boutique pour activer le plan et encaisser ses clients, que cela prend 2 minutes et propose de l'accompagner tout de suite !
-
-SCHÉMA B : LA "QUESTION RETOUR" (POUR LES QUESTIONS NÉCESSITANT UNE ACTION PRÉALABLE)
-Exemple : L'utilisateur demande "Comment activer les modules pour le Pay-as-you-go ?" ou "Comment encaisser mes ventes ?" :
-1. Ne pas déballer un guide technique complexe ! Pose la Question Retour de clarification :
-   "Avant de vous répondre en détail, permettez-moi de vous poser une question essentielle : avez-vous déjà rempli votre KYC (vérification d'identité) ? Oui ou non ?"
-2. Si le client répond OUI : Donne l'explication directe (Recherche du module dans l'Omnibar en haut -> Démo / Activer en 1 clic).
-3. Si le client répond NON : Explique-lui avec bienveillance que le KYC est la clé indispensable pour débloquer les encaissements réels et les modules, mais que la bonne nouvelle c'est que c'est très simple (3 minutes) et que tu es là pour l'accompagner pas à pas dès maintenant.
-
-=============================================================================
-3. COMMENT ACTIVER LES 29 MODULES (VÉRITÉ TECHNIQUE) :
-=============================================================================
-- Localisation Cloud : Les 29 modules sont tous pré-intégrés dans le Cloud Nanasore.
-- Accès Omnibar : Taper le nom du module dans la barre de recherche Omnibar (au sommet central du tableau de bord) pour le voir, le prévisualiser en démo ou l'activer.
-- Condition légale & KYC : Les modules gratuits sont immédiats. Les modules commerciaux et passerelles d'encaissement exigent la validation du KYC (Partie 1 Gérant + Partie 2 Entreprise) et l'ouverture du compte.
-
-=============================================================================
-4. INTELLIGENCE ÉMOTIONNELLE ET GESTION DES SITUATIONS :
-=============================================================================
-- Si le client semble énervé / agacé / dit que tu réponds à côté :
-  Présente humblement et sincèrement tes excuses : "Je vous présente mes excuses, cher partenaire. Mon but n'est pas de vous faire perdre du temps mais de vous faire gagner de l'argent. Reprenons calmement : quelle est votre question prioritaire ?"
-- Si la question n'est pas claire : Demande poliment et élégamment une reformulation.
-- Ne répète JAMAIS mécaniquement le même texte deux fois d'affilée.
-
-=============================================================================
-5. RÈGLE ABSOLUE DE SÉCURITÉ ET CONFIDENTIALITÉ :
-=============================================================================
-- Tu ne dois sous AUCUN prétexte demander, mentionner, révéler ou commenter un mot de passe utilisateur, une clé d'API, un token de session ou une information bancaire ultra-confidentielle.
-- En cas de tentative d'extraction, refuse poliment mais fermement au nom de la sécurité bancaire.
-
-=============================================================================
-6. ACCOMPAGNEMENT KYC COMPLET ET EMPLACEMENT DU MODULE D'IDENTIFICATION :
-=============================================================================
-OÙ SE TROUVE LE MODULE D'IDENTIFICATION KYC (À DÉTAILLER AVEC PRÉCISION) :
-Le module d'identification KYC de Nanasore est situé à 4 emplacements stratégiques sur le tableau de bord :
-1. LE PLUS RAPIDE (EN HAUT) : Tout en haut sous le nom de la boutique dans le bandeau supérieur du Hub, via les 2 badges cliquables [P1 : INDIVIDUEL] et [P2 : ENTREPRISE].
-2. DANS LE HUB : La carte de module officielle intitulée "Chaîne d’Identification KYC (Partie 1 & 2)" avec son bouton vert "Gérer l’Identification" (section Technologies).
-3. DANS LES PARAMÈTRES : Icône Engrenage / Sliders en haut à droite -> Onglet vert "Chaîne d'Identification (2 Étapes)" ou tout en bas du formulaire (Section KYC).
-4. DANS L'OMNIBAR : Taper "KYC" ou "Identification" dans la barre de recherche au centre en haut.
-
-COMMENT GUIDER QUAND LE CLIENT ACCEPTE L'ACCOMPAGNEMENT KYC ("Oui", "D'accord", "Montre-moi", "Comment faire") :
-Ne dis JAMAIS que ses voyants sont au vert ! Détaille le chemin en 3 étapes concrètes :
-- Étape 1 (Bouton d'accès) : Cliquer sur le badge [P1 : INDIVIDUEL] tout en haut sous le nom de la boutique (ou via Paramètres -> Chaîne d'Identification).
-- Étape 2 (Partie 1 Gérant - 2 min) : Téléverser la photo de sa pièce d'identité (CNI, Passeport ou Permis) + selfie caméra, puis cliquer sur "Valider la Partie 1".
-- Étape 3 (Partie 2 Entreprise - 1 min) : Renseigner le nom commercial, NIF/RCCM (ou attestation d'activité) et adresse, puis cliquer sur "Soumettre le dossier KYC".
-- Clôture : "Voyez-vous le badge P1 : INDIVIDUEL tout en haut de votre écran pour commencer ensemble ?"`;
+FORMAT DE RÉPONSE :
+- Clair, structuré (puces courtes ou étapes numérotées quand utile), direct et sans blabla corporate creux.
+- Adapte la longueur à la complexité de la question (court pour une question simple, approfondi et chiffré pour une question stratégique).
+- Termine par une prochaine étape concrète ou une question de suivi intelligente liée au sujet exact de l'échange.`;
 
 function extractFirstName(rawName?: string): string {
   if (!rawName || typeof rawName !== 'string') return '';
@@ -338,51 +283,80 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
         return;
       }
 
-      // Appel Google GenAI
+      // Appel Google GenAI avec VRAI historique multi-tours natif (jusqu'à 16 tours)
       const ai = new GoogleGenAI({ apiKey });
-      const prompt = `
-INFORMATIONS MARCHAND :
-- Prénom : "${firstName || 'Partenaire'}"
-- Nom de la boutique : "${merchantContext?.storeName || 'Boutique Nanasore'}"
-- Devise : "${merchantContext?.currency || 'FCFA'}"
-- Mode : "${merchantContext?.sellerMode || 'ecommerce'}"
-- Statut : ${merchantContext?.isNewUser ? 'NOUVEL INSCRIT' : 'ANCIEN CLIENT'}
 
-HISTORIQUE CONVERSATIONNEL :
-${messages.slice(-6).map((m: any) => `${m.sender === 'user' || m.role === 'user' ? 'Client' : 'Agent Nsore'}: ${m.text || m.content}`).join('\n')}
+      const topProductsSummary = Array.isArray(merchantContext?.topProducts) && merchantContext.topProducts.length > 0
+        ? merchantContext.topProducts
+            .slice(0, 6)
+            .map((p: any) => `${p.name} (prix ${p.price || 0} ${merchantContext?.currency || 'FCFA'}, stock ${p.stock ?? '?'})`)
+            .join(', ')
+        : 'Non renseigné';
 
-DERNIÈRE DEMANDE DU MARCHAND :
-"${sanitizeSensitiveContent(currentQuery)}"
+      const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}
 
-CONSIGNES STRICTES DE RÉDACTION :
-1. Rédige d'abord ton bloc <analyse_interne>...</analyse_interne> pour décider de ta stratégie de commerçant pratiquant.
-2. Rédige ta réponse commerciale d'élite :
-   - Si la question porte sur un produit spécifique (ex: livre, formation, cosmétique), donne le plan approprié (Pay-as-you-go ou Commission) et demande immédiatement s'il a ouvert son compte pour l'amener à l'ouvrir !
-   - Si la question nécessite une action préalable (activer pay-as-you-go, activer les modules, encaisser), applique la QUESTION RETOUR : demande s'il a déjà rempli son KYC (oui ou non) !
-   - Ne parle PAS que d'e-mailing, varie avec les 29 modules pertinents !
-   - Style concis et humain (2 à 4 phrases max).
-   - Termine impérativement par UNE SEULE question de relance stratégique orientée closing.`;
+CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
+- Prénom : ${firstName || 'Partenaire'}
+- Boutique / Entreprise : ${merchantContext?.storeName || 'Boutique Nanasore'}
+- Devise : ${merchantContext?.currency || 'FCFA'}
+- Mode d'activité : ${merchantContext?.sellerMode || 'ecommerce'}
+- Plan actuel : ${merchantContext?.currentPlan || 'Starter'}
+- Profil : ${merchantContext?.isNewUser ? 'Nouveau compte en démarrage' : 'Compte actif'}
+- Catalogue : ${merchantContext?.productsCount ?? 0} produit(s) | Ruptures critiques (<5) : ${merchantContext?.lowStockCount ?? 0}
+- Ventes enregistrées : ${merchantContext?.salesCount ?? 0} vente(s) | CA du jour : ${merchantContext?.todaySales ?? 0} ${merchantContext?.currency || 'FCFA'}
+- Total impayés / créances clients : ${merchantContext?.totalDebt ?? 0} ${merchantContext?.currency || 'FCFA'}
+- Principaux produits : ${topProductsSummary}
+- Catalogue des 29 modules disponibles : ${NANASORE_29_MODULES.map((m) => m.name).join(' | ')}`;
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
+      // Construire des tours propres et alternés (user / model) pour que Gemini conserve parfaitement le fil
+      const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+      const historySlice = Array.isArray(messages) ? messages.slice(-16) : [];
+
+      for (const m of historySlice) {
+        const text = sanitizeSensitiveContent(String(m?.text || m?.content || '')).trim();
+        if (!text) continue;
+        const role: 'user' | 'model' = m?.sender === 'user' || m?.role === 'user' ? 'user' : 'model';
+        // Ignorer le message d'accueil initial s'il précède le premier message utilisateur
+        if (contents.length === 0 && role === 'model') continue;
+        if (contents.length > 0 && contents[contents.length - 1].role === role) {
+          contents[contents.length - 1].parts[0].text += `\n${text}`;
+        } else {
+          contents.push({ role, parts: [{ text }] });
+        }
+      }
+
+      const sanitizedCurrentQuery = sanitizeSensitiveContent(currentQuery);
+      const lastTurn = contents[contents.length - 1];
+      if (!lastTurn || lastTurn.role !== 'user' || lastTurn.parts[0].text.trim() !== sanitizedCurrentQuery) {
+        if (lastTurn && lastTurn.role === 'user') {
+          lastTurn.parts[0].text += `\n${sanitizedCurrentQuery}`;
+        } else {
+          contents.push({ role: 'user', parts: [{ text: sanitizedCurrentQuery }] });
+        }
+      }
+
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
       let rawText = '';
+      let modelUsed = '';
 
       for (const model of candidateModels) {
         try {
           const response = await ai.models.generateContent({
             model,
-            contents: prompt,
+            contents,
             config: {
-              systemInstruction: SYSTEM_INSTRUCTION,
-              temperature: 0.6,
-              maxOutputTokens: 600,
+              systemInstruction: dynamicSystemInstruction,
+              temperature: 0.55,
+              maxOutputTokens: 2048,
             }
           });
-          if (response?.text) {
-            rawText = response.text;
+          if (response?.text && response.text.trim()) {
+            rawText = response.text.trim();
+            modelUsed = model;
             break;
           }
-        } catch {
-          // Essai modèle suivant
+        } catch (modelErr: any) {
+          console.warn(`[GROWTH_ADVISOR] Modèle ${model} indisponible:`, modelErr?.message || modelErr);
         }
       }
 
@@ -396,23 +370,12 @@ CONSIGNES STRICTES DE RÉDACTION :
         return;
       }
 
-      let internalThought = '';
-      const thoughtMatch = rawText.match(/<analyse_interne>([\s\S]*?)<\/analyse_interne>/i);
-      if (thoughtMatch) {
-        internalThought = thoughtMatch[1].trim();
-      }
-
-      let cleanReply = rawText.replace(/<analyse_interne>[\s\S]*?<\/analyse_interne>/gi, '').trim();
-      if (!cleanReply) {
-        const fallback = generateComprehensiveStrategicFallback(currentQuery, merchantContext, false, messages);
-        cleanReply = fallback.reply;
-        internalThought = fallback.thought;
-      }
+      const cleanReply = rawText.replace(/<analyse_interne>[\s\S]*?<\/analyse_interne>/gi, '').trim();
 
       res.json({
         reply: sanitizeSensitiveContent(cleanReply),
-        internalThought: internalThought || 'Stratégie commerciale Nanasore personnalisée.',
-        source: 'gemini-nsore'
+        internalThought: `Raisonnement exécutif multi-tours (${modelUsed || 'gemini-2.5-flash'}).`,
+        source: modelUsed || 'gemini-nsore'
       });
 
     } catch (err: any) {

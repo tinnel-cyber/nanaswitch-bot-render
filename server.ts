@@ -205,7 +205,7 @@ async function callGeminiWithRetry(
     config?: any;
   }
 ): Promise<{ text?: string; modelUsed: string } | null> {
-  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 
   for (const model of candidateModels) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -8701,70 +8701,69 @@ async function startServer() {
       const totalDebt = customers.reduce((sum: number, c: any) => sum + (c.totalDebt || 0), 0);
       const overdueCustomers = customers.filter((c: any) => c.status === 'OVERDUE' || c.totalDebt > 15000);
 
-      // If Gemini API is available, ask gemini-3.8-flash
+      // If Gemini API is available, ask gemini-2.5-flash
       if (ai) {
         try {
-          const prompt = `Tu es le copilote IA expert en gestion de boutique d'alimentation générale en Afrique de l'Ouest/Centrale (monnaie F CFA).
-Analyse ces données réelles de la boutique :
-- Articles en stock : ${totalStockItems} références. Articles en alerte rupture (< 5 unités) : ${lowStockProducts.map((p: any) => `${p.name} (${p.stock} restant)`).join(', ') || 'Aucun'}
-- Sucre : stock actuel de ${inventory.find((p: any) => p.id === 'sucre')?.stock ?? 50} unités.
-- Dettes clients : Total impayés = ${totalDebt} F CFA. Clients critiques : ${overdueCustomers.map((c: any) => `${c.name} (${c.totalDebt} F CFA, retard ${c.daysOverdue || 14}j)`).join(', ') || 'Aucun'}
-- Ventes enregistrées récemment : ${sales.length} ventes.
-- Pertes/Casse : ${losses.length} déclarations.
+          const totalSalesAmount = sales.reduce((sum: number, s: any) => sum + (Number(s.total) || 0), 0);
+          const catalogPreview = inventory
+            .slice(0, 12)
+            .map((p: any) => `${p.name} (prix: ${p.price || p.sellingPrice || 0} F, coût: ${p.costPrice || 0} F, stock: ${p.stock ?? 0})`)
+            .join(', ') || 'Aucun produit enregistré';
 
-Donne une analyse claire sous format JSON strict avec la structure suivante :
+          const prompt = `Tu es le Directeur Financier & Stratégique IA de NANASORE (Afrique de l'Ouest/Centrale, devise F CFA).
+Analyse EXCLUSIVEMENT ces données réelles de l'entreprise (ne mentionne AUCUN produit ou client qui n'existe pas dans ces données) :
+- Catalogue (${totalStockItems} références) : ${catalogPreview}
+- Articles en alerte rupture (< 5 unités) : ${lowStockProducts.map((p: any) => `${p.name} (${p.stock} restant)`).join(', ') || 'Aucun'}
+- Dettes clients : Total impayés = ${totalDebt} F CFA. Clients critiques : ${overdueCustomers.map((c: any) => `${c.name || c.shortName} (${c.totalDebt} F CFA, retard ${c.daysOverdue || 0}j)`).join(', ') || 'Aucun'}
+- Ventes enregistrées : ${sales.length} ventes pour un total de ${totalSalesAmount} F CFA.
+- Pertes/Casse déclarées : ${losses.length}.
+
+Produis un audit rigoureux et concret au format JSON strict :
 {
-  "summary": "synthèse en 2 phrases de la santé de la boutique",
+  "summary": "synthèse lucide en 2 phrases basée uniquement sur les chiffres ci-dessus",
   "alerts": [
     {
-      "type": "RUPTURE",
-      "title": "Alerte Rupture",
-      "message": "Attention, vous allez manquer de Sucre dans 2 jours selon vos ventes récentes et autres.",
-      "severity": "HIGH",
-      "action": "Commander Sucre"
-    },
-    {
-      "type": "IMPAYE",
-      "title": "Alerte Impayés",
-      "message": "Mamadou a dépassé son plafond de crédit de 15 000 F CFA.",
-      "severity": "CRITICAL",
-      "action": "Relancer Mamadou"
+      "type": "RUPTURE | IMPAYE | MARGE",
+      "title": "Titre court",
+      "message": "Constats chiffrés exacts",
+      "severity": "HIGH | CRITICAL | MEDIUM",
+      "action": "Action immédiate"
     }
   ],
   "topProducts": [
-    { "name": "Riz 25kg", "margin": 3000, "note": "Meilleure marge unitaire" },
-    { "name": "Lait", "margin": 150, "note": "Forte rotation quotidienne" },
-    { "name": "Huile 1L", "margin": 200, "note": "Indispensable cuisine" }
+    { "name": "Nom réel du produit", "margin": 0, "note": "Pourquoi ce produit est stratégique" }
   ],
   "reinvestmentSuggestion": {
-    "title": "Opportunité du Vendredi",
-    "message": "Vos ventes de pain augmentent de 20% le vendredi, pensez à commander plus de beurre.",
-    "expectedImpact": "+15% de marge sur le petit-déjeuner"
+    "title": "Opportunité de croissance prioritaire",
+    "message": "Recommandation concrète adaptée au catalogue réel",
+    "expectedImpact": "Impact estimé réaliste"
   },
   "concreteActions": [
     {
-      "title": "Sécuriser les créances clients critiques",
-      "description": "Exiger au moins 50% d'acompte sur tout nouveau crédit pour Mamadou et geler les nouveaux crédits non urgents.",
-      "estimatedGain": "+45 000 F CFA de trésorerie"
+      "title": "Action prioritaire #1",
+      "description": "Plan d'exécution précis basé sur les données réelles",
+      "estimatedGain": "Gain estimé en F CFA ou %"
     },
     {
-      "title": "Réapprovisionner le Sucre et les conserves avant le week-end",
-      "description": "Le sucre s'épuise vite et la tomate/sardine sont en rupture imminente. Réapprovisionner 2 cartons pour ne pas refuser de clients.",
-      "estimatedGain": "+25 000 F CFA de ventes préservées"
+      "title": "Action prioritaire #2",
+      "description": "Plan d'exécution précis",
+      "estimatedGain": "Gain estimé"
     },
     {
-      "title": "Pack Petit-Déjeuner matinal (Pain + Beurre/Lait)",
-      "description": "Capitaliser sur la hausse du vendredi en proposant du beurre frais et du lait en boîte aux acheteurs de pain.",
-      "estimatedGain": "+15% de panier moyen le matin"
+      "title": "Action prioritaire #3",
+      "description": "Plan d'exécution précis",
+      "estimatedGain": "Gain estimé"
     }
   ]
 }
-Réponds UNIQUEMENT avec un JSON valide, sans balises markdown additionnelles si possible.`;
+Réponds UNIQUEMENT avec un JSON valide.`;
 
           const geminiResult = await callGeminiWithRetry(ai, {
             contents: prompt,
             config: {
               responseMimeType: 'application/json',
+              temperature: 0.35,
+              maxOutputTokens: 2048,
             },
           });
 
@@ -8876,10 +8875,10 @@ Réponds UNIQUEMENT avec un JSON valide, sans balises markdown additionnelles si
     }
   });
 
-  // AI Financial Q&A Chatbot endpoint
+  // AI Financial Q&A Chatbot endpoint (avec mémoire multi-tours & vraies données métier)
   app.post('/api/ai/chat', async (req, res) => {
     try {
-      const { message = '', context = {} } = req.body;
+      const { message = '', history = [], context = {} } = req.body;
 
       if (!message || message.trim() === '') {
         return res.status(400).json({ error: 'Message requis' });
@@ -8889,19 +8888,62 @@ Réponds UNIQUEMENT avec un JSON valide, sans balises markdown additionnelles si
 
       if (ai) {
         try {
-          const systemInstruction = `Tu es l'Agent IA Gemini, conseiller financier et expert en gestion de boutique d'alimentation générale en Afrique de l'Ouest/Centrale (monnaie: Franc CFA / F CFA).
-Ton rôle est d'aider le boutiquier à maximiser ses bénéfices, gérer ses crédits clients (cahier de dettes), éviter les ruptures de stock, calculer ses vraies marges et négocier avec ses fournisseurs grossistes.
-Règles de communication :
-- Sois direct, chaleureux, bienveillant et pratique (termes simples, exemples concrets de boutique).
-- Tous les montants doivent être formulés en F CFA.
-- Structure tes réponses avec des puces courtes et des actions faciles à appliquer dès aujourd'hui.
-- Contexte boutique actuel : Total impayés = ${context.totalDebt || 108000} F CFA, Articles en rupture imminente = ${context.lowStockCount || 3}, Ventes du jour = ${context.todaySales || 45000} F CFA.`;
+          const topProdsText = Array.isArray(context.topProducts) && context.topProducts.length > 0
+            ? context.topProducts.slice(0, 6).map((p: any) => `${p.name} (prix ${p.price || 0} F CFA, stock ${p.stock ?? '?'})`).join(', ')
+            : 'Catalogue non transmis';
+          const lowStockText = Array.isArray(context.lowStockNames) && context.lowStockNames.length > 0
+            ? context.lowStockNames.slice(0, 6).join(', ')
+            : `${context.lowStockCount ?? 0} article(s)`;
+          const overdueText = Array.isArray(context.overdueCustomers) && context.overdueCustomers.length > 0
+            ? context.overdueCustomers.slice(0, 5).map((c: any) => `${c.name} (${c.totalDebt} F CFA)`).join(', ')
+            : 'Aucun client critique signalé';
+
+          const systemInstruction = `Tu es le Directeur Financier & Analyste de Gestion IA de NANASORE (Afrique de l'Ouest & Centrale, devise : Franc CFA / F CFA).
+Ton rôle est d'aider le dirigeant à prendre des décisions financières rigoureuses : marges nettes, trésorerie, recouvrement de créances, réapprovisionnement, tarification et rentabilité.
+
+RÈGLES DE RAISONNEMENT :
+- Réponds directement et avec précision à la question posée en utilisant l'historique complet de la conversation (ne perds jamais le fil si l'utilisateur dit "oui", "explique le point 2", "et si je fais...").
+- Base-toi EXCLUSIVEMENT sur les données réelles ci-dessous. N'invente jamais de produits fictifs (ne parle pas de sucre, de riz ou d'un client imaginaire s'ils ne figurent pas dans les données).
+- Formule tous les calculs clairement en F CFA avec des puces concrètes et actionnables.
+
+DONNÉES RÉELLES EN DIRECT :
+- Références en stock : ${context.inventoryCount ?? 0}
+- Articles en stock critique (< 5) : ${lowStockText}
+- Principaux produits : ${topProdsText}
+- Ventes du jour : ${context.todaySales ?? 0} F CFA (${context.totalSalesCount ?? 0} ventes enregistrées)
+- Total impayés clients : ${context.totalDebt ?? 0} F CFA | Clients à surveiller : ${overdueText}
+- Pertes / casses déclarées : ${context.lossesCount ?? 0}`;
+
+          const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+          const recentHistory = Array.isArray(history) ? history.slice(-16) : [];
+          for (const h of recentHistory) {
+            const text = String(h?.text || h?.content || '').trim();
+            if (!text) continue;
+            const role: 'user' | 'model' = h?.sender === 'user' || h?.role === 'user' ? 'user' : 'model';
+            if (contents.length === 0 && role === 'model') continue;
+            if (contents.length > 0 && contents[contents.length - 1].role === role) {
+              contents[contents.length - 1].parts[0].text += `\n${text}`;
+            } else {
+              contents.push({ role, parts: [{ text }] });
+            }
+          }
+
+          const trimmedMessage = message.trim();
+          const lastTurn = contents[contents.length - 1];
+          if (!lastTurn || lastTurn.role !== 'user' || lastTurn.parts[0].text.trim() !== trimmedMessage) {
+            if (lastTurn && lastTurn.role === 'user') {
+              lastTurn.parts[0].text += `\n${trimmedMessage}`;
+            } else {
+              contents.push({ role: 'user', parts: [{ text: trimmedMessage }] });
+            }
+          }
 
           const geminiResult = await callGeminiWithRetry(ai, {
-            contents: message,
+            contents,
             config: {
               systemInstruction,
-              temperature: 0.7,
+              temperature: 0.45,
+              maxOutputTokens: 2048,
             },
           });
 
@@ -8909,11 +8951,11 @@ Règles de communication :
             return res.json({
               success: true,
               source: geminiResult.modelUsed,
-              reply: geminiResult.text,
+              reply: geminiResult.text.trim(),
             });
           }
-        } catch {
-          // Fallback to local financial engine below
+        } catch (chatErr: any) {
+          console.warn('[/api/ai/chat] Gemini fallback:', chatErr?.message || chatErr);
         }
       }
 
@@ -8989,11 +9031,17 @@ Avez-vous votre pièce d'identité sous la main pour finaliser la Partie 1 en 2 
 2. **Négociez un délai de paiement de 7 jours** : Si vous réglez vos grossistes après avoir encaissé le cash de vos clients du week-end, vous travaillez avec la trésorerie du fournisseur !
 3. **Surveillez les dates de péremption** dès la réception du carton pour ne jamais accepter un lot proche de l'expiration.`;
       } else {
-        reply = `**✨ Analyse financière de votre boutique par Gemini :**
+        const debtVal = Number(context.totalDebt || 0);
+        const lowCount = Number(context.lowStockCount || 0);
+        const lowNames = Array.isArray(context.lowStockNames) && context.lowStockNames.length > 0
+          ? context.lowStockNames.join(', ')
+          : `${lowCount} référence(s)`;
+        const salesVal = Number(context.todaySales || 0);
+        reply = `**📊 Synthèse financière basée sur vos données actuelles :**
 
-- **Priorité 1 (Liquidités)** : Vous avez plus de 100 000 F CFA de dettes dans votre carnet. Récupérer un quart de cette somme (25 000 F CFA) vous donne le cash nécessaire pour réapprovisionner le Sucre et les conserves sans toucher à votre réserve personnelle.
-- **Priorité 2 (Anti-Rupture)** : Le Sucre et les produits à moins de 5 unités (Tomate, Sardines, Spaghetti) doivent être commandés d'urgence pour ne pas perdre vos clients au profit de la boutique voisine.
-- **Priorité 3 (Opportunité)** : Développez les ventes associées (Pain + Beurre/Lait) le vendredi matin pour booster la marge moyenne par client.`;
+- **Trésorerie & Créances** : Total d'impayés clients = **${debtVal.toLocaleString('fr-FR')} F CFA**. ${debtVal > 0 ? `Priorisez le recouvrement d'au moins 30 % (${Math.round(debtVal * 0.3).toLocaleString('fr-FR')} F CFA) pour renforcer votre cash disponible.` : `Aucun impayé critique signalé — votre trésorerie est saine.`}
+- **Stocks critiques** : ${lowCount > 0 ? `**${lowNames}** sont sous le seuil de sécurité (< 5 unités). Planifiez leur réapprovisionnement en priorité.` : `Aucune rupture critique détectée sur vos ${context.inventoryCount ?? 0} références.`}
+- **Activité du jour** : **${salesVal.toLocaleString('fr-FR')} F CFA** enregistrés (${context.totalSalesCount ?? 0} ventes). Précisez votre objectif (marge, prix, recouvrement ou stock) pour un calcul détaillé.`;
       }
 
       res.json({

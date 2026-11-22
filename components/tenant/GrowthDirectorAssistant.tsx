@@ -41,6 +41,10 @@ export interface GrowthDirectorAssistantProps {
   isNewUser?: boolean;
   salesCount?: number;
   productsCount?: number;
+  todaySales?: number;
+  totalDebt?: number;
+  lowStockCount?: number;
+  topProducts?: Array<{ name: string; price?: number; stock?: number }>;
   currentPlan?: string;
   isFloating?: boolean;
   onClose?: () => void;
@@ -69,6 +73,10 @@ export function GrowthDirectorAssistant({
   isNewUser = true,
   salesCount = 0,
   productsCount = 0,
+  todaySales = 0,
+  totalDebt = 0,
+  lowStockCount = 0,
+  topProducts = [],
   currentPlan = 'Starter',
   isFloating = false,
   onClose,
@@ -82,8 +90,8 @@ export function GrowthDirectorAssistant({
     if (isNewUser) {
       return `${greeting} C'est un réel plaisir de vous accueillir sur Nanasore.\n\nPuis-je vous aider à choisir la formule idéale pour lancer ${storeName} en toute rentabilité, ou préférez-vous que je vous présente les outils qui correspondent le mieux à votre profil ?`;
     }
-    return `Heureux de vous retrouver, ${firstName || 'cher partenaire'} !\n\nLes indicateurs de ${storeName} sont au vert. Souhaitez-vous que nous optimisions vos marges avec une campagne ciblée sur le Studio E-mailing Pro, ou regardons-nous la gestion de vos stocks comptoir ?`;
-  }, [firstName, isNewUser, storeName]);
+    return `Heureux de vous retrouver, ${firstName || 'cher partenaire'} !\n\nJe suis connecté aux indicateurs de ${storeName} (${productsCount} produit(s), ${salesCount} vente(s)). Quelle décision stratégique, financière ou commerciale souhaitez-vous travailler ensemble aujourd'hui ?`;
+  }, [firstName, isNewUser, storeName, productsCount, salesCount]);
 
   const [messages, setMessages] = useState<Message[]>([
     { 
@@ -188,6 +196,10 @@ export function GrowthDirectorAssistant({
             isNewUser,
             salesCount,
             productsCount,
+            todaySales,
+            totalDebt,
+            lowStockCount,
+            topProducts,
             currentPlan
           }
         })

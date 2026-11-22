@@ -373,21 +373,33 @@ export async function handleHaggleOffer(
   activeGeminiCalls++;
 
   try {
-    // Exécution avec timeout strict < 2s (1800ms)
-    const geminiPromise = ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: systemPrompt,
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.7,
+    // Exécution avec timeout strict (gemini-2.5-flash puis fallback gemini-2.0-flash)
+    const callModel = async () => {
+      const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let lastErr: any = null;
+      for (const model of models) {
+        try {
+          const res = await ai.models.generateContent({
+            model,
+            contents: systemPrompt,
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.65,
+            }
+          });
+          if (res?.text) return res;
+        } catch (err) {
+          lastErr = err;
+        }
       }
-    });
+      throw lastErr || new Error('GEMINI_HAGGLE_FAILED');
+    };
 
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('TIMEOUT_GEMINI_EXCEEDED')), timeoutMs)
     );
 
-    const response = await Promise.race([geminiPromise, timeoutPromise]);
+    const response = await Promise.race([callModel(), timeoutPromise]);
     const rawText = response.text || '';
 
     // Décodage du JSON

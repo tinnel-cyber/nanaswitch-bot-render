@@ -72,6 +72,12 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>('');
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
+  const [aiAuditResult, setAiAuditResult] = useState<{
+    summary?: string;
+    concreteActions?: Array<{ title: string; description: string; estimatedGain?: string }>;
+    reinvestmentSuggestion?: { title: string; message: string; expectedImpact?: string };
+    source?: string;
+  } | null>(null);
   const [restockSuccessMessage, setRestockSuccessMessage] = useState<string | null>(null);
 
   // Financial Q&A state
@@ -79,9 +85,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
     {
       id: 'msg-init',
       sender: 'gemini',
-      text: `Bonjour cher boutiquier ! Je suis votre conseiller financier intelligent Gemini. 
-Je surveille en direct vos ventes, vos marges, vos stocks et votre cahier de dettes. 
-Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés, je vous réponds avec des calculs concrets en Francs CFA !`,
+      text: `Bonjour ! Je suis votre Directeur Financier IA Nanasore.\nJe suis connecté en direct à vos ventes, vos stocks, vos marges et vos créances clients. Posez-moi vos questions — je conserve le fil complet de notre discussion et je raisonne avec vos vrais chiffres en F CFA.`,
       timestamp: 'À l\'instant',
     },
   ]);
@@ -91,8 +95,15 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
 
   // Computed live metrics
   const totalDebt = customers.reduce((sum, c) => sum + (c.totalDebt || 0), 0);
-  const overdueCustomersCount = customers.filter((c) => c.status === 'OVERDUE' || c.totalDebt > 15000).length;
+  const overdueCustomers = customers.filter((c) => c.status === 'OVERDUE' || c.totalDebt > 15000);
+  const overdueCustomersCount = overdueCustomers.length;
   const criticalStockProducts = inventory.filter((p) => p.stock < 5);
+  const todaySalesTotal = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const topProductsSummary = inventory.slice(0, 8).map((p) => ({
+    name: p.name,
+    price: p.price || 0,
+    stock: p.stock ?? 0,
+  }));
   const sucreProduct = inventory.find((p) => p.id === 'sucre');
   const mamadouCustomer = customers.find((c) => c.shortName?.toLowerCase().includes('mamadou') || c.id === 'cust-mamadou');
 
@@ -114,17 +125,13 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
     setIsAnalyzing(true);
     setHasRunAnalysis(false);
 
-    // Simulation steps for great UX
-    setAnalysisStep('🔍 Scan de 147 transactions et marges brutes...');
-    await new Promise((r) => setTimeout(r, 650));
+    setAnalysisStep(`🔍 Audit de ${sales.length} ventes et ${inventory.length} références en stock...`);
+    await new Promise((r) => setTimeout(r, 400));
 
-    setAnalysisStep('📦 Analyse des vitesses de vente et alertes de rupture (Sucre, Tomate)...');
-    await new Promise((r) => setTimeout(r, 700));
+    setAnalysisStep(`📦 Vérification des ${criticalStockProducts.length} stock(s) critique(s) et ${formatCFA(totalDebt)} d'impayés...`);
+    await new Promise((r) => setTimeout(r, 400));
 
-    setAnalysisStep('📓 Audit des 108 000 F CFA d\'impayés dans le Cahier de Dettes...');
-    await new Promise((r) => setTimeout(r, 650));
-
-    setAnalysisStep('⚡ Synthèse des 3 actions à fort impact par Gemini 3.8 Flash...');
+    setAnalysisStep('⚡ Synthèse des 3 actions à fort impact par Gemini 2.5 Flash...');
 
     try {
       const response = await fetch('/api/ai/advisor', {
@@ -140,7 +147,16 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
 
       const contentType = response.headers.get("content-type") || "";
       if (response.ok && contentType.includes("application/json")) {
-        await response.json();
+        const json = await response.json();
+        const auditPayload = json?.analysis || json;
+        if (auditPayload && (auditPayload.summary || Array.isArray(auditPayload.concreteActions))) {
+          setAiAuditResult({
+            summary: auditPayload.summary,
+            concreteActions: Array.isArray(auditPayload.concreteActions) ? auditPayload.concreteActions : undefined,
+            reinvestmentSuggestion: auditPayload.reinvestmentSuggestion,
+            source: json?.source || 'gemini-2.5-flash',
+          });
+        }
       }
     } catch (e) {
       console.warn('Analysis network call:', e);
@@ -164,7 +180,8 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
       timestamp: 'À l\'instant',
     };
 
-    setChatMessages((prev) => [...prev, userMsg]);
+    const nextHistory = [...chatMessages, userMsg];
+    setChatMessages(nextHistory);
     if (!presetQuestion) setUserInput('');
     setIsWaitingAnswer(true);
 
@@ -174,10 +191,24 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: query,
+          history: nextHistory.slice(-16).map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            sender: m.sender,
+            text: m.text,
+          })),
           context: {
             totalDebt,
+            overdueCustomers: overdueCustomers.slice(0, 5).map((c) => ({
+              name: c.name || c.shortName,
+              totalDebt: c.totalDebt,
+            })),
+            inventoryCount: inventory.length,
             lowStockCount: criticalStockProducts.length,
-            todaySales: sales.reduce((sum, s) => sum + s.total, 0),
+            lowStockNames: criticalStockProducts.slice(0, 6).map((p) => `${p.name} (${p.stock})`),
+            todaySales: todaySalesTotal,
+            totalSalesCount: sales.length,
+            lossesCount: losses.length,
+            topProducts: topProductsSummary,
           },
         }),
       });
@@ -400,6 +431,10 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
               sellerMode="ecommerce"
               salesCount={sales?.length || 0}
               productsCount={inventory?.length || 0}
+              todaySales={todaySalesTotal}
+              totalDebt={totalDebt}
+              lowStockCount={criticalStockProducts.length}
+              topProducts={topProductsSummary}
               isNewUser={!sales?.length && !inventory?.length}
             />
           </div>
@@ -902,6 +937,51 @@ Posez-moi n'importe quelle question sur vos finances, vos marges ou vos impayés
             </div>
 
             {/* RÉSULTAT DE L'ANALYSE : LES 3 ACTIONS CONCRÈTES POUR AUGMENTER LE BÉNÉFICE */}
+            {aiAuditResult && (
+              <div className="space-y-3 mb-4">
+                <div className="p-4 rounded-2xl bg-indigo-950/60 border border-indigo-500/40 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-black text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Synthèse Directe de l&apos;Audit IA
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
+                      {aiAuditResult.source || 'gemini-2.5-flash'}
+                    </span>
+                  </div>
+                  {aiAuditResult.summary && (
+                    <p className="text-xs text-slate-200 leading-relaxed">{aiAuditResult.summary}</p>
+                  )}
+                </div>
+
+                {Array.isArray(aiAuditResult.concreteActions) && aiAuditResult.concreteActions.length > 0 && (
+                  <div className="space-y-2.5">
+                    {aiAuditResult.concreteActions.map((act, idx) => (
+                      <div
+                        key={`ai-act-${idx}`}
+                        className="rounded-xl bg-slate-900 border border-indigo-500/35 p-3.5 shadow-md flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-200 flex items-center justify-center font-black text-xs shrink-0">
+                              {idx + 1}
+                            </div>
+                            <h4 className="text-sm font-bold text-white">{act.title}</h4>
+                          </div>
+                          {act.estimatedGain && (
+                            <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
+                              {act.estimatedGain}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">{act.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-extrabold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
