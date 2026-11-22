@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   ShoppingBag, Search, X, ChevronRight, Check, Star, 
   ShieldCheck, Zap, MessageCircle, ArrowLeft, Laptop, 
@@ -7,7 +7,7 @@ import {
   Palette, ShoppingCart, Copy, GraduationCap, User, Flame, ArrowRight
 } from 'lucide-react';
 import { StudentAuthModal } from '../../components/lms/student/StudentAuthModal';
-import { getCurrentStudent, navigateToStudentDashboard } from '../../services/studentAuthService';
+import { getCurrentStudent, navigateToStudentDashboard, fetchStudentDashboardCloud } from '../../services/studentAuthService';
 import { StoreThemeProps } from '../../types/theme';
 import { StoreProductItem } from '../../components/storeBuilder/types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
@@ -313,13 +313,73 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
   // Le produit affiché en mode tunnel est soit l'état local, soit le selectedProduct transmis par les props
   const activeTunnel = tunnelProductState || selectedProduct;
 
-  // Si le catalogue vendeur est vide, on injecte les produits digitaux de référence pour garantir l'expérience de démonstration
+  // Synchronisation automatique des cours publiés du Campus Privé vers le Thème Digital Pro
+  const [publishedCampusProducts, setPublishedCampusProducts] = useState<StoreProductItem[]>([]);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const tenantId = (storeConfig as any)?.tenantId || (storeConfig as any)?.id || '';
+    const qs = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+    fetch(`/api/lms/courses/published${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json?.success || !Array.isArray(json.products)) return;
+        const mapped: StoreProductItem[] = json.products.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: Number(p.price) || 0,
+          category: p.category || 'Nos Formations',
+          badge: p.badge || 'Campus Privé • Accès à vie',
+          stock: 9999,
+          rating: 5.0,
+          reviewCount: 0,
+          salesCount: 0,
+          image: p.image || MASTERCLASS_COVER_SVG,
+          description: p.description || '',
+          metadata: p.metadata || {
+            course_id: p.courseId || String(p.id).replace(/^course_prod_/, ''),
+            enrollment_source: 'digital_pro',
+            is_campus_course: true
+          }
+        } as any));
+        setPublishedCampusProducts(mapped);
+      })
+      .catch(() => {});
+
+    fetchStudentDashboardCloud()
+      .then((cloud) => {
+        if (active && Array.isArray(cloud?.enrolledCourseIds)) {
+          setEnrolledCourseIds(cloud.enrolledCourseIds);
+        }
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, [(storeConfig as any)?.tenantId, (storeConfig as any)?.id]);
+
+  // Fusion temps réel : produits numériques de la boutique + cours publiés du Campus Privé
   const displayProducts = useMemo(() => {
-    if (allProducts && allProducts.length > 0) {
-      return filteredProducts.length > 0 ? filteredProducts : allProducts;
+    const base = allProducts && allProducts.length > 0
+      ? (filteredProducts.length > 0 ? filteredProducts : allProducts)
+      : [];
+
+    const seenIds = new Set(base.map((p) => p.id));
+    const extraCampus = publishedCampusProducts.filter((cp) => !seenIds.has(cp.id));
+    const merged = [...extraCampus, ...base];
+
+    if (merged.length > 0) {
+      return merged.map((prod) => {
+        const pAny = prod as any;
+        const cid = pAny?.metadata?.course_id || (String(prod.id).startsWith('course_prod_') ? String(prod.id).replace(/^course_prod_/, '') : '');
+        if (cid && enrolledCourseIds.includes(cid)) {
+          return { ...prod, badge: 'Déjà inscrit • Accès Campus' };
+        }
+        return prod;
+      });
     }
     return DEMO_DIGITAL_PRODUCTS;
-  }, [allProducts, filteredProducts]);
+  }, [allProducts, filteredProducts, publishedCampusProducts, enrolledCourseIds]);
 
   // Détermination intelligente du badge dynamique anti-débordement
   const getProductBadge = (prod: StoreProductItem): string => {
@@ -370,7 +430,32 @@ export const ThemeDigitalPro: React.FC<StoreThemeProps> = (props) => {
 
   const handleExecuteBuyNow = (prod: StoreProductItem, qty: number = 1) => {
     playTapBeep();
-    onBuyNow(prod, qty);
+    const pAny = prod as any;
+    const linkedCourseId =
+      pAny?.metadata?.course_id ||
+      (String(prod.id || '').startsWith('course_prod_') ? String(prod.id).replace(/^course_prod_/, '') : '');
+
+    // Si l'étudiant est déjà inscrit à cette formation Campus Privé, accès direct au Tableau de Bord Étudiant
+    if (linkedCourseId && enrolledCourseIds.includes(linkedCourseId)) {
+      navigateToStudentDashboard();
+      return;
+    }
+
+    // Sinon on enrichit le produit avec la source 'digital_pro' pour enrôlement Campus ou Double Accès Téléchargement
+    const enrichedProd: StoreProductItem = {
+      ...prod,
+      ...(linkedCourseId
+        ? {
+            metadata: {
+              ...(pAny?.metadata || {}),
+              course_id: linkedCourseId,
+              enrollment_source: 'digital_pro',
+              is_campus_course: true
+            }
+          }
+        : {})
+    } as any;
+    onBuyNow(enrichedProd, qty);
   };
 
   const handleFocusSearch = () => {

@@ -3570,6 +3570,77 @@ async function startServer() {
     });
   });
 
+  // GET /api/lms/courses/published — Liste les cours publiés du Campus Privé prêts pour le Thème Digital Pro
+  app.get('/api/lms/courses/published', async (req, res) => {
+    const tenantId = String(req.query?.tenantId || '').trim();
+    const byId = new Map<string, any>();
+
+    // 1. Cours stockés dans le registre Cloud serveur
+    for (const c of readJsonArrayFile(LMS_COURSES_FILE)) {
+      if (c.status !== 'published' && !c.is_published) continue;
+      if (tenantId && c.tenant_id && c.tenant_id !== tenantId) continue;
+      byId.set(c.id, c);
+    }
+
+    // 2. Fusion avec la table SQL `courses` si configurée
+    if (supabaseAdmin) {
+      try {
+        let query = supabaseAdmin
+          .from('courses')
+          .select('id, title, description, price, thumbnail_url, status, tenant_id, settings, updated_at')
+          .eq('status', 'published')
+          .order('updated_at', { ascending: false })
+          .limit(50);
+        if (tenantId) {
+          query = query.eq('tenant_id', tenantId);
+        }
+        const { data } = await query;
+        if (Array.isArray(data)) {
+          for (const row of data) {
+            if (!byId.has(row.id)) {
+              byId.set(row.id, {
+                id: row.id,
+                title: row.title,
+                description: row.description || '',
+                price: Number(row.price) || 0,
+                thumbnail_url: row.thumbnail_url || '',
+                category: row.settings?.category || 'Nos Formations',
+                tenant_id: row.tenant_id || '',
+                status: 'published',
+                storefrontProductId: `course_prod_${row.id}`,
+                updated_at: row.updated_at,
+              });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const storefrontProducts = Array.from(byId.values()).map((c: any) => ({
+      id: c.storefrontProductId || `course_prod_${c.id}`,
+      courseId: c.id,
+      name: c.title || 'Formation Campus Privé',
+      price: Math.max(0, Number(c.price) || 0),
+      category: c.category || 'Nos Formations',
+      badge: 'Campus Privé • Accès à vie',
+      stock: 9999,
+      isDigital: true,
+      image: c.thumbnail_url || '',
+      description: c.description || `Accès complet au Campus Privé : ${c.title}`,
+      metadata: {
+        course_id: c.id,
+        enrollment_source: 'digital_pro',
+        is_campus_course: true,
+      },
+    }));
+
+    return res.json({
+      success: true,
+      courses: Array.from(byId.values()),
+      products: storefrontProducts,
+    });
+  });
+
   // DELETE /api/lms/courses/:courseId — Supprime un cours du Campus ET son produit miroir en vitrine
   app.delete('/api/lms/courses/:courseId', async (req, res) => {
     const cleanId = String(req.params.courseId || '').trim();
