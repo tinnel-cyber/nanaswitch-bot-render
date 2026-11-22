@@ -1167,6 +1167,30 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {/* Activation Enregistreur d'Écran en direct (Cours & Live Shopping) */}
+                <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-slate-100">
+                  <div className="pr-2">
+                    <span className="block text-xs font-bold text-slate-700">
+                      Enregistreur d’écran en direct
+                    </span>
+                    <span className="block text-[10px] text-slate-400">
+                      Active la capture écran + bulle caméra &amp; signature pour Cours et Live Shopping (téléchargement local)
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={config.enableLiveScreenRecorder ?? true}
+                      onChange={(e) => {
+                        playTapBeep();
+                        updateField('enableLiveScreenRecorder', e.target.checked);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
+                  </label>
+                </div>
               </div>
             </div>
           )}

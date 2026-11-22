@@ -33,6 +33,7 @@ import {
   lowerHandInSession,
 } from '../../../../services/liveSessionService';
 import { uploadLiveResourceFile } from '../../../../services/liveResourceUploadService';
+import { LiveScreenRecorderControl } from '../../../../components/live/LiveScreenRecorderControl';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface LiveInstructorControlBarProps {
@@ -416,6 +417,11 @@ export const LiveInstructorControlBar: React.FC<LiveInstructorControlBarProps> =
               <span>Affiliés</span>
             </button>
           )}
+
+          <LiveScreenRecorderControl
+            variant="light"
+            contextLabel={roomMode === 'classroom' ? 'cours-direct' : 'live-shopping'}
+          />
 
           <button
             type="button"

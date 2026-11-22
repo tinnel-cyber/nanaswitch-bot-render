@@ -22,7 +22,6 @@ import { getThemeRoutePrefix } from '../../../utils/themeRoutePrefix';
 import { ensureAndPersistTenantSlug } from '../../../utils/slugService';
 import { buildPublicShopUrl } from '../../../config/domains';
 import { isSuperAdminLocally } from '../../../services/superAdminService';
-import { subscribeStudioMediaTransfer } from '../../../services/studioMediaBridgeService';
 
 interface StoreStudioPageProps {
   storeId?: string;
@@ -322,23 +321,6 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
       setDraftThemeConfig(newConfig);
     }
   }, []);
-
-  // Réception directe d'une vidéo montée depuis le Studio Montage Vidéo (100% local navigateur)
-  useEffect(() => {
-    return subscribeStudioMediaTransfer('THEME', (payload) => {
-      if (!payload?.url) return;
-      setDraftThemeConfig((prev) => {
-        setHistoryStack((h) => [...h.slice(-19), prev]);
-        setRedoStack([]);
-        return {
-          ...prev,
-          heroVideoUrl: payload.url
-        };
-      });
-      playValidationBeep();
-      showToast(`🎬 Vidéo montée « ${payload.title} » appliquée en vidéo Hero du thème !`);
-    });
-  }, [showToast]);
 
   const handleUndo = useCallback(() => {
     if (historyStack.length === 0) return;

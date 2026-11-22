@@ -10,6 +10,7 @@ import { LiveMiniPlayer } from './LiveMiniPlayer';
 import { NanasoreLiveCommerceOverlay } from '../../components/live/NanasoreLiveCommerceOverlay';
 import { HlsLivePlayer } from '../../components/live/HlsLivePlayer';
 import { WhipLiveBroadcaster } from '../../components/live/WhipLiveBroadcaster';
+import { LiveScreenRecorderControl } from '../../components/live/LiveScreenRecorderControl';
 import { buildStoreHlsUrl } from '../../config/liveStreamConfig';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 
@@ -27,6 +28,7 @@ interface LiveStageProps {
   onAddToCart?: (product: LiveProductItem) => void;
   liveId?: string;
   isHost?: boolean;
+  enableScreenRecorder?: boolean;
 }
 
 // Vidéo de démonstration Studio 4K fluide et optimisée (royalty-free CDN)
@@ -39,7 +41,8 @@ export const LiveStage: React.FC<LiveStageProps> = ({
   onOpenOffer,
   onAddToCart,
   liveId = 'live-stream-pro',
-  isHost = false
+  isHost = false,
+  enableScreenRecorder = true
 }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -204,8 +207,14 @@ export const LiveStage: React.FC<LiveStageProps> = ({
                 </div>
               </div>
 
-              {/* Droite : Contrôles Rapides (Studio Vendeur, Son & Plein Écran) */}
+              {/* Droite : Contrôles Rapides (Enregistreur Écran, Studio Vendeur, Son & Plein Écran) */}
               <div className="flex items-center gap-2">
+                {isHost && enableScreenRecorder && (
+                  <LiveScreenRecorderControl
+                    variant="dark"
+                    contextLabel="live-shopping"
+                  />
+                )}
                 {isHost && (
                   <button
                     type="button"

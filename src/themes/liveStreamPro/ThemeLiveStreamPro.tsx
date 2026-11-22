@@ -199,6 +199,8 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
             pinnedProduct={pinnedProduct}
             onOpenOffer={handleOpenOfferInSlideOut}
             onAddToCart={handleAddToCart}
+            isHost={Boolean(isStoreAdmin || isAdminPreview)}
+            enableScreenRecorder={customConfig?.enableLiveScreenRecorder ?? true}
           />
         </div>
 

@@ -2055,6 +2055,7 @@ export interface ThemeCustomizationConfig {
 
   // 4. Studio Live Shopping, Preuve Sociale & Pied de page
   liveStreamVideoUrl?: string; // Lien YouTube Live / Facebook / TikTok / MP4
+  enableLiveScreenRecorder?: boolean; // Active l'enregistreur d'écran (Cours & Live Shopping en direct)
   liveStreamStatus?: 'live' | 'upcoming' | 'replay';
   enableLiveSalesPopup?: boolean; // Bulle de preuve sociale ("Moussa vient d'acheter...")
   footerAboutText?: string;

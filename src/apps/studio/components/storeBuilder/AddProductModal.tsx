@@ -23,7 +23,6 @@ import {
 } from '../../../../services/omniFunnelService';
 import { buildPublicShopUrl } from '../../../../config/domains';
 import { ensureMandatoryProductSlug } from '../../../../utils/slugEngine';
-import { subscribeStudioMediaTransfer } from '../../../../services/studioMediaBridgeService';
 
 const MarketingAIAssistantModal = React.lazy(() => import('../../../../components/MarketingAIAssistantModal').then(m => ({ default: m.MarketingAIAssistantModal })));
 
@@ -132,22 +131,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [aiImagePrompt, setAiImagePrompt] = useState('');
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [aiImageError, setAiImageError] = useState<string | null>(null);
-  const [studioVideoBadge, setStudioVideoBadge] = useState<string | null>(null);
-
-  // Réception directe d'une vidéo montée depuis le Studio Montage Vidéo (100% local navigateur)
-  useEffect(() => {
-    if (!isOpen) return;
-    return subscribeStudioMediaTransfer('PRODUCT', (payload) => {
-      if (!payload?.url) return;
-      setRoutineVideoUrls([payload.url]);
-      setIsBoostersOpen(true);
-      setStudioVideoBadge(payload.title || 'Vidéo montée Studio');
-      playValidationBeep();
-      setTimeout(() => {
-        card3Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 250);
-    });
-  }, [isOpen]);
 
   // Chargement des tunnels du vendeur
   useEffect(() => {
@@ -1628,21 +1611,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
                   {/* Vidéos routine */}
                   <div className="space-y-1.5">
-                    {studioVideoBadge && (
-                      <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          Vidéo montée reçue du Studio : « {studioVideoBadge} »
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setStudioVideoBadge(null)}
-                          className="text-[10px] underline opacity-80 hover:opacity-100 cursor-pointer"
-                        >
-                          OK
-                        </button>
-                      </div>
-                    )}
                     <span className="text-[11px] font-semibold text-muted block">
                       URL de courte vidéo (Démo / Rituel Beauté) :
                     </span>
@@ -1653,13 +1621,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                       placeholder="https://... (Lien vidéo MP4 ou YouTube Short)"
                       className="w-full bg-input border border-theme rounded-xl px-3 py-1.5 text-xs text-body placeholder:text-muted"
                     />
-                    {routineVideoUrls[0]?.startsWith('blob:') && (
-                      <video
-                        src={routineVideoUrls[0]}
-                        controls
-                        className="w-full max-h-40 rounded-xl bg-black border border-theme mt-1.5"
-                      />
-                    )}
                   </div>
 
                   {/* Numéro de Lot Live */}
