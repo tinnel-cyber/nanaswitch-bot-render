@@ -30,7 +30,12 @@ import {
   Image as ImageIcon,
   Subtitles,
   Plus,
-  Trash2
+  Trash2,
+  Undo2,
+  Redo2,
+  VolumeX,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { encodeVideo, formatBytes, VideoEncodeResult } from '../../../services/videoEncoderService';
 import {
@@ -55,6 +60,17 @@ import {
   downloadSubtitleFile,
   autoTranscribeBlobToSubtitles
 } from '../../../services/subtitleStudioService';
+import {
+  TimelineClip,
+  getClipOutputDuration,
+  getTotalTimelineDuration,
+  splitClipAtTime,
+  deleteClipFromTimeline,
+  duplicateClipInTimeline,
+  moveClipInTimeline,
+  updateClipInTimeline,
+  exportTimelineToVideoBlob
+} from '../../../services/videoTimelineService';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../../utils/audio';
 
 export interface SocialVideoMontageStudioProps {
@@ -382,6 +398,170 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     }
   };
 
+  // =========================================================================
+  // TIMELINE DE MONTAGE PRO (CUT, SUPPRESSION, MULTI-CLIPS, VITESSE, MUTE, UNDO/REDO)
+  // =========================================================================
+  const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string>('');
+  const [historyPast, setHistoryPast] = useState<TimelineClip[][]>([]);
+  const [historyFuture, setHistoryFuture] = useState<TimelineClip[][]>([]);
+  const [timelineNotice, setTimelineNotice] = useState<string | null>(null);
+  const addClipInputRef = useRef<HTMLInputElement | null>(null);
+
+  const selectedClip = useMemo(
+    () => timelineClips.find(c => c.id === selectedClipId) || timelineClips[0] || null,
+    [timelineClips, selectedClipId]
+  );
+
+  const totalTimelineSec = useMemo(
+    () => getTotalTimelineDuration(timelineClips),
+    [timelineClips]
+  );
+
+  const pushTimelineState = (nextClips: TimelineClip[], nextSelectedId?: string, notice?: string) => {
+    setHistoryPast(prev => [...prev.slice(-24), timelineClips]);
+    setHistoryFuture([]);
+    setTimelineClips(nextClips);
+    if (nextSelectedId !== undefined) {
+      setSelectedClipId(nextSelectedId);
+    } else if (nextClips.length > 0 && !nextClips.some(c => c.id === selectedClipId)) {
+      setSelectedClipId(nextClips[0].id);
+    }
+    if (notice) {
+      setTimelineNotice(notice);
+      setTimeout(() => setTimelineNotice(prev => (prev === notice ? null : prev)), 3000);
+    }
+  };
+
+  const handleUndoTimeline = () => {
+    if (historyPast.length === 0) return;
+    playTapBeep();
+    const previous = historyPast[historyPast.length - 1];
+    setHistoryFuture(f => [timelineClips, ...f.slice(0, 24)]);
+    setHistoryPast(p => p.slice(0, -1));
+    setTimelineClips(previous);
+    if (previous[0]) setSelectedClipId(previous[0].id);
+  };
+
+  const handleRedoTimeline = () => {
+    if (historyFuture.length === 0) return;
+    playTapBeep();
+    const next = historyFuture[0];
+    setHistoryPast(p => [...p.slice(-24), timelineClips]);
+    setHistoryFuture(f => f.slice(1));
+    setTimelineClips(next);
+    if (next[0]) setSelectedClipId(next[0].id);
+  };
+
+  const handleSelectClip = (clip: TimelineClip) => {
+    playTapBeep();
+    setSelectedClipId(clip.id);
+    if (previewUrl !== clip.sourceUrl) {
+      setPreviewUrl(clip.sourceUrl);
+    }
+    const v = videoPreviewRef.current;
+    if (v) {
+      try {
+        v.playbackRate = clip.speed || 1;
+        v.muted = clip.muted;
+        v.currentTime = clip.startSec;
+      } catch {}
+    }
+  };
+
+  const handleSplitAtPlayhead = () => {
+    if (!selectedClip) return;
+    const playhead = videoPreviewRef.current?.currentTime ?? currentVideoTime;
+    const { clips: nextClips, rightClipId } = splitClipAtTime(timelineClips, selectedClip.id, playhead);
+    if (!rightClipId) {
+      setTimelineNotice('Placez la tête de lecture au milieu du clip (au moins 0.3s des bords) pour faire un Cut.');
+      playCancelSound();
+      return;
+    }
+    playValidationBeep();
+    pushTimelineState(nextClips, rightClipId, `✂️ Cut effectué à ${playhead.toFixed(1)}s — 2 segments créés.`);
+  };
+
+  const handleDeleteSelectedClip = () => {
+    if (!selectedClip) return;
+    if (timelineClips.length <= 1) {
+      setTimelineNotice('Impossible de supprimer le seul clip restant. Faites d\'abord un Cut pour supprimer un passage.');
+      playCancelSound();
+      return;
+    }
+    playTapBeep();
+    const nextClips = deleteClipFromTimeline(timelineClips, selectedClip.id);
+    pushTimelineState(nextClips, nextClips[0]?.id || '', `🗑️ Segment "${selectedClip.label}" supprimé.`);
+    if (nextClips[0]) {
+      setPreviewUrl(nextClips[0].sourceUrl);
+    }
+  };
+
+  const handleDuplicateSelectedClip = () => {
+    if (!selectedClip) return;
+    playTapBeep();
+    const { clips: nextClips, newClipId } = duplicateClipInTimeline(timelineClips, selectedClip.id);
+    if (newClipId) {
+      pushTimelineState(nextClips, newClipId, `📋 Clip dupliqué sur la timeline.`);
+    }
+  };
+
+  const handleMoveSelectedClip = (dir: 'left' | 'right') => {
+    if (!selectedClip) return;
+    playTapBeep();
+    const nextClips = moveClipInTimeline(timelineClips, selectedClip.id, dir);
+    pushTimelineState(nextClips, selectedClip.id);
+  };
+
+  const handleAddExtraClip = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    playValidationBeep();
+    const url = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {
+      const dur = Math.max(1, Number((probe.duration || 10).toFixed(2)));
+      const newId = `clip_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      const newClip: TimelineClip = {
+        id: newId,
+        label: `Clip ${timelineClips.length + 1}`,
+        sourceUrl: url,
+        sourceFile: file,
+        startSec: 0,
+        endSec: dur,
+        sourceDurationSec: dur,
+        speed: 1,
+        muted: false
+      };
+      pushTimelineState([...timelineClips, newClip], newId, `➕ "${file.name}" ajouté à la timeline (${dur}s).`);
+    };
+    probe.src = url;
+    e.target.value = '';
+  };
+
+  // Initialise automatiquement le Clip 1 quand une vidéo source arrive
+  useEffect(() => {
+    if (previewUrl && timelineClips.length === 0) {
+      const initDur = Math.max(1, videoDuration || 30);
+      const id = `clip_main_${Date.now()}`;
+      setTimelineClips([
+        {
+          id,
+          label: 'Clip 1',
+          sourceUrl: previewUrl,
+          sourceFile,
+          startSec: 0,
+          endSec: initDur,
+          sourceDurationSec: initDur,
+          speed: 1,
+          muted: false
+        }
+      ]);
+      setSelectedClipId(id);
+    }
+  }, [previewUrl, sourceFile, videoDuration, timelineClips.length]);
+
   const activeBackdropUrl = useMemo(() => {
     if (customBackdropUrl) return customBackdropUrl;
     const preset = STUDIO_BACKDROP_PRESETS.find(p => p.id === selectedBackdropId);
@@ -667,6 +847,67 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       }
     }
 
+    // Si la timeline a été montée (multi-clips, Cut, suppression, vitesse, mute ou trim In/Out) -> assemblage complet
+    const isTimelineEdited =
+      timelineClips.length > 1 ||
+      (timelineClips.length === 1 &&
+        (timelineClips[0].startSec > 0.1 ||
+          timelineClips[0].endSec < timelineClips[0].sourceDurationSec - 0.1 ||
+          timelineClips[0].speed !== 1 ||
+          timelineClips[0].muted));
+
+    if (isTimelineEdited && timelineClips.length > 0) {
+      try {
+        const assembled = await exportTimelineToVideoBlob(timelineClips, {
+          width: resolvedExportDimensions.width,
+          height: resolvedExportDimensions.height,
+          filterCss: activeFilterCss || undefined,
+          overlayText: combinedOverlayText || undefined,
+          overlayPosition: textPosition,
+          overlayColor: textColor,
+          subtitles: subtitleCues,
+          subtitleColor: resolvedSubtitleColor,
+          onProgress: (pct) => setEncodeProgress(pct)
+        });
+
+        const ext = exportContainer === 'mp4' ? 'mp4' : 'webm';
+        const outFile = new File(
+          [assembled.blob],
+          `nana-timeline-${socialFormat.replace(':', 'x')}-${exportResolution}-${Date.now()}.${ext}`,
+          { type: assembled.mimeType }
+        );
+        setEncodeProgress(100);
+        setEncodeResult({
+          file: outFile,
+          originalSizeBytes: inputBlob.size,
+          encodedSizeBytes: outFile.size,
+          savingsPercent: 0,
+          durationSec: assembled.durationSec,
+          width: resolvedExportDimensions.width,
+          height: resolvedExportDimensions.height,
+          elapsedMs: Math.round(assembled.durationSec * 1000),
+          engine: 'webcodecs-hardware'
+        });
+        playValidationBeep();
+
+        const dlUrl = URL.createObjectURL(outFile);
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = outFile.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(dlUrl), 15000);
+        setIsEncoding(false);
+        return;
+      } catch (tlErr: any) {
+        playCancelSound();
+        setEncodeError(tlErr?.message || 'Erreur lors de l\'assemblage de la timeline.');
+        setIsEncoding(false);
+        return;
+      }
+    }
+
     try {
       const overlayTextForExport =
         combinedOverlayText ||
@@ -938,11 +1179,31 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
                     controls
                     playsInline
                     onLoadedMetadata={(e) => {
-                      const d = Math.round(e.currentTarget.duration || 30);
-                      setVideoDuration(d);
-                      setMaxDurationSec(Math.min(d, SOCIAL_FORMATS[socialFormat].maxRecommendedSec));
+                      const d = Math.max(1, Number((e.currentTarget.duration || 30).toFixed(2)));
+                      setVideoDuration(Math.round(d));
+                      setMaxDurationSec(Math.min(Math.round(d), SOCIAL_FORMATS[socialFormat].maxRecommendedSec));
+                      setTimelineClips(prev =>
+                        prev.map(c =>
+                          c.sourceUrl === previewUrl && (c.sourceDurationSec === 30 || c.endSec > d)
+                            ? { ...c, sourceDurationSec: d, endSec: Math.min(c.endSec === 30 ? d : c.endSec, d) }
+                            : c
+                        )
+                      );
                     }}
-                    onTimeUpdate={(e) => setCurrentVideoTime(e.currentTarget.currentTime)}
+                    onTimeUpdate={(e) => {
+                      const t = e.currentTarget.currentTime;
+                      setCurrentVideoTime(t);
+                      if (selectedClip && !e.currentTarget.paused && t >= selectedClip.endSec - 0.05) {
+                        const idx = timelineClips.findIndex(c => c.id === selectedClip.id);
+                        const nextClip = idx >= 0 && idx + 1 < timelineClips.length ? timelineClips[idx + 1] : null;
+                        if (nextClip) {
+                          handleSelectClip(nextClip);
+                          setTimeout(() => videoPreviewRef.current?.play().catch(() => {}), 60);
+                        } else if (timelineClips.length > 1 || selectedClip.endSec < selectedClip.sourceDurationSec - 0.1) {
+                          e.currentTarget.pause();
+                        }
+                      }
+                    }}
                     style={{ filter: chromaConfig.mode === 'none' ? activeFilterCss : undefined }}
                     className={`w-full h-full object-cover ${chromaConfig.mode !== 'none' ? 'opacity-0' : ''}`}
                   />
@@ -1589,9 +1850,246 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
               </div>
             )}
 
-            {/* PANNEAU 1 : MONTAGE (TRIM, TEXTE COMMERCIAL, FILTRES) */}
+            {/* PANNEAU 1 : MONTAGE (TIMELINE PRO MULTI-CLIPS, CUT, SUPPRESSION, TRIM, TEXTE, FILTRES) */}
             {activePanel === 'EDIT' && (
               <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5">
+                {/* TIMELINE PRO MULTI-CLIPS */}
+                <div className="p-4 rounded-2xl bg-slate-950/95 border border-indigo-500/30 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Scissors className="w-4 h-4 text-emerald-400" />
+                      <h3 className="text-xs font-black text-white uppercase tracking-wider">
+                        Timeline Multi-Clips ({timelineClips.length} segment{timelineClips.length > 1 ? 's' : ''})
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-600/25 border border-indigo-500/40 text-[10px] font-mono font-black text-indigo-200">
+                        Total : {totalTimelineSec}s
+                      </span>
+                    </div>
+
+                    {/* Undo / Redo + Ajouter Clip */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleUndoTimeline}
+                        disabled={historyPast.length === 0}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-800 cursor-pointer"
+                        title="Annuler (Undo)"
+                      >
+                        <Undo2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRedoTimeline}
+                        disabled={historyFuture.length === 0}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-800 cursor-pointer"
+                        title="Rétablir (Redo)"
+                      >
+                        <Redo2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addClipInputRef.current?.click()}
+                        className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-black flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Clip</span>
+                      </button>
+                      <input
+                        ref={addClipInputRef}
+                        type="file"
+                        accept="video/*"
+                        onChange={handleAddExtraClip}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Barre d'actions principales : Cut, Supprimer, Dupliquer, Déplacer */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleSplitAtPlayhead}
+                      disabled={!selectedClip}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-[11px] font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      title="Couper le clip sélectionné à la position actuelle de lecture"
+                    >
+                      <Scissors className="w-3.5 h-3.5" />
+                      <span>Cut ici ({currentVideoTime.toFixed(1)}s)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedClip}
+                      disabled={!selectedClip || timelineClips.length <= 1}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 disabled:opacity-35 text-rose-300 border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      title="Supprimer le segment sélectionné"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Supprimer</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDuplicateSelectedClip}
+                      disabled={!selectedClip}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Dupliquer</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSelectedClip('left')}
+                      disabled={!selectedClip || timelineClips.findIndex(c => c.id === selectedClip.id) <= 0}
+                      className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
+                      title="Déplacer à gauche"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveSelectedClip('right')}
+                      disabled={!selectedClip || timelineClips.findIndex(c => c.id === selectedClip.id) >= timelineClips.length - 1}
+                      className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-35 text-slate-200 border border-slate-700 cursor-pointer"
+                      title="Déplacer à droite"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {timelineNotice && (
+                    <p className="text-[11px] text-emerald-300 font-semibold">{timelineNotice}</p>
+                  )}
+
+                  {/* Piste Visuelle Interactive des Segments */}
+                  {timelineClips.length > 0 ? (
+                    <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1.5">
+                      {timelineClips.map((clip, idx) => {
+                        const isSel = selectedClip?.id === clip.id;
+                        const outDur = getClipOutputDuration(clip);
+                        return (
+                          <button
+                            key={clip.id}
+                            type="button"
+                            onClick={() => handleSelectClip(clip)}
+                            style={{ minWidth: `${Math.max(105, Math.min(220, Math.round(outDur * 14)))}px` }}
+                            className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 shrink-0 ${
+                              isSel
+                                ? 'bg-indigo-600/30 border-indigo-400 shadow-lg shadow-indigo-950/50'
+                                : 'bg-slate-900 border-slate-800 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10.5px] font-black text-white truncate">
+                                #{idx + 1} {clip.label}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {clip.speed !== 1 && (
+                                  <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black">
+                                    {clip.speed}x
+                                  </span>
+                                )}
+                                {clip.muted && <VolumeX className="w-3 h-3 text-rose-400" />}
+                              </div>
+                            </div>
+                            <span className="text-[9.5px] font-mono text-slate-400">
+                              {clip.startSec.toFixed(1)}s → {clip.endSec.toFixed(1)}s ({outDur}s)
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl border border-dashed border-slate-800 text-center text-[11px] text-slate-400">
+                      Importez une vidéo pour activer la timeline multi-clips.
+                    </div>
+                  )}
+
+                  {/* Contrôles Fins du Clip Sélectionné : Trim In/Out, Vitesse & Muet */}
+                  {selectedClip && (
+                    <div className="pt-2.5 border-t border-slate-800/90 space-y-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Début (In)</span>
+                            <span className="font-mono font-bold text-indigo-300">{selectedClip.startSec.toFixed(1)}s</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={Math.max(0.5, selectedClip.endSec - 0.3)}
+                            step={0.1}
+                            value={selectedClip.startSec}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setTimelineClips(prev => updateClipInTimeline(prev, selectedClip.id, { startSec: v }));
+                              if (videoPreviewRef.current) videoPreviewRef.current.currentTime = v;
+                            }}
+                            className="w-full accent-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[10.5px]">
+                            <span className="text-slate-400">Fin (Out)</span>
+                            <span className="font-mono font-bold text-emerald-300">{selectedClip.endSec.toFixed(1)}s</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={selectedClip.startSec + 0.3}
+                            max={Math.max(selectedClip.startSec + 0.5, selectedClip.sourceDurationSec)}
+                            step={0.1}
+                            value={selectedClip.endSec}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setTimelineClips(prev => updateClipInTimeline(prev, selectedClip.id, { endSec: v }));
+                            }}
+                            className="w-full accent-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10.5px] text-slate-400 mr-1">Vitesse :</span>
+                          {[0.5, 0.75, 1, 1.25, 1.5, 2].map((spd) => (
+                            <button
+                              key={spd}
+                              type="button"
+                              onClick={() => {
+                                playTapBeep();
+                                pushTimelineState(updateClipInTimeline(timelineClips, selectedClip.id, { speed: spd }), selectedClip.id);
+                                if (videoPreviewRef.current) videoPreviewRef.current.playbackRate = spd;
+                              }}
+                              className={`px-2 py-0.5 rounded-lg text-[10.5px] font-bold cursor-pointer ${
+                                selectedClip.speed === spd
+                                  ? 'bg-amber-500 text-slate-950'
+                                  : 'bg-slate-900 text-slate-300 border border-slate-800 hover:text-white'
+                              }`}
+                            >
+                              {spd}x
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            const nextMuted = !selectedClip.muted;
+                            pushTimelineState(updateClipInTimeline(timelineClips, selectedClip.id, { muted: nextMuted }), selectedClip.id);
+                            if (videoPreviewRef.current) videoPreviewRef.current.muted = nextMuted;
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold flex items-center gap-1 cursor-pointer border ${
+                            selectedClip.muted
+                              ? 'bg-rose-600/20 text-rose-300 border-rose-500/40'
+                              : 'bg-slate-900 text-slate-200 border-slate-700'
+                          }`}
+                        >
+                          {selectedClip.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                          <span>{selectedClip.muted ? 'Muet' : 'Son Actif'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-300 flex items-center gap-1.5">

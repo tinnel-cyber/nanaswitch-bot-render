@@ -1,0 +1,334 @@
+/**
+ * @file videoTimelineService.ts
+ * @description Moteur de Timeline Multi-Clips Pro (Cut/Scinder, Suppression, Duplication, Réorganisation,
+ * Vitesse, Mute, Trim In/Out et Export vidéo assemblé 100 % local sans stockage Cloud).
+ */
+
+export interface TimelineClip {
+  id: string;
+  label: string;
+  sourceUrl: string;
+  sourceFile?: File | null;
+  startSec: number;
+  endSec: number;
+  sourceDurationSec: number;
+  speed: number; // 0.5, 0.75, 1, 1.25, 1.5, 2
+  muted: boolean;
+}
+
+export interface TimelineExportOptions {
+  width: number;
+  height: number;
+  filterCss?: string;
+  overlayText?: string;
+  overlayPosition?: 'top' | 'center' | 'bottom';
+  overlayColor?: string;
+  subtitles?: Array<{ startSec: number; endSec: number; text: string }>;
+  subtitleColor?: string;
+  onProgress?: (pct: number) => void;
+}
+
+export function getClipOutputDuration(clip: TimelineClip): number {
+  const raw = Math.max(0.1, (clip.endSec || 0) - (clip.startSec || 0));
+  const spd = Math.max(0.25, Number(clip.speed) || 1);
+  return Number((raw / spd).toFixed(2));
+}
+
+export function getTotalTimelineDuration(clips: TimelineClip[]): number {
+  return Number(
+    clips.reduce((sum, c) => sum + getClipOutputDuration(c), 0).toFixed(2)
+  );
+}
+
+/**
+ * Coupe (Cut / Scinde) un clip exactement à la position source `splitAtSourceSec`.
+ * Retourne la nouvelle liste de clips et l'ID du nouveau segment de droite.
+ */
+export function splitClipAtTime(
+  clips: TimelineClip[],
+  clipId: string,
+  splitAtSourceSec: number
+): { clips: TimelineClip[]; rightClipId: string | null } {
+  const idx = clips.findIndex(c => c.id === clipId);
+  if (idx < 0) return { clips, rightClipId: null };
+
+  const target = clips[idx];
+  const minMargin = 0.25;
+  const clampedSplit = Number(splitAtSourceSec.toFixed(2));
+
+  if (clampedSplit <= target.startSec + minMargin || clampedSplit >= target.endSec - minMargin) {
+    return { clips, rightClipId: null };
+  }
+
+  const leftClip: TimelineClip = {
+    ...target,
+    endSec: clampedSplit,
+    label: target.label.includes('(1)') ? target.label : `${target.label} (1)`
+  };
+
+  const rightClipId = `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const rightClip: TimelineClip = {
+    ...target,
+    id: rightClipId,
+    startSec: clampedSplit,
+    label: `${target.label.replace(/\s*\(\d+\)$/, '')} (2)`
+  };
+
+  const next = [...clips];
+  next.splice(idx, 1, leftClip, rightClip);
+  return { clips: next, rightClipId };
+}
+
+/**
+ * Supprime un segment de la timeline (au début, au milieu ou à la fin).
+ */
+export function deleteClipFromTimeline(clips: TimelineClip[], clipId: string): TimelineClip[] {
+  return clips.filter(c => c.id !== clipId);
+}
+
+/**
+ * Duplique un segment immédiatement après lui.
+ */
+export function duplicateClipInTimeline(
+  clips: TimelineClip[],
+  clipId: string
+): { clips: TimelineClip[]; newClipId: string | null } {
+  const idx = clips.findIndex(c => c.id === clipId);
+  if (idx < 0) return { clips, newClipId: null };
+
+  const src = clips[idx];
+  const newClipId = `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const copy: TimelineClip = {
+    ...src,
+    id: newClipId,
+    label: `${src.label} (Copie)`
+  };
+
+  const next = [...clips];
+  next.splice(idx + 1, 0, copy);
+  return { clips: next, newClipId };
+}
+
+/**
+ * Déplace un clip vers la gauche ou la droite sur la timeline.
+ */
+export function moveClipInTimeline(
+  clips: TimelineClip[],
+  clipId: string,
+  direction: 'left' | 'right'
+): TimelineClip[] {
+  const idx = clips.findIndex(c => c.id === clipId);
+  if (idx < 0) return clips;
+  const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= clips.length) return clips;
+
+  const next = [...clips];
+  const [moved] = next.splice(idx, 1);
+  next.splice(targetIdx, 0, moved);
+  return next;
+}
+
+/**
+ * Met à jour les propriétés d'un clip (Trim In/Out, vitesse, mute, nom).
+ */
+export function updateClipInTimeline(
+  clips: TimelineClip[],
+  clipId: string,
+  patch: Partial<Pick<TimelineClip, 'startSec' | 'endSec' | 'speed' | 'muted' | 'label'>>
+): TimelineClip[] {
+  return clips.map(c => {
+    if (c.id !== clipId) return c;
+    const nextStart = patch.startSec !== undefined ? Math.max(0, Math.min(patch.startSec, c.sourceDurationSec - 0.25)) : c.startSec;
+    const nextEnd = patch.endSec !== undefined ? Math.max(nextStart + 0.25, Math.min(patch.endSec, c.sourceDurationSec)) : Math.max(nextStart + 0.25, c.endSec);
+    return {
+      ...c,
+      ...patch,
+      startSec: Number(nextStart.toFixed(2)),
+      endSec: Number(nextEnd.toFixed(2))
+    };
+  });
+}
+
+/**
+ * Assemble et exporte tous les clips de la timeline dans l'ordre exact en un seul fichier vidéo local.
+ * Respecte : Cut/Suppression, Trim In/Out, Vitesse, Mute, Filtres, Texte commercial & Sous-titres synchronisés.
+ */
+export async function exportTimelineToVideoBlob(
+  clips: TimelineClip[],
+  options: TimelineExportOptions
+): Promise<{ blob: Blob; mimeType: string; durationSec: number }> {
+  if (!clips.length) {
+    throw new Error('La timeline est vide. Ajoutez au moins un clip vidéo.');
+  }
+  if (typeof document === 'undefined' || typeof MediaRecorder === 'undefined') {
+    throw new Error('Votre navigateur ne supporte pas l\'export multi-clips local.');
+  }
+
+  const width = options.width || 720;
+  const height = options.height || 1280;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Contexte graphique Canvas indisponible.');
+
+  const totalDuration = Math.max(0.5, getTotalTimelineDuration(clips));
+  const canvasStream = canvas.captureStream(24);
+
+  // Mixage audio propre via AudioContext pour conserver le son de chaque clip non-muté
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  const audioCtx = AudioCtx ? new AudioCtx() : null;
+  const audioDest = audioCtx ? audioCtx.createMediaStreamDestination() : null;
+
+  const combinedTracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
+  if (audioDest) {
+    combinedTracks.push(...audioDest.stream.getAudioTracks());
+  }
+  const combinedStream = new MediaStream(combinedTracks);
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+    ? 'video/webm;codecs=vp9,opus'
+    : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+      ? 'video/webm;codecs=vp8,opus'
+      : 'video/webm';
+
+  const recorder = new MediaRecorder(combinedStream, {
+    mimeType,
+    videoBitsPerSecond: width >= 1080 ? 3_500_000 : width >= 720 ? 2_000_000 : 1_100_000
+  });
+
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (ev) => {
+    if (ev.data.size > 0) chunks.push(ev.data);
+  };
+
+  const stopPromise = new Promise<Blob>((resolve, reject) => {
+    recorder.onerror = () => reject(new Error('Erreur lors de l\'encodage de la timeline.'));
+    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+  });
+
+  recorder.start(250);
+  let timelineElapsedSec = 0;
+
+  try {
+    for (const clip of clips) {
+      const videoEl = document.createElement('video');
+      videoEl.crossOrigin = 'anonymous';
+      videoEl.playsInline = true;
+      videoEl.muted = clip.muted;
+      videoEl.playbackRate = clip.speed || 1;
+      videoEl.src = clip.sourceUrl;
+
+      await new Promise<void>((resolve, reject) => {
+        videoEl.onloadedmetadata = () => resolve();
+        videoEl.onerror = () => reject(new Error(`Impossible de lire le clip "${clip.label}".`));
+      });
+
+      if (audioCtx && audioDest && !clip.muted) {
+        try {
+          const srcNode = audioCtx.createMediaElementSource(videoEl);
+          srcNode.connect(audioDest);
+        } catch {}
+      }
+
+      videoEl.currentTime = Math.max(0, clip.startSec);
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => {
+          videoEl.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        videoEl.addEventListener('seeked', onSeeked);
+      });
+
+      const clipOutDur = getClipOutputDuration(clip);
+      const clipStartWall = performance.now();
+      await videoEl.play().catch(() => {});
+
+      await new Promise<void>((resolve) => {
+        const drawStep = () => {
+          const wallSec = (performance.now() - clipStartWall) / 1000;
+          const currentTimelineSec = timelineElapsedSec + wallSec;
+
+          // Rendu vidéo proportionnel (aspect cover) + filtre
+          const vW = videoEl.videoWidth || width;
+          const vH = videoEl.videoHeight || height;
+          const vRatio = vW / vH;
+          const cRatio = width / height;
+          let sx = 0, sy = 0, sw = vW, sh = vH;
+          if (vRatio > cRatio) {
+            sw = vH * cRatio;
+            sx = (vW - sw) / 2;
+          } else {
+            sh = vW / cRatio;
+            sy = (vH - sh) / 2;
+          }
+
+          ctx.save();
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, width, height);
+          if (options.filterCss) ctx.filter = options.filterCss;
+          ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, width, height);
+          ctx.restore();
+
+          // Incrustation sous-titres synchronisés
+          const activeSub = options.subtitles?.find(
+            s => currentTimelineSec >= s.startSec && currentTimelineSec <= s.endSec
+          );
+          if (activeSub?.text) {
+            ctx.save();
+            const fontSize = Math.round(width * 0.055);
+            ctx.font = `900 ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.14));
+            ctx.strokeStyle = '#000000';
+            ctx.fillStyle = options.subtitleColor || '#FDE047';
+            const subY = height * 0.78;
+            ctx.strokeText(activeSub.text.toUpperCase(), width / 2, subY, width * 0.88);
+            ctx.fillText(activeSub.text.toUpperCase(), width / 2, subY, width * 0.88);
+            ctx.restore();
+          }
+
+          // Incrustation habillage commercial
+          if (options.overlayText) {
+            ctx.save();
+            const fontSize = Math.round(width * 0.042);
+            ctx.font = `800 ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            const yPos =
+              options.overlayPosition === 'top'
+                ? height * 0.1
+                : options.overlayPosition === 'center'
+                  ? height * 0.5
+                  : height * 0.9;
+            ctx.fillStyle = 'rgba(0,0,0,0.68)';
+            ctx.fillRect(width * 0.06, yPos - fontSize, width * 0.88, fontSize * 1.6);
+            ctx.fillStyle = options.overlayColor || '#FFFFFF';
+            ctx.fillText(options.overlayText, width / 2, yPos + fontSize * 0.15, width * 0.84);
+            ctx.restore();
+          }
+
+          options.onProgress?.(Math.min(98, Math.round((currentTimelineSec / totalDuration) * 100)));
+
+          if (videoEl.currentTime >= clip.endSec || videoEl.ended || wallSec >= clipOutDur + 0.15) {
+            videoEl.pause();
+            resolve();
+            return;
+          }
+          requestAnimationFrame(drawStep);
+        };
+        requestAnimationFrame(drawStep);
+      });
+
+      timelineElapsedSec += clipOutDur;
+    }
+  } finally {
+    if (recorder.state !== 'inactive') recorder.stop();
+    if (audioCtx) {
+      audioCtx.close().catch(() => {});
+    }
+  }
+
+  const blob = await stopPromise;
+  options.onProgress?.(100);
+  return { blob, mimeType, durationSec: totalDuration };
+}
