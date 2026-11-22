@@ -45,6 +45,7 @@ export interface ScreenRecorderOptions {
   cameraDeviceId?: string;
   micDeviceId?: string;
   facingMode?: 'user' | 'environment';
+  existingCamStream?: MediaStream | null;
   bubble: CamBubbleConfig;
   watermark?: BrandWatermarkConfig;
   previewCanvas?: HTMLCanvasElement | null;
@@ -228,6 +229,8 @@ export class ProScreenRecorderSession {
   private autoDownload: boolean;
   private cameraDeviceId?: string;
   private micDeviceId?: string;
+  private existingCamStream?: MediaStream | null;
+  private ownsCamStream = true;
   private onStopCb?: (result: RecordedMediaResult) => void;
   private onErrorCb?: (message: string) => void;
 
@@ -244,6 +247,7 @@ export class ProScreenRecorderSession {
     this.autoDownload = options.autoDownload !== false;
     this.cameraDeviceId = options.cameraDeviceId || undefined;
     this.micDeviceId = options.micDeviceId || undefined;
+    this.existingCamStream = options.existingCamStream || null;
     this.onStopCb = options.onStop;
     this.onErrorCb = options.onError;
 
@@ -271,6 +275,12 @@ export class ProScreenRecorderSession {
     this.bubbleConfig = { ...this.bubbleConfig, ...patch };
     if (this.bubbleConfig.enabled && !this.camStream && !this.stopped && this.mode === 'screen') {
       this.startCameraBubble().catch(() => {});
+    } else if (!this.bubbleConfig.enabled && this.camStream) {
+      if (this.ownsCamStream) {
+        this.camStream.getTracks().forEach((t) => t.stop());
+      }
+      this.camStream = null;
+      this.camVideo = null;
     }
   }
 
@@ -286,26 +296,77 @@ export class ProScreenRecorderSession {
     this.previewCanvas = canvas;
   }
 
+  private async waitVideoReady(vid: HTMLVideoElement): Promise<void> {
+    if (vid.readyState >= 2 && vid.videoWidth > 0) return;
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        vid.removeEventListener('loadedmetadata', finish);
+        vid.removeEventListener('canplay', finish);
+        resolve();
+      };
+      vid.addEventListener('loadedmetadata', finish, { once: true });
+      vid.addEventListener('canplay', finish, { once: true });
+      setTimeout(finish, 2500);
+    });
+  }
+
   private async startCameraBubble(facingMode: 'user' | 'environment' = 'user'): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) return;
     try {
-      const videoConstraint: MediaTrackConstraints = this.cameraDeviceId
-        ? { deviceId: { ideal: this.cameraDeviceId }, width: { ideal: 640 }, height: { ideal: 640 } }
-        : { facingMode, width: { ideal: 640 }, height: { ideal: 640 } };
+      let stream: MediaStream | null = null;
+      if (
+        this.existingCamStream &&
+        this.existingCamStream.getVideoTracks().some((t) => t.readyState === 'live')
+      ) {
+        stream = this.existingCamStream;
+        this.ownsCamStream = false;
+      } else {
+        this.ownsCamStream = true;
+        const attempts: Array<MediaTrackConstraints | boolean> = [];
+        if (this.cameraDeviceId) {
+          attempts.push({ deviceId: { ideal: this.cameraDeviceId }, width: { ideal: 640 }, height: { ideal: 640 } });
+        }
+        attempts.push({ facingMode, width: { ideal: 640 }, height: { ideal: 640 } });
+        attempts.push(true);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraint,
-        audio: false
-      });
+        let lastErr: any = null;
+        for (const videoConstraint of attempts) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: videoConstraint,
+              audio: false
+            });
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (!stream) {
+          throw lastErr || new Error('Caméra introuvable');
+        }
+      }
+
       this.camStream = stream;
       const vid = document.createElement('video');
       vid.srcObject = stream;
       vid.muted = true;
       vid.playsInline = true;
+      vid.autoplay = true;
       await vid.play().catch(() => {});
+      await this.waitVideoReady(vid);
       this.camVideo = vid;
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[ScreenRecorder] Caméra bulle indisponible:', err);
+      const msg =
+        err?.name === 'NotAllowedError'
+          ? 'Caméra bulle refusée par le navigateur — enregistrement de l’écran seul.'
+          : err?.name === 'NotReadableError'
+            ? 'Caméra déjà utilisée par une autre fenêtre — enregistrement de l’écran seul.'
+            : 'Caméra bulle indisponible — enregistrement de l’écran seul.';
+      this.onErrorCb?.(msg);
     }
   }
 
@@ -317,20 +378,33 @@ export class ProScreenRecorderSession {
           'La capture d\'écran système n\'est pas supportée sur ce navigateur mobile. Passez en mode « Caméra directe ».'
         );
       }
-      this.screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: {
-          frameRate: { ideal: this.fps, max: this.fps },
-          width: { ideal: Math.max(1280, this.canvas.width) },
-          height: { ideal: Math.max(720, this.canvas.height) }
-        },
-        audio: Boolean(options.includeSystemAudio)
-      });
+
+      // Activer la bulle caméra AVANT getDisplayMedia tant que le geste utilisateur est frais
+      if (this.bubbleConfig.enabled) {
+        await this.startCameraBubble(options.facingMode || 'user');
+      }
+
+      try {
+        this.screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
+          video: {
+            frameRate: { ideal: this.fps, max: this.fps },
+            width: { ideal: Math.max(1280, this.canvas.width) },
+            height: { ideal: Math.max(720, this.canvas.height) }
+          },
+          audio: Boolean(options.includeSystemAudio)
+        });
+      } catch (err) {
+        this.cleanup();
+        throw err;
+      }
 
       const screenVid = document.createElement('video');
       screenVid.srcObject = this.screenStream;
       screenVid.muted = true;
       screenVid.playsInline = true;
+      screenVid.autoplay = true;
       await screenVid.play().catch(() => {});
+      await this.waitVideoReady(screenVid);
       this.screenVideo = screenVid;
 
       const primaryTrack = this.screenStream?.getVideoTracks()[0];
@@ -338,10 +412,6 @@ export class ProScreenRecorderSession {
         primaryTrack.onended = () => {
           if (!this.stopped) this.stop();
         };
-      }
-
-      if (this.bubbleConfig.enabled) {
-        await this.startCameraBubble(options.facingMode || 'user');
       }
     } else {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -692,7 +762,9 @@ export class ProScreenRecorderSession {
       this.rafId = null;
     }
     this.screenStream?.getTracks().forEach((t) => t.stop());
-    this.camStream?.getTracks().forEach((t) => t.stop());
+    if (this.ownsCamStream) {
+      this.camStream?.getTracks().forEach((t) => t.stop());
+    }
     this.micStream?.getTracks().forEach((t) => t.stop());
     this.audioCtx?.close().catch(() => {});
     this.screenStream = null;
@@ -715,19 +787,41 @@ export async function captureOneShotScreenPng(
   if (!isScreenCaptureSupported()) {
     throw new Error('La capture d\'écran instantanée nécessite un navigateur sur ordinateur.');
   }
-  const stream: MediaStream = await (navigator.mediaDevices as any).getDisplayMedia({
-    video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
-    audio: false
-  });
 
   let camStream: MediaStream | null = null;
+  if (bubble?.enabled && navigator.mediaDevices?.getUserMedia) {
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
+        audio: false
+      });
+    } catch {
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch {
+        camStream = null;
+      }
+    }
+  }
+
+  let stream: MediaStream;
+  try {
+    stream = await (navigator.mediaDevices as any).getDisplayMedia({
+      video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false
+    });
+  } catch (err) {
+    camStream?.getTracks().forEach((t) => t.stop());
+    throw err;
+  }
+
   try {
     const vid = document.createElement('video');
     vid.srcObject = stream;
     vid.muted = true;
     vid.playsInline = true;
-    await vid.play();
-    await new Promise((r) => setTimeout(r, 220));
+    await vid.play().catch(() => {});
+    await new Promise((r) => setTimeout(r, 250));
 
     const W = vid.videoWidth || 1280;
     const H = vid.videoHeight || 720;
@@ -738,18 +832,14 @@ export async function captureOneShotScreenPng(
     if (!ctx) throw new Error('Canvas indisponible');
     ctx.drawImage(vid, 0, 0, W, H);
 
-    if (bubble?.enabled && navigator.mediaDevices?.getUserMedia) {
+    if (bubble?.enabled && camStream) {
       try {
-        camStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
-          audio: false
-        });
         const cv = document.createElement('video');
         cv.srcObject = camStream;
         cv.muted = true;
         cv.playsInline = true;
-        await cv.play();
-        await new Promise((r) => setTimeout(r, 180));
+        await cv.play().catch(() => {});
+        await new Promise((r) => setTimeout(r, 250));
 
         const size = Math.round((W * Math.max(12, Math.min(36, bubble.sizePct))) / 100);
         const margin = Math.round(W * 0.025);
