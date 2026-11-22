@@ -115,7 +115,6 @@ const VoiceSimulationArena = React.lazy(() => import('./components/lms/arena/Voi
 const CRMDashboard = React.lazy(() => import('./components/CRMDashboard').then(m => ({ default: m.CRMDashboard || m.default })));
 const AuthScreen = React.lazy(() => import('./components/auth/AuthScreen').then(m => ({ default: m.AuthScreen })));
 const UpsellModal = React.lazy(() => import('./components/quotas/UpsellModal').then(m => ({ default: m.UpsellModal })));
-const AiStudioView = React.lazy(() => import('./components/ai/AiStudioView').then(m => ({ default: m.AiStudioView })));
 const NanaGeneratorModal = React.lazy(() => import('./components/NanaGeneratorModal').then(m => ({ default: m.NanaGeneratorModal })));
 const KycVerificationModal = React.lazy(() => import('./components/storeBuilder/KycVerificationModal').then(m => ({ default: m.KycVerificationModal })));
 import { lazyWithRetry } from './utils/lazyWithRetry';

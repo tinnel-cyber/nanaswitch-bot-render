@@ -161,43 +161,14 @@ export async function generateAIMedia(params: {
   let textContent = '';
   let provider = 'nana-resilient-studio';
 
-  const officialLambdaUrl = (import.meta as any).env?.VITE_AWS_LAMBDA_URL ||
-    (import.meta as any).env?.LAMBDA_URL ||
-    'https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/';
-
-  const isLocal = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    Boolean((import.meta as any).env?.DEV)
-  );
-
-  // Helper pour appeler AWS Lambda : proxy /aws-lambda en local ou URL AWS directe sans preflight CORS
+  // Helper sécurisé : 100% via proxy serveur /api/ai/lambda (URL Lambda masquée côté serveur)
   const callLambdaService = async (payload: { type: string; prompt: string; [key: string]: any }): Promise<Response> => {
-    const payloadStr = JSON.stringify(payload);
-
-    if (isLocal) {
-      try {
-        const proxyRes = await fetch('/aws-lambda', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: payloadStr
-        });
-        if (proxyRes.ok || (proxyRes.status !== 404 && proxyRes.status !== 502)) {
-          return proxyRes;
-        }
-      } catch (proxyErr: any) {
-        console.warn('[AI STUDIO SERVICE] Proxy local /aws-lambda indisponible, bascule sur AWS direct :', proxyErr?.message);
-      }
-    }
-
-    return await fetch(officialLambdaUrl, {
+    return await fetch('/api/ai/lambda', {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=UTF-8'
+        'Content-Type': 'application/json'
       },
-      body: payloadStr
+      body: JSON.stringify(payload)
     });
   };
 

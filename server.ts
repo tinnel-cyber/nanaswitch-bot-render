@@ -7449,20 +7449,67 @@ async function startServer() {
   // Moteur de Live Streaming WebRTC WHIP / HLS & Relais RTMP MediaMTX (Northflank)
   attachLiveRelayRoutes(app);
 
-  // Proxy endpoint pour Nana-générateur vers backend AWS Lambda officiel (Replicate & HLS centralisé côté AWS Lambda)
+  // Proxy sécurisé pour Nana-générateur vers backend AWS Lambda officiel (0 SSRF, 0 stockage Cloud vidéo)
+  const ALLOWED_LAMBDA_TYPES = new Set(['text', 'image', 'video', 'status', 'copy', 'script', 'flow']);
   const forwardToAwsLambda = async (req: express.Request, res: express.Response) => {
     try {
-      const lambdaUrl = 
-        (req.headers['x-target-lambda-url'] as string) ||
-        process.env.AWS_LAMBDA_URL || 
-        process.env.LAMBDA_URL || 
+      // Sécurité anti-SSRF : jamais de lecture d'URL arbitraire depuis req.headers
+      const lambdaUrl =
+        process.env.AWS_LAMBDA_URL ||
+        process.env.LAMBDA_URL ||
         process.env.VITE_AWS_LAMBDA_URL ||
         'https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/';
+
+      const bodyObj = req.body && typeof req.body === 'object' ? { ...req.body } : {};
+      const reqType = String(bodyObj.type || '').toLowerCase().trim();
+      if (req.method === 'POST' && reqType && !ALLOWED_LAMBDA_TYPES.has(reqType)) {
+        return res.status(400).json({ error: `Type de requête IA non autorisé : ${reqType}` });
+      }
+
+      // Consommation sécurisée côté serveur d'un crédit Pay-As-You-Go studio-video-ia si demandé
+      if (req.method === 'POST' && reqType === 'video' && bodyObj.usePaygCredit) {
+        const ownerKey = String(bodyObj.universeId || bodyObj.userId || '').trim();
+        if (!ownerKey) {
+          return res.status(400).json({ error: 'Identifiant marchand requis pour utiliser un crédit Pay-As-You-Go.' });
+        }
+        const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
+        const entIdx = allEnts.findIndex(
+          (e: any) =>
+            (e.ownerKey === ownerKey || e.universeId === ownerKey || e.userId === ownerKey) &&
+            e.moduleId === 'studio-video-ia' &&
+            (Number(e.credits) || 0) > 0
+        );
+        if (entIdx < 0) {
+          return res.status(402).json({
+            code: 'NO_PAYG_VIDEO_CREDIT',
+            error: 'Aucun crédit Studio Vidéo IA actif. Activez le module dans NaNa Wallet Marchand.'
+          });
+        }
+        allEnts[entIdx] = {
+          ...allEnts[entIdx],
+          credits: Math.max(0, (Number(allEnts[entIdx].credits) || 0) - 1),
+          lastUsedAt: new Date().toISOString()
+        };
+        writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
+        if (supabaseAdmin) {
+          try {
+            await supabaseAdmin
+              .from('payg_entitlements')
+              .update({ credits: allEnts[entIdx].credits, updated_at: new Date().toISOString() })
+              .eq('id', `${allEnts[entIdx].ownerKey}_studio-video-ia`);
+          } catch {}
+        }
+      }
+
+      // Nettoyer les champs internes avant transfert vers AWS Lambda
+      delete bodyObj.usePaygCredit;
+      delete bodyObj.universeId;
+      delete bodyObj.userId;
 
       const response = await fetch(lambdaUrl, {
         method: req.method,
         headers: { 'Content-Type': 'application/json' },
-        body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : undefined
+        body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(bodyObj) : undefined
       });
 
       const contentType = response.headers.get('content-type') || '';
@@ -7475,7 +7522,7 @@ async function startServer() {
       }
     } catch (err: any) {
       console.error('[SERVER AWS LAMBDA PROXY ERROR]', err);
-      return res.status(500).json({ error: err.message || "Erreur proxy AWS Lambda côté serveur" });
+      return res.status(500).json({ error: err.message || "Erreur proxy IA côté serveur" });
     }
   };
 

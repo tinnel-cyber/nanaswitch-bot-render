@@ -69,7 +69,7 @@ export const VideoEngineModal: React.FC<VideoEngineModalProps> = ({
   isOpen,
   nodeId,
   nodeTitle,
-  courseId = 'telecom-fintech-masterclass',
+  courseId = '',
   initialConfig,
   onClose,
   onSave,

@@ -45,7 +45,7 @@ import {
   GENERATOR_CREDIT_COSTS, 
   DEFAULT_FREE_CREDITS 
 } from '../../../utils/firestoreService';
-import { SPaymentGateway } from '../../../components/payment/SPaymentGateway';
+import { UltimateCheckout } from '../../../services/nana-switch/payment/UltimateCheckout';
 import { FLOW_STUDIO_URL, openFlowInApp, showGoogleFlowToast } from '../../../utils/launchGoogleFlow';
 import { getResolvedGeminiApiKey } from '../../../services/legalAiService';
 import { 
@@ -60,64 +60,23 @@ export type GeneratorMode = 'text' | 'image' | 'video';
 export type VideoSubMode = 'flow' | 'direct';
 export type FlowStyleType = 'pub' | 'cours' | 'cinema';
 
-// URL backend AWS Lambda officielle (Replicate centralisé : Texte, Image, Vidéo)
-export const OFFICIAL_AWS_LAMBDA_URL = 'https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/';
-
-// Configurée via .env (VITE_AWS_LAMBDA_URL, VITE_LAMBDA_URL, LAMBDA_URL, AWS_LAMBDA_URL) ou URL officielle par défaut
-const rawConfiguredLambdaUrl: string =
-  (import.meta as any).env?.VITE_AWS_LAMBDA_URL ||
-  (import.meta as any).env?.VITE_LAMBDA_URL ||
-  (typeof process !== 'undefined' ? (process.env?.AWS_LAMBDA_URL || process.env?.LAMBDA_URL || '') : '') ||
-  '';
-export const LAMBDA_URL: string =
-  (rawConfiguredLambdaUrl.startsWith('https://') || rawConfiguredLambdaUrl.startsWith('http://'))
-    ? rawConfiguredLambdaUrl.trim()
-    : OFFICIAL_AWS_LAMBDA_URL;
+// Proxy serveur sécurisé unique (URL AWS Lambda jamais exposée côté client)
+export const OFFICIAL_AWS_LAMBDA_URL = '/api/ai/lambda';
+export const LAMBDA_URL: string = '/api/ai/lambda';
 
 /**
- * Appel sécurisé vers le backend AWS Lambda officiel (Replicate centralisé côté AWS) :
- * 1. En développement : Proxy Vite / Node.js sur '/aws-lambda' (0 restriction CORS)
- * 2. En direct : URL AWS Lambda avec Content-Type 'text/plain;charset=UTF-8' (évite le preflight CORS OPTIONS)
+ * Appel sécurisé 100% via le proxy serveur '/api/ai/lambda' (0 exposition d'URL Lambda, 0 SSRF, 0 CORS)
  */
 export async function callAwsLambdaUnified(
   payload: { type: string; prompt?: string; id?: string; [key: string]: any },
   signal?: AbortSignal
 ): Promise<Response> {
-  const isLocal = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    Boolean((import.meta as any).env?.DEV)
-  );
-
-  const payloadStr = JSON.stringify(payload);
-
-  if (isLocal) {
-    try {
-      const proxyRes = await fetch('/aws-lambda', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: payloadStr,
-        signal
-      });
-
-      if (proxyRes.ok || (proxyRes.status !== 404 && proxyRes.status !== 502)) {
-        return proxyRes;
-      }
-    } catch (proxyErr: any) {
-      console.warn('[STUDIO] Proxy local /aws-lambda indisponible, bascule sur AWS Lambda direct :', proxyErr?.message);
-    }
-  }
-
-  // Appel direct vers AWS Lambda (simple request CORS sans preflight)
-  const targetUrl = OFFICIAL_AWS_LAMBDA_URL;
-  return await fetch(targetUrl, {
+  return await fetch('/api/ai/lambda', {
     method: 'POST',
     headers: {
-      'Content-Type': 'text/plain;charset=UTF-8'
+      'Content-Type': 'application/json'
     },
-    body: payloadStr,
+    body: JSON.stringify(payload),
     signal
   });
 }
@@ -1398,10 +1357,10 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
         const videoPrompt = userPrompt;
         const LAMBDA_ENDPOINT = OFFICIAL_AWS_LAMBDA_URL;
 
-        // 1. Premier appel pour lancer la génération vidéo sur AWS Lambda (Replicate & S3)
-        const res = await fetch(LAMBDA_ENDPOINT, {
+        // 1. Premier appel sécurisé via proxy serveur /api/ai/lambda (aucun stockage Cloud vidéo)
+        const res = await fetch('/api/ai/lambda', {
           method: "POST",
-          headers: { "Content-Type": "text/plain;charset=UTF-8" },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ type: "video", prompt: videoPrompt })
         });
 
@@ -1421,11 +1380,11 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
           (data.status === "starting" || data.status === "processing") &&
           tries < 45
         ) {
-          setVideoLoadingMessage(`Création de la vidéo IA en cours sur Replicate... (${(tries + 1) * 4}s / ~1-2 min)`);
+          setVideoLoadingMessage(`Création de la vidéo IA en cours... (${(tries + 1) * 4}s / ~1-2 min)`);
           await new Promise((resolve) => setTimeout(resolve, 4000));
-          const pollRes = await fetch(LAMBDA_ENDPOINT, {
+          const pollRes = await fetch('/api/ai/lambda', {
             method: "POST",
-            headers: { "Content-Type": "text/plain;charset=UTF-8" },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: "status", id: data.id })
           });
           data = await pollRes.json();
@@ -2546,22 +2505,44 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Composant de paiement 100% Automatique S-Pay */}
+                  {/* Vrai UltimateCheckout unifié (Mobile Money / Carte + synchro Wallet NaNa Marchand) */}
                   <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-1 sm:p-2">
-                    <SPaymentGateway
+                    <UltimateCheckout
                       isModal={false}
-                      productType="digital"
+                      isOpen={true}
                       amount={selectedPack.price}
                       currency="FCFA"
-                      orderDescription={`Recharge ${selectedPack.credits} Crédits Studio`}
+                      orderDescription={`Recharge ${selectedPack.credits} Crédits Studio (${selectedPack.name})`}
                       orderId={`CREDIT-${effectiveUid.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}`}
+                      storeName={storeName || 'Studio Créatif NaNa'}
+                      merchantId={effectiveUid}
+                      defaultCustomerName={currentUser?.name || ''}
+                      defaultEmail={currentUser?.email || ''}
                       defaultPhone={currentUser?.phone || ''}
-                      onSuccess={async (details) => {
+                      onSuccess={async (details: any) => {
                         try {
-                          await addUserCredits(effectiveUid, selectedPack.credits, details.transactionId);
+                          const txRef = details?.transactionRef || details?.transactionId || details?.orderId || `UC-STUDIO-${Date.now()}`;
+                          await addUserCredits(effectiveUid, selectedPack.credits, txRef);
                           setCredits((prev) => prev + selectedPack.credits);
+
+                          // Synchronisation comptable avec le Wallet NaNa Marchand unifié
+                          try {
+                            await fetch('/api/merchant/wallet/recharge/confirm', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                userId: effectiveUid,
+                                amount: selectedPack.price,
+                                provider: details?.provider || details?.paymentMethod || 'UltimateCheckout',
+                                reference: txRef,
+                                phone: details?.phone || currentUser?.phone || ''
+                              })
+                            });
+                            window.dispatchEvent(new CustomEvent('nanasore_wallet_updated', { detail: { userId: effectiveUid } }));
+                          } catch {}
+
                           playCashChime();
-                          setRechargeSuccessToast(`✓ Félicitations ! +${selectedPack.credits} crédits ajoutés avec succès.`);
+                          setRechargeSuccessToast(`✓ Félicitations ! +${selectedPack.credits} crédits ajoutés via UltimateCheckout.`);
                           setTimeout(() => setRechargeSuccessToast(null), 5000);
                           setIsRechargeModalOpen(false);
                           setIsPaymentGatewayActive(false);
@@ -2572,6 +2553,10 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                         }
                       }}
                       onCancel={() => {
+                        playTapBeep();
+                        setIsPaymentGatewayActive(false);
+                      }}
+                      onClose={() => {
                         playTapBeep();
                         setIsPaymentGatewayActive(false);
                       }}
