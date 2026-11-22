@@ -299,35 +299,45 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [product, items, amount, orderDescription]);
 
-  // Détection souveraine d'abonnement / licence SaaS / recharge Pay-as-you-go (Mobile Money uniquement)
+  // Détection stricte d'abonnement / licence SaaS / recharge Pay-as-you-go (zéro faux positif sur prod_*, caisse_* ou articles physiques)
   const isSubscriptionProduct = useMemo(() => {
-    const id = (resolvedProduct.id || '').toLowerCase();
-    const name = (resolvedProduct.name || '').toLowerCase();
-    const desc = (resolvedProduct.description || '').toLowerCase();
+    if (enablePhysicalPosToken) return false;
+    const id = (resolvedProduct.id || '').toLowerCase().trim();
+    const name = (resolvedProduct.name || '').toLowerCase().trim();
+    const desc = (resolvedProduct.description || '').toLowerCase().trim();
+    const exactSubIds = new Set(['pro', 'business', 'enterprise', 'starter', 'elite', 'custom_modular', 'pay_as_you_go_recharge']);
     return (
-      id.includes('sub') ||
-      id.includes('plan') ||
-      id.includes('recharge') ||
-      id.includes('pay_as_you_go') ||
-      id.includes('nanasore_') ||
-      id.includes('caisse') ||
-      id.includes('elite') ||
-      id.includes('pro') ||
-      id.includes('business') ||
-      id.includes('enterprise') ||
-      id.includes('starter') ||
+      exactSubIds.has(id) ||
+      id.startsWith('sub_') ||
+      id.startsWith('plan_') ||
+      id.startsWith('nanasore_') ||
       name.includes('abonnement') ||
       name.includes('licence') ||
-      name.includes('plan ') ||
-      name.includes('recharge') ||
       name.includes('pay-as-you-go') ||
+      name.startsWith('plan ') ||
+      name.startsWith('recharge pay-as-you-go') ||
+      desc.includes('abonnement saas') ||
       desc.includes('licence') ||
-      desc.includes('abonnement') ||
-      desc.includes('recharge') ||
-      desc.includes('pay-as-you-go') ||
-      Boolean((resolvedProduct as any).itemType === 'subscription')
+      desc.includes('crédit pay-as-you-go') ||
+      (resolvedProduct as any).itemType === 'subscription' ||
+      (resolvedProduct as any).itemType === 'recharge'
     );
-  }, [resolvedProduct]);
+  }, [resolvedProduct, enablePhysicalPosToken]);
+
+  // Détection si l'article commandé est un produit numérique (déclaré AVANT isCashlessOnly pour éviter toute TDZ)
+  const isDigitalProduct = Boolean(
+    !enablePhysicalPosToken && (
+      (resolvedProduct as any)?.is_digital ||
+      (resolvedProduct as any)?.category?.toLowerCase?.().includes('digital') ||
+      (resolvedProduct as any)?.category?.toLowerCase?.().includes('numérique') ||
+      (resolvedProduct as any)?.category?.toLowerCase?.().includes('e-book') ||
+      (resolvedProduct as any)?.category?.toLowerCase?.().includes('pdf') ||
+      (resolvedProduct as any)?.category?.toLowerCase?.().includes('formation') ||
+      resolvedProduct.name?.toLowerCase?.().includes('.pdf') ||
+      resolvedProduct.name?.toLowerCase?.().includes('.zip') ||
+      resolvedProduct.name?.toLowerCase?.().includes('.mp4')
+    )
+  );
 
   // 3. Navigation d'étapes (Étape 1: Formulaire & Choix, Étape 2B: Mobile Money, Étape 3: Succès)
   const [currentStep, setCurrentStep] = useState<'STEP_1' | 'STEP_2B' | 'STEP_3'>(() => {
@@ -370,8 +380,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number; discountAmount: number } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
 
-  // Paiement 100% digital obligatoire pour abonnements, recharges et produits numériques (JAMAIS de paiement à la livraison)
-  const isCashlessOnly = Boolean(isSubscriptionProduct || isDigitalProduct);
+  // Paiement 100% digital obligatoire UNIQUEMENT pour abonnements, recharges et produits numériques (jamais pour produits physiques / Mini-Market)
+  const isCashlessOnly = Boolean(!enablePhysicalPosToken && (isSubscriptionProduct || isDigitalProduct));
 
   // Option Caisse Physique STRICTEMENT réservée au Mini-Market (jamais pour abonnements, recharges ou produits numériques)
   const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isCashlessOnly);
@@ -929,19 +939,6 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       setPaymentError('Vérification : ' + e.message);
     }
   };
-
-  // Détection si l'article commandé est un produit numérique
-  const isDigitalProduct = Boolean(
-    (resolvedProduct as any)?.is_digital ||
-    (resolvedProduct as any)?.category?.toLowerCase?.().includes('digital') ||
-    (resolvedProduct as any)?.category?.toLowerCase?.().includes('numérique') ||
-    (resolvedProduct as any)?.category?.toLowerCase?.().includes('e-book') ||
-    (resolvedProduct as any)?.category?.toLowerCase?.().includes('pdf') ||
-    (resolvedProduct as any)?.category?.toLowerCase?.().includes('formation') ||
-    resolvedProduct.name?.toLowerCase?.().includes('.pdf') ||
-    resolvedProduct.name?.toLowerCase?.().includes('.zip') ||
-    resolvedProduct.name?.toLowerCase?.().includes('.mp4')
-  );
 
   const digitalReceiptPayload: DigitalReceiptPayload = useMemo(() => ({
     orderId,
