@@ -65,11 +65,15 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
         urlStr.startsWith('/api/payouts') ||
         urlStr.startsWith('/api/admin/') ||
         urlStr.startsWith('/api/affiliate/') ||
+        urlStr.startsWith('/api/universes') ||
+        urlStr.startsWith('/api/kyc') ||
         urlStr.includes('/api/merchant/wallet') ||
         urlStr.includes('/api/merchant/subscription') ||
         urlStr.includes('/api/payouts') ||
         urlStr.includes('/api/admin/') ||
-        urlStr.includes('/api/affiliate/');
+        urlStr.includes('/api/affiliate/') ||
+        urlStr.includes('/api/universes') ||
+        urlStr.includes('/api/kyc');
       if (isProtectedFinanceRoute) {
         const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
         if (!headers.has('Authorization')) {

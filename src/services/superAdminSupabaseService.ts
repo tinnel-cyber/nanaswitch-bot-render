@@ -384,7 +384,28 @@ export async function updateKycStatusInSupabase(
       console.warn('[SUPABASE_SUPERADMIN] Notice update merchants status:', merchErr);
     }
 
-    // 1b. Mettre à jour la table public.universes (statut VERIFIED ou REJECTED pour cet univers)
+    // 1b. Mettre à jour la table public.app_registry et public.universes (statut VERIFIED ou REJECTED pour cet univers)
+    try {
+      const { data: regItem } = await supabase
+        .from('app_registry')
+        .select('config_json')
+        .eq('key', `universe_${userIdOrStoreId}`)
+        .maybeSingle();
+      if (regItem?.config_json) {
+        await supabase
+          .from('app_registry')
+          .update({
+            config_json: {
+              ...regItem.config_json,
+              status: isVerified ? 'VERIFIED' : 'REJECTED',
+              updated_at: now
+            },
+            updated_at: now
+          })
+          .eq('key', `universe_${userIdOrStoreId}`);
+      }
+    } catch {}
+
     try {
       await supabase
         .from('universes')

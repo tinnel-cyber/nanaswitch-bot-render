@@ -349,7 +349,6 @@ export function purgeLegacyMockStorage(): void {
       const raw = localStorage.getItem(k);
       if (raw) {
         if (
-          raw.includes('store-') ||
           raw.includes('yennenga') || 
           raw.includes('Yacouba') || 
           raw.includes('216150000') || 

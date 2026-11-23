@@ -69,7 +69,57 @@ export const KycValidationControlPlaneView: React.FC = () => {
     try {
       const mergedMap = new Map<string, KycSubmission>();
 
-      // 1. Lire Supabase table account_activations
+      // 1. Lire Supabase table account_activations + app_registry (Univers Marchand) + merchants
+      try {
+        const { data: regUniverses } = await supabase
+          .from('app_registry')
+          .select('*')
+          .eq('category', 'Univers Marchand')
+          .order('created_at', { ascending: false });
+
+        if (Array.isArray(regUniverses) && regUniverses.length > 0) {
+          regUniverses.forEach((item: any) => {
+            const conf = item.config_json || {};
+            const kd = conf.kyc || {};
+            const key = conf.id || (typeof item.key === 'string' ? item.key.replace(/^universe_/, '') : '') || item.id;
+            if (!key) return;
+            const rawStatus = String(conf.status || '').toUpperCase();
+            const mappedStatus: KycStatus =
+              rawStatus === 'VERIFIED' || rawStatus === 'ACTIVE' || rawStatus === 'APPROVED'
+                ? 'verified'
+                : rawStatus === 'REJECTED'
+                  ? 'rejected'
+                  : 'pending_approval';
+            mergedMap.set(key, {
+              id: `kyc-${key}`,
+              storeId: key,
+              userId: conf.owner_id || conf.userId || item.tenant_id || key,
+              storeName: conf.name || item.name || kd.companyName || kd.fullName || 'Univers Marchand',
+              managerFullName: kd.managerName || kd.fullName || conf.name || 'Gérant',
+              whatsappPhone: kd.phone || kd.whatsappPhone || '',
+              userEmail: conf.userEmail || conf.owner_email || kd.companyEmail || '',
+              activityDomain: conf.sector || kd.sector || kd.activityDomain || 'Commerce Général',
+              briefDescription: kd.activityDescription || kd.briefDescription || '',
+              activityDescription: kd.activityDescription || kd.briefDescription || '',
+              monetizationModel: 'commission',
+              pricingModel: 'commission',
+              documentType: 'CNIB',
+              documentPhotoUrl: kd.documentPhotoUrl || kd.cnibRectoUrl || kd.managerCnibRectoUrl || '',
+              documentVersoUrl: kd.documentVersoUrl || kd.cnibVersoUrl || kd.managerCnibVersoUrl || '',
+              managerPhotoUrl: kd.managerPhotoUrl || kd.faceSelfieUrl || kd.managerSelfieUrl || '',
+              businessDocumentUrl: kd.rccmDocPhotoUrl || kd.rccmDocUrl || '',
+              rccmDocPhotoUrl: kd.rccmDocPhotoUrl || kd.rccmDocUrl || '',
+              ifuDocPhotoUrl: kd.ifuDocPhotoUrl || kd.ifuDocUrl || '',
+              rccmNumber: kd.rccm || kd.rccmNumber || '',
+              ifuNumber: kd.ifuCompany || kd.ifuNumber || '',
+              type: conf.type === 'entreprise' || kd.rccm ? 'business' : 'individual',
+              status: mappedStatus,
+              submittedAt: conf.created_at || item.created_at || new Date().toISOString()
+            });
+          });
+        }
+      } catch {}
+
       try {
         const { data: activations } = await supabase
           .from('account_activations')

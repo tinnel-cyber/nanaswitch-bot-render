@@ -837,13 +837,49 @@ async function startServer() {
     }
   }
 
+  const stripBase64ForRegistry = (kycObj: any): Record<string, any> => {
+    if (!kycObj || typeof kycObj !== 'object') return {};
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(kycObj)) {
+      if (typeof v === 'string' && v.startsWith('data:') && v.length > 512) {
+        cleaned[k] = '[DOCUMENT_TRANSMIS]';
+      } else {
+        cleaned[k] = v;
+      }
+    }
+    return cleaned;
+  };
+
+  // 2.bis Gestion des Univers Marchands (Isolation Multi-Tenant stricte par JWT Supabase)
+  const resolveVerifiedUniverseOwner = async (req: any): Promise<{ userId: string; email: string; token: string } | null> => {
+    try {
+      const authHeader = String(req.headers?.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+      if (!token) return null;
+      const { supabase } = await import('./app/utils/supabase.server');
+      if (!supabase) return null;
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data?.user?.id) return null;
+      return {
+        userId: data.user.id,
+        email: String(data.user.email || '').toLowerCase(),
+        token
+      };
+    } catch {
+      return null;
+    }
+  };
+
   // 1. Soumission d'un dossier KYC / Univers Marchand
   app.post('/api/kyc/submit', async (req, res) => {
     try {
       const payload = req.body || {};
-      const storeId = payload.storeId || payload.id || `store_${Date.now()}`;
-      const userId = payload.userId || payload.uid || storeId;
+      const verifiedOwner = await resolveVerifiedUniverseOwner(req);
+      const storeId = String(payload.storeId || payload.id || `store_${Date.now()}`);
+      const userId = verifiedOwner?.userId || payload.userId || payload.uid || storeId;
+      const userEmail = verifiedOwner?.email || String(payload.userEmail || payload.email || payload.companyEmail || '').toLowerCase();
       const storeName = payload.storeName || payload.companyName || payload.appName || payload.fullName || 'Commerce Marchand';
+      const nowIso = new Date().toISOString();
 
       const submission = {
         id: payload.id || `kyc-sub-${storeId}-${Date.now()}`,
@@ -853,7 +889,7 @@ async function startServer() {
         managerFullName: payload.managerFullName || payload.fullName || payload.managerName || 'Gérant',
         managerPhotoUrl: payload.managerPhotoUrl || payload.photoCaptureUrl || payload.faceSelfieUrl || payload.managerSelfieUrl || '',
         whatsappPhone: payload.whatsappPhone || payload.phone || payload.managerPhone || '',
-        userEmail: payload.userEmail || payload.email || payload.companyEmail || '',
+        userEmail: userEmail || payload.userEmail || payload.email || payload.companyEmail || '',
         activityDomain: payload.activityDomain || payload.sector || payload.appellation || 'Commerce Général',
         briefDescription: payload.briefDescription || payload.activityDescription || payload.description || '',
         activityDescription: payload.activityDescription || payload.briefDescription || payload.description || '',
@@ -870,12 +906,12 @@ async function startServer() {
         type: payload.type || payload.accountType || (payload.rccmNumber || payload.rccm ? 'business' : 'individual'),
         accountType: payload.accountType || payload.type || 'entreprise',
         status: payload.status === 'verified' || payload.status === 'approved' ? 'verified' : 'pending_approval',
-        submittedAt: payload.submittedAt || new Date().toISOString(),
+        submittedAt: payload.submittedAt || nowIso,
         businessData: payload.businessData || {
           companyName: payload.companyName || storeName,
           rccmNumber: payload.rccmNumber || payload.rccm || '',
           ifuNumber: payload.ifuNumber || payload.ifuCompany || payload.ifu || '',
-          companyEmail: payload.companyEmail || payload.email || '',
+          companyEmail: payload.companyEmail || payload.email || userEmail || '',
           companyAddress: payload.companyAddress || payload.address || ''
         },
         individualData: payload.individualData || {
@@ -888,34 +924,85 @@ async function startServer() {
       const updated = [submission, ...existing.filter((s: any) => s.storeId !== storeId && s.id !== submission.id)];
       saveStoredKycSubmissions(updated);
 
-      // Synchronisation Supabase profiles (marquer kyc_status en attente)
+      // Garantir que l'univers associé existe immédiatement dans universes.json
+      const existingUnivs = getStoredUniverses();
+      const existingUniv = existingUnivs.find((u: any) => String(u.id || u.storeId) === storeId);
+      const univType = submission.type === 'business' || submission.accountType === 'entreprise' ? 'entreprise' : 'particulier';
+      const univStatus = existingUniv?.status === 'VERIFIED' || submission.status === 'verified' ? 'VERIFIED' : 'PENDING_KYC';
+      const universeRecord = {
+        ...(existingUniv || {}),
+        id: storeId,
+        storeId,
+        name: existingUniv?.name || storeName,
+        sector: existingUniv?.sector || submission.activityDomain || 'E-commerce & Services',
+        type: existingUniv?.type || univType,
+        status: univStatus,
+        owner_id: userId,
+        ownerId: userId,
+        userId,
+        owner_email: submission.userEmail || '',
+        userEmail: submission.userEmail || '',
+        balances: existingUniv?.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+        api_credits_balance: existingUniv?.api_credits_balance ?? 5000,
+        integration_mode: existingUniv?.integration_mode || 'AGREGATED',
+        kyc: {
+          ...stripBase64ForRegistry(existingUniv?.kyc || {}),
+          fullName: submission.managerFullName,
+          companyName: submission.businessData?.companyName,
+          companyEmail: submission.businessData?.companyEmail || submission.userEmail,
+          phone: submission.whatsappPhone,
+          sector: submission.activityDomain,
+          activityDomain: submission.activityDomain,
+          activityDescription: submission.activityDescription,
+          rccm: submission.rccmNumber,
+          ifuCompany: submission.ifuNumber
+        },
+        created_at: existingUniv?.created_at || existingUniv?.createdAt || nowIso,
+        updated_at: nowIso
+      };
+      saveStoredUniverses([universeRecord, ...existingUnivs.filter((u: any) => String(u.id || u.storeId) !== storeId)]);
+
+      // Synchronisation Supabase profiles + app_registry + merchants
       try {
-        const { supabase } = await import('./app/utils/supabase.server');
-        if (supabase && userId && !userId.startsWith('usr-demo')) {
+        const { supabase, getSupabaseClientForToken } = await import('./app/utils/supabase.server');
+        const dbClient = getSupabaseClientForToken(verifiedOwner?.token) || supabase;
+        if (dbClient && userId && !String(userId).startsWith('usr-demo')) {
           const isUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
           const targetEmail = submission.userEmail || submission.businessData?.companyEmail || (typeof userId === 'string' && userId.includes('@') ? userId : null);
 
           if (isUuid(userId)) {
-            await supabase.from('profiles').update({
+            await dbClient.from('profiles').update({
               kyc_status: submission.status === 'verified' ? 'full' : 'pending',
               pricing_model: submission.pricingModel,
-              updated_at: new Date().toISOString()
+              updated_at: nowIso
             }).eq('id', userId);
           }
           if (targetEmail) {
-            await supabase.from('profiles').update({
+            await dbClient.from('profiles').update({
               kyc_status: submission.status === 'verified' ? 'full' : 'pending',
               pricing_model: submission.pricingModel,
-              updated_at: new Date().toISOString()
+              updated_at: nowIso
             }).eq('email', targetEmail);
           }
+
+          // Persistance Cloud dans app_registry pour garantir la visibilité de la carte d'univers sur tous les appareils
+          try {
+            await dbClient.from('app_registry').upsert({
+              key: `universe_${storeId}`,
+              name: universeRecord.name,
+              category: 'Univers Marchand',
+              tenant_id: String(userId),
+              config_json: universeRecord,
+              updated_at: nowIso
+            }, { onConflict: 'key' });
+          } catch {}
         }
       } catch (supaErr) {
-        console.warn('[SERVER KYC] Supabase profiles sync notice:', supaErr);
+        console.warn('[SERVER KYC] Supabase sync notice:', supaErr);
       }
 
-      console.log(`[SERVER KYC] Nouveau dossier reçu et enregistré : ${storeName} (${storeId})`);
-      return res.json({ success: true, submission });
+      console.log(`[SERVER KYC] Nouveau dossier reçu et univers synchronisé : ${storeName} (${storeId})`);
+      return res.json({ success: true, submission, universe: universeRecord });
     } catch (err: any) {
       console.error('[SERVER KYC] Erreur soumission KYC:', err);
       return res.status(500).json({ success: false, error: err?.message || 'Erreur soumission' });
@@ -932,113 +1019,167 @@ async function startServer() {
     }
   });
 
-  // 2.bis Gestion des Univers Marchands (Isolation Multi-Tenant stricte par JWT Supabase)
-  const resolveVerifiedUniverseOwner = async (req: any): Promise<{ userId: string; email: string } | null> => {
-    try {
-      const authHeader = String(req.headers?.authorization || '');
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-      if (!token) return null;
-      const { supabase } = await import('./app/utils/supabase.server');
-      if (!supabase) return null;
-      const { data, error } = await supabase.auth.getUser(token);
-      if (error || !data?.user?.id) return null;
-      return {
-        userId: data.user.id,
-        email: String(data.user.email || '').toLowerCase()
-      };
-    } catch {
-      return null;
-    }
-  };
-
   app.get('/api/universes', async (req, res) => {
     try {
       const owner = await resolveVerifiedUniverseOwner(req);
       if (!owner) {
-        return res.status(401).json({ success: false, error: 'Authentification Supabase requise', universes: [] });
+        return res.status(401).json({ success: false, error: 'Authentification requise', universes: [] });
       }
 
       const { storeId } = req.query || {};
       const mergedMap = new Map<string, { row: any; ts: number }>();
 
+      const isVerifiedStatus = (s: any) => {
+        const up = String(s || '').toUpperCase();
+        return up === 'VERIFIED' || up === 'ACTIVE' || up === 'APPROVED';
+      };
+
       const addCandidate = (row: any) => {
-        if (!row || !row.id) return;
-        const id = String(row.id);
-        const ts = Date.parse(row.updated_at || row.updatedAt || row.created_at || row.createdAt || '') || 0;
+        if (!row || !(row.id || row.storeId)) return;
+        const id = String(row.id || row.storeId);
+        if (storeId && id !== String(storeId)) return;
+        const ts = Date.parse(row.updated_at || row.updatedAt || row.created_at || row.createdAt || row.submittedAt || '') || 0;
         const prev = mergedMap.get(id);
-        if (!prev || ts >= prev.ts) {
-          mergedMap.set(id, { row, ts });
+        if (!prev) {
+          mergedMap.set(id, { row: { ...row, id }, ts });
+        } else {
+          const bestStatus = isVerifiedStatus(prev.row.status) || isVerifiedStatus(row.status)
+            ? 'VERIFIED'
+            : (ts >= prev.ts ? (row.status || prev.row.status) : (prev.row.status || row.status));
+          const winner = ts >= prev.ts ? { ...prev.row, ...row, id, status: bestStatus } : { ...row, ...prev.row, id, status: bestStatus };
+          mergedMap.set(id, { row: winner, ts: Math.max(ts, prev.ts) });
         }
       };
 
-      // 1. Sources distantes Supabase : public.merchants ET public.universes filtrées strictement par propriétaire
+      // 1. Sources distantes Cloud : public.merchants, public.app_registry et public.universes filtrées par propriétaire
       try {
-        const { supabase } = await import('./app/utils/supabase.server');
-        if (supabase) {
-          let qMerch = supabase
-            .from('merchants')
-            .select('*')
-            .eq('owner_id', owner.userId)
-            .order('created_at', { ascending: false });
-          if (storeId) {
-            qMerch = qMerch.eq('id', String(storeId));
-          }
-          const { data: merchRows, error: merchErr } = await qMerch;
-          if (!merchErr && Array.isArray(merchRows)) {
-            merchRows.forEach(addCandidate);
-          } else if (merchErr) {
-            console.warn('[SERVER UNIVERSES] Supabase merchants read error:', merchErr.message);
-          }
-
-          let qUniv = supabase
-            .from('universes')
-            .select('*')
-            .eq('user_id', owner.userId)
-            .order('created_at', { ascending: false });
-          if (storeId) {
-            qUniv = qUniv.eq('id', String(storeId));
-          }
-          const { data: univRows, error: univErr } = await qUniv;
-          if (!univErr && Array.isArray(univRows)) {
-            univRows.forEach((row: any) => {
-              addCandidate({
-                ...row,
-                owner_id: row.user_id || owner.userId,
-                owner_email: row.settings?.owner_email || owner.email,
-                sector: row.sector || row.appellation || 'E-commerce & Services',
-                kyc: row.kyc_data || row.kyc || {},
-                kyc_limits: row.settings?.kyc_limits || row.kyc_limits,
-                api_credits_balance: row.settings?.api_credits_balance ?? row.api_credits_balance ?? 5000,
-                api_pricing_config: row.settings?.api_pricing_config || row.api_pricing_config,
-                monthly_usage: row.settings?.monthly_usage || row.monthly_usage
+        const { supabase, getSupabaseClientForToken } = await import('./app/utils/supabase.server');
+        const dbClient = getSupabaseClientForToken(owner.token) || supabase;
+        if (dbClient) {
+          try {
+            let qMerch = dbClient
+              .from('merchants')
+              .select('*')
+              .or(`owner_id.eq.${owner.userId},user_id.eq.${owner.userId}`)
+              .order('created_at', { ascending: false });
+            if (storeId) {
+              qMerch = qMerch.eq('id', String(storeId));
+            }
+            const { data: merchRows, error: merchErr } = await qMerch;
+            if (!merchErr && Array.isArray(merchRows)) {
+              merchRows.forEach((row: any) => {
+                addCandidate({
+                  ...row,
+                  name: row.name || row.business_name || 'Univers Marchand',
+                  owner_id: row.owner_id || row.user_id || owner.userId,
+                  kyc: row.kyc_data || row.kyc || {}
+                });
               });
-            });
-          } else if (univErr) {
-            console.warn('[SERVER UNIVERSES] Supabase universes read error:', univErr.message);
-          }
+            }
+          } catch {}
 
-          if (mergedMap.size > 0) {
-            return res.json({
-              success: true,
-              universes: Array.from(mergedMap.values()).map(v => v.row)
-            });
-          }
+          // Lecture depuis public.app_registry (catégorie 'Univers Marchand' scopée par tenant_id)
+          try {
+            const { data: regRows, error: regErr } = await dbClient
+              .from('app_registry')
+              .select('*')
+              .eq('category', 'Univers Marchand')
+              .eq('tenant_id', owner.userId);
+            if (!regErr && Array.isArray(regRows)) {
+              regRows.forEach((item: any) => {
+                const conf = item.config_json || {};
+                const uId = conf.id || (typeof item.key === 'string' ? item.key.replace(/^universe_/, '') : '') || item.id;
+                if (!uId) return;
+                addCandidate({
+                  ...conf,
+                  id: uId,
+                  owner_id: owner.userId,
+                  name: conf.name || item.name || 'Univers Marchand',
+                  sector: conf.sector || conf.appellation || 'E-commerce & Services',
+                  updated_at: conf.updated_at || item.updated_at || item.created_at
+                });
+              });
+            }
+          } catch {}
+
+          try {
+            let qUniv = dbClient
+              .from('universes')
+              .select('*')
+              .eq('user_id', owner.userId)
+              .order('created_at', { ascending: false });
+            if (storeId) {
+              qUniv = qUniv.eq('id', String(storeId));
+            }
+            const { data: univRows, error: univErr } = await qUniv;
+            if (!univErr && Array.isArray(univRows)) {
+              univRows.forEach((row: any) => {
+                addCandidate({
+                  ...row,
+                  owner_id: row.user_id || owner.userId,
+                  owner_email: row.settings?.owner_email || owner.email,
+                  sector: row.sector || row.appellation || 'E-commerce & Services',
+                  kyc: row.kyc_data || row.kyc || {},
+                  kyc_limits: row.settings?.kyc_limits || row.kyc_limits,
+                  api_credits_balance: row.settings?.api_credits_balance ?? row.api_credits_balance ?? 5000,
+                  api_pricing_config: row.settings?.api_pricing_config || row.api_pricing_config,
+                  monthly_usage: row.settings?.monthly_usage || row.monthly_usage
+                });
+              });
+            }
+          } catch {}
         }
       } catch (supaErr) {
-        console.warn('[SERVER UNIVERSES] Supabase read notice:', supaErr);
+        console.warn('[SERVER UNIVERSES] Cloud read notice:', supaErr);
       }
 
-      // 2. Repli strict sur stockage serveur local — JAMAIS non filtré (renvoie [] si 0 correspondance)
-      const univs = getStoredUniverses().filter((u: any) => {
+      // 2. Fusion avec le stockage serveur local (universes.json) filtré strictement par propriétaire
+      getStoredUniverses().forEach((u: any) => {
         const uOwner = String(u.owner_id || u.ownerId || u.userId || u.user_id || '');
         const uEmail = String(u.owner_email || u.ownerEmail || u.userEmail || u.email || u.kyc?.userEmail || '').toLowerCase();
         const matchesOwner = uOwner === owner.userId || (owner.email && uEmail === owner.email);
-        if (!matchesOwner) return false;
-        if (storeId) return u.id === storeId || u.storeId === storeId;
-        return true;
+        if (matchesOwner) {
+          addCandidate(u);
+        }
       });
 
-      return res.json({ success: true, universes: univs });
+      // 3. Reconstruction automatique depuis les dossiers KYC soumis (kyc_submissions.json) pour ce propriétaire
+      getStoredKycSubmissions().forEach((sub: any) => {
+        const sOwner = String(sub.userId || sub.owner_id || '');
+        const sEmail = String(sub.userEmail || sub.businessData?.companyEmail || '').toLowerCase();
+        const matchesOwner = sOwner === owner.userId || (owner.email && sEmail === owner.email);
+        if (!matchesOwner) return;
+        const sId = String(sub.storeId || sub.id || '');
+        if (!sId || sId.startsWith('kyc-sub-')) return;
+        addCandidate({
+          id: sId,
+          name: sub.storeName || sub.businessData?.companyName || sub.individualData?.fullName || 'Univers Marchand',
+          sector: sub.activityDomain || 'E-commerce & Services',
+          type: sub.type === 'business' || sub.accountType === 'entreprise' ? 'entreprise' : 'particulier',
+          status: sub.status === 'verified' || sub.status === 'approved' ? 'VERIFIED' : (sub.status === 'rejected' ? 'REJECTED' : 'PENDING_KYC'),
+          owner_id: owner.userId,
+          owner_email: owner.email,
+          balances: { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
+          kyc: {
+            fullName: sub.managerFullName,
+            companyName: sub.businessData?.companyName,
+            companyEmail: sub.businessData?.companyEmail || sub.userEmail,
+            phone: sub.whatsappPhone,
+            sector: sub.activityDomain,
+            activityDomain: sub.activityDomain,
+            activityDescription: sub.activityDescription || sub.briefDescription,
+            rccm: sub.rccmNumber,
+            ifuCompany: sub.ifuNumber
+          },
+          created_at: sub.submittedAt,
+          updated_at: sub.reviewedAt || sub.submittedAt
+        });
+      });
+
+      return res.json({
+        success: true,
+        universes: Array.from(mergedMap.values()).map(v => v.row)
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message, universes: [] });
     }
@@ -1048,7 +1189,7 @@ async function startServer() {
     try {
       const owner = await resolveVerifiedUniverseOwner(req);
       if (!owner) {
-        return res.status(401).json({ success: false, error: 'Authentification Supabase requise' });
+        return res.status(401).json({ success: false, error: 'Authentification requise' });
       }
 
       const body = req.body || {};
@@ -1066,21 +1207,20 @@ async function startServer() {
       // Vérifier si l'univers est déjà validé côté DB ; sinon forcer PENDING_KYC (impossible de s'auto-valider)
       let enforcedStatus: 'PENDING_KYC' | 'VERIFIED' | 'REJECTED' = 'PENDING_KYC';
       try {
-        const { supabase } = await import('./app/utils/supabase.server');
-        if (supabase) {
-          const { data: existingMerch } = await supabase
+        const { supabase, getSupabaseClientForToken } = await import('./app/utils/supabase.server');
+        const dbClient = getSupabaseClientForToken(owner.token) || supabase;
+        if (dbClient) {
+          const { data: existingMerch } = await dbClient
             .from('merchants')
             .select('status')
             .eq('id', universeId)
-            .eq('owner_id', owner.userId)
             .maybeSingle();
-          const { data: existingUniv } = await supabase
-            .from('universes')
-            .select('status')
-            .eq('id', universeId)
-            .eq('user_id', owner.userId)
+          const { data: existingReg } = await dbClient
+            .from('app_registry')
+            .select('config_json')
+            .eq('key', `universe_${universeId}`)
             .maybeSingle();
-          const dbStatus = String(existingMerch?.status || existingUniv?.status || '').toUpperCase();
+          const dbStatus = String(existingMerch?.status || existingReg?.config_json?.status || '').toUpperCase();
           if (dbStatus === 'VERIFIED' || dbStatus === 'ACTIVE' || dbStatus === 'APPROVED') {
             enforcedStatus = 'VERIFIED';
           } else if (dbStatus === 'REJECTED') {
@@ -1088,6 +1228,13 @@ async function startServer() {
           }
         }
       } catch {}
+
+      const localExisting = getStoredUniverses().find((u: any) => String(u.id) === universeId);
+      if (localExisting?.status === 'VERIFIED') {
+        enforcedStatus = 'VERIFIED';
+      }
+
+      const lightweightKyc = stripBase64ForRegistry(body.kyc || {});
 
       // Forcer l'appartenance au propriétaire vérifié par le JWT (impossible d'usurper un autre tenant)
       const universe = {
@@ -1100,6 +1247,7 @@ async function startServer() {
         userId: owner.userId,
         owner_email: owner.email || body.userEmail || body.ownerEmail || '',
         userEmail: owner.email || body.userEmail || body.ownerEmail || '',
+        kyc: lightweightKyc,
         updated_at: nowIso
       };
 
@@ -1107,15 +1255,32 @@ async function startServer() {
       const updated = [universe, ...existing.filter((u: any) => u.id !== universe.id)];
       saveStoredUniverses(updated);
 
-      // Persistance canonique dans public.merchants ET public.universes (service-role côté serveur)
+      // Persistance canonique dans public.merchants, public.app_registry ET public.universes
       try {
-        const { supabase } = await import('./app/utils/supabase.server');
-        if (supabase) {
-          const { error: merchErr } = await supabase.from('merchants').upsert({
+        const { supabase, getSupabaseClientForToken } = await import('./app/utils/supabase.server');
+        const dbClient = getSupabaseClientForToken(owner.token) || supabase;
+        if (dbClient) {
+          // 1. public.app_registry (toujours disponible et compatible multi-univers)
+          const { error: regErr } = await dbClient.from('app_registry').upsert({
+            key: `universe_${universeId}`,
+            name: rawName,
+            category: 'Univers Marchand',
+            tenant_id: owner.userId,
+            config_json: universe,
+            updated_at: nowIso
+          }, { onConflict: 'key' });
+          if (regErr) {
+            console.warn('[SERVER UNIVERSES] app_registry upsert error:', regErr.message);
+          }
+
+          // 2. public.merchants (inclut user_id et business_name pour compatibilité schéma historique + nouveau schéma)
+          const merchantPayload: Record<string, any> = {
             id: universeId,
+            user_id: owner.userId,
             owner_id: owner.userId,
             owner_email: universe.owner_email,
             name: rawName,
+            business_name: rawName,
             sector: universe.sector || 'E-commerce & Services',
             type: universe.type === 'particulier' ? 'particulier' : 'entreprise',
             status: enforcedStatus,
@@ -1124,7 +1289,7 @@ async function startServer() {
             balances: universe.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
             keys: universe.keys || {},
             webhook_config: universe.webhook_config || {},
-            kyc_data: universe.kyc || {},
+            kyc_data: lightweightKyc,
             kyc_limits: universe.kyc_limits || {},
             api_credits_balance: universe.api_credits_balance ?? 5000,
             api_pricing_config: universe.api_pricing_config || {},
@@ -1132,12 +1297,16 @@ async function startServer() {
             company_email: universe.kyc?.companyEmail || universe.owner_email || null,
             phone: universe.kyc?.phone || universe.kyc?.whatsappPhone || null,
             updated_at: nowIso
-          }, { onConflict: 'id' });
+          };
+          const { error: merchErr } = await dbClient.from('merchants').upsert(merchantPayload, { onConflict: 'id' });
           if (merchErr) {
-            console.warn('[SERVER UNIVERSES] Supabase merchants upsert error:', merchErr.message);
+            // Repli sans user_id si contrainte d'unicité sur user_id lors d'un 2e univers
+            const { user_id: _omitUserId, ...fallbackMerchPayload } = merchantPayload;
+            await dbClient.from('merchants').upsert(fallbackMerchPayload, { onConflict: 'id' });
           }
 
-          const { error: univErr } = await supabase.from('universes').upsert({
+          // 3. public.universes (tentative sur schéma v2, puis repli sur schéma v1 si colonnes absentes)
+          const { error: univErr } = await dbClient.from('universes').upsert({
             id: universeId,
             user_id: owner.userId,
             name: rawName,
@@ -1149,7 +1318,7 @@ async function startServer() {
             balances: universe.balances || { XOF: 0, USD: 0, XAF: 0, GNF: 0, GHS: 0 },
             keys: universe.keys || {},
             webhook_config: universe.webhook_config || { url: null, secret_key: '', is_active: false },
-            kyc_data: universe.kyc || {},
+            kyc_data: lightweightKyc,
             integration_mode: universe.integration_mode || 'AGREGATED',
             integration_config: universe.integration_config || {},
             settings: {
@@ -1163,11 +1332,11 @@ async function startServer() {
             updated_at: nowIso
           }, { onConflict: 'id' });
           if (univErr) {
-            console.warn('[SERVER UNIVERSES] Supabase universes upsert error:', univErr.message);
+            // Ignorer silencieusement si la table universes a l'ancien schéma storefront
           }
         }
       } catch (eMerch) {
-        console.warn('[SERVER UNIVERSES] Supabase upsert notice:', eMerch);
+        console.warn('[SERVER UNIVERSES] Cloud upsert notice:', eMerch);
       }
 
       console.log(`[SERVER UNIVERSES] Univers enregistré avec succès : ${universe.name} (${universe.id}) status=${enforcedStatus} owner=${owner.userId}`);
@@ -8324,7 +8493,30 @@ async function startServer() {
             console.warn('[SERVER KYC] Update merchants notice:', eMerch);
           }
 
-          // 1b. Mettre à jour public.universes (strictement ciblé par storeId)
+          // 1b. Mettre à jour public.universes et public.app_registry (strictement ciblé par storeId)
+          try {
+            if (storeId) {
+              const { data: regItem } = await supabase
+                .from('app_registry')
+                .select('config_json')
+                .eq('key', `universe_${storeId}`)
+                .maybeSingle();
+              if (regItem?.config_json) {
+                await supabase
+                  .from('app_registry')
+                  .update({
+                    config_json: {
+                      ...regItem.config_json,
+                      status: isApproved ? 'VERIFIED' : 'REJECTED',
+                      updated_at: nowIso
+                    },
+                    updated_at: nowIso
+                  })
+                  .eq('key', `universe_${storeId}`);
+              }
+            }
+          } catch {}
+
           try {
             if (storeId) {
               await supabase.from('universes').update({

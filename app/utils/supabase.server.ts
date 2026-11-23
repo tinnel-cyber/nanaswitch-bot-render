@@ -16,6 +16,34 @@ export function getSupabaseClient(): SupabaseClient {
 }
 
 /**
+ * Crée un client Supabase scopé avec le jeton JWT Bearer de l'utilisateur connecté
+ * afin que les politiques RLS PostgreSQL (auth.uid()) fonctionnent même sans clé service_role.
+ */
+export function getSupabaseClientForToken(token?: string): SupabaseClient {
+  const cleanToken = String(token || '').replace(/^Bearer\s+/i, '').trim();
+  const isServiceRole =
+    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY !== defaultAnonKey &&
+    !String(process.env.SUPABASE_SERVICE_ROLE_KEY).startsWith('sb_publishable_');
+
+  if (!cleanToken || isServiceRole) {
+    return supabase;
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${cleanToken}`,
+      },
+    },
+  });
+}
+
+/**
  * Client Supabase côté serveur robuste avec fallback automatique.
  */
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -24,4 +52,5 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     autoRefreshToken: false,
   },
 });
+
 

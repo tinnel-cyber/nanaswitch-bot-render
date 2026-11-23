@@ -540,24 +540,41 @@ export async function submitKycSubmission(submission: KycSubmission & { userId: 
     console.warn('[KYC SERVICE] API /api/kyc/submit notice:', apiErr);
   }
 
-  // 3. Sauvegarde dans le cache local
+  // 3. Sauvegarde dans le cache local (avec repli anti-QuotaExceededError et support multi-univers par storeId)
+  const makeLightweightKyc = (sub: KycSubmission): KycSubmission => ({
+    ...sub,
+    documentPhotoUrl: sub.documentPhotoUrl && sub.documentPhotoUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.documentPhotoUrl,
+    documentVersoUrl: sub.documentVersoUrl && sub.documentVersoUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.documentVersoUrl,
+    managerPhotoUrl: sub.managerPhotoUrl && sub.managerPhotoUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.managerPhotoUrl,
+    businessDocumentUrl: sub.businessDocumentUrl && sub.businessDocumentUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.businessDocumentUrl,
+    rccmDocPhotoUrl: sub.rccmDocPhotoUrl && sub.rccmDocPhotoUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.rccmDocPhotoUrl,
+    ifuDocPhotoUrl: sub.ifuDocPhotoUrl && sub.ifuDocPhotoUrl.length > 80000 ? '[DOCUMENT_TRANSMIS]' : sub.ifuDocPhotoUrl,
+  });
+
   try {
     const rawSubs = localStorage.getItem('nana_kyc_submissions');
     let allSubs: KycSubmission[] = rawSubs ? JSON.parse(rawSubs) : [];
-    allSubs = allSubs.filter(s => s.id !== submissionId && s.userId !== submission.userId);
+    allSubs = allSubs.filter(s => s.id !== submissionId && (!preparedData.storeId || s.storeId !== preparedData.storeId));
     allSubs.unshift(preparedData);
-    localStorage.setItem('nana_kyc_submissions', JSON.stringify(allSubs));
+    try {
+      localStorage.setItem('nana_kyc_submissions', JSON.stringify(allSubs));
+    } catch {
+      const lightSubs = allSubs.map(makeLightweightKyc);
+      localStorage.setItem('nana_kyc_submissions', JSON.stringify(lightSubs));
+    }
 
     const rawAll = localStorage.getItem('nana_all_kyc_requests');
     let allReqs: KycSubmission[] = rawAll ? JSON.parse(rawAll) : [];
-    allReqs = allReqs.filter(s => s.id !== submissionId && s.userId !== submission.userId && s.storeId !== preparedData.storeId);
-    allReqs.unshift(preparedData);
-    localStorage.setItem('nana_all_kyc_requests', JSON.stringify(allReqs));
+    allReqs = allReqs.filter(s => s.id !== submissionId && (!preparedData.storeId || s.storeId !== preparedData.storeId));
+    allReqs.unshift(makeLightweightKyc(preparedData));
+    try {
+      localStorage.setItem('nana_all_kyc_requests', JSON.stringify(allReqs));
+    } catch {}
 
     // Mettre à jour l'utilisateur local si applicable
     if (currentUser && (currentUser.id === submission.userId || currentUser.uid === submission.userId)) {
       currentUser.kycStatus = 'pending';
-      currentUser.kycData = preparedData;
+      currentUser.kycData = makeLightweightKyc(preparedData);
       localStorage.setItem('nana_store_auth_user', JSON.stringify(currentUser));
     }
   } catch (err) {
