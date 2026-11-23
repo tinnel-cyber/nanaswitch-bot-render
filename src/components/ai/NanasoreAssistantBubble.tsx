@@ -4,7 +4,11 @@ import {
   Play,
   Sparkles,
   UserPlus,
-  ExternalLink
+  ExternalLink,
+  MessageSquare,
+  Send,
+  Loader2,
+  Bot
 } from 'lucide-react';
 import { getPageAssistantConfig } from '../../config/assistantStepsConfig';
 import {
@@ -17,6 +21,13 @@ import {
 import { GuidedTourBubbles } from './GuidedTourBubbles';
 import { SupportQuestionModal } from './SupportQuestionModal';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
+
+interface SarahChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  source?: string;
+}
 
 interface NanasoreAssistantBubbleProps {
   currentView: string;
@@ -52,6 +63,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
 
   // États d'ouverture & lecture instantanée
   const [isExpanded, setIsExpanded] = useState(false);
+  const [sarahTab, setSarahTab] = useState<'CHAT' | 'VIDEO'>('CHAT');
   const [isTourActive, setIsTourActive] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -59,6 +71,96 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
   const [isPlayingFallback, setIsPlayingFallback] = useState(false);
   const [hasFinishedVideoOrTour, setHasFinishedVideoOrTour] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Chat IA intelligent de Sarah (propulsé par gemini-flash-lite-latest)
+  const [sarahMessages, setSarahMessages] = useState<SarahChatMessage[]>([
+    {
+      id: 'sarah-welcome',
+      sender: 'ai',
+      text: isAuthenticated
+        ? "Bonjour ! Je suis Sarah, votre assistante IA Nanasore (37 modules). Comment puis-je vous aider aujourd'hui ?"
+        : "Bonjour ! Je suis Sarah, votre guide IA sur Nanasore (37 modules tout-en-un).\n\nDites-moi ce que vous souhaitez vendre ou lancer (boutique, formations, live shopping, services…) et je vous oriente tout de suite !"
+    }
+  ]);
+  const [sarahInput, setSarahInput] = useState('');
+  const [isSarahLoading, setIsSarahLoading] = useState(false);
+  const sarahChatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isExpanded && sarahTab === 'CHAT') {
+      sarahChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sarahMessages, isSarahLoading, isExpanded, sarahTab]);
+
+  const handleSendSarahMessage = async (presetText?: string) => {
+    const query = (presetText || sarahInput).trim();
+    if (!query || isSarahLoading) return;
+
+    playTapBeep();
+    const userMsg: SarahChatMessage = {
+      id: `u-${Date.now()}`,
+      sender: 'user',
+      text: query
+    };
+    const nextHistory = [...sarahMessages, userMsg];
+    setSarahMessages(nextHistory);
+    if (!presetText) setSarahInput('');
+    setIsSarahLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/growth-advisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          persona: 'sarah_public',
+          messages: nextHistory.slice(-16).map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            sender: m.sender,
+            text: m.text
+          })),
+          merchantContext: {
+            isNewUser: !isAuthenticated,
+            currentView,
+            storeName: 'Nanasore'
+          }
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.reply) {
+        setSarahMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            sender: 'ai',
+            text: data.reply,
+            source: data.source
+          }
+        ]);
+        playValidationBeep();
+      } else {
+        setSarahMessages((prev) => [
+          ...prev,
+          {
+            id: `a-${Date.now()}`,
+            sender: 'ai',
+            text: data.error || "Je suis temporairement très sollicitée. Vous pouvez déjà créer votre compte gratuitement en 2 minutes ou lancer la vidéo explicative !"
+          }
+        ]);
+      }
+    } catch {
+      setSarahMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          sender: 'ai',
+          text: "Connexion momentanément instable. Nanasore regroupe 37 modules (Boutique, POS, Formations, Live Shopping, Paiements Mobile Money). Cliquez sur « Créer mon compte » pour démarrer gratuitement !"
+        }
+      ]);
+    } finally {
+      setIsSarahLoading(false);
+    }
+  };
 
   // Préchargement silencieux du poster de Sarah et synchronisation publique des tutoriels
   useEffect(() => {
@@ -266,6 +368,139 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
               </button>
             </div>
 
+            {/* Onglets Sarah : Discuter avec Sarah IA vs Vidéo & Guide */}
+            <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-950/90 border-b border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setSarahTab('CHAT');
+                }}
+                className={`py-1.5 px-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                  sarahTab === 'CHAT'
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Discuter avec Sarah IA</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  setSarahTab('VIDEO');
+                }}
+                className={`py-1.5 px-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                  sarahTab === 'VIDEO'
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm'
+                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>Vidéo &amp; Guide</span>
+              </button>
+            </div>
+
+            {/* ONGLET 1 : CHAT IA INTELLIGENT DE SARAH (ORIENTATION NOUVEAUX CLIENTS — 37 MODULES) */}
+            {sarahTab === 'CHAT' && (
+              <div className="flex flex-col bg-slate-950/95">
+                <div className="p-3 h-64 overflow-y-auto space-y-2.5 scrollbar-thin">
+                  {sarahMessages.map((msg) => {
+                    const isUser = msg.sender === 'user';
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+                        <div
+                          className={`max-w-[88%] px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-line ${
+                            isUser
+                              ? 'bg-indigo-600 text-white rounded-tr-sm'
+                              : 'bg-slate-900 text-slate-100 border border-slate-800 rounded-tl-sm'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                        {!isUser && msg.source && msg.source.includes('gemini-') && !msg.source.includes('fallback') && (
+                          <span className="text-[9px] text-emerald-400/80 mt-0.5 px-1 font-semibold flex items-center gap-1">
+                            <Bot className="w-2.5 h-2.5" />
+                            Sarah IA • {msg.source}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {isSarahLoading && (
+                    <div className="flex items-center gap-2 text-[11px] text-indigo-300 bg-slate-900/90 border border-indigo-500/30 rounded-xl px-3 py-2 w-fit">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Sarah réfléchit...</span>
+                    </div>
+                  )}
+                  <div ref={sarahChatEndRef} />
+                </div>
+
+                {/* Questions rapides visiteurs */}
+                <div className="px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto border-t border-slate-800/80 bg-slate-900/60">
+                  {[
+                    'Quel module pour mon activité ?',
+                    'Combien ça coûte ?',
+                    'Orange Money / Wave ?',
+                    'Créer ma boutique'
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      disabled={isSarahLoading}
+                      onClick={() => handleSendSarahMessage(q)}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600/30 border border-slate-700 hover:border-indigo-400 text-[10px] font-bold text-slate-200 whitespace-nowrap cursor-pointer transition disabled:opacity-50"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Saisie message */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendSarahMessage();
+                  }}
+                  className="p-2.5 flex items-center gap-1.5 border-t border-slate-800 bg-slate-900/90"
+                >
+                  <input
+                    type="text"
+                    value={sarahInput}
+                    onChange={(e) => setSarahInput(e.target.value)}
+                    placeholder="Posez votre question à Sarah..."
+                    className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSarahLoading || !sarahInput.trim()}
+                    className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white cursor-pointer transition shrink-0"
+                    aria-label="Envoyer"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </form>
+
+                {!isAuthenticated && (
+                  <div className="px-2.5 pb-2.5 bg-slate-900/90">
+                    <button
+                      type="button"
+                      onClick={handleAuthCtaClick}
+                      className="w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white shadow-md"
+                    >
+                      <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span>Créer mon compte gratuit (2 min) →</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ONGLET 2 : VIDÉO PRÉSENTATIVE & VISITE GUIDÉE */}
+            {sarahTab === 'VIDEO' && (
+              <>
             {/* Bannière 1ère Vidéo Présentative : Création de compte & Onboarding */}
             <div className="nana-trainer-banner flex items-center justify-between gap-2">
               <span className="truncate">
@@ -415,6 +650,8 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                 📚 Accéder à tous les tutoriels vidéo
               </button>
             </div>
+              </>
+            )}
           </div>
         )}
 

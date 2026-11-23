@@ -2,9 +2,9 @@ import { Express, Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 
 /**
- * 29 Modules officiels Nanasore
+ * 37 Modules officiels Nanasore
  */
-export const NANASORE_29_MODULES = [
+export const NANASORE_37_MODULES = [
   // Pilier 1 : Commerce & POS Comptoir (6 modules)
   { id: 'pos', name: 'Caisse Tactile POS & Reçus Thermiques', category: 'Commerce & Caisse', desc: 'Encaissement comptoir ultra-rapide, tickets de caisse personnalisés et gestion multi-vendeurs.' },
   { id: 'inventory-stock', name: 'Gestion des Stocks & Alertes Ruptures', category: 'Gestion & Logistique', desc: 'Suivi des entrées/sorties en temps réel et alertes prédictives avant rupture.' },
@@ -27,7 +27,7 @@ export const NANASORE_29_MODULES = [
   { id: 'webinar', name: 'Salles VIP & Masterclasses Interactives', category: 'Formation & Savoir', desc: 'Diffusion de webinaires privés en direct, sessions de coaching payantes et billetterie exclusive.' },
   { id: 'docusign', name: 'Signature Électronique & Contrats Numériques', category: 'Juridique & Vente', desc: 'Signature légale de devis, partenariats et conventions commerciales sans papier.' },
   { id: 'academy-support', name: 'Support Pédagogique & Micro-Learning', category: 'Formation & Savoir', desc: 'Tutoriels interactifs et guidage pas à pas pour maîtriser chaque levier de la plateforme.' },
-  { id: 'vendor-upload', name: 'Espace Documents & Dépôt Fichiers Sécurisé', category: 'Stockage & Outils', desc: 'Stockage Cloud R2 haute vitesse pour vos ressources numériques, livres PDF et livrables téléchargeables.' },
+  { id: 'vendor-upload', name: 'Espace Documents & Dépôt Fichiers Sécurisé', category: 'Stockage & Outils', desc: 'Stockage Cloud haute vitesse pour vos ressources numériques, livres PDF et livrables téléchargeables.' },
 
   // Pilier 4 : Finance, Fintech & Passerelle Souveraine (4 modules)
   { id: 'gateway', name: 'Passerelle de Paiement Souveraine Sebpay', category: 'Paiements & Fintech', desc: 'Encaissement local sans intermédiaire via Mobile Money (Orange Money, Moov, Wave) et Cartes Bancaires.' },
@@ -42,8 +42,21 @@ export const NANASORE_29_MODULES = [
   { id: 'team-roles', name: 'Gestion des Rôles & Permissions Collaborateurs', category: 'Sécurité & RH', desc: 'Accès granulaires caissiers, gestionnaires de stock et comptables pour zéro fraude interne.' },
   { id: 'activity-log', name: 'Journal d’Audit & Sécurité Opérationnelle', category: 'Sécurité & RH', desc: 'Traçabilité de chaque action sensible pour une sérénité managériale absolue.' },
   { id: 'smart-sync', name: 'Moteur de Synchronisation Cloud & Hors-Ligne', category: 'Technologie & POS', desc: 'Continuité de vente 100% hors connexion avec synchronisation instantanée au retour du réseau.' },
-  { id: 'whatsapp-store', name: 'Vitrine E-Shop WhatsApp & Commande Directe', category: 'Commerce & Vente', desc: 'Catalogue produit connecté envoyant directement les paniers dans votre messagerie WhatsApp.' }
+  { id: 'whatsapp-store', name: 'Vitrine E-Shop WhatsApp & Commande Directe', category: 'Commerce & Vente', desc: 'Catalogue produit connecté envoyant directement les paniers dans votre messagerie WhatsApp.' },
+
+  // Pilier 6 : Studio Créateurs, Live Commerce & Écosystème Pro (8 nouveaux modules -> 37 au total)
+  { id: 'video-montage-studio', name: 'Studio Montage Vidéo Pro & Enregistreur d’Écran', category: 'Studio Créateurs', desc: 'Montage multi-pistes, sous-titres IA, enregistreur d’écran avec bulle caméra et filigrane de marque 100% local.' },
+  { id: 'live-shopping-pro', name: 'Live Shopping & Cours en Direct Interactifs', category: 'Live Commerce', desc: 'Diffusion en direct avec épinglage produits, enchères live, quiz, devoirs et enregistreur d’écran intégré.' },
+  { id: 'affiliation-studio', name: 'Programme d’Affiliation Multi-Canaux (4 Canaux)', category: 'Croissance & Vente', desc: 'Recrutement d’affiliés sur SaaS, Produits, Tunnels et Cours avec suivi des liens ?ref= et commissions automatiques.' },
+  { id: 'nana-wallet', name: 'NaNa Wallet & Transferts Instantanés', category: 'Paiements & Fintech', desc: 'Portefeuille marchand unifié pour suivre ses revenus, commissions d’affiliation et demandes de retrait.' },
+  { id: 'theme-studio', name: 'Studio de Thèmes & Constructeur Vitrine', category: 'Marque & Identité', desc: 'Personnalisation visuelle complète de votre boutique en ligne avec thèmes spécialisés prêts à vendre.' },
+  { id: 'crm-pipeline', name: 'CRM Clients & Relances Automatisées', category: 'Marketing & Données', desc: 'Fiches clients centralisées, historique d’achats, segmentation et relances ciblées.' },
+  { id: 'wameet-vip', name: 'Wameet Salles VIP, Messagerie & Coaching 1-to-1', category: 'Communauté & Live', desc: 'Salons privés, coaching vidéo payant, prise de rendez-vous et animation de communauté.' },
+  { id: 'cvpro-docs', name: 'CVPro, Certifications & Documents Officiels', category: 'Formation & Outils', desc: 'Création de CV professionnels, attestations de formation et documents commerciaux certifiés.' }
 ];
+
+// Alias de compatibilité ascendante
+export const NANASORE_29_MODULES = NANASORE_37_MODULES;
 
 const SYSTEM_INSTRUCTION = `Tu es l'Agent Nsore, Directeur de la Croissance, de la Stratégie Commerciale et du Pilotage d'Entreprise de la plateforme NANASORE (Afrique de l'Ouest & Centrale, devise par défaut FCFA).
 
@@ -52,7 +65,7 @@ TA POSTURE DE VRAI DIRECTEUR DE CROISSANCE :
 - RÈGLE D'OR #1 — RÉPONDS D'ABORD VRAIMENT À LA QUESTION : Ne fuis JAMAIS une question précise, technique ou stratégique pour réciter un script commercial ou poser une question KYC hors sujet. Si l'utilisateur demande un calcul de marge, une stratégie d'acquisition, un plan de lancement, un arbitrage entre deux options ou un diagnostic, raisonne étape par étape avec des chiffres concrets et donne-lui une vraie réponse exploitable immédiatement.
 - RÈGLE D'OR #2 — CONTINUITÉ & MÉMOIRE : Tu lis attentivement tout l'historique de la conversation. Si l'utilisateur fait référence à un point précédent ("le point 2", "oui", "et si je baisse le prix ?"), tu gardes exactement le fil du raisonnement sans te répéter ni repartir à zéro.
 - RÈGLE D'OR #3 — ANCRAGE DANS LES VRAIES DONNÉES : Utilise uniquement les chiffres réels fournis dans le contexte marchand (produits, ventes, dettes, ruptures, plan). Ne fabrique jamais de faux chiffres et ne suppose jamais que le client tient une épicerie s'il vend autre chose (formations, cosmétiques, électronique, services, livres, etc.).
-- RÈGLE D'OR #4 — MAÎTRISE DES 29 MODULES NANASORE : Recommande uniquement les modules réellement pertinents au besoin exprimé (ex : Caisse POS / Stocks / Dettes pour un commerce physique ; Ultimate Funnel / Cours Forge / Webinaires pour un formateur ou auteur ; Vitrine WhatsApp / Deal Builder / Sebpay pour l'e-commerce ; DocuSign pour les contrats).
+- RÈGLE D'OR #4 — MAÎTRISE DES 37 MODULES NANASORE : Recommande uniquement les modules réellement pertinents au besoin exprimé parmi nos 37 modules (ex : Caisse POS / Stocks / Dettes pour un commerce physique ; Ultimate Funnel / Cours Forge / Webinaires / Studio Vidéo pour un formateur ou auteur ; Vitrine WhatsApp / Live Shopping / Deal Builder / Sebpay pour l'e-commerce ; Affiliation / CRM / DocuSign pour la croissance).
 - RÈGLE D'OR #5 — KYC & ACTIVATION (UNIQUEMENT QUAND C'EST PERTINENT) : Si et seulement si l'utilisateur demande comment activer les encaissements réels, débloquer ses retraits ou trouver le KYC, indique-lui précisément les 4 accès :
   1. Badges [P1 : INDIVIDUEL] et [P2 : ENTREPRISE] en haut sous le nom de la boutique,
   2. Carte « Chaîne d'Identification KYC » dans le Hub,
@@ -64,6 +77,17 @@ FORMAT DE RÉPONSE :
 - Clair, structuré (puces courtes ou étapes numérotées quand utile), direct et sans blabla corporate creux.
 - Adapte la longueur à la complexité de la question (court pour une question simple, approfondi et chiffré pour une question stratégique).
 - Termine par une prochaine étape concrète ou une question de suivi intelligente liée au sujet exact de l'échange.`;
+
+const SARAH_PUBLIC_SYSTEM_INSTRUCTION = `Tu es Sarah, l'Assistante d'Accueil & Conseillère d'Orientation IA officielle de NANASORE (plateforme tout-en-un de 37 modules pour commerçants, formateurs, créateurs et entreprises en Afrique de l'Ouest & Centrale, devise FCFA).
+
+TON RÔLE AUPRÈS DES NOUVEAUX VISITEURS (HORS TABLEAU DE BORD) :
+- Tu accueilles chaleureusement les visiteurs qui découvrent Nanasore et tu réponds avec une clarté remarquable à toutes leurs questions avant leur inscription.
+- Tu connais parfaitement les **37 modules** de Nanasore : Boutique en ligne & Thèmes, Vitrine WhatsApp, Caisse POS hors-ligne, Stocks & Livre des Dettes, Facturation OHADA, Tunnels de vente (Ultimate Funnel), Formations LMS (Cours Forge), Live Shopping & Cours en direct, Studio Montage Vidéo & Enregistreur d'écran, Programme d'Affiliation 4 canaux, Paiements Mobile Money (Orange Money, Moov, Wave) & Cartes via Sebpay, NaNa Wallet, DocuSign, CRM & E-mailing.
+- **Orientation personnalisée** : Demande ou identifie l'activité du visiteur (boutique physique, e-commerce, formateur/coach, auteur de livre, prestataire, créateur) et explique-lui en 2 ou 3 points concrets quels modules lui feront gagner du temps et de l'argent dès aujourd'hui.
+- **Tarifs & démarrage sans risque** : Explique que l'ouverture de compte est gratuite et rapide (2 minutes), qu'il peut démarrer sans risque (formule à la commission / Pay-as-you-go sans frais fixes au début, ou abonnement fixe dès que le volume augmente) et encaisser via Mobile Money et Cartes.
+- **Continuité** : Garde parfaitement le fil de toute la conversation multi-tours sans te répéter.
+- **Sécurité** : Ne demande ni ne révèle jamais de mot de passe, clé API ou donnée privée.
+- **Style** : Chaleureux, pro, rassurant, concis et structuré. Invite naturellement le visiteur à cliquer sur « Créer mon compte » quand il est prêt à essayer.`;
 
 function extractFirstName(rawName?: string): string {
   if (!rawName || typeof rawName !== 'string') return '';
@@ -210,7 +234,7 @@ export function generateComprehensiveStrategicFallback(
   if (q.includes('omnibar') || q.includes('barre de recherche') || q.includes('ou trouver les modules') || q.includes('où trouver')) {
     return {
       thought: `Explication de l'Omnibar.`,
-      reply: `L'**Omnibar** est votre commande centrale Nanasore, située tout en haut au milieu de votre écran. Il vous suffit d'y taper le nom de n'importe lequel de nos 29 modules pour l'ouvrir, visionner une démo ou l'activer en un clic.\n\nQuel outil souhaitez-vous chercher dans l'Omnibar à cet instant ?`
+      reply: `L'**Omnibar** est votre commande centrale Nanasore, située tout en haut au milieu de votre écran. Il vous suffit d'y taper le nom de n'importe lequel de nos 37 modules pour l'ouvrir, visionner une démo ou l'activer en un clic.\n\nQuel outil souhaitez-vous chercher dans l'Omnibar à cet instant ?`
     };
   }
 
@@ -226,7 +250,7 @@ export function generateComprehensiveStrategicFallback(
   if (q.includes('business') || q.includes('argent') || q.includes('combinaison') || q.includes('pack') || q.includes('lancer')) {
     return {
       thought: `Combinaisons de modules à fort ROI.`,
-      reply: `Pour bâtir un business très lucratif sur Nanasore, nous combinons nos 29 modules selon votre activité : la combinaison **Caisse POS + Vitrine WhatsApp E-Shop** pour du commerce physique, ou **Ultimate Funnel + NaNa Cours Forge** pour vendre des livres ou formations numériques avec des marges supérieures à 85%.\n\nQuel domaine vous correspond le mieux : les produits physiques ou les produits numériques ?`
+      reply: `Pour bâtir un business très lucratif sur Nanasore, nous combinons nos 37 modules selon votre activité : la combinaison **Caisse POS + Vitrine WhatsApp E-Shop** pour du commerce physique, ou **Ultimate Funnel + NaNa Cours Forge** pour vendre des livres ou formations numériques avec des marges supérieures à 85%.\n\nQuel domaine vous correspond le mieux : les produits physiques ou les produits numériques ?`
     };
   }
 
@@ -242,7 +266,7 @@ export function generateComprehensiveStrategicFallback(
   if (q.includes('bonjour') || q.includes('salut') || q.includes('hello') || q.includes('aide') || q === '') {
     return {
       thought: `Accueil d'un nouveau marchand par son prénom.`,
-      reply: `${greeting} ! C'est un réel honneur de vous accueillir au sein de Nanasore.\n\nEn tant que directeur commercial, je suis là pour vous aider à lancer votre business et à activer les 29 modules qui feront décoller ${storeName}. Puis-je vous aider à choisir la formule idéale pour démarrer, ou souhaitez-vous me décrire ce que vous souhaitez vendre ?`
+      reply: `${greeting} ! C'est un réel honneur de vous accueillir au sein de Nanasore.\n\nJe suis là pour vous aider à lancer votre business et à activer les 37 modules qui feront décoller ${storeName}. Puis-je vous aider à choisir la formule idéale pour démarrer, ou souhaitez-vous me décrire ce que vous souhaitez vendre ?`
     };
   }
 
@@ -253,18 +277,47 @@ export function generateComprehensiveStrategicFallback(
   };
 }
 
+// Anti-spam léger par IP pour les visiteurs publics (Sarah hors tableau de bord) : 20 req / 10 min
+const sarahPublicRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkSarahPublicRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = sarahPublicRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    sarahPublicRateMap.set(ip, { count: 1, resetAt: now + 10 * 60 * 1000 });
+    return true;
+  }
+  if (entry.count >= 20) return false;
+  entry.count += 1;
+  return true;
+}
+
 /**
  * Attache la route /api/ai/growth-advisor au serveur Express
  */
 export function attachGrowthAdvisorRoutes(app: Express): void {
   app.post('/api/ai/growth-advisor', async (req: Request, res: Response): Promise<void> => {
     try {
-      const { query = '', messages = [], merchantContext = {} } = req.body;
+      const { query = '', messages = [], merchantContext = {}, persona = 'nsore_director' } = req.body;
       const currentQuery = (query || '').trim();
+      const isSarahPublic = persona === 'sarah_public';
 
       if (!currentQuery) {
         res.status(400).json({ error: 'La requête ne peut pas être vide.' });
         return;
+      }
+
+      if (isSarahPublic) {
+        const clientIp =
+          (typeof req.headers['x-forwarded-for'] === 'string'
+            ? req.headers['x-forwarded-for'].split(',')[0].trim()
+            : req.ip) || 'unknown';
+        if (!checkSarahPublicRateLimit(clientIp)) {
+          res.status(429).json({
+            error: 'Vous avez atteint la limite temporaire de messages visiteurs. Créez votre compte gratuit en 2 minutes pour un accès illimité à nos conseillers IA !'
+          });
+          return;
+        }
       }
 
       const isLeakAttempt = detectCredentialLeakAttempt(currentQuery);
@@ -298,7 +351,14 @@ export function attachGrowthAdvisorRoutes(app: Express): void {
             .join(', ')
         : 'Non renseigné';
 
-      const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}
+      const dynamicSystemInstruction = isSarahPublic
+        ? `${SARAH_PUBLIC_SYSTEM_INSTRUCTION}
+
+CONTEXTE VISITEUR :
+- Page consultée : ${merchantContext?.currentView || 'Accueil public Nanasore'}
+- Statut : ${merchantContext?.isNewUser ? 'Nouveau visiteur (pas encore inscrit)' : 'Utilisateur connecté'}
+- Liste complète des 37 modules Nanasore : ${NANASORE_37_MODULES.map((m) => m.name).join(' | ')}`
+        : `${SYSTEM_INSTRUCTION}
 
 CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
 - Prénom : ${firstName || 'Partenaire'}
@@ -311,7 +371,7 @@ CONTEXTE RÉEL DU MARCHAND (À UTILISER DIRECTEMENT DANS TON RAISONNEMENT) :
 - Ventes enregistrées : ${merchantContext?.salesCount ?? 0} vente(s) | CA du jour : ${merchantContext?.todaySales ?? 0} ${merchantContext?.currency || 'FCFA'}
 - Total impayés / créances clients : ${merchantContext?.totalDebt ?? 0} ${merchantContext?.currency || 'FCFA'}
 - Principaux produits : ${topProductsSummary}
-- Catalogue des 29 modules disponibles : ${NANASORE_29_MODULES.map((m) => m.name).join(' | ')}`;
+- Catalogue des 37 modules disponibles : ${NANASORE_37_MODULES.map((m) => m.name).join(' | ')}`;
 
       // Construire des tours propres et alternés (user / model) pour que Gemini conserve parfaitement le fil
       const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];

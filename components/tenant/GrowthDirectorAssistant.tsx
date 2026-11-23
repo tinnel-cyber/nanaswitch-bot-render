@@ -120,7 +120,7 @@ export function GrowthDirectorAssistant({
     if (isNewUser) {
       return [
         "Quel plan pour vendre mon livre ?",
-        "Comment activer les 29 modules via l'Omnibar ?",
+        "Comment activer les 37 modules via l'Omnibar ?",
         "M'accompagner à remplir mon KYC",
         "Paiement à la commission vs Abonnement fixe"
       ];
