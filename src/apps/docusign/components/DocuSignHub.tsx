@@ -736,10 +736,37 @@ export default function DocuSignHub({
     playValidationBeep();
   };
 
+  const verifyDocuSignPayg = async (actionLabel: string): Promise<boolean> => {
+    const effectiveSub = liveSubscription || subscription;
+    const isPaidSub = Boolean(
+      effectiveSub &&
+      effectiveSub.status === 'active' &&
+      !String(effectiveSub.planId || '').includes('free') &&
+      !String(effectiveSub.planId || '').includes('zero') &&
+      !String(effectiveSub.planId || '').includes('pay-as-you-go')
+    );
+
+    const { consumePaygModuleUsage } = await import('../../../services/paygBillingService');
+    const paygRes = await consumePaygModuleUsage({
+      ownerKey: currentUser?.storeId || currentUser?.uid || '',
+      moduleId: 'escrow-devis-pro',
+      actionLabel,
+      hasActivePaidSubscription: isPaidSub,
+      isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+    });
+
+    if (!paygRes.allowed) {
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'DocuSign (1 000 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
+      alert(paygRes.message || 'Solde NaNa Wallet insuffisant (1 000 F CFA requis pour ce document DocuSign).');
+      return false;
+    }
+    return true;
+  };
+
   // Téléchargement direct en PDF haute résolution du document scanné
-  const handleDownloadScanPdf = () => {
+  const handleDownloadScanPdf = async () => {
     if (!scanPreviewUrl) return;
-    if (!checkDocumentQuota()) return;
+    if (!(await verifyDocuSignPayg('Export PDF DocuSign'))) return;
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -754,9 +781,9 @@ export default function DocuSignHub({
   };
 
   // Téléchargement direct en image PNG ou JPEG
-  const handleDownloadScanImage = (format: 'png' | 'jpeg') => {
+  const handleDownloadScanImage = async (format: 'png' | 'jpeg') => {
     if (!scanPreviewUrl) return;
-    if (!checkDocumentQuota()) return;
+    if (!(await verifyDocuSignPayg(`Export ${format.toUpperCase()} DocuSign`))) return;
     const link = document.createElement('a');
     link.href = scanPreviewUrl;
     link.download = `Document_Scanne_${Date.now()}.${format === 'png' ? 'png' : 'jpg'}`;

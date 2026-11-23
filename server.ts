@@ -7017,7 +7017,7 @@ async function startServer() {
       id: 'cv-pro-ia',
       name: 'CV Pro IA & Lettre Certifiée',
       category: 'Carrière & IA',
-      unitLabel: '1 génération certifiée',
+      unitLabel: '1 export PDF certifié',
       priceXof: 500,
       supabaseModuleKey: 'cv_pro_ia',
       description: 'Création de CV ATS haute précision + lettre de motivation IA + export PDF.'
@@ -7032,40 +7032,13 @@ async function startServer() {
       description: 'Génération de vidéos publicitaires avec présentateur virtuel et voix off.'
     },
     {
-      id: 'theme-generator-ia',
-      name: 'Générateur de Thème Digital IA',
-      category: 'Boutique & Design',
-      unitLabel: '1 thème digital complet',
-      priceXof: 2000,
-      supabaseModuleKey: 'theme_generator_ia',
-      description: 'Génération et publication d\'un thème e-commerce ou académie sur-mesure.'
-    },
-    {
-      id: 'course-forge-ai',
-      name: 'Course Forge IA (Quiz & Syllabus)',
-      category: 'Formation LMS',
-      unitLabel: '1 pack génération IA',
-      priceXof: 1000,
-      supabaseModuleKey: 'course_forge_ai',
-      description: 'Génération automatique de modules, quiz corrigés et simulations orales IA.'
-    },
-    {
       id: 'escrow-devis-pro',
-      name: 'Devis & Contrat Séquestre Escrow',
+      name: 'DocuSign : Signature & Devis Pro',
       category: 'B2B & Juridique',
-      unitLabel: '1 dossier séquestre',
+      unitLabel: '1 document signé / exporté',
       priceXof: 1000,
       supabaseModuleKey: 'escrow_devis_pro',
-      description: 'Émission d\'un devis B2B signé avec protection de paiement séquestre.'
-    },
-    {
-      id: 'whatsapp-social-blast',
-      name: 'Campagne WhatsApp & Social Blast',
-      category: 'Acquisition',
-      unitLabel: '1 campagne multi-canaux',
-      priceXof: 1500,
-      supabaseModuleKey: 'whatsapp_social_blast',
-      description: 'Diffusion promotionnelle ciblée sur WhatsApp, statut et liens trackés.'
+      description: 'Signature électronique, scellement PDF et devis B2B certifiés.'
     },
     {
       id: 'salles-vip-live',
@@ -7077,31 +7050,13 @@ async function startServer() {
       description: 'Ouverture d\'une salle Live HD illimitée avec billetterie intégrée.'
     },
     {
-      id: 'kyc-express-audit',
-      name: 'Vérification KYC Express Prioritaire',
-      category: 'Conformité',
-      unitLabel: '1 traitement prioritaire',
-      priceXof: 2000,
-      supabaseModuleKey: 'kyc_express_audit',
-      description: 'Passage prioritaire en tête de file pour la validation de conformité.'
-    },
-    {
-      id: 'export-comptable-pro',
-      name: 'Export Comptable & Factures Pro',
-      category: 'Finance',
-      unitLabel: '1 pack export certifié',
-      priceXof: 750,
-      supabaseModuleKey: 'export_comptable_pro',
-      description: 'Grand livre des ventes, TVA et factures PDF certifiées pour comptable.'
-    },
-    {
-      id: 'sms-otp-pack',
-      name: 'Pack 100 SMS & Alertes Clients',
-      category: 'Notifications',
-      unitLabel: '100 crédits SMS',
-      priceXof: 1200,
-      supabaseModuleKey: 'sms_otp_pack',
-      description: 'Notifications SMS automatiques de commandes, livraisons et codes OTP.'
+      id: 'sales-funnel-pro',
+      name: 'Tunnel de Vente Haute Conversion',
+      category: 'Marketing & Vente',
+      unitLabel: '1 tunnel de vente publié',
+      priceXof: 5000,
+      supabaseModuleKey: 'sales_funnel_pro',
+      description: 'Création et publication d\'un tunnel de vente monopage ou modulaire complet.'
     }
   ];
 
@@ -7549,6 +7504,139 @@ async function startServer() {
       transaction: txRecord,
       activatedModules
     });
+  });
+
+  // POST /api/merchant/wallet/payg/consume — Consommation réelle côté serveur d'un module Pay-As-You-Go
+  // 1) Consomme d'abord 1 crédit Pay-As-You-Go pré-acheté si disponible
+  // 2) Sinon débite directement le solde réel du NaNa Wallet
+  // 3) Sinon renvoie HTTP 402 (solde insuffisant)
+  app.post('/api/merchant/wallet/payg/consume', async (req, res) => {
+    try {
+      const { ownerKey: rawOwnerKey, universeId, userId, moduleId, actionLabel = '' } = req.body || {};
+      const ownerKey = String(rawOwnerKey || universeId || userId || '').trim();
+      if (!ownerKey || !moduleId) {
+        return res.status(400).json({ success: false, error: 'Identifiant marchand et moduleId requis.' });
+      }
+
+      const mod = PAYG_MODULES_CATALOG.find((m) => m.id === String(moduleId));
+      if (!mod) {
+        return res.status(404).json({ success: false, error: `Module Pay-As-You-Go inconnu : ${moduleId}` });
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // 1. Priorité : consommer 1 crédit Pay-As-You-Go déjà acheté
+      const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
+      const entIdx = allEnts.findIndex(
+        (e: any) =>
+          (e.ownerKey === ownerKey || e.universeId === ownerKey || e.userId === ownerKey) &&
+          e.moduleId === mod.id &&
+          Number(e.remainingCredits || 0) > 0
+      );
+
+      if (entIdx >= 0) {
+        allEnts[entIdx].remainingCredits = Math.max(0, Number(allEnts[entIdx].remainingCredits || 1) - 1);
+        allEnts[entIdx].usedCredits = Number(allEnts[entIdx].usedCredits || 0) + 1;
+        allEnts[entIdx].updatedAt = nowIso;
+        writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
+
+        if (supabaseAdmin) {
+          try {
+            await supabaseAdmin
+              .from('payg_entitlements')
+              .update({
+                remaining_credits: allEnts[entIdx].remainingCredits,
+                used_credits: allEnts[entIdx].usedCredits,
+                updated_at: nowIso
+              })
+              .eq('id', `${allEnts[entIdx].ownerKey}_${mod.id}`);
+          } catch {}
+        }
+
+        return res.json({
+          success: true,
+          mode: 'CREDIT_CONSUMED',
+          moduleId: mod.id,
+          chargedXof: 0,
+          remainingCredits: allEnts[entIdx].remainingCredits,
+          message: `1 crédit « ${mod.name} » consommé (restant : ${allEnts[entIdx].remainingCredits}).`
+        });
+      }
+
+      // 2. Sinon : débit direct du solde réel NaNa Wallet
+      const current = await readUnifiedWalletBalance(universeId || ownerKey, userId || ownerKey);
+      if (current.balanceXof < mod.priceXof) {
+        return res.status(402).json({
+          success: false,
+          code: 'INSUFFICIENT_PAYG_BALANCE',
+          moduleId: mod.id,
+          moduleName: mod.name,
+          requiredXof: mod.priceXof,
+          currentBalance: current.balanceXof,
+          error: `Solde insuffisant pour « ${mod.name} » (${mod.priceXof.toLocaleString('fr-FR')} F CFA requis, ${current.balanceXof.toLocaleString('fr-FR')} F CFA disponible). Rechargez votre NaNa Wallet.`
+        });
+      }
+
+      const updatedWallet = await writeUnifiedWalletBalance(
+        universeId || ownerKey,
+        userId || ownerKey,
+        current.balanceXof - mod.priceXof,
+        current.balances
+      );
+
+      const txId = `PAYGUSE-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const txRecord = {
+        id: txId,
+        universeId: String(universeId || ownerKey),
+        userId: String(userId || ownerKey),
+        type: 'DEBIT',
+        title: `Usage Pay-As-You-Go : ${mod.name}`,
+        subtitle: actionLabel ? String(actionLabel).slice(0, 120) : mod.unitLabel,
+        amount: mod.priceXof,
+        currency: 'XOF',
+        category: 'PAY_AS_YOU_GO_USAGE',
+        reference: txId,
+        moduleIds: [mod.id],
+        status: 'COMPLETED',
+        createdAt: nowIso
+      };
+
+      const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+      allTxs.unshift(txRecord);
+      writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('wallet_transactions').insert({
+            id: txId,
+            universe_id: String(universeId || ownerKey),
+            user_id: String(userId || ownerKey),
+            type: 'DEBIT',
+            title: txRecord.title,
+            subtitle: txRecord.subtitle,
+            amount: mod.priceXof,
+            currency: 'XOF',
+            category: 'PAY_AS_YOU_GO_USAGE',
+            reference: txId,
+            status: 'COMPLETED',
+            created_at: nowIso
+          });
+        } catch {}
+      }
+
+      return res.json({
+        success: true,
+        mode: 'WALLET_DEBITED',
+        moduleId: mod.id,
+        chargedXof: mod.priceXof,
+        newBalance: updatedWallet.balanceXof,
+        transaction: txRecord,
+        message: `${mod.priceXof.toLocaleString('fr-FR')} F CFA débités de votre NaNa Wallet pour « ${mod.name} ».`
+      });
+    } catch (err: any) {
+      console.error('[PAYG_CONSUME] Erreur:', err?.message || err);
+      return res.status(500).json({ success: false, error: 'Erreur serveur lors de la vérification Pay-As-You-Go.' });
+    }
   });
 
   // 3. Validation ou Rejet par le Super Admin

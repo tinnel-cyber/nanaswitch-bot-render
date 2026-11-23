@@ -249,30 +249,45 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
     }
   };
 
-  // Exportation Haute Définition via html2canvas & jsPDF avec sécurité anti-échec (Fallback Impression A4)
+  // Exportation Haute Définition via html2canvas & jsPDF avec facturation Pay-As-You-Go réelle côté serveur
   const handleDownloadPdfHd = async () => {
     if (!resume) return;
 
-    // Vérification stricte du Plan Zéro & Quotas CV Pro
-    const cvAccess = canAccessCvPro(subscription, (currentUser as any)?.walletBalance || 0);
-    if (!cvAccess.allowed) {
-      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (Inclus Plan Pro ou 500 F CFA à l\'acte)');
+    const isPaidSub = Boolean(
+      subscription &&
+      subscription.status === 'active' &&
+      !String(subscription.planId || '').includes('free') &&
+      !String(subscription.planId || '').includes('zero') &&
+      !String(subscription.planId || '').includes('pay-as-you-go')
+    );
+
+    const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
+    const paygRes = await consumePaygModuleUsage({
+      ownerKey: currentUser?.storeId || currentUser?.uid || '',
+      moduleId: 'cv-pro-ia',
+      actionLabel: `Export PDF CV Pro : ${resume.personalInfo?.fullName || 'CV'}`,
+      hasActivePaidSubscription: isPaidSub,
+      isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+    });
+
+    if (!paygRes.allowed) {
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (500 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
       setExportErrorAlert({
         isOpen: true,
-        message: cvAccess.message
+        message: paygRes.message || 'Solde NaNa Wallet insuffisant (500 F CFA requis pour cet export CV Pro).'
       });
-      return;
-    }
-
-    const currentDocs = getGeneratedDocumentsCount(currentUser?.storeId);
-    if (isLimitReached(subscription, 'DOCUMENTS', currentDocs)) {
-      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 0, 'CV Pro');
       return;
     }
 
     playTapBeep();
     setIsExportingPdf(true);
-    setExportToast('Génération du PDF en cours...');
+    setExportToast(
+      paygRes.mode === 'WALLET_DEBITED'
+        ? `500 F CFA débités du NaNa Wallet • Génération du PDF...`
+        : paygRes.mode === 'CREDIT_CONSUMED'
+          ? `1 crédit CV Pro consommé • Génération du PDF...`
+          : 'Génération du PDF en cours...'
+    );
 
     try {
       // 1. Ciblage & cycle de rendu : s'assurer que le composant CV est actif et rendu à l'écran

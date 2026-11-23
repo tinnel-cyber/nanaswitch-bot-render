@@ -511,6 +511,28 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     setErrorMsg('');
 
     try {
+      const { consumePaygModuleUsage } = await import('../../../services/paygBillingService');
+      const paygRes = await consumePaygModuleUsage({
+        ownerKey: currentUser?.storeId || currentUser?.uid || '',
+        moduleId: 'salles-vip-live',
+        actionLabel: `Création Live / Salle VIP : ${title.trim()}`,
+        hasActivePaidSubscription: Boolean(
+          (currentUser as any)?.subscription?.status === 'active' &&
+          !String((currentUser as any)?.subscription?.planId || '').includes('free') &&
+          !String((currentUser as any)?.subscription?.planId || '').includes('pay-as-you-go')
+        ),
+        isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+      });
+
+      if (!paygRes.allowed) {
+        setLoading(false);
+        setErrorMsg(
+          paygRes.message ||
+          'Solde Pay-As-You-Go insuffisant (2 500 F CFA requis pour ouvrir une session Live / Salle VIP). Rechargez votre NaNa Wallet.'
+        );
+        return;
+      }
+
       const numericPrice = isPaid ? Math.max(0, parseInt(price) || 0) : 0;
       const finalMeetingUrl = rawPastedUrl || (
         effectivePlatform === 'jitsi'
