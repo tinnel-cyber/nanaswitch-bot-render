@@ -9214,19 +9214,39 @@ async function startServer() {
     }
   };
 
-  app.all('/api/payment*', forwardToPaymentMicroservice);
+  // Endpoint Webhook unifié et fortifié (Render + Northflank + nanasore.com)
+  // Placé AVANT `app.all('/api/payment*', ...)` pour que `/api/payment/webhook` et `/api/webhooks/payment`
+  // soient traités localement ET relayés au routeur s'il est en ligne.
+  const UNIFIED_WEBHOOK_PATHS = [
+    '/api/webhooks/payment',
+    '/api/payment/webhook',
+    '/api/payment/webhook/sebpay',
+    '/api/payments/webhook/sebpay',
+    '/api/webhook/sebpay',
+    '/webhook/sebpay',
+    '/api/payment/saspay/webhook',
+    '/api/webhooks/saspay',
+    '/api/webhook/saspay',
+    '/webhook/saspay',
+  ];
 
-
-  // Endpoint Webhook fortifié pour le traitement des paiements Mobile Money (HMAC-SHA256)
-  app.post('/api/webhooks/payment', async (req: any, res) => {
+  app.post(UNIFIED_WEBHOOK_PATHS, async (req: any, res) => {
     try {
-      const effectiveWebhookSecret =
-        PAYMENT_WEBHOOK_SECRET ||
-        process.env.SEBPAY_WEBHOOK_SECRET ||
-        process.env.SEBPAY_SECRET_KEY ||
-        process.env.SASPAY_WEBHOOK_SECRET ||
-        '';
-      if (!effectiveWebhookSecret) {
+      const candidateSecrets = Array.from(
+        new Set(
+          [
+            PAYMENT_WEBHOOK_SECRET,
+            process.env.SEBPAY_WEBHOOK_SECRET,
+            process.env.SEBPAY_SECRET_KEY,
+            process.env.SASPAY_WEBHOOK_SECRET,
+            process.env.SASPAY_API_KEY,
+          ]
+            .map((s) => String(s || '').trim())
+            .filter(Boolean)
+        )
+      );
+
+      if (candidateSecrets.length === 0) {
         console.error('[SECURITY CONFIG ERROR] Aucun secret HMAC configuré (PAYMENT_WEBHOOK_SECRET). Webhook refusé.');
         return res.status(503).json({ error: 'Configuration webhook serveur incomplète.' });
       }
@@ -9237,7 +9257,9 @@ async function startServer() {
         req.headers['x-saspay-signature'] ||
         req.headers['x-fedapay-signature'] ||
         req.headers['x-c-signature'] ||
-        req.headers['x-signature-sha256'];
+        req.headers['x-cinetpay-signature'] ||
+        req.headers['x-signature-sha256'] ||
+        req.headers['x-signature'];
 
       if (!providedSignature) {
         console.error('[SECURITY ALERT] Requête webhook rejetée : Signature cryptographique absente.');
@@ -9247,20 +9269,28 @@ async function startServer() {
       }
 
       const rawPayload = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-      const hmac = crypto.createHmac('sha256', effectiveWebhookSecret);
-      hmac.update(rawPayload);
-      const expectedSignature = hmac.digest('hex');
+      const cleanProvided = String(providedSignature).trim().toLowerCase().replace(/^sha256=/, '');
+      const webhookTimestamp = String(req.headers['x-webhook-timestamp'] || '').trim();
 
       let isSignatureValid = false;
-      try {
-        const provBuf = Buffer.from(String(providedSignature).trim().toLowerCase(), 'utf8');
-        const expBuf = Buffer.from(String(expectedSignature).trim().toLowerCase(), 'utf8');
-        if (provBuf.length === expBuf.length) {
-          isSignatureValid = crypto.timingSafeEqual(provBuf, expBuf);
-        }
-      } catch (cryptoErr) {
-        console.error('[SECURITY ERROR] Erreur comparaison signature:', cryptoErr);
-        isSignatureValid = false;
+      for (const secret of candidateSecrets) {
+        try {
+          const directHex = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex').toLowerCase();
+          const provBuf = Buffer.from(cleanProvided, 'utf8');
+          const expBuf = Buffer.from(directHex, 'utf8');
+          if (provBuf.length === expBuf.length && crypto.timingSafeEqual(provBuf, expBuf)) {
+            isSignatureValid = true;
+            break;
+          }
+          if (webhookTimestamp) {
+            const tsHex = crypto.createHmac('sha256', secret).update(`${webhookTimestamp}.${rawPayload}`).digest('hex').toLowerCase();
+            const tsBuf = Buffer.from(tsHex, 'utf8');
+            if (provBuf.length === tsBuf.length && crypto.timingSafeEqual(provBuf, tsBuf)) {
+              isSignatureValid = true;
+              break;
+            }
+          }
+        } catch {}
       }
 
       if (!isSignatureValid) {
@@ -9298,6 +9328,23 @@ async function startServer() {
 
       console.log(`[SUCCESS] Webhook signé HMAC validé (Tx: ${txId}, Order: ${candidateOrderId}, Montant: ${amount})`);
 
+      // Relais asynchrone best-effort au micro-service Northflank (s'il est distinct et en ligne) pour synchroniser le split
+      const targetBase = PAYMENT_API_BASE_URL.replace(/\/+$/, '');
+      const currentHost = (req.get('host') || '').toLowerCase();
+      if (targetBase && (!currentHost || !targetBase.toLowerCase().includes(currentHost))) {
+        fetch(`${targetBase}/api/payment/webhook`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-webhook-signature': String(providedSignature),
+            ...(webhookTimestamp ? { 'x-webhook-timestamp': webhookTimestamp } : {}),
+            ...(req.headers['x-webhook-event'] ? { 'x-webhook-event': String(req.headers['x-webhook-event']) } : {}),
+          },
+          body: rawPayload,
+          signal: AbortSignal.timeout(6000),
+        }).catch(() => {});
+      }
+
       if (txData.merchantId || txData.userId) {
         import('./src/server/webPushService').then(({ sendNewOrderPushToSeller }) => {
           sendNewOrderPushToSeller({
@@ -9312,6 +9359,7 @@ async function startServer() {
 
       return res.status(200).json({
         success: true,
+        received: true,
         txId,
         orderId: candidateOrderId,
         amount,
@@ -9328,6 +9376,8 @@ async function startServer() {
       });
     }
   });
+
+  app.all('/api/payment*', forwardToPaymentMicroservice);
 
   // Online Voice Recognition & Video Auto-Subtitles endpoint via Gemini Flash
   app.post('/api/ai/transcribe', async (req, res) => {
