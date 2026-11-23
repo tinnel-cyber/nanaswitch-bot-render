@@ -375,7 +375,7 @@ export async function handleHaggleOffer(
   try {
     // Exécution avec timeout strict (gemini-2.5-flash puis fallback gemini-2.0-flash)
     const callModel = async () => {
-      const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      const models = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
       let lastErr: any = null;
       for (const model of models) {
         try {

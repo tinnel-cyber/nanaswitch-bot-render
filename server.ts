@@ -210,7 +210,7 @@ async function callGeminiWithRetry(
     config?: any;
   }
 ): Promise<{ text?: string; modelUsed: string } | null> {
-  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+  const candidateModels = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
 
   for (const model of candidateModels) {
     for (let attempt = 0; attempt < 2; attempt++) {
