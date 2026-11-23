@@ -1,19 +1,94 @@
 -- ==============================================================================
--- Migration Production : Soldes atomiques dans Supabase + Unicité sur la référence de paiement (anti-doublon)
+-- Migration Production : Harmonisation du schéma wallet_transactions +
+-- Soldes atomiques + Unicité sur la référence de paiement (anti-doublon)
 -- ==============================================================================
 
--- 1. Colonne payment_reference normalisée et contrainte UNIQUE anti-doublon sur wallet_transactions
+-- 1. S'assurer que la table public.wallet_transactions existe et possède
+--    toutes les colonnes attendues par le serveur (compatible avec l'ancien schéma)
+CREATE TABLE IF NOT EXISTS public.wallet_transactions (
+  id TEXT PRIMARY KEY,
+  universe_id TEXT,
+  user_id UUID,
+  type TEXT NOT NULL DEFAULT 'CREDIT',
+  amount NUMERIC NOT NULL DEFAULT 0,
+  payment_reference TEXT,
+  status TEXT NOT NULL DEFAULT 'COMPLETED',
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Si la table existait sous l'ancien schéma (id UUID, wallet_id, transaction_type NOT NULL...),
+-- on convertit id en TEXT, on rend les anciennes colonnes optionnelles et on ajoute les colonnes manquantes.
+DO $$
+BEGIN
+  -- Convertir id en TEXT si c'était un UUID
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions'
+      AND column_name = 'id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE public.wallet_transactions ALTER COLUMN id DROP DEFAULT;
+    ALTER TABLE public.wallet_transactions ALTER COLUMN id TYPE TEXT USING id::TEXT;
+  END IF;
+
+  -- Rendre les colonnes de l'ancien schéma optionnelles (DROP NOT NULL) si elles existent
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions' AND column_name = 'wallet_id'
+  ) THEN
+    ALTER TABLE public.wallet_transactions ALTER COLUMN wallet_id DROP NOT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions' AND column_name = 'transaction_type'
+  ) THEN
+    ALTER TABLE public.wallet_transactions ALTER COLUMN transaction_type DROP NOT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions' AND column_name = 'description'
+  ) THEN
+    ALTER TABLE public.wallet_transactions ALTER COLUMN description DROP NOT NULL;
+  END IF;
+END $$;
+
 ALTER TABLE public.wallet_transactions
+  ADD COLUMN IF NOT EXISTS universe_id TEXT,
+  ADD COLUMN IF NOT EXISTS user_id UUID,
+  ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'CREDIT',
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'COMPLETED',
+  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS payment_reference TEXT;
 
--- Backfill éventuel depuis metadata->>'reference'
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_universe
+  ON public.wallet_transactions (universe_id, created_at DESC);
+
+-- Backfill de payment_reference depuis metadata->>'reference' ou reference_id (si existant)
 UPDATE public.wallet_transactions
 SET payment_reference = NULLIF(BTRIM(metadata->>'reference'), '')
 WHERE payment_reference IS NULL
   AND metadata IS NOT NULL
   AND COALESCE(BTRIM(metadata->>'reference'), '') <> '';
 
--- Dédoublonnage défensif avant création de l'index unique (conserve la 1ère transaction par payment_reference)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'wallet_transactions' AND column_name = 'reference_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE public.wallet_transactions
+      SET payment_reference = NULLIF(BTRIM(reference_id::TEXT), '')
+      WHERE payment_reference IS NULL
+        AND reference_id IS NOT NULL
+        AND BTRIM(reference_id::TEXT) <> ''
+    $sql$;
+  END IF;
+END $$;
+
+-- Dédoublonnage défensif avant création de l'index unique
 DELETE FROM public.wallet_transactions a
 USING public.wallet_transactions b
 WHERE a.payment_reference IS NOT NULL
@@ -24,16 +99,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_transactions_payment_reference
   ON public.wallet_transactions (payment_reference)
   WHERE payment_reference IS NOT NULL;
 
--- 2. Unicité sur transaction_id dans merchant_subscriptions (anti-double activation d'abonnement)
+-- 2. Table merchant_subscriptions + Unicité sur transaction_id
+CREATE TABLE IF NOT EXISTS public.merchant_subscriptions (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  plan_name TEXT NOT NULL,
+  billing_cycle TEXT NOT NULL DEFAULT 'MONTHLY',
+  amount NUMERIC NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'XOF',
+  transaction_id TEXT,
+  payment_method TEXT DEFAULT 'MOBILE_MONEY',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ
+);
+
+DELETE FROM public.merchant_subscriptions a
+USING public.merchant_subscriptions b
+WHERE a.transaction_id IS NOT NULL
+  AND BTRIM(a.transaction_id) <> ''
+  AND a.transaction_id = b.transaction_id
+  AND a.ctid > b.ctid;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_merchant_subscriptions_transaction_id
   ON public.merchant_subscriptions (transaction_id)
   WHERE transaction_id IS NOT NULL AND BTRIM(transaction_id) <> '';
 
 -- 3. Fonction transactionnelle atomique RPC : apply_universe_wallet_mutation_atomic
---    - Verrouille la ligne `universes` avec SELECT ... FOR UPDATE (zéro race condition)
---    - Insère la transaction avec payment_reference UNIQUE (anti-double crédit / anti-double débit)
---    - Vérifie que le solde ne devient jamais négatif lors d'un débit (RAISE EXCEPTION 'INSUFFICIENT_BALANCE')
---    - Met à jour atomiquement `universes.balances` (et `merchants.balances` si présent)
 CREATE OR REPLACE FUNCTION public.apply_universe_wallet_mutation_atomic(
   p_tx_id TEXT,
   p_universe_id TEXT,
