@@ -5467,7 +5467,7 @@ export default function App() {
         }}
         isAuthenticated={Boolean(currentUser)}
         onRequestAuth={handlePublicRequestAuthFromSarah}
-        customAvatarUrl="/assets/avatar_nanasore.jpg"
+        customAvatarUrl="/assets/avatar_aicha.jpg"
       />
     </>
   );
@@ -6644,7 +6644,7 @@ export default function App() {
             onOpenAiAdvisor={() => {
               requireManagerAuth(() => setCurrentView('AI_ADVISOR'), 'Conseils IA Gemini', 'IA');
             }}
-            customAvatarUrl="/assets/avatar_nanasore.jpg"
+            customAvatarUrl="/assets/avatar_aicha.jpg"
           />
         </React.Suspense>
       </ModuleErrorBoundary>

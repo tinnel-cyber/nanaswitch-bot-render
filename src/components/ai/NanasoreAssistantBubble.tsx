@@ -48,7 +48,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
   onOpenAiAdvisor,
   onRequestAuth,
   isAuthenticated = false,
-  customAvatarUrl = '/assistant.jpg',
+  customAvatarUrl = '/assets/avatar_aicha.jpg',
   className = ''
 }) => {
   // Détection de la configuration correspondant à la page actuelle
@@ -72,14 +72,14 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
   const [hasFinishedVideoOrTour, setHasFinishedVideoOrTour] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Chat IA intelligent de Sarah (propulsé par gemini-flash-lite-latest)
+  // Chat IA intelligent d'Aïcha (propulsé par gemini-flash-lite-latest)
   const [sarahMessages, setSarahMessages] = useState<SarahChatMessage[]>([
     {
       id: 'sarah-welcome',
       sender: 'ai',
       text: isAuthenticated
-        ? "Bonjour ! Je suis Sarah, votre assistante IA Nanasore (37 modules). Comment puis-je vous aider aujourd'hui ?"
-        : "Bonjour ! Je suis Sarah, votre guide IA sur Nanasore (37 modules tout-en-un).\n\nDites-moi ce que vous souhaitez vendre ou lancer (boutique, formations, live shopping, services…) et je vous oriente tout de suite !"
+        ? "Bonjour ! Je suis Aïcha, votre assistante IA Nanasore (37 modules). Comment puis-je vous aider aujourd'hui ?"
+        : "Bonjour ! Je suis Aïcha, votre guide IA sur Nanasore (37 modules tout-en-un).\n\nDites-moi ce que vous souhaitez vendre ou lancer (boutique, formations, live shopping, services…) et je vous oriente tout de suite !"
     }
   ]);
   const [sarahInput, setSarahInput] = useState('');
@@ -331,26 +331,26 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
               ×
             </span>
             👋 <strong>Bonjour !</strong><br />
-            Je suis Sarah. Cliquez pour lancer la vidéo explicative (Création de compte &amp; démarrage en 1 min) !
+            Je suis Aïcha. Cliquez pour discuter avec moi ou voir la vidéo explicative (démarrage en 1 min) !
           </div>
         )}
 
-        {/* 2. Carte Principale Dépliée : Sarah + Vidéo Présentative Instantanée */}
+        {/* 2. Carte Principale Dépliée : Aïcha + Chat IA & Vidéo Présentative */}
         {isExpanded && (
           <div className="nana-card" id="nanaCard">
-            {/* En-tête : Sarah */}
+            {/* En-tête : Aïcha */}
             <div className="nana-header">
               <div className="nana-header-profile">
                 <img 
                   src={customAvatarUrl} 
-                  alt="Sarah - Accueil"
+                  alt="Aïcha - Accueil Nanasore"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/assets/avatar_nanasore.jpg';
+                    (e.target as HTMLImageElement).src = '/assets/avatar_aicha.jpg';
                   }}
                 />
                 <div>
-                  <div className="nana-header-title">Sarah • Support Nanasore</div>
-                  <div className="nana-header-sub">🟢 Accès libre • Lecture instantanée</div>
+                  <div className="nana-header-title">Aïcha • Support Nanasore</div>
+                  <div className="nana-header-sub">🟢 En ligne • Guide IA (37 modules)</div>
                 </div>
               </div>
 
@@ -368,7 +368,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
               </button>
             </div>
 
-            {/* Onglets Sarah : Discuter avec Sarah IA vs Vidéo & Guide */}
+            {/* Onglets Aïcha : Discuter avec Aïcha IA vs Vidéo & Guide */}
             <div className="grid grid-cols-2 gap-1.5 p-2 bg-slate-950/90 border-b border-slate-800">
               <button
                 type="button"
@@ -383,7 +383,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>Discuter avec Sarah IA</span>
+                <span>Discuter avec Aïcha IA</span>
               </button>
               <button
                 type="button"
@@ -402,7 +402,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
               </button>
             </div>
 
-            {/* ONGLET 1 : CHAT IA INTELLIGENT DE SARAH (ORIENTATION NOUVEAUX CLIENTS — 37 MODULES) */}
+            {/* ONGLET 1 : CHAT IA INTELLIGENT D'AÏCHA (ORIENTATION NOUVEAUX CLIENTS — 37 MODULES) */}
             {sarahTab === 'CHAT' && (
               <div className="flex flex-col bg-slate-950/95">
                 <div className="p-3 h-64 overflow-y-auto space-y-2.5 scrollbar-thin">
@@ -422,7 +422,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                         {!isUser && msg.source && msg.source.includes('gemini-') && !msg.source.includes('fallback') && (
                           <span className="text-[9px] text-emerald-400/80 mt-0.5 px-1 font-semibold flex items-center gap-1">
                             <Bot className="w-2.5 h-2.5" />
-                            Sarah IA • {msg.source}
+                            Aïcha IA • {msg.source}
                           </span>
                         )}
                       </div>
@@ -432,7 +432,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                   {isSarahLoading && (
                     <div className="flex items-center gap-2 text-[11px] text-indigo-300 bg-slate-900/90 border border-indigo-500/30 rounded-xl px-3 py-2 w-fit">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Sarah réfléchit...</span>
+                      <span>Aïcha réfléchit...</span>
                     </div>
                   )}
                   <div ref={sarahChatEndRef} />
@@ -470,7 +470,7 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                     type="text"
                     value={sarahInput}
                     onChange={(e) => setSarahInput(e.target.value)}
-                    placeholder="Posez votre question à Sarah..."
+                    placeholder="Posez votre question à Aïcha..."
                     className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
                   />
                   <button
@@ -655,17 +655,17 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
           </div>
         )}
 
-        {/* 3. Bouton Avatar Flottant (Sarah) - Lecture instantanée au clic */}
+        {/* 3. Bouton Avatar Flottant (Aïcha) */}
         <button 
           className="nana-avatar-btn" 
-          aria-label="Ouvrir l'assistant Nanasore et lancer la vidéo explicative de Sarah"
+          aria-label="Ouvrir l'assistante IA Aïcha de Nanasore"
           onClick={handleToggleSarah}
         >
           <img 
             src={customAvatarUrl} 
-            alt="Sarah - Assistante Nanasore"
+            alt="Aïcha - Assistante IA Nanasore"
             onError={(e) => {
-              (e.target as HTMLImageElement).src = '/assets/avatar_nanasore.jpg';
+              (e.target as HTMLImageElement).src = '/assets/avatar_aicha.jpg';
             }}
           />
           <span className="nana-online-dot"></span>
