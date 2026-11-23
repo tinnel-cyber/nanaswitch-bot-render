@@ -343,6 +343,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
   const [selectedPack, setSelectedPack] = useState<CreditPack>(CREDIT_PACKS[1]);
   const [isPaymentGatewayActive, setIsPaymentGatewayActive] = useState(false);
   const [rechargeSuccessToast, setRechargeSuccessToast] = useState<string | null>(null);
+  const [studioOrderId, setStudioOrderId] = useState<string>('');
 
   // Résultats
   const [generatedText, setGeneratedText] = useState<string>('');
@@ -2491,9 +2492,27 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                   {/* Bouton pour lancer la passerelle */}
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       playTapBeep();
-                      setIsPaymentGatewayActive(true);
+                      try {
+                        const res = await fetch('/api/merchant/wallet/recharge/intent', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            userId: effectiveUid,
+                            amount: selectedPack.price,
+                          }),
+                        });
+                        const json = await res.json().catch(() => null);
+                        if (!res.ok || !json?.success || !json?.orderId) {
+                          setErrorMessage(json?.error || "Impossible d'initialiser la recharge sécurisée.");
+                          return;
+                        }
+                        setStudioOrderId(json.orderId);
+                        setIsPaymentGatewayActive(true);
+                      } catch (err: any) {
+                        setErrorMessage(err?.message || "Erreur lors de l'initialisation de la recharge.");
+                      }
                     }}
                     className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-950/40 transition active:scale-98 cursor-pointer"
                   >
@@ -2529,7 +2548,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                       amount={selectedPack.price}
                       currency="FCFA"
                       orderDescription={`Recharge ${selectedPack.credits} Crédits Studio (${selectedPack.name})`}
-                      orderId={`CREDIT-${effectiveUid.slice(0, 8)}-${Date.now().toString(36).toUpperCase()}`}
+                      orderId={studioOrderId}
                       storeName={storeName || 'Studio Créatif NaNa'}
                       merchantId={effectiveUid}
                       defaultCustomerName={currentUser?.name || ''}
@@ -2537,28 +2556,31 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                       defaultPhone={currentUser?.phone || ''}
                       onSuccess={async (details: any) => {
                         try {
-                          const txRef = details?.transactionRef || details?.transactionId || details?.orderId || `UC-STUDIO-${Date.now()}`;
+                          const txRef = studioOrderId || details?.orderId || details?.transactionRef || details?.transactionId;
+                          const confirmRes = await fetch('/api/merchant/wallet/recharge/confirm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              userId: effectiveUid,
+                              orderId: studioOrderId,
+                              amount: selectedPack.price,
+                              provider: details?.provider || details?.paymentMethod || 'UltimateCheckout',
+                              reference: txRef,
+                              phone: details?.phone || currentUser?.phone || ''
+                            })
+                          });
+                          const confirmJson = await confirmRes.json().catch(() => null);
+                          if (!confirmRes.ok || !confirmJson?.success) {
+                            setErrorMessage(confirmJson?.error || 'Paiement non encore confirmé par le routeur.');
+                            return;
+                          }
+                          window.dispatchEvent(new CustomEvent('nanasore_wallet_updated', { detail: { userId: effectiveUid } }));
+
                           await addUserCredits(effectiveUid, selectedPack.credits, txRef);
                           setCredits((prev) => prev + selectedPack.credits);
 
-                          // Synchronisation comptable avec le Wallet NaNa Marchand unifié
-                          try {
-                            await fetch('/api/merchant/wallet/recharge/confirm', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                userId: effectiveUid,
-                                amount: selectedPack.price,
-                                provider: details?.provider || details?.paymentMethod || 'UltimateCheckout',
-                                reference: txRef,
-                                phone: details?.phone || currentUser?.phone || ''
-                              })
-                            });
-                            window.dispatchEvent(new CustomEvent('nanasore_wallet_updated', { detail: { userId: effectiveUid } }));
-                          } catch {}
-
                           playCashChime();
-                          setRechargeSuccessToast(`✓ Félicitations ! +${selectedPack.credits} crédits ajoutés via UltimateCheckout.`);
+                          setRechargeSuccessToast(`✓ Félicitations ! +${selectedPack.credits} crédits vérifiés et ajoutés.`);
                           setTimeout(() => setRechargeSuccessToast(null), 5000);
                           setIsRechargeModalOpen(false);
                           setIsPaymentGatewayActive(false);

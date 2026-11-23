@@ -52,6 +52,43 @@ import { TenantProvider } from './context/TenantContext';
 import { runAutomatedStorageGC } from './utils/storageManager';
 import { initOfflineSyncListeners } from './services/offlineSyncService';
 import { initOfflineSyncWorker } from './workers/offlineSyncWorkerClient';
+import { supabase } from './lib/supabase';
+
+// Injection automatique du jeton Bearer sur toutes les routes financières (/api/merchant/* et /api/payouts*)
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const isProtectedFinanceRoute =
+        urlStr.startsWith('/api/merchant/') ||
+        urlStr.startsWith('/api/payouts') ||
+        urlStr.includes('/api/merchant/wallet') ||
+        urlStr.includes('/api/merchant/subscription') ||
+        urlStr.includes('/api/payouts');
+      if (isProtectedFinanceRoute) {
+        const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+        if (!headers.has('Authorization')) {
+          let token = '';
+          try {
+            const { data } = await supabase.auth.getSession();
+            token = data?.session?.access_token || '';
+          } catch {}
+          if (!token) {
+            try {
+              token = localStorage.getItem('nana_auth_token') || '';
+            } catch {}
+          }
+          if (token) {
+            headers.set('Authorization', `Bearer ${token}`);
+            return nativeFetch(input, { ...init, headers });
+          }
+        }
+      }
+    } catch {}
+    return nativeFetch(input, init);
+  }) as typeof window.fetch;
+}
 
 // Initialisation globale de la synchronisation hors-ligne IndexedDB & Worker de Batching
 if (typeof window !== 'undefined') {

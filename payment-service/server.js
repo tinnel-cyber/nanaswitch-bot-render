@@ -1545,7 +1545,8 @@ app.get(['/api/payment/sebpay/collections/:externalRef', '/api/payment/sebpay/ve
         }
         if (intentDoc.exists) {
           iData = intentDoc.data();
-          const isPaid = iData?.isPaid === true || iData?.paid === true || ['PAID', 'COMPLETED', 'SUCCESS'].includes(String(iData?.status || '').toUpperCase());
+          const isServerValidated = Boolean(iData?.validatedByWebhook === true || iData?.validatedAt);
+          const isPaid = isServerValidated && (iData?.isPaid === true || iData?.paid === true || ['PAID', 'COMPLETED', 'SUCCESS'].includes(String(iData?.status || '').toUpperCase()));
           if (isPaid) {
             return res.json({
               success: true,
@@ -1580,6 +1581,8 @@ app.get(['/api/payment/sebpay/collections/:externalRef', '/api/payment/sebpay/ve
             paymentStatus: 'PAID',
             isPaid: true,
             paid: true,
+            validatedByWebhook: true,
+            amountPaid: sasVerify.amount || iData?.amount,
             validatedAt: nowServer,
             updatedAt: nowServer
           };

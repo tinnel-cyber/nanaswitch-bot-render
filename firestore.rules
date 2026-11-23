@@ -413,11 +413,15 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
-    // Intentions de paiement Mobile Money
+    // Intentions de paiement Mobile Money (seul le serveur peut marquer un paiement comme payé)
     match /payment_intents/{intentId} {
-      allow create: if isSignedIn() && isNotDemo();
-      allow read, update: if isSuperAdmin() 
+      allow create: if isSignedIn() && isNotDemo()
+        && request.resource.data.get('isPaid', false) == false
+        && request.resource.data.get('paid', false) == false
+        && !(request.resource.data.get('status', 'PENDING') in ['PAID', 'COMPLETED', 'SUCCESS', 'APPROVED', 'VALIDATED']);
+      allow read: if isSuperAdmin() 
         || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.storeId == request.auth.uid));
+      allow update: if isSuperAdmin();
       allow delete: if isSuperAdmin();
     }
 

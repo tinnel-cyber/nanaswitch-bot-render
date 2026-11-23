@@ -6368,6 +6368,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
   const [selectedPlanForModal, setSelectedPlanForModal] = useState<any | null>(null);
   const [pendingCheckout, setPendingCheckout] = useState<{
     kind: 'PLAN' | 'RECHARGE';
+    orderId: string;
     amount: number;
     title: string;
     planId?: string;
@@ -6454,35 +6455,75 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
 
   const currentBalance = app?.balances?.XOF || 0;
 
-  const handlePayAsYouGoRecharge = (amount: number) => {
+  const handlePayAsYouGoRecharge = async (amount: number) => {
     if (amount < 1000) {
       notify("Le montant minimum de recharge Pay-as-you-go est de 1 000 F CFA.", "warning");
       return;
     }
-    setIsRechargeModalOpen(false);
-    setPendingCheckout({
-      kind: 'RECHARGE',
-      amount,
-      title: `Recharge Pay-as-you-go (${amount.toLocaleString('fr-FR')} F CFA)`,
-    });
+    try {
+      const res = await fetch('/api/merchant/wallet/recharge/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: app?.id || '',
+          amount,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json?.orderId) {
+        notify(json?.error || "Impossible d'initialiser la recharge sécurisée.", "error");
+        return;
+      }
+      setIsRechargeModalOpen(false);
+      setPendingCheckout({
+        kind: 'RECHARGE',
+        orderId: json.orderId,
+        amount: json.amount || amount,
+        title: `Recharge Pay-as-you-go (${amount.toLocaleString('fr-FR')} F CFA)`,
+      });
+    } catch (err: any) {
+      notify(err?.message || "Erreur lors de l'initialisation de la recharge.", "error");
+    }
   };
 
-  const confirmPlanSubscription = () => {
+  const confirmPlanSubscription = async () => {
     if (!selectedPlanForModal) return;
     const planPrice =
       billingPartition === 'ANNUAL'
         ? Number(selectedPlanForModal.annualPrice) || Number(selectedPlanForModal.monthlyPrice) * 10
         : Number(selectedPlanForModal.monthlyPrice) || 15000;
     const planObj = selectedPlanForModal;
-    setSelectedPlanForModal(null);
-    setPendingCheckout({
-      kind: 'PLAN',
-      amount: planPrice,
-      title: `Abonnement ${planObj.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : 'Annuel'})`,
-      planId: planObj.id,
-      planName: planObj.name,
-      billingCycle: billingPartition,
-    });
+    try {
+      const res = await fetch('/api/merchant/subscription/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: app?.id || '',
+          planId: planObj.id,
+          planName: planObj.name,
+          billingCycle: billingPartition,
+          amount: planPrice,
+          customerEmail: app?.kyc?.companyEmail || '',
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json?.orderId) {
+        notify(json?.error || "Impossible d'initialiser l'abonnement sécurisé.", "error");
+        return;
+      }
+      setSelectedPlanForModal(null);
+      setPendingCheckout({
+        kind: 'PLAN',
+        orderId: json.orderId,
+        amount: json.amount || planPrice,
+        title: `Abonnement ${planObj.name} (${billingPartition === 'MONTHLY' ? 'Mensuel' : 'Annuel'})`,
+        planId: planObj.id,
+        planName: planObj.name,
+        billingCycle: billingPartition,
+      });
+    } catch (err: any) {
+      notify(err?.message || "Erreur lors de l'initialisation de l'abonnement.", "error");
+    }
   };
 
   const subscriptionPlans = [
@@ -7373,6 +7414,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
           isOpen={true}
           enablePhysicalPosToken={false}
           onClose={() => setPendingCheckout(null)}
+          orderId={pendingCheckout.orderId}
           amount={pendingCheckout.amount}
           currency="FCFA"
           storeName="NaNaSwitch Cloud"
@@ -7391,11 +7433,12 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
             const universeId = app?.id || 'default';
             if (current.kind === 'PLAN') {
               try {
-                await fetch('/api/merchant/subscription/activate', {
+                const res = await fetch('/api/merchant/subscription/activate', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     universeId,
+                    orderId: current.orderId,
                     planId: current.planId,
                     planName: current.planName,
                     billingCycle: current.billingCycle || 'MONTHLY',
@@ -7405,8 +7448,15 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
                     customerPhone: details.phoneNumber,
                   }),
                 });
-              } catch {}
-              notify(`Abonnement ${current.planName} payé et activé en production !`, 'success');
+                const json = await res.json().catch(() => null);
+                if (!res.ok || !json?.success) {
+                  notify(json?.error || "Vérification de l'abonnement en cours auprès du routeur.", "warning");
+                  return;
+                }
+                notify(`Abonnement ${current.planName} vérifié et activé !`, 'success');
+              } catch (err: any) {
+                notify(err?.message || "Erreur lors de la vérification de l'abonnement.", 'error');
+              }
             } else {
               try {
                 const res = await fetch('/api/merchant/wallet/recharge', {
@@ -7414,22 +7464,27 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     universeId,
+                    orderId: current.orderId,
                     amount: details.amount || current.amount,
                     transactionId: details.transactionId,
                     paymentMethod: details.paymentMethod,
-                    currentBalanceXof: app?.balances?.XOF || 0,
                   }),
                 });
                 const json = await res.json().catch(() => null);
-                if (app && onUpdateApp) {
-                  const nextXof = json?.newBalanceXof ?? ((app.balances?.XOF || 0) + (details.amount || current.amount));
+                if (!res.ok || !json?.success) {
+                  notify(json?.error || 'Vérification de la recharge en cours auprès du routeur.', 'warning');
+                  return;
+                }
+                if (app && onUpdateApp && typeof json.newBalanceXof === 'number') {
                   onUpdateApp({
                     ...app,
-                    balances: { ...app.balances, XOF: nextXof },
+                    balances: { ...app.balances, XOF: json.newBalanceXof },
                   });
                 }
-              } catch {}
-              notify(`Recharge Pay-as-you-go de ${(details.amount || current.amount).toLocaleString('fr-FR')} F CFA créditée !`, 'success');
+                notify(`Recharge Pay-as-you-go de ${Number(json.amount || current.amount).toLocaleString('fr-FR')} F CFA vérifiée et créditée !`, 'success');
+              } catch (err: any) {
+                notify(err?.message || 'Erreur lors de la vérification de la recharge.', 'error');
+              }
             }
           }}
         />

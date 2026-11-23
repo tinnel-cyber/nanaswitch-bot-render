@@ -66,6 +66,13 @@ import {
 import { attachGrowthAdvisorRoutes } from './src/server/growthAdvisorController';
 import { attachCampaignsRoutes } from './src/server/campaignsController';
 import { attachLiveRelayRoutes } from './src/server/liveRelayController';
+import {
+  createPaymentSecurity,
+  deterministicId,
+  getServerPlanMinPrice,
+  type PaymentIntent,
+  type VerifiedPayment,
+} from './src/server/paymentSecurity';
 
 export { compressVideoTo480p };
 
@@ -751,6 +758,16 @@ async function startServer() {
     const supaMod = await import('./app/utils/supabase.server');
     supabaseAdmin = supaMod?.supabase || null;
   } catch {}
+  const paymentSecurity = createPaymentSecurity({
+    dataDir: DATA_DIR,
+    getSupabaseAdmin: () => supabaseAdmin,
+    resolveUser: resolveSupabaseUserFromRequest,
+    isAdminUser: (u: any) => {
+      const email = String(u?.email || '').toLowerCase();
+      const role = String(u?.app_metadata?.role || u?.user_metadata?.role || '').toUpperCase();
+      return Boolean(u && (KNOWN_ADMIN_EMAILS.has(email) || role === 'SUPER_ADMIN' || role === 'ADMIN'));
+    },
+  });
   const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
   const UNIVERSES_DATA_FILE = path.join(KYC_DATA_DIR, 'universes.json');
 
@@ -3775,6 +3792,9 @@ async function startServer() {
   const PAYOUT_REQUESTS_FILE = path.join(DATA_DIR, 'payout_requests.json');
   const DISPUTES_FILE = path.join(DATA_DIR, 'merchant_disputes.json');
   const SUPPORT_TICKETS_FILE = path.join(DATA_DIR, 'support_tickets.json');
+  const MERCHANT_WALLETS_FILE = path.join(DATA_DIR, 'merchant_wallets.json');
+  const WALLET_TXS_FILE = path.join(DATA_DIR, 'merchant_wallet_transactions.json');
+  const WALLET_PINS_FILE = path.join(DATA_DIR, 'merchant_wallet_pins.json');
 
   const readJsonArrayFile = (filePath: string): any[] => {
     try {
@@ -3795,48 +3815,215 @@ async function startServer() {
     }
   };
 
-  // 2H.1 Activation Abonnement réel (après paiement confirmé via UltimateCheckout)
-  app.post('/api/merchant/subscription/activate', async (req, res) => {
-    const {
-      universeId,
-      planId,
-      planName,
-      billingCycle = 'MONTHLY',
-      amount = 0,
-      transactionId = '',
-      paymentMethod = 'MOBILE_MONEY',
-      customerPhone = '',
-    } = req.body || {};
+  const hashWalletPin = (pin: string) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const derived = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+    return `${salt}:${derived}`;
+  };
 
-    if (!universeId || !planId) {
-      return res.status(400).json({ success: false, error: 'universeId et planId requis' });
+  const verifyWalletPinHash = (pin: string, storedHash: string): boolean => {
+    const parts = String(storedHash || '').split(':');
+    if (parts.length !== 2) return false;
+    const [salt, hex] = parts;
+    const derived = crypto.scryptSync(String(pin), salt, 32);
+    const expected = Buffer.from(hex, 'hex');
+    if (derived.length !== expected.length) return false;
+    return crypto.timingSafeEqual(derived, expected);
+  };
+
+  const getWalletPinRecord = async (ownerKey: string) => {
+    const pins = readJsonArrayFile(WALLET_PINS_FILE);
+    let rec = pins.find((p: any) => p.ownerKey === ownerKey) || null;
+    if (!rec && supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('app_registry')
+          .select('config_json, value')
+          .eq('key', `wallet_pin_${ownerKey}`)
+          .maybeSingle();
+        if (data?.config_json?.pinHash || data?.value?.pinHash) {
+          rec = data.config_json || data.value;
+        }
+      } catch {}
     }
-    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY' || String(paymentMethod).toUpperCase() === 'PHYSICAL_POS_TOKEN') {
-      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les abonnements.' });
+    return rec;
+  };
+
+  const readUnifiedWalletBalance = async (universeId: string, userId: string): Promise<{ balanceXof: number; balances: Record<string, number> }> => {
+    const key = universeId || (userId ? `user_${userId}` : 'default');
+    if (supabaseAdmin && universeId) {
+      try {
+        const { data: uRow } = await supabaseAdmin
+          .from('universes')
+          .select('balances')
+          .eq('id', universeId)
+          .maybeSingle();
+        if (uRow?.balances && typeof uRow.balances === 'object') {
+          const b = uRow.balances as Record<string, any>;
+          return {
+            balanceXof: Number(b.XOF ?? 0) || 0,
+            balances: {
+              XOF: Number(b.XOF ?? 0) || 0,
+              USD: Number(b.USD ?? 0) || 0,
+              XAF: Number(b.XAF ?? 0) || 0,
+              GNF: Number(b.GNF ?? 0) || 0,
+              GHS: Number(b.GHS ?? 0) || 0,
+            }
+          };
+        }
+      } catch {}
     }
 
+    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
+    const found = wallets.find((w: any) => w.key === key || (universeId && w.universeId === universeId));
+    const xof = Number(found?.balanceXof ?? 0) || 0;
+    return {
+      balanceXof: xof,
+      balances: found?.balances || { XOF: xof, USD: 0, XAF: 0, GNF: 0, GHS: 0 }
+    };
+  };
+
+  const writeUnifiedWalletBalance = async (universeId: string, userId: string, nextBalanceXof: number, existingBalances?: Record<string, number>) => {
+    const key = universeId || (userId ? `user_${userId}` : 'default');
+    const nowIso = new Date().toISOString();
+    const safeXof = Math.max(0, Math.round(Number(nextBalanceXof) || 0));
+    const nextBalances = {
+      XOF: safeXof,
+      USD: Number(existingBalances?.USD ?? 0) || 0,
+      XAF: Number(existingBalances?.XAF ?? 0) || 0,
+      GNF: Number(existingBalances?.GNF ?? 0) || 0,
+      GHS: Number(existingBalances?.GHS ?? 0) || 0,
+    };
+
+    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
+    const idx = wallets.findIndex((w: any) => w.key === key || (universeId && w.universeId === universeId));
+    const updatedRow = { key, universeId: universeId || '', userId: userId || '', balanceXof: safeXof, balances: nextBalances, updatedAt: nowIso };
+    if (idx >= 0) wallets[idx] = updatedRow;
+    else wallets.unshift(updatedRow);
+    writeJsonArrayFile(MERCHANT_WALLETS_FILE, wallets);
+
+    if (supabaseAdmin && universeId) {
+      try {
+        await supabaseAdmin
+          .from('universes')
+          .update({ balances: nextBalances, updated_at: nowIso })
+          .eq('id', universeId);
+      } catch {}
+    }
+    return { balanceXof: safeXof, balances: nextBalances };
+  };
+
+  // Vérifie dans le fichier local ET dans le Cloud si une référence a déjà été créditée
+  const findExistingWalletCredit = async (txRef: string, deterministicTxId: string): Promise<any | null> => {
+    const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+    const localHit = allTxs.find((t: any) => String(t.reference || '') === txRef || String(t.id || '') === deterministicTxId);
+    if (localHit) return localHit;
+    if (supabaseAdmin) {
+      try {
+        const { data } = await supabaseAdmin.from('wallet_transactions').select('*').eq('id', deterministicTxId).maybeSingle();
+        if (data) return data.metadata || data;
+      } catch {}
+    }
+    return null;
+  };
+
+  /**
+   * Crédite une recharge Wallet UNIQUEMENT après vérification serveur du paiement.
+   * Le montant crédité est celui confirmé par le routeur (verified.amount), jamais celui envoyé par le navigateur.
+   */
+  const executeVerifiedWalletRecharge = async (intent: PaymentIntent, verified: VerifiedPayment) => {
+    const txRef = intent.orderId;
+    const txId = deterministicId('RECH', txRef);
+    const existing = await findExistingWalletCredit(txRef, txId);
+    if (existing) {
+      const current = await readUnifiedWalletBalance(intent.universeId, intent.userId);
+      return { duplicate: true, balanceXof: current.balanceXof, balances: current.balances, transaction: existing };
+    }
+
+    const creditAmount = Math.round(Number(verified.amount) || 0);
+    const current = await readUnifiedWalletBalance(intent.universeId, intent.userId);
+    const updated = await writeUnifiedWalletBalance(intent.universeId, intent.userId, current.balanceXof + creditAmount, current.balances);
+    const nowIso = new Date().toISOString();
+
+    const txRecord = {
+      id: txId,
+      universeId: String(intent.universeId || ''),
+      userId: String(intent.userId || intent.ownerUserId || ''),
+      type: 'CREDIT',
+      title: 'Recharge Wallet (Vérifiée Serveur)',
+      subtitle: `Réf. ${txRef} • ${verified.source}`,
+      amount: creditAmount,
+      currency: 'XOF',
+      category: 'RECHARGE',
+      reference: txRef,
+      gatewayTransactionId: verified.transactionId,
+      status: 'COMPLETED',
+      createdAt: nowIso,
+    };
+
+    const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+    allTxs.unshift(txRecord);
+    writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('wallet_transactions').insert({
+          id: txId,
+          universe_id: intent.universeId || null,
+          user_id: intent.userId || intent.ownerUserId || null,
+          type: 'CREDIT',
+          amount: creditAmount,
+          status: 'COMPLETED',
+          metadata: txRecord,
+          created_at: nowIso,
+        });
+      } catch (err) {
+        console.error('[WALLET RECHARGE DB INSERT ERROR]', (err as Error).message);
+      }
+    }
+
+    await paymentSecurity.updateIntent(intent.orderId, {
+      status: 'SETTLED',
+      verifiedAmount: creditAmount,
+      verifiedTransactionId: verified.transactionId,
+      verificationSource: verified.source,
+      settlement: { txId, balanceXof: updated.balanceXof, settledAt: nowIso },
+    });
+
+    return { duplicate: false, balanceXof: updated.balanceXof, balances: updated.balances, transaction: txRecord };
+  };
+
+  /**
+   * Active un abonnement UNIQUEMENT après vérification serveur du paiement.
+   */
+  const executeVerifiedSubscriptionActivation = async (intent: PaymentIntent, verified: VerifiedPayment) => {
+    const subId = deterministicId('SUB', intent.orderId);
+    const all = readJsonArrayFile(SUBSCRIPTIONS_FILE);
+    const already = all.find((s: any) => s.id === subId || s.orderId === intent.orderId);
+    if (already) return { duplicate: true, subscription: already, saasAffiliateCommission: null };
+
+    const billingCycle = String(intent.billingCycle || 'MONTHLY').toUpperCase();
     const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + (billingCycle === 'ANNUAL' ? 365 : 30) * 24 * 60 * 60 * 1000
-    ).toISOString();
+    const expiresAt = new Date(now.getTime() + (billingCycle === 'ANNUAL' ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString();
+    const confirmedAmount = Math.round(Number(verified.amount) || 0);
 
     const record = {
-      id: `sub_${crypto.randomBytes(5).toString('hex')}`,
-      universeId: String(universeId),
-      planId: String(planId),
-      planName: String(planName || planId),
-      billingCycle: String(billingCycle),
-      amount: Math.max(0, Number(amount) || 0),
+      id: subId,
+      orderId: intent.orderId,
+      universeId: String(intent.universeId),
+      planId: String(intent.planId),
+      planName: String(intent.planName || intent.planId),
+      billingCycle,
+      amount: confirmedAmount,
       currency: 'XOF',
-      transactionId: String(transactionId || `SUB-${Date.now().toString(36).toUpperCase()}`),
-      paymentMethod: String(paymentMethod),
-      customerPhone: String(customerPhone || ''),
+      transactionId: String(verified.transactionId || intent.orderId),
+      paymentMethod: 'MOBILE_MONEY',
+      verificationSource: verified.source,
       status: 'ACTIVE',
       activatedAt: now.toISOString(),
       expiresAt,
     };
 
-    const all = readJsonArrayFile(SUBSCRIPTIONS_FILE);
     all.unshift(record);
     writeJsonArrayFile(SUBSCRIPTIONS_FILE, all);
 
@@ -3856,7 +4043,9 @@ async function startServer() {
           activated_at: record.activatedAt,
           expires_at: record.expiresAt,
         });
-      } catch {}
+      } catch (err) {
+        console.error('[SUBSCRIPTION DB INSERT ERROR]', (err as Error).message);
+      }
       try {
         await supabaseAdmin
           .from('universes')
@@ -3865,15 +4054,15 @@ async function startServer() {
       } catch {}
     }
 
-    // Affiliation SaaS : si cette boutique a un parrain enregistré, on active son statut et crédite la commission récurrente
+    // Affiliation SaaS : commission calculée UNIQUEMENT sur le montant confirmé par le routeur
     let saasAffiliateCommission = null;
     if (record.amount > 0) {
       const referrals = getStoredAffiliateReferrals();
       const refIdx = referrals.findIndex(
         (r: any) =>
           String(r.storeId || '') === String(record.universeId) ||
-          (req.body?.customerEmail &&
-            String(r.ownerEmail || '').toLowerCase() === String(req.body.customerEmail).trim().toLowerCase())
+          (intent.customerEmail &&
+            String(r.ownerEmail || '').toLowerCase() === String(intent.customerEmail).trim().toLowerCase())
       );
       if (refIdx !== -1) {
         const refEntry = referrals[refIdx];
@@ -3885,7 +4074,7 @@ async function startServer() {
         const tier = computeAffiliateTier(activeCountForReferrer);
         saasAffiliateCommission = creditAffiliateCommissionIdempotent({
           affiliateHandle: referrerCode,
-          orderRef: record.transactionId,
+          orderRef: intent.orderId,
           orderTotal: record.amount,
           commissionRate: tier.rate,
           channel: 'SAAS',
@@ -3914,78 +4103,215 @@ async function startServer() {
       }
     }
 
-    return res.json({ success: true, subscription: record, saasAffiliateCommission });
+    await paymentSecurity.updateIntent(intent.orderId, {
+      status: 'SETTLED',
+      verifiedAmount: confirmedAmount,
+      verifiedTransactionId: verified.transactionId,
+      verificationSource: verified.source,
+      settlement: { subscriptionId: record.id, settledAt: record.activatedAt },
+    });
+
+    return { duplicate: false, subscription: record, saasAffiliateCommission };
+  };
+
+  /**
+   * Règle une intention de paiement si et seulement si le routeur / webhook confirme le paiement.
+   */
+  const trySettleIntent = async (orderId: string) => {
+    return paymentSecurity.withLock(orderId, async () => {
+      const intent = await paymentSecurity.getIntent(orderId);
+      if (!intent) return { ok: false, status: 404, code: 'INTENT_NOT_FOUND', error: 'Intention de paiement introuvable. Veuillez relancer le paiement depuis votre espace.' };
+      if (intent.status === 'SETTLED') {
+        const current = await readUnifiedWalletBalance(intent.universeId, intent.userId);
+        return { ok: true, duplicate: true, intent, balanceXof: current.balanceXof, balances: current.balances };
+      }
+      const verified = await paymentSecurity.verifyPayment({
+        orderId: intent.orderId,
+        expectedAmount: intent.amount,
+        expectedCurrency: intent.currency,
+      });
+      await paymentSecurity.updateIntent(intent.orderId, {
+        attempts: (Number(intent.attempts) || 0) + 1,
+        lastCheckedAt: new Date().toISOString(),
+        ...(verified.status === 'FAILED' ? { status: 'FAILED' } : {}),
+      });
+      if (!verified.verified) {
+        const httpStatus = verified.status === 'FAILED' ? 402 : 202;
+        return {
+          ok: false,
+          status: httpStatus,
+          code: verified.status === 'FAILED' ? 'PAYMENT_FAILED' : 'PAYMENT_NOT_VERIFIED',
+          paymentStatus: verified.status,
+          reason: verified.reason,
+          error:
+            verified.status === 'FAILED'
+              ? `Paiement refusé ou montant non conforme (${verified.reason || 'échec opérateur'}).`
+              : 'Paiement non encore confirmé par le routeur de paiement. Veuillez valider sur votre téléphone.',
+        };
+      }
+      if (intent.purpose === 'SUBSCRIPTION') {
+        const out = await executeVerifiedSubscriptionActivation(intent, verified);
+        return { ok: true, ...out, verified };
+      }
+      const out = await executeVerifiedWalletRecharge(intent, verified);
+      return { ok: true, ...out, verified };
+    });
+  };
+
+  // Boucle serveur de réconciliation automatique (crédite même si le navigateur est fermé)
+  setInterval(async () => {
+    const pending = paymentSecurity.listAwaitingIntents();
+    for (const intent of pending.slice(0, 15)) {
+      try {
+        await trySettleIntent(intent.orderId);
+      } catch {}
+    }
+  }, 20000);
+
+  // 2H.0 Création d'une intention d'abonnement (authentifiée + liée au propriétaire)
+  app.post('/api/merchant/subscription/intent', async (req, res) => {
+    const { universeId, planId, planName, billingCycle = 'MONTHLY', amount = 0, customerEmail = '' } = req.body || {};
+    if (!universeId || !planId) {
+      return res.status(400).json({ success: false, error: 'universeId et planId requis.' });
+    }
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId });
+    if (!ctx) return;
+
+    const cycle = String(billingCycle || 'MONTHLY').toUpperCase() === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY';
+    const minPrice = getServerPlanMinPrice(String(planId), cycle);
+    if (minPrice === null) {
+      return res.status(400).json({ success: false, error: `Offre d'abonnement inconnue : ${planId}` });
+    }
+    const cleanAmount = Math.max(minPrice, Math.round(Number(amount) || minPrice));
+
+    const intent = await paymentSecurity.createIntent({
+      purpose: 'SUBSCRIPTION',
+      ownerUserId: ctx.authUserId,
+      universeId: String(universeId),
+      userId: ctx.userId,
+      amount: cleanAmount,
+      currency: 'XOF',
+      planId: String(planId),
+      planName: String(planName || planId),
+      billingCycle: cycle,
+      customerEmail: String(customerEmail || ''),
+    });
+
+    return res.json({ success: true, orderId: intent.orderId, amount: intent.amount, currency: intent.currency, intent });
   });
 
-  // 2H.2 Recharge Pay-as-you-go réelle (après paiement confirmé via UltimateCheckout — Mobile Money uniquement)
-  app.post('/api/merchant/wallet/recharge', async (req, res) => {
-    const {
-      universeId,
-      amount = 0,
-      transactionId = '',
-      paymentMethod = 'MOBILE_MONEY',
-      currentBalanceXof = 0,
-    } = req.body || {};
-
-    const cleanAmount = Math.max(0, Number(amount) || 0);
-    if (!universeId || cleanAmount < 1000) {
-      return res.status(400).json({ success: false, error: 'universeId et montant >= 1000 XOF requis' });
+  // 2H.1 Activation Abonnement réel (authentifiée + vérifiée serveur auprès du routeur)
+  app.post('/api/merchant/subscription/activate', async (req, res) => {
+    const { universeId, orderId = '', transactionId = '', reference = '', paymentMethod = 'MOBILE_MONEY' } = req.body || {};
+    if (!universeId) {
+      return res.status(400).json({ success: false, error: 'universeId requis.' });
     }
     if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY' || String(paymentMethod).toUpperCase() === 'PHYSICAL_POS_TOKEN') {
-      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les recharges wallet.' });
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les abonnements.' });
+    }
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId });
+    if (!ctx) return;
+
+    const targetOrderId = String(orderId || reference || transactionId || '').trim();
+    if (!targetOrderId) {
+      return res.status(400).json({ success: false, error: 'orderId d\'intention de paiement requis.' });
+    }
+    const intent = await paymentSecurity.getIntent(targetOrderId);
+    if (!intent || intent.purpose !== 'SUBSCRIPTION') {
+      return res.status(404).json({ success: false, code: 'INTENT_NOT_FOUND', error: 'Intention d\'abonnement introuvable. Veuillez initier le paiement depuis l\'application.' });
+    }
+    if (!ctx.isAdmin && (intent.ownerUserId !== ctx.authUserId || intent.universeId !== String(universeId))) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Cette intention de paiement appartient à un autre compte.' });
     }
 
-    const nowIso = new Date().toISOString();
-    const txId = String(transactionId || `RCH-${Date.now().toString(36).toUpperCase()}`);
-    let newBalanceXof = Math.max(0, Number(currentBalanceXof) || 0) + cleanAmount;
-
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('wallet_transactions').insert({
-          id: txId,
-          universe_id: String(universeId),
-          type: 'RECHARGE',
-          amount: cleanAmount,
-          status: 'COMPLETED',
-          metadata: {
-            currency: 'XOF',
-            payment_method: paymentMethod,
-            source: 'pay_as_you_go_recharge',
-            created_at: nowIso,
-          },
-          created_at: nowIso,
-        });
-      } catch {}
-      try {
-        const { data: uRow } = await supabaseAdmin
-          .from('universes')
-          .select('balances')
-          .eq('id', String(universeId))
-          .maybeSingle();
-        const prevBal = (uRow?.balances && typeof uRow.balances === 'object') ? uRow.balances : { XOF: Number(currentBalanceXof) || 0 };
-        const updatedBalances = { ...prevBal, XOF: (Number(prevBal.XOF) || 0) + cleanAmount };
-        newBalanceXof = updatedBalances.XOF;
-        await Promise.allSettled([
-          supabaseAdmin.from('universes').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', String(universeId)),
-          supabaseAdmin.from('merchants').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', String(universeId)),
-        ]);
-      } catch {}
+    const settled: any = await trySettleIntent(intent.orderId);
+    if (settled?.locked) {
+      return res.status(202).json({ success: false, status: 'PROCESSING', error: 'Vérification déjà en cours.' });
     }
-
+    if (!settled?.ok) {
+      return res.status(settled.status || 402).json({ success: false, code: settled.code, status: settled.paymentStatus, error: settled.error });
+    }
     return res.json({
       success: true,
-      transactionId: txId,
-      amount: cleanAmount,
-      newBalanceXof,
-      createdAt: nowIso,
+      duplicate: settled.duplicate,
+      subscription: settled.subscription,
+      saasAffiliateCommission: settled.saasAffiliateCommission || null,
     });
   });
 
-  // 2H.3 Retraits & Reversements sécurisés côté serveur (POST /api/payouts/request & GET /api/payouts)
+  // 2H.2 Création d'une intention de recharge Wallet (authentifiée + liée au propriétaire)
+  app.post('/api/merchant/wallet/recharge/intent', async (req, res) => {
+    const { universeId = '', userId = '', amount = 0 } = req.body || {};
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
+    if (!ctx) return;
+
+    const cleanAmount = Math.round(Number(amount) || 0);
+    if (cleanAmount < 100) {
+      return res.status(400).json({ success: false, error: 'Montant minimum de recharge : 100 FCFA.' });
+    }
+
+    const intent = await paymentSecurity.createIntent({
+      purpose: 'WALLET_RECHARGE',
+      ownerUserId: ctx.authUserId,
+      universeId: ctx.universeId,
+      userId: ctx.userId,
+      amount: cleanAmount,
+      currency: 'XOF',
+    });
+
+    return res.json({ success: true, orderId: intent.orderId, amount: intent.amount, currency: intent.currency, intent });
+  });
+
+  // Handler commun de confirmation de recharge (utilisé par /recharge et /recharge/confirm)
+  const handleVerifiedRechargeConfirm = async (req: express.Request, res: express.Response) => {
+    const { universeId = '', userId = '', orderId = '', reference = '', transactionId = '', paymentMethod = 'MOBILE_MONEY' } = req.body || {};
+    if (String(paymentMethod).toUpperCase() === 'CASH_ON_DELIVERY' || String(paymentMethod).toUpperCase() === 'PHYSICAL_POS_TOKEN') {
+      return res.status(400).json({ success: false, error: 'Paiement Mobile Money obligatoire pour les recharges wallet.' });
+    }
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
+    if (!ctx) return;
+
+    const targetOrderId = String(orderId || reference || transactionId || '').trim();
+    if (!targetOrderId) {
+      return res.status(400).json({ success: false, error: 'orderId d\'intention de recharge requis.' });
+    }
+    const intent = await paymentSecurity.getIntent(targetOrderId);
+    if (!intent || intent.purpose !== 'WALLET_RECHARGE') {
+      return res.status(404).json({ success: false, code: 'INTENT_NOT_FOUND', error: 'Intention de recharge introuvable. Veuillez initier la recharge depuis votre Wallet.' });
+    }
+    if (!ctx.isAdmin && intent.ownerUserId !== ctx.authUserId) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Cette intention de recharge appartient à un autre compte.' });
+    }
+    if (ctx.universeId && intent.universeId && intent.universeId !== ctx.universeId) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Univers non concordant avec l\'intention de recharge.' });
+    }
+
+    const settled: any = await trySettleIntent(intent.orderId);
+    if (settled?.locked) {
+      return res.status(202).json({ success: false, status: 'PROCESSING', error: 'Vérification déjà en cours.' });
+    }
+    if (!settled?.ok) {
+      return res.status(settled.status || 402).json({ success: false, code: settled.code, status: settled.paymentStatus, error: settled.error });
+    }
+    return res.json({
+      success: true,
+      duplicate: settled.duplicate,
+      transactionId: settled.transaction?.id,
+      amount: settled.transaction?.amount || intent.verifiedAmount || intent.amount,
+      balanceXof: settled.balanceXof,
+      newBalanceXof: settled.balanceXof,
+      balances: settled.balances,
+      transaction: settled.transaction,
+    });
+  };
+
+  app.post('/api/merchant/wallet/recharge', handleVerifiedRechargeConfirm);
+
+  // 2H.3 Retraits & Reversements sécurisés côté serveur (authentifié + contrôle propriétaire + contrôle solde + PIN)
   app.post('/api/payouts/request', async (req, res) => {
     const {
-      universeId,
-      userId = null,
+      universeId = '',
+      userId = '',
       amount = 0,
       fee = 0,
       netAmount = 0,
@@ -3997,80 +4323,145 @@ async function startServer() {
       operatorName = '',
       destination = '',
       beneficiary = '',
-      mode = 'PRODUCTION',
+      pin = '',
     } = req.body || {};
 
-    const cleanAmount = Math.max(0, Number(amount) || 0);
-    if (!universeId || cleanAmount < 1000 || !destination) {
-      return res.status(400).json({ success: false, error: 'Paramètres de retrait invalides (min 1 000 XOF).' });
+    const cleanUniverseId = String(universeId || '').trim();
+    const isInstructorScope = cleanUniverseId.startsWith('instructor_');
+    const ownerUniverseCheck = isInstructorScope ? '' : cleanUniverseId;
+    const ownerUserCheck = isInstructorScope ? cleanUniverseId.replace(/^instructor_/, '') : String(userId || '').trim();
+
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, {
+      universeId: ownerUniverseCheck,
+      userId: ownerUserCheck,
+    });
+    if (!ctx) return;
+
+    const cleanAmount = Math.round(Number(amount) || 0);
+    if ((!cleanUniverseId && !ctx.userId) || cleanAmount < 1000 || !String(destination || '').trim()) {
+      return res.status(400).json({ success: false, error: 'Paramètres de retrait invalides (min 1 000 XOF et numéro requis).' });
     }
 
-    const isRealProd = String(mode).toUpperCase() === 'PRODUCTION';
-    const nowIso = new Date().toISOString();
-    const payoutId = `PAYOUT-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    const effectiveUniverseId = cleanUniverseId || ctx.universeId;
+    const ownerKey = effectiveUniverseId || ctx.userId;
 
-    const record = {
-      id: payoutId,
-      universeId: String(universeId),
-      userId,
-      amount: cleanAmount,
-      fee: Number(fee) || 0,
-      netAmount: Number(netAmount) || Math.max(0, cleanAmount - (Number(fee) || 0)),
-      currency: String(currency || 'XOF'),
-      country: String(country),
-      countryCode: String(countryCode),
-      flag: String(flag),
-      operatorId: String(operatorId),
-      operatorName: String(operatorName),
-      destination: String(destination),
-      beneficiary: String(beneficiary),
-      mode: isRealProd ? 'PRODUCTION' : 'SIMULATION',
-      status: isRealProd ? 'PENDING' : 'COMPLETED',
-      createdAt: nowIso,
-    };
-
-    const all = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
-    all.unshift(record);
-    writeJsonArrayFile(PAYOUT_REQUESTS_FILE, all);
-
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('wallet_transactions').insert({
-          id: payoutId,
-          universe_id: record.universeId,
-          user_id: userId || null,
-          type: 'WITHDRAWAL',
-          amount: cleanAmount,
-          status: record.status,
-          metadata: record,
-          created_at: nowIso,
-        });
-      } catch {}
-
-      if (isRealProd) {
-        try {
-          const { data: uRow } = await supabaseAdmin
-            .from('universes')
-            .select('balances')
-            .eq('id', record.universeId)
-            .maybeSingle();
-          if (uRow?.balances && typeof uRow.balances === 'object') {
-            const nextXof = Math.max(0, (Number(uRow.balances.XOF) || 0) - cleanAmount);
-            await supabaseAdmin
-              .from('universes')
-              .update({ balances: { ...uRow.balances, XOF: nextXof }, updated_at: nowIso })
-              .eq('id', record.universeId);
-          }
-        } catch {}
+    // 1. Contrôle Master PIN côté serveur s'il est configuré sur ce Wallet
+    const pinRecord = await getWalletPinRecord(ownerKey);
+    if (pinRecord?.pinHash) {
+      if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+        return res.status(403).json({ success: false, code: 'INVALID_MASTER_PIN', error: 'Master PIN requis ou incorrect pour autoriser ce retrait.' });
       }
     }
 
-    return res.json({ success: true, payout: record });
+    // 2. Contrôle strict du solde réel côté serveur (refus 402 si solde insuffisant)
+    const lockKey = `wallet_${ownerKey}`;
+    const outcome: any = await paymentSecurity.withLock(lockKey, async () => {
+      const current = await readUnifiedWalletBalance(effectiveUniverseId, ctx.userId);
+      if (current.balanceXof < cleanAmount) {
+        return {
+          insufficient: true,
+          available: current.balanceXof,
+        };
+      }
+
+      const updated = await writeUnifiedWalletBalance(
+        effectiveUniverseId,
+        ctx.userId,
+        current.balanceXof - cleanAmount,
+        current.balances
+      );
+
+      const nowIso = new Date().toISOString();
+      const payoutId = `PAYOUT-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const computedFee = Math.max(0, Math.round(Number(fee) || 0));
+      const record = {
+        id: payoutId,
+        universeId: String(effectiveUniverseId),
+        userId: ctx.userId,
+        amount: cleanAmount,
+        fee: computedFee,
+        netAmount: Math.max(0, cleanAmount - computedFee) || Number(netAmount) || cleanAmount,
+        currency: String(currency || 'XOF'),
+        country: String(country),
+        countryCode: String(countryCode),
+        flag: String(flag),
+        operatorId: String(operatorId),
+        operatorName: String(operatorName),
+        destination: String(destination).trim(),
+        beneficiary: String(beneficiary),
+        mode: 'PRODUCTION',
+        status: 'PENDING',
+        createdAt: nowIso,
+      };
+
+      const all = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
+      all.unshift(record);
+      writeJsonArrayFile(PAYOUT_REQUESTS_FILE, all);
+
+      const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
+      allTxs.unshift({
+        id: payoutId,
+        universeId: String(effectiveUniverseId),
+        userId: ctx.userId,
+        type: 'DEBIT',
+        title: `Retrait ${record.operatorName || 'Mobile Money'}`,
+        subtitle: record.destination,
+        amount: cleanAmount,
+        currency: record.currency,
+        category: 'WITHDRAWAL',
+        reference: payoutId,
+        status: 'PENDING',
+        createdAt: nowIso,
+      });
+      writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('wallet_transactions').insert({
+            id: payoutId,
+            universe_id: record.universeId || null,
+            user_id: ctx.userId || null,
+            type: 'WITHDRAWAL',
+            amount: cleanAmount,
+            status: record.status,
+            metadata: record,
+            created_at: nowIso,
+          });
+        } catch (err) {
+          console.error('[PAYOUT DB INSERT ERROR]', (err as Error).message);
+        }
+      }
+
+      return { record, balanceXof: updated.balanceXof, balances: updated.balances };
+    });
+
+    if (outcome?.locked) {
+      return res.status(409).json({ success: false, error: 'Une opération est déjà en cours sur ce portefeuille.' });
+    }
+    if (outcome?.insufficient) {
+      return res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_BALANCE',
+        availableBalance: outcome.available,
+        error: `Solde insuffisant (${Number(outcome.available || 0).toLocaleString('fr-FR')} FCFA disponibles pour ${cleanAmount.toLocaleString('fr-FR')} FCFA demandés).`,
+      });
+    }
+
+    return res.json({ success: true, payout: outcome.record, balanceXof: outcome.balanceXof, balances: outcome.balances });
   });
 
   app.get('/api/payouts', async (req, res) => {
-    const universeId = String(req.query.universeId || '').trim();
-    const userId = String(req.query.userId || '').trim();
+    const rawUniverseId = String(req.query.universeId || '').trim();
+    const rawUserId = String(req.query.userId || '').trim();
+    const isInstructorScope = rawUniverseId.startsWith('instructor_');
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, {
+      universeId: isInstructorScope ? '' : rawUniverseId,
+      userId: isInstructorScope ? rawUniverseId.replace(/^instructor_/, '') : rawUserId,
+    });
+    if (!ctx) return;
+
+    const universeId = rawUniverseId || ctx.universeId;
+    const userId = rawUserId || ctx.userId;
     let list = readJsonArrayFile(PAYOUT_REQUESTS_FILE);
 
     if (supabaseAdmin && (universeId || userId)) {
@@ -4101,7 +4492,7 @@ async function startServer() {
                 operatorName: meta.operatorName || 'Mobile Money',
                 destination: meta.destination || '',
                 beneficiary: meta.beneficiary || '',
-                mode: meta.mode || 'PRODUCTION',
+                mode: 'PRODUCTION',
                 status: row.status || 'PENDING',
                 createdAt: row.created_at || new Date().toISOString(),
               });
@@ -4113,8 +4504,7 @@ async function startServer() {
 
     if (universeId) {
       list = list.filter((p: any) => String(p.universeId || '') === universeId);
-    }
-    if (userId) {
+    } else if (userId) {
       list = list.filter((p: any) => String(p.userId || '') === userId || String(p.universeId || '') === `instructor_${userId}`);
     }
     list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -7007,9 +7397,6 @@ async function startServer() {
   // ============================================================================
   // 2J. WALLET NANA MARCHAND UNIFIÉ (SOLDE RÉEL, PAY-AS-YOU-GO, MASTER PIN SCRYPT, ULTIMATECHECKOUT)
   // ============================================================================
-  const MERCHANT_WALLETS_FILE = path.join(DATA_DIR, 'merchant_wallets.json');
-  const WALLET_TXS_FILE = path.join(DATA_DIR, 'merchant_wallet_transactions.json');
-  const WALLET_PINS_FILE = path.join(DATA_DIR, 'merchant_wallet_pins.json');
   const PAYG_ENTITLEMENTS_FILE = path.join(DATA_DIR, 'payg_entitlements.json');
 
   const PAYG_MODULES_CATALOG = [
@@ -7060,116 +7447,23 @@ async function startServer() {
     }
   ];
 
-  const hashWalletPin = (pin: string) => {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const derived = crypto.scryptSync(String(pin), salt, 32).toString('hex');
-    return `${salt}:${derived}`;
-  };
-
-  const verifyWalletPinHash = (pin: string, storedHash: string): boolean => {
-    const parts = String(storedHash || '').split(':');
-    if (parts.length !== 2) return false;
-    const [salt, hex] = parts;
-    const derived = crypto.scryptSync(String(pin), salt, 32);
-    const expected = Buffer.from(hex, 'hex');
-    if (derived.length !== expected.length) return false;
-    return crypto.timingSafeEqual(derived, expected);
-  };
-
-  const getWalletPinRecord = async (ownerKey: string) => {
-    const pins = readJsonArrayFile(WALLET_PINS_FILE);
-    let rec = pins.find((p: any) => p.ownerKey === ownerKey) || null;
-    if (!rec && supabaseAdmin) {
-      try {
-        const { data } = await supabaseAdmin
-          .from('app_registry')
-          .select('config_json, value')
-          .eq('key', `wallet_pin_${ownerKey}`)
-          .maybeSingle();
-        if (data?.config_json?.pinHash || data?.value?.pinHash) {
-          rec = data.config_json || data.value;
-        }
-      } catch {}
-    }
-    return rec;
-  };
-
-  const readUnifiedWalletBalance = async (universeId: string, userId: string): Promise<{ balanceXof: number; balances: Record<string, number> }> => {
-    const key = universeId || (userId ? `user_${userId}` : 'default');
-    if (supabaseAdmin && universeId) {
-      try {
-        const { data: uRow } = await supabaseAdmin
-          .from('universes')
-          .select('balances')
-          .eq('id', universeId)
-          .maybeSingle();
-        if (uRow?.balances && typeof uRow.balances === 'object') {
-          const b = uRow.balances as Record<string, any>;
-          return {
-            balanceXof: Number(b.XOF ?? 0) || 0,
-            balances: {
-              XOF: Number(b.XOF ?? 0) || 0,
-              USD: Number(b.USD ?? 0) || 0,
-              XAF: Number(b.XAF ?? 0) || 0,
-              GNF: Number(b.GNF ?? 0) || 0,
-              GHS: Number(b.GHS ?? 0) || 0,
-            }
-          };
-        }
-      } catch {}
-    }
-
-    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
-    const found = wallets.find((w: any) => w.key === key || (universeId && w.universeId === universeId));
-    const xof = Number(found?.balanceXof ?? 0) || 0;
-    return {
-      balanceXof: xof,
-      balances: found?.balances || { XOF: xof, USD: 0, XAF: 0, GNF: 0, GHS: 0 }
-    };
-  };
-
-  const writeUnifiedWalletBalance = async (universeId: string, userId: string, nextBalanceXof: number, existingBalances?: Record<string, number>) => {
-    const key = universeId || (userId ? `user_${userId}` : 'default');
-    const nowIso = new Date().toISOString();
-    const safeXof = Math.max(0, Math.round(Number(nextBalanceXof) || 0));
-    const nextBalances = {
-      XOF: safeXof,
-      USD: Number(existingBalances?.USD ?? 0) || 0,
-      XAF: Number(existingBalances?.XAF ?? 0) || 0,
-      GNF: Number(existingBalances?.GNF ?? 0) || 0,
-      GHS: Number(existingBalances?.GHS ?? 0) || 0,
-    };
-
-    const wallets = readJsonArrayFile(MERCHANT_WALLETS_FILE);
-    const idx = wallets.findIndex((w: any) => w.key === key || (universeId && w.universeId === universeId));
-    const updatedRow = { key, universeId: universeId || '', userId: userId || '', balanceXof: safeXof, balances: nextBalances, updatedAt: nowIso };
-    if (idx >= 0) wallets[idx] = updatedRow;
-    else wallets.unshift(updatedRow);
-    writeJsonArrayFile(MERCHANT_WALLETS_FILE, wallets);
-
-    if (supabaseAdmin && universeId) {
-      try {
-        await supabaseAdmin
-          .from('universes')
-          .update({ balances: nextBalances, updated_at: nowIso })
-          .eq('id', universeId);
-      } catch {}
-    }
-    return { balanceXof: safeXof, balances: nextBalances };
-  };
-
-  // GET /api/merchant/wallet/summary
+  // GET /api/merchant/wallet/summary (Authentifié + contrôle propriétaire)
   app.get('/api/merchant/wallet/summary', async (req, res) => {
-    const universeId = String(req.query.universeId || '').trim();
-    const userId = String(req.query.userId || '').trim();
+    const rawUniverseId = String(req.query.universeId || '').trim();
+    const rawUserId = String(req.query.userId || '').trim();
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId: rawUniverseId, userId: rawUserId });
+    if (!ctx) return;
+
+    const universeId = ctx.universeId;
+    const userId = ctx.userId;
     const ownerKey = universeId || userId || 'default';
 
     const { balanceXof, balances } = await readUnifiedWalletBalance(universeId, userId);
 
-    // Historique réel (local + Supabase wallet_transactions)
+    // Historique réel (local + Cloud wallet_transactions)
     let txs = readJsonArrayFile(WALLET_TXS_FILE).filter((t: any) =>
       (universeId && String(t.universeId || '') === universeId) ||
-      (userId && String(t.userId || '') === userId)
+      (!universeId && userId && String(t.userId || '') === userId)
     );
 
     if (supabaseAdmin && (universeId || userId)) {
@@ -7212,12 +7506,13 @@ async function startServer() {
 
     // Entitlements Pay-As-You-Go actifs par module
     const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE).filter((e: any) =>
-      e.ownerKey === ownerKey || (universeId && e.universeId === universeId) || (userId && e.userId === userId)
+      e.ownerKey === ownerKey || (universeId && e.universeId === universeId) || (!universeId && userId && e.userId === userId)
     );
     const entitlementsMap: Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }> = {};
     for (const e of allEnts) {
+      const rem = e.remainingCredits !== undefined ? Number(e.remainingCredits) : Number(e.credits);
       entitlementsMap[e.moduleId] = {
-        credits: Number(e.credits) || 0,
+        credits: Math.max(0, rem || 0),
         totalSpentXof: Number(e.totalSpentXof) || 0,
         lastUnlockedAt: e.lastUnlockedAt || ''
       };
@@ -7237,10 +7532,13 @@ async function startServer() {
     });
   });
 
-  // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (scrypt)
+  // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (Authentifié + contrôle propriétaire)
   app.post('/api/merchant/wallet/pin/set', async (req, res) => {
     const { universeId = '', userId = '', pin = '', currentPin = '' } = req.body || {};
-    const ownerKey = String(universeId || userId || '').trim();
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
+    if (!ctx) return;
+
+    const ownerKey = String(ctx.universeId || ctx.userId || '').trim();
     const cleanPin = String(pin || '').trim();
 
     if (!ownerKey) {
@@ -7259,7 +7557,7 @@ async function startServer() {
 
     const nowIso = new Date().toISOString();
     const pinHash = hashWalletPin(cleanPin);
-    const record = { ownerKey, universeId, userId, pinHash, updatedAt: nowIso };
+    const record = { ownerKey, universeId: ctx.universeId, userId: ctx.userId, pinHash, updatedAt: nowIso };
 
     const pins = readJsonArrayFile(WALLET_PINS_FILE);
     const idx = pins.findIndex((p: any) => p.ownerKey === ownerKey);
@@ -7283,13 +7581,16 @@ async function startServer() {
     return res.json({ success: true, hasMasterPin: true });
   });
 
-  // POST /api/merchant/wallet/pin/verify — Vérification du Master PIN
+  // POST /api/merchant/wallet/pin/verify — Vérification du Master PIN (Authentifié + contrôle propriétaire)
   app.post('/api/merchant/wallet/pin/verify', async (req, res) => {
     const { universeId = '', userId = '', pin = '' } = req.body || {};
-    const ownerKey = String(universeId || userId || '').trim();
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
+    if (!ctx) return;
+
+    const ownerKey = String(ctx.universeId || ctx.userId || '').trim();
     const existing = await getWalletPinRecord(ownerKey);
     if (!existing?.pinHash) {
-      return res.json({ success: true, verified: true, hasMasterPin: false });
+      return res.json({ success: true, verified: false, hasMasterPin: false });
     }
     const ok = verifyWalletPinHash(String(pin || ''), existing.pinHash);
     if (!ok) {
@@ -7298,76 +7599,17 @@ async function startServer() {
     return res.json({ success: true, verified: true, hasMasterPin: true });
   });
 
-  // POST /api/merchant/wallet/recharge/confirm — Crédit réel UNIQUEMENT après paiement UltimateCheckout (idempotent)
-  app.post('/api/merchant/wallet/recharge/confirm', async (req, res) => {
-    const {
-      universeId = '',
-      userId = '',
-      amount = 0,
-      provider = 'NanaSwitch',
-      reference = '',
-      orderId = '',
-      phone = ''
-    } = req.body || {};
+  // POST /api/merchant/wallet/recharge/confirm — Crédit réel UNIQUEMENT après vérification serveur auprès du routeur
+  app.post('/api/merchant/wallet/recharge/confirm', handleVerifiedRechargeConfirm);
 
-    const cleanAmount = Math.round(Number(amount) || 0);
-    const txRef = String(reference || orderId || '').trim();
-    if ((!universeId && !userId) || cleanAmount < 100 || !txRef) {
-      return res.status(400).json({ success: false, error: 'Référence de paiement UltimateCheckout et montant (>= 100 FCFA) requis.' });
-    }
-
-    const allTxs = readJsonArrayFile(WALLET_TXS_FILE);
-    const alreadyProcessed = allTxs.find((t: any) => String(t.reference || '') === txRef);
-    if (alreadyProcessed) {
-      const current = await readUnifiedWalletBalance(universeId, userId);
-      return res.json({ success: true, duplicate: true, balanceXof: current.balanceXof, transaction: alreadyProcessed });
-    }
-
-    const current = await readUnifiedWalletBalance(universeId, userId);
-    const updated = await writeUnifiedWalletBalance(universeId, userId, current.balanceXof + cleanAmount, current.balances);
-
-    const nowIso = new Date().toISOString();
-    const txId = `RECH-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-    const txRecord = {
-      id: txId,
-      universeId: String(universeId),
-      userId: String(userId),
-      type: 'CREDIT',
-      title: `Recharge Wallet (${provider})`,
-      subtitle: phone ? `Via UltimateCheckout • ${phone}` : 'Validée via UltimateCheckout',
-      amount: cleanAmount,
-      currency: 'XOF',
-      category: 'RECHARGE',
-      reference: txRef,
-      status: 'COMPLETED',
-      createdAt: nowIso
-    };
-
-    allTxs.unshift(txRecord);
-    writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
-
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('wallet_transactions').insert({
-          id: txId,
-          universe_id: universeId || null,
-          user_id: userId || null,
-          type: 'CREDIT',
-          amount: cleanAmount,
-          status: 'COMPLETED',
-          metadata: txRecord,
-          created_at: nowIso,
-        });
-      } catch {}
-    }
-
-    return res.json({ success: true, balanceXof: updated.balanceXof, balances: updated.balances, transaction: txRecord });
-  });
-
-  // POST /api/merchant/wallet/pay-as-you-go — Paiement multi-modules Pay-As-You-Go :
-  // vérifie Master PIN, décrémente le solde PARTOUT et exécute l'activation dans Supabase pour CHAQUE module
+  // POST /api/merchant/wallet/pay-as-you-go — Paiement multi-modules Pay-As-You-Go (Authentifié + contrôle propriétaire)
   app.post('/api/merchant/wallet/pay-as-you-go', async (req, res) => {
-    const { universeId = '', userId = '', moduleIds = [], pin = '' } = req.body || {};
+    const { universeId: rawUniverseId = '', userId: rawUserId = '', moduleIds = [], pin = '' } = req.body || {};
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId: rawUniverseId, userId: rawUserId });
+    if (!ctx) return;
+
+    const universeId = ctx.universeId;
+    const userId = ctx.userId;
     const ownerKey = String(universeId || userId || '').trim();
     if (!ownerKey) {
       return res.status(400).json({ success: false, error: 'Identifiant marchand requis.' });
@@ -7398,7 +7640,7 @@ async function startServer() {
       });
     }
 
-    // 3. Décrémentation atomique du solde partout (Supabase universes + local)
+    // 3. Décrémentation du solde partout (universes + local)
     const updatedWallet = await writeUnifiedWalletBalance(universeId, userId, current.balanceXof - totalCost, current.balances);
     const nowIso = new Date().toISOString();
     const txId = `PAYG-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
@@ -7440,13 +7682,16 @@ async function startServer() {
       } catch {}
     }
 
-    // 4. Exécution & activation dans Supabase + local pour CHAQUE module concerné
+    // 4. Exécution & activation dans le Cloud + local pour CHAQUE module concerné
     const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
     const activatedModules: any[] = [];
 
     for (const mod of selectedModules) {
       const entIdx = allEnts.findIndex((e: any) => e.ownerKey === ownerKey && e.moduleId === mod.id);
       const prevCredits = entIdx >= 0 ? (Number(allEnts[entIdx].credits) || 0) : 0;
+      const prevRemaining = entIdx >= 0
+        ? (allEnts[entIdx].remainingCredits !== undefined ? Number(allEnts[entIdx].remainingCredits) : prevCredits)
+        : 0;
       const prevSpent = entIdx >= 0 ? (Number(allEnts[entIdx].totalSpentXof) || 0) : 0;
 
       const entRecord = {
@@ -7457,6 +7702,8 @@ async function startServer() {
         moduleName: mod.name,
         supabaseModuleKey: mod.supabaseModuleKey,
         credits: prevCredits + 1,
+        remainingCredits: prevRemaining + 1,
+        usedCredits: entIdx >= 0 ? (Number(allEnts[entIdx].usedCredits) || 0) : 0,
         totalSpentXof: prevSpent + mod.priceXof,
         lastTxId: txId,
         lastUnlockedAt: nowIso,
@@ -7486,6 +7733,7 @@ async function startServer() {
             module_id: mod.id,
             module_key: mod.supabaseModuleKey,
             credits: entRecord.credits,
+            remaining_credits: entRecord.remainingCredits,
             total_spent_xof: entRecord.totalSpentXof,
             last_tx_id: txId,
             status: 'ACTIVE',
@@ -7506,14 +7754,20 @@ async function startServer() {
     });
   });
 
-  // POST /api/merchant/wallet/payg/consume — Consommation réelle côté serveur d'un module Pay-As-You-Go
-  // 1) Consomme d'abord 1 crédit Pay-As-You-Go pré-acheté si disponible
-  // 2) Sinon débite directement le solde réel du NaNa Wallet
-  // 3) Sinon renvoie HTTP 402 (solde insuffisant)
+  // POST /api/merchant/wallet/payg/consume — Consommation réelle côté serveur d'un module Pay-As-You-Go (Authentifié + contrôle propriétaire)
   app.post('/api/merchant/wallet/payg/consume', async (req, res) => {
     try {
-      const { ownerKey: rawOwnerKey, universeId, userId, moduleId, actionLabel = '' } = req.body || {};
-      const ownerKey = String(rawOwnerKey || universeId || userId || '').trim();
+      const { ownerKey: rawOwnerKey, universeId: rawUniverseId, userId: rawUserId, moduleId, actionLabel = '' } = req.body || {};
+      const candidateUniverse = String(rawUniverseId || (rawOwnerKey && rawOwnerKey !== rawUserId ? rawOwnerKey : '') || '').trim();
+      const ctx = await paymentSecurity.requireAccountOwner(req, res, {
+        universeId: candidateUniverse,
+        userId: rawUserId,
+      });
+      if (!ctx) return;
+
+      const universeId = ctx.universeId;
+      const userId = ctx.userId;
+      const ownerKey = String(universeId || userId || '').trim();
       if (!ownerKey || !moduleId) {
         return res.status(400).json({ success: false, error: 'Identifiant marchand et moduleId requis.' });
       }
@@ -7527,15 +7781,19 @@ async function startServer() {
 
       // 1. Priorité : consommer 1 crédit Pay-As-You-Go déjà acheté
       const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
-      const entIdx = allEnts.findIndex(
-        (e: any) =>
-          (e.ownerKey === ownerKey || e.universeId === ownerKey || e.userId === ownerKey) &&
+      const entIdx = allEnts.findIndex((e: any) => {
+        const rem = e.remainingCredits !== undefined ? Number(e.remainingCredits) : Number(e.credits);
+        return (
+          (e.ownerKey === ownerKey || (universeId && e.universeId === universeId) || (!universeId && e.userId === userId)) &&
           e.moduleId === mod.id &&
-          Number(e.remainingCredits || 0) > 0
-      );
+          (rem || 0) > 0
+        );
+      });
 
       if (entIdx >= 0) {
-        allEnts[entIdx].remainingCredits = Math.max(0, Number(allEnts[entIdx].remainingCredits || 1) - 1);
+        const prevRem = allEnts[entIdx].remainingCredits !== undefined ? Number(allEnts[entIdx].remainingCredits) : Number(allEnts[entIdx].credits || 1);
+        allEnts[entIdx].remainingCredits = Math.max(0, prevRem - 1);
+        allEnts[entIdx].credits = allEnts[entIdx].remainingCredits;
         allEnts[entIdx].usedCredits = Number(allEnts[entIdx].usedCredits || 0) + 1;
         allEnts[entIdx].updatedAt = nowIso;
         writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
@@ -7545,6 +7803,7 @@ async function startServer() {
             await supabaseAdmin
               .from('payg_entitlements')
               .update({
+                credits: allEnts[entIdx].remainingCredits,
                 remaining_credits: allEnts[entIdx].remainingCredits,
                 used_credits: allEnts[entIdx].usedCredits,
                 updated_at: nowIso
@@ -7564,7 +7823,7 @@ async function startServer() {
       }
 
       // 2. Sinon : débit direct du solde réel NaNa Wallet
-      const current = await readUnifiedWalletBalance(universeId || ownerKey, userId || ownerKey);
+      const current = await readUnifiedWalletBalance(universeId, userId);
       if (current.balanceXof < mod.priceXof) {
         return res.status(402).json({
           success: false,
@@ -7578,8 +7837,8 @@ async function startServer() {
       }
 
       const updatedWallet = await writeUnifiedWalletBalance(
-        universeId || ownerKey,
-        userId || ownerKey,
+        universeId,
+        userId,
         current.balanceXof - mod.priceXof,
         current.balances
       );
@@ -7587,8 +7846,8 @@ async function startServer() {
       const txId = `PAYGUSE-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
       const txRecord = {
         id: txId,
-        universeId: String(universeId || ownerKey),
-        userId: String(userId || ownerKey),
+        universeId: String(universeId),
+        userId: String(userId),
         type: 'DEBIT',
         title: `Usage Pay-As-You-Go : ${mod.name}`,
         subtitle: actionLabel ? String(actionLabel).slice(0, 120) : mod.unitLabel,
@@ -7609,16 +7868,12 @@ async function startServer() {
         try {
           await supabaseAdmin.from('wallet_transactions').insert({
             id: txId,
-            universe_id: String(universeId || ownerKey),
-            user_id: String(userId || ownerKey),
+            universe_id: universeId || null,
+            user_id: userId || null,
             type: 'DEBIT',
-            title: txRecord.title,
-            subtitle: txRecord.subtitle,
             amount: mod.priceXof,
-            currency: 'XOF',
-            category: 'PAY_AS_YOU_GO_USAGE',
-            reference: txId,
             status: 'COMPLETED',
+            metadata: txRecord,
             created_at: nowIso
           });
         } catch {}
@@ -8617,10 +8872,23 @@ async function startServer() {
 
 
   // Endpoint Webhook fortifié pour le traitement des paiements Mobile Money (HMAC-SHA256)
-  app.post('/api/webhooks/payment', (req: any, res) => {
+  app.post('/api/webhooks/payment', async (req: any, res) => {
     try {
+      const effectiveWebhookSecret =
+        PAYMENT_WEBHOOK_SECRET ||
+        process.env.SEBPAY_WEBHOOK_SECRET ||
+        process.env.SEBPAY_SECRET_KEY ||
+        process.env.SASPAY_WEBHOOK_SECRET ||
+        '';
+      if (!effectiveWebhookSecret) {
+        console.error('[SECURITY CONFIG ERROR] Aucun secret HMAC configuré (PAYMENT_WEBHOOK_SECRET). Webhook refusé.');
+        return res.status(503).json({ error: 'Configuration webhook serveur incomplète.' });
+      }
+
       const providedSignature =
         req.headers['x-webhook-signature'] ||
+        req.headers['x-sebpay-signature'] ||
+        req.headers['x-saspay-signature'] ||
         req.headers['x-fedapay-signature'] ||
         req.headers['x-c-signature'] ||
         req.headers['x-signature-sha256'];
@@ -8633,7 +8901,7 @@ async function startServer() {
       }
 
       const rawPayload = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-      const hmac = crypto.createHmac('sha256', PAYMENT_WEBHOOK_SECRET);
+      const hmac = crypto.createHmac('sha256', effectiveWebhookSecret);
       hmac.update(rawPayload);
       const expectedSignature = hmac.digest('hex');
 
@@ -8658,34 +8926,53 @@ async function startServer() {
 
       const payload = req.body || {};
       const txData = payload.data || payload;
-      const txId = txData.txId || txData.transactionId || txData.id;
-      const userId = txData.userId || 'student-demo';
-      const courseId = txData.courseId || 'telecom-fintech-masterclass';
-      const amount = Number(txData.amount || 45000);
-      const provider = txData.provider || 'WAVE';
+      const recorded = paymentSecurity.recordSignedWebhookPayment(payload);
+      const rawRef = String(
+        txData.external_reference ||
+        txData.externalReference ||
+        txData.orderId ||
+        txData.metadata?.orderId ||
+        recorded?.externalReference ||
+        ''
+      ).trim();
+      const candidateOrderId = rawRef.includes('___') ? rawRef.split('___').pop()! : rawRef;
 
-      console.log(`[SUCCESS] Webhook validé par HMAC SHA-256 pour ${userId} sur ${courseId} (Tx: ${txId})`);
+      let settlementResult: any = null;
+      if (candidateOrderId) {
+        try {
+          settlementResult = await trySettleIntent(candidateOrderId);
+        } catch (settleErr) {
+          console.error('[WEBHOOK SETTLE ERROR]', (settleErr as Error).message);
+        }
+      }
 
-      // Déclencheur Web Push temps réel vers le marchand / formateur
-      import('./src/server/webPushService').then(({ sendNewOrderPushToSeller }) => {
-        sendNewOrderPushToSeller({
-          merchantId: userId,
-          orderId: txId,
-          customerName: txData.customerName || 'Acheteur',
-          totalAmount: amount,
-          productName: courseId
-        }).catch(pushErr => console.warn('[PAYMENT PUSH NOTIFY ERROR]', pushErr));
-      }).catch(() => {});
+      const txId = String(txData.transaction_id || txData.transactionId || txData.txId || txData.id || candidateOrderId || '');
+      const amount = Number(txData.amount_paid || txData.amountPaid || txData.amount || 0) || 0;
+      const provider = String(txData.provider || txData.operator || 'MOBILE_MONEY');
+
+      console.log(`[SUCCESS] Webhook signé HMAC validé (Tx: ${txId}, Order: ${candidateOrderId}, Montant: ${amount})`);
+
+      if (txData.merchantId || txData.userId) {
+        import('./src/server/webPushService').then(({ sendNewOrderPushToSeller }) => {
+          sendNewOrderPushToSeller({
+            merchantId: String(txData.merchantId || txData.userId),
+            orderId: candidateOrderId || txId,
+            customerName: txData.customerName || 'Client',
+            totalAmount: amount,
+            productName: txData.description || candidateOrderId || 'Paiement confirmé'
+          }).catch(pushErr => console.warn('[PAYMENT PUSH NOTIFY ERROR]', pushErr));
+        }).catch(() => {});
+      }
 
       return res.status(200).json({
         success: true,
         txId,
-        userId,
-        courseId,
+        orderId: candidateOrderId,
         amount,
         provider,
+        settled: Boolean(settlementResult?.ok),
         status: 'COMPLETED',
-        message: 'Signature cryptographique vérifiée. Droits d\'accès enregistrés par l\'autorité serveur.'
+        message: 'Signature cryptographique vérifiée et transaction traitée par le serveur.'
       });
     } catch (err: any) {
       console.error('[FATAL WEBHOOK ERROR]', err);

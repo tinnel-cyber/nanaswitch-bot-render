@@ -403,17 +403,33 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }
   };
 
-  // 5. Lancement du VRAI UltimateCheckout pour la Recharge
-  const handleLaunchUltimateCheckout = () => {
+  // 5. Lancement du VRAI UltimateCheckout pour la Recharge (Intention créée côté serveur)
+  const handleLaunchUltimateCheckout = async () => {
     if (rechargeAmount < 100) {
       showToast('Montant minimum de recharge : 100 FCFA.', 'error');
       return;
     }
     playTapBeep();
-    const orderId = `WLT-RECH-${Date.now().toString(36).toUpperCase()}`;
-    setActiveRechargeOrderId(orderId);
-    setIsRechargeAmountModalOpen(false);
-    setIsUltimateCheckoutOpen(true);
+    try {
+      const intentRes = await fetch('/api/merchant/wallet/recharge/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          amount: rechargeAmount,
+        }),
+      });
+      const intentJson = await intentRes.json().catch(() => null);
+      if (!intentRes.ok || !intentJson?.success || !intentJson?.orderId) {
+        throw new Error(intentJson?.error || 'Impossible d\'initialiser la recharge sécurisée.');
+      }
+      setActiveRechargeOrderId(intentJson.orderId);
+      setIsRechargeAmountModalOpen(false);
+      setIsUltimateCheckoutOpen(true);
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors de l\'initialisation de la recharge.', 'error');
+    }
   };
 
   const handleUltimateCheckoutSuccess = async (details: any) => {
@@ -427,7 +443,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           userId: resolvedUserId,
           amount: Number(details?.amount || rechargeAmount),
           provider: details?.provider || details?.paymentMethod || 'UltimateCheckout',
-          reference: details?.transactionRef || details?.orderId || activeRechargeOrderId,
+          reference: activeRechargeOrderId || details?.orderId || details?.transactionRef,
           orderId: activeRechargeOrderId,
           phone: details?.phone || resolvedUserPhone
         })
@@ -441,7 +457,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       setBalanceXof(nextBal);
       broadcastWalletBalanceUpdate(nextBal);
       await fetchWalletSummary();
-      showToast(`Recharge de ${formatCFA(Number(details?.amount || rechargeAmount))} créditée et synchronisée partout !`, 'success');
+      showToast(`Recharge de ${formatCFA(Number(json.amount || details?.amount || rechargeAmount))} vérifiée et créditée !`, 'success');
     } catch (err: any) {
       showToast(err?.message || 'Erreur lors de la synchronisation de la recharge.', 'error');
     }
@@ -559,7 +575,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          universeId: selectedUniverseId || `user_${resolvedUserId}`,
+          universeId: selectedUniverseId,
           userId: resolvedUserId || null,
           amount: amt,
           fee: 0,
@@ -571,6 +587,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           operatorName: providerNames[withdrawProvider],
           destination: withdrawPhone.trim(),
           beneficiary: resolvedUserName,
+          pin: withdrawPin.trim(),
           mode: 'PRODUCTION'
         })
       });
@@ -580,7 +597,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       }
 
       playValidationBeep();
-      const nextBal = Math.max(0, balanceXof - amt);
+      const nextBal = json?.balanceXof !== undefined ? Number(json.balanceXof) : Math.max(0, balanceXof - amt);
       setBalanceXof(nextBal);
       setWithdrawAmount('');
       setWithdrawPin('');
