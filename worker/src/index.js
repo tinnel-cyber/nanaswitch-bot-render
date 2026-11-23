@@ -8,8 +8,8 @@
  * ==============================================================================
  */
 
-const PRIMARY_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
-const SECONDARY_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+const PRIMARY_ORIGIN = "https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run";
+const SECONDARY_ORIGIN = "https://nanaswitch-bot-render-0kqp.onrender.com";
 const PRIMARY_FAST_TIMEOUT_MS = 4500;
 const PRIMARY_MUTATION_TIMEOUT_MS = 12000;
 const SECONDARY_TIMEOUT_MS = 25000;
@@ -60,19 +60,19 @@ export default {
       });
     }
 
-    // 1. Détermination du pool de backends (Render primaire en ligne + Northflank secours)
+    // 1. Détermination du pool de backends (Northflank primaire Always-On + Render secours)
     let primaryOrigin = PRIMARY_ORIGIN;
     let fallbackOrigin = SECONDARY_ORIGIN;
 
-    const configuredPrimary = env && (env.PRIMARY_BACKEND_URL || env.RENDER_BACKEND_URL);
-    if (configuredPrimary && !configuredPrimary.includes("nanasore.onrender.com")) {
+    const configuredPrimary = env && (env.PRIMARY_BACKEND_URL || env.NORTHFLANK_BACKEND_URL);
+    if (configuredPrimary) {
       primaryOrigin = configuredPrimary.startsWith("http")
         ? configuredPrimary
         : `https://${configuredPrimary}`;
     }
 
-    const configuredSecondary = env && (env.SECONDARY_BACKEND_URL || env.NORTHFLANK_BACKEND_URL);
-    if (configuredSecondary) {
+    const configuredSecondary = env && (env.SECONDARY_BACKEND_URL || env.RENDER_BACKEND_URL);
+    if (configuredSecondary && !configuredSecondary.includes("nanasore.onrender.com")) {
       fallbackOrigin = configuredSecondary.startsWith("http")
         ? configuredSecondary
         : `https://${configuredSecondary}`;
