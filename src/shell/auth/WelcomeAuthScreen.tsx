@@ -5,6 +5,7 @@ import {
   loginWithEmail, 
   registerWithEmail, 
   resendVerificationEmail, 
+  verifyEmailConfirmationStatus,
   signInWithGoogle, 
   resetPasswordEmail,
   updateUserPassword,
@@ -421,30 +422,29 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     try {
       const user = await registerWithEmail(emailInput.trim(), passwordInput, fullName.trim());
       playValidationBeep();
-      // Ne pas renvoyer un 2e e-mail ici : registerWithEmail() envoie déjà l'unique lien officiel Supabase (un 2e envoi invaliderait le 1er jeton).
-
-      // Persistance Neutre Immédiate dans Supabase :
-      // kyc_status: 'none', pricing_model: 'none', wallet_balance: 0, enabled_themes: []
-      await syncAuthProfileWithSupabase({
-        userId: user.uid,
-        email: user.email || emailInput.trim(),
-        fullName: fullName.trim() || 'Utilisateur Nanasore',
-        whatsapp: fullWhatsapp
-      });
 
       setPendingAuthUser(user);
-      setInfoMessage('Compte créé avec succès !');
 
       if (!user.emailVerified) {
+        setInfoMessage('Un e-mail de confirmation vous a été envoyé. Cliquez sur le lien reçu dans votre boîte mail avant de continuer.');
         setStep('EMAIL_VERIFICATION');
       } else {
+        await syncAuthProfileWithSupabase({
+          userId: user.uid,
+          email: user.email || emailInput.trim(),
+          fullName: fullName.trim() || 'Utilisateur Nanasore',
+          whatsapp: fullWhatsapp
+        });
+        setInfoMessage('Compte créé et vérifié avec succès !');
         setStep('PIN_SETUP');
       }
     } catch (err: any) {
       playCancelSound();
       console.error('[REGISTER ERROR]', err);
-      if (err.code === 'auth/email-already-in-use') {
-        setErrorMessage('Cet email est déjà enregistré. Veuillez vous connecter.');
+      if (err.code === 'auth/email-already-in-use' || String(err?.message || '').includes('existe déjà')) {
+        setInfoMessage(null);
+        setErrorMessage('Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter ci-dessous.');
+        setStep('LOGIN');
       } else {
         setErrorMessage(err.message || 'Erreur lors de la création de compte.');
       }
@@ -559,16 +559,42 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     }
   };
 
-  // Finalisation Master PIN & Entrée directe dans le Tableau de Bord Unifié
+  // Finalisation Master PIN & Entrée directe dans le Tableau de Bord Unifié (exige un utilisateur réellement authentifié et vérifié)
   const finalizeMasterPinSetup = async (pinValue: string) => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const currentUserAuth = pendingAuthUser || (await getSupabaseCurrentUser().catch(() => null));
-      const uid = currentUserAuth?.uid || `user-${Date.now()}`;
-      const userEmail = currentUserAuth?.email || emailInput.trim();
-      const cleanFullName = fullName.trim() || currentUserAuth?.displayName || 'Utilisateur Nanasore';
+      const verifiedLiveUser = await getSupabaseCurrentUser().catch(() => null);
+      const currentUserAuth = verifiedLiveUser || pendingAuthUser;
+
+      if (!currentUserAuth?.uid || !currentUserAuth?.emailVerified) {
+        const check = await verifyEmailConfirmationStatus(emailInput.trim(), passwordInput);
+        if (!check.verified || !check.user) {
+          playCancelSound();
+          setIsLoading(false);
+          setNewPin('');
+          setConfirmPin('');
+          setPinStep('ENTER');
+          setErrorMessage(check.message || "Veuillez d'abord confirmer votre adresse e-mail via le lien reçu avant de finaliser votre compte.");
+          setStep('EMAIL_VERIFICATION');
+          return;
+        }
+        setPendingAuthUser(check.user);
+      }
+
+      const activeAuthUser = verifiedLiveUser?.emailVerified ? verifiedLiveUser : (pendingAuthUser?.emailVerified ? pendingAuthUser : await getSupabaseCurrentUser());
+      if (!activeAuthUser?.uid) {
+        playCancelSound();
+        setIsLoading(false);
+        setErrorMessage("Votre session n'est pas encore active. Veuillez confirmer votre e-mail puis vous connecter.");
+        setStep('LOGIN');
+        return;
+      }
+
+      const uid = activeAuthUser.uid;
+      const userEmail = activeAuthUser.email || emailInput.trim();
+      const cleanFullName = fullName.trim() || activeAuthUser.displayName || 'Utilisateur Nanasore';
       const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
       const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
 
@@ -612,10 +638,10 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
       const finalStoreUser: StoreUser = {
         ...userProfileData,
-        avatarUrl: currentUserAuth?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+        avatarUrl: (activeAuthUser as any)?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
       };
 
-      // 1. Sauvegarde locale immédiate prioritaire (garantie 100% de fluidité sans blocage réseau)
+      // 1. Sauvegarde locale uniquement après vérification effective de l'e-mail
       try {
         localStorage.removeItem('nana_merchant_universes');
         localStorage.removeItem('nana_current_app_id');
@@ -625,46 +651,24 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         localStorage.setItem('nanasore_seller_mode', 'merchant_ecommerce');
       } catch {}
 
-      // 2. Sauvegarde Firestore/Supabase en arrière-plan sans bloquer l'UI
+      // 2. Sauvegarde Cloud en arrière-plan sans bloquer l'UI
       saveUserProfile(uid, userProfileData).catch(e => console.warn('[STORAGE] Profil async notice:', e));
       syncAuthProfileWithSupabase({
         userId: uid,
         email: userEmail,
         fullName: cleanFullName,
         whatsapp: fullWhatsapp
-      }).catch(e => console.warn('[SYNC] Supabase async notice:', e));
+      }).catch(e => console.warn('[SYNC] Cloud async notice:', e));
 
       playCashChime();
       setIsLoading(false);
       onLoginSuccess(finalStoreUser);
     } catch (err: any) {
       console.error('[MASTER_PIN_FINALIZE_ERROR]', err);
-      // Repli d'urgence en cas d'erreur exceptionnelle pour que l'utilisateur entre immédiatement
-      const emergencyUser: StoreUser = {
-        id: `user-${Date.now()}`,
-        storeId: `store-${Date.now().toString(36)}`,
-        name: fullName.trim() || 'Utilisateur Nanasore',
-        email: emailInput.trim(),
-        role: 'GERANT' as UserRole,
-        vendorType: 'ecommerce' as const,
-        sellerMode: 'merchant_ecommerce' as const,
-        pinCode: pinValue,
-        masterPin: pinValue,
-        phone: whatsappNumber,
-        city: 'Ouagadougou',
-        country: 'Burkina Faso',
-        currency: 'F CFA',
-        defaultCreditLimit: 20000,
-        kycStatus: 'none',
-        setupCompleted: true,
-        credits: 15,
-        plan: 'free',
-        subscriptionPlan: 'free',
-        subscriptionStatus: 'ACTIVE',
-      };
-      playCashChime();
+      playCancelSound();
       setIsLoading(false);
-      onLoginSuccess(emergencyUser);
+      setErrorMessage(err?.message || "Impossible de finaliser la configuration. Veuillez vous connecter.");
+      setStep('LOGIN');
     }
   };
 
@@ -1303,29 +1307,80 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                     Vérifiez votre boîte de réception
                   </h2>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                    Un email de confirmation a été envoyé à <strong>{emailInput}</strong>. Cliquez sur le lien pour valider votre compte.
+                    Un email de confirmation a été envoyé à <strong>{emailInput}</strong>. Cliquez sur le lien reçu dans votre boîte mail (vérifiez aussi vos spams) pour activer votre compte.
                   </p>
                 </div>
                 <div className="pt-2 flex flex-col gap-2 w-full max-w-xs">
                   <button
                     type="button"
-                    onClick={() => { playValidationBeep(); setStep('PIN_SETUP'); }}
-                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                    disabled={isCheckingEmail}
+                    onClick={async () => {
+                      setIsCheckingEmail(true);
+                      setErrorMessage(null);
+                      setInfoMessage(null);
+                      const check = await verifyEmailConfirmationStatus(emailInput.trim(), passwordInput);
+                      setIsCheckingEmail(false);
+                      if (!check.verified || !check.user) {
+                        playCancelSound();
+                        setErrorMessage(
+                          check.message ||
+                            "Votre adresse e-mail n'est pas encore confirmée. Veuillez cliquer sur le lien reçu par e-mail avant de continuer."
+                        );
+                        return;
+                      }
+                      playValidationBeep();
+                      setPendingAuthUser(check.user);
+                      const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
+                      const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
+                      syncAuthProfileWithSupabase({
+                        userId: check.user.uid,
+                        email: check.user.email || emailInput.trim(),
+                        fullName: fullName.trim() || check.user.displayName || 'Utilisateur Nanasore',
+                        whatsapp: fullWhatsapp
+                      }).catch(() => {});
+                      setInfoMessage('✓ Adresse e-mail confirmée avec succès !');
+                      setStep('PIN_SETUP');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    J'ai validé mon email • Continuer
+                    {isCheckingEmail ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Vérification auprès du serveur...</span>
+                      </>
+                    ) : (
+                      <span>J'ai validé mon email • Continuer</span>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={async () => {
                       setIsResending(true);
-                      await resendVerificationEmail();
+                      setErrorMessage(null);
+                      const ok = await resendVerificationEmail(emailInput.trim());
                       setIsResending(false);
-                      setInfoMessage('✓ Nouveau lien envoyé !');
+                      if (ok) {
+                        setInfoMessage('✓ Nouveau lien de confirmation envoyé ! Vérifiez votre boîte de réception et vos spams.');
+                      } else {
+                        setErrorMessage("Impossible de renvoyer l'e-mail pour le moment. Patientez une minute ou vérifiez l'adresse saisie.");
+                      }
                     }}
-                    disabled={isResending}
-                    className="w-full py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
+                    disabled={isResending || isCheckingEmail}
+                    className="w-full py-2 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-bold transition cursor-pointer disabled:opacity-50"
                   >
                     {isResending ? 'Envoi...' : 'Renvoyer le lien'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTapBeep();
+                      setErrorMessage(null);
+                      setInfoMessage(null);
+                      setStep('LOGIN');
+                    }}
+                    className="w-full py-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                  >
+                    ← Retour à la connexion
                   </button>
                 </div>
               </div>

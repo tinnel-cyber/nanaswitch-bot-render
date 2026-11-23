@@ -125,21 +125,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           resolvedName = userCred.displayName;
         }
 
-        setInfoMessage("Compte créé avec succès ! Un e-mail de confirmation officiel vous a été expédié.");
         persistSellerModeLocally(sellerMode);
-        // Ne pas envoyer un 2e e-mail ici : registerWithEmail() envoie déjà l'unique lien officiel Supabase.
-
-        if (userCred?.id) {
-          try {
-            await supabase.from('profiles').upsert({
-              id: userCred.id,
-              email: email.trim(),
-              full_name: resolvedName,
-              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
-          } catch {}
-        }
 
         // Rattachement automatique au parrain SaaS si un ?ref=CODE ou code promo a été saisi
         const activeRefCode = referralCode.trim() || getCapturedSaasReferral() || '';
@@ -153,6 +139,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           }).catch(() => {});
         }
 
+        if (!userCred.emailVerified) {
+          setIsLoading(false);
+          playValidationBeep();
+          setIsSignUp(false);
+          setInfoMessage(
+            "Un e-mail de confirmation officiel vient de vous être envoyé. Veuillez cliquer sur le lien dans votre boîte mail (vérifiez aussi vos spams), puis connectez-vous ci-dessous."
+          );
+          return;
+        }
+
+        if (userCred?.id) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: userCred.id,
+              email: email.trim(),
+              full_name: resolvedName,
+              role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+          } catch {}
+        }
+
+        setInfoMessage("Compte créé et vérifié avec succès !");
         setTimeout(() => {
           setIsLoading(false);
           playValidationBeep();
@@ -197,6 +206,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     } catch (err: any) {
       setIsLoading(false);
       playCancelSound();
+      if (err?.code === 'auth/email-already-in-use' || String(err?.message || '').includes('existe déjà')) {
+        setIsSignUp(false);
+      }
       setErrorMessage(err?.message || "Une erreur est survenue lors de l'authentification.");
     }
   };

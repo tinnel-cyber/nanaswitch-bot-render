@@ -167,8 +167,14 @@ export async function registerWithEmail(
 
   if (error) {
     console.warn('[SUPABASE AUTH] Inscription via GoTrue client notice :', error.message);
-    if (error.message.includes('User already registered') || error.message.includes('already registered')) {
-      throw new Error('Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.');
+    if (
+      error.message.includes('User already registered') ||
+      error.message.includes('already registered') ||
+      error.message.includes('already exists')
+    ) {
+      const dupErr: any = new Error('Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.');
+      dupErr.code = 'auth/email-already-in-use';
+      throw dupErr;
     }
 
     // Basculement direct et transparent vers Brevo pour délivrer l'e-mail de confirmation
@@ -215,6 +221,16 @@ export async function registerWithEmail(
     throw new Error("Échec de création du compte.");
   }
 
+  // Détection critique Supabase : lorsque mailer_autoconfirm=false et que l'e-mail existe déjà,
+  // Supabase renvoie un user obfusqué avec identities: [] et n'envoie AUCUN e-mail.
+  if (Array.isArray((u as any).identities) && (u as any).identities.length === 0) {
+    const dupErr: any = new Error('Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter ou réinitialiser votre mot de passe.');
+    dupErr.code = 'auth/email-already-in-use';
+    throw dupErr;
+  }
+
+  const isEmailConfirmed = Boolean(u.confirmed_at || u.email_confirmed_at);
+
   const authUser: SupabaseAuthUser = {
     id: u.id,
     uid: u.id,
@@ -222,42 +238,148 @@ export async function registerWithEmail(
     displayName: resolvedName,
     name: resolvedName,
     fullName: resolvedName,
-    emailVerified: Boolean(u.confirmed_at || u.email_confirmed_at),
+    emailVerified: isEmailConfirmed,
     providerData: [{ providerId: 'password' }],
     role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
     sellerMode,
   };
 
-  // Synchronisation prioritaire immédiate dans la table Supabase `profiles`
-  try {
-    await supabase.from('profiles').upsert({
-      id: u.id,
-      email: cleanEmail,
-      full_name: resolvedName,
-      role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
-      kyc_status: 'none',
-      pricing_model: 'none',
-      wallet_balance: 0,
-      enabled_themes: [],
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
-  } catch (profErr) {
-    console.warn('[SUPABASE AUTH] Sync profil notice:', profErr);
-  }
-
-  if (typeof window !== 'undefined') {
+  // Ne synchroniser et ne persister la session locale QUE si l'e-mail est réellement confirmé et qu'une session JWT est active
+  if (isEmailConfirmed && data.session?.access_token) {
     try {
-      localStorage.setItem('nana_store_auth_user', JSON.stringify({
-        ...authUser,
-        plan: 'free',
-      }));
-      if (data.session?.access_token) {
+      await supabase.from('profiles').upsert({
+        id: u.id,
+        email: cleanEmail,
+        full_name: resolvedName,
+        role: sellerMode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+        kyc_status: 'none',
+        pricing_model: 'none',
+        wallet_balance: 0,
+        enabled_themes: [],
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch (profErr) {
+      console.warn('[SUPABASE AUTH] Sync profil notice:', profErr);
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('nana_store_auth_user', JSON.stringify({
+          ...authUser,
+          plan: 'free',
+        }));
         localStorage.setItem('nana_auth_token', data.session.access_token);
-      }
+      } catch {}
+    }
+  } else if (typeof window !== 'undefined') {
+    // S'assurer qu'aucune session locale non vérifiée ne traîne dans le navigateur
+    try {
+      localStorage.removeItem('nana_store_auth_user');
+      localStorage.removeItem('nana_auth_token');
     } catch {}
   }
 
   return authUser;
+}
+
+/**
+ * Vérifie strictement auprès de Supabase Auth si l'adresse e-mail a bien été confirmée
+ * (utilisé par le bouton "J'ai validé mon email • Continuer")
+ */
+export async function verifyEmailConfirmationStatus(
+  email: string,
+  password?: string
+): Promise<{ verified: boolean; user?: SupabaseAuthUser; message?: string }> {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  try {
+    // 1. Vérifier s'il existe déjà une session active confirmée
+    const { data: userData } = await supabase.auth.getUser();
+    const currentU = userData?.user;
+    if (currentU && (currentU.confirmed_at || currentU.email_confirmed_at)) {
+      const { data: sessData } = await supabase.auth.getSession();
+      const displayName = currentU.user_metadata?.full_name || currentU.user_metadata?.name || cleanEmail.split('@')[0] || 'Utilisateur';
+      const authUser: SupabaseAuthUser = {
+        id: currentU.id,
+        uid: currentU.id,
+        email: currentU.email || cleanEmail,
+        displayName,
+        name: displayName,
+        fullName: displayName,
+        emailVerified: true,
+        providerData: [{ providerId: 'password' }],
+        role: currentU.user_metadata?.seller_mode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+        sellerMode: currentU.user_metadata?.seller_mode || 'merchant_ecommerce',
+      };
+      if (typeof window !== 'undefined' && sessData?.session?.access_token) {
+        try {
+          localStorage.setItem('nana_store_auth_user', JSON.stringify({ ...authUser, plan: 'free' }));
+          localStorage.setItem('nana_auth_token', sessData.session.access_token);
+        } catch {}
+      }
+      return { verified: true, user: authUser };
+    }
+
+    // 2. Sinon, tenter une connexion réelle avec email + mot de passe pour vérifier si le lien a été cliqué sur un autre appareil/onglet
+    if (cleanEmail && password) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (error) {
+        if (error.message.includes('Email not confirmed')) {
+          return {
+            verified: false,
+            message: "Votre adresse e-mail n'est pas encore confirmée. Veuillez ouvrir l'e-mail reçu et cliquer sur le lien de confirmation avant de continuer (vérifiez aussi vos courriers indésirables/spams)."
+          };
+        }
+        if (error.message.includes('Invalid login credentials')) {
+          return {
+            verified: false,
+            message: "Aucun clic de confirmation détecté ou ce compte existe déjà avec un autre mot de passe. Vérifiez votre boîte mail ou connectez-vous."
+          };
+        }
+        return {
+          verified: false,
+          message: error.message || "Votre adresse e-mail n'a pas encore été validée."
+        };
+      }
+
+      const u = data?.user;
+      if (u && (u.confirmed_at || u.email_confirmed_at) && data?.session?.access_token) {
+        const displayName = u.user_metadata?.full_name || u.user_metadata?.name || cleanEmail.split('@')[0] || 'Utilisateur';
+        const authUser: SupabaseAuthUser = {
+          id: u.id,
+          uid: u.id,
+          email: u.email || cleanEmail,
+          displayName,
+          name: displayName,
+          fullName: displayName,
+          emailVerified: true,
+          providerData: [{ providerId: 'password' }],
+          role: u.user_metadata?.seller_mode === 'creator_trainer' ? 'INSTRUCTOR' : 'GERANT',
+          sellerMode: u.user_metadata?.seller_mode || 'merchant_ecommerce',
+        };
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('nana_store_auth_user', JSON.stringify({ ...authUser, plan: 'free' }));
+            localStorage.setItem('nana_auth_token', data.session.access_token);
+          } catch {}
+        }
+        return { verified: true, user: authUser };
+      }
+    }
+
+    return {
+      verified: false,
+      message: "Votre adresse e-mail n'est pas encore confirmée. Veuillez cliquer sur le lien reçu par e-mail avant de continuer."
+    };
+  } catch (err: any) {
+    return {
+      verified: false,
+      message: err?.message || "Impossible de vérifier la confirmation de votre e-mail."
+    };
+  }
 }
 
 /**
