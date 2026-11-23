@@ -25,7 +25,7 @@ const UNSUB_HMAC_SECRET =
   process.env.EMAIL_UNSUBSCRIBE_SECRET ||
   process.env.PAYMENT_WEBHOOK_SECRET ||
   process.env.ADMIN_API_KEY ||
-  'nanasore_unsub_signing_key';
+  '';
 
 const PUBLIC_API_BASE =
   (process.env.API_URL || process.env.APP_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run').replace(/\/+$/, '');

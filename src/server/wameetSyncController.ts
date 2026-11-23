@@ -24,10 +24,10 @@ import type { Request, Response, Express, NextFunction } from 'express';
 // ============================================================================
 
 export const NANA_WAMEET_M2M_SECRET =
-  process.env.NANA_WAMEET_M2M_SECRET || 'nana_wameet_m2m_studio_sync_secret_2026';
+  process.env.NANA_WAMEET_M2M_SECRET || process.env.INTERNAL_API_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || '';
 
 export const NANA_M2M_API_KEY =
-  process.env.NANA_M2M_API_KEY || 'nanasore_studio_m2m_key_prod_v1';
+  process.env.NANA_M2M_API_KEY || process.env.ADMIN_API_KEY || process.env.PAYMENT_WEBHOOK_SECRET || '';
 
 /**
  * Durée de validité maximale d'une requête M2M (anti-rejeu) : 5 minutes

@@ -79,8 +79,8 @@ const FAROTAGE_BY_ORDER_ID = new Map<string, string>();
 // Verrous d'exclusion mutuelle par Wallet (Atomic Mutex Locks)
 const WALLET_MUTEX_LOCKS = new Set<string>();
 
-// Clé secrète de signature Webhook S
-const S_FAROTAGE_SECRET = process.env.S_WEBHOOK_SECRET || 'wameet_farotage_s_secret_key_2026';
+// Clé secrète de signature Webhook S (aucun secret par défaut en dur)
+const getSFarotageSecret = () => String(process.env.S_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || '').trim();
 
 // Émetteur WebSocket centralisé
 let globalSocketEmitter: FarotageSocketBroadcaster | null = null;
@@ -160,17 +160,14 @@ function emitFarotageEvent(targetId: string, event: string, data: any): void {
  * Vérifie la signature de sécurité du Webhook S (HMAC SHA-256)
  */
 export function verifySSignature(payloadString: string, signatureHeader?: string): boolean {
-  if (!signatureHeader) {
-    // Mode permissif en développement si non spécifié, mais loggue un avertissement
-    if (process.env.NODE_ENV !== 'production') {
-      return true;
-    }
+  const secret = getSFarotageSecret();
+  if (!secret || !signatureHeader) {
     return false;
   }
 
   try {
     const computedHmac = crypto
-      .createHmac('sha256', S_FAROTAGE_SECRET)
+      .createHmac('sha256', secret)
       .update(payloadString)
       .digest('hex');
 

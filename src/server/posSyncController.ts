@@ -20,7 +20,7 @@ import { NANA_PRODUCT_CATALOG } from './smartHaggleController';
 // ============================================================================
 
 export const POS_SYNC_M2M_TOKEN =
-  process.env.POS_SYNC_M2M_TOKEN || 'nanasore_m2m_phygital_secret_token_2026';
+  process.env.POS_SYNC_M2M_TOKEN || process.env.INTERNAL_API_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || '';
 
 // ============================================================================
 // 2. TYPES ET STRUCTURES DE DONNÉES DU GESTIONNAIRE PHYGITAL

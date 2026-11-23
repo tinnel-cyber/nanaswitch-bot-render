@@ -28,19 +28,19 @@ import {
 
 export { NANASORE_GIFT_CATALOG };
 
-const S_WEBHOOK_SECRET = process.env.S_WEBHOOK_SECRET || 'wameet_cagnotte_s_secret_key_2026';
+const getSWebhookSecret = () => String(process.env.S_WEBHOOK_SECRET || process.env.PAYMENT_WEBHOOK_SECRET || '').trim();
 
 /**
  * Vérification de la signature cryptographique HMAC SHA-256 du Webhook S
  */
 export function verifySSignature(payloadString: string, signatureHeader?: string): boolean {
-  if (!signatureHeader) {
-    if (process.env.NODE_ENV !== 'production') return true;
+  const secret = getSWebhookSecret();
+  if (!secret || !signatureHeader) {
     return false;
   }
   try {
     const computedHmac = crypto
-      .createHmac('sha256', S_WEBHOOK_SECRET)
+      .createHmac('sha256', secret)
       .update(payloadString)
       .digest('hex');
     return crypto.timingSafeEqual(
