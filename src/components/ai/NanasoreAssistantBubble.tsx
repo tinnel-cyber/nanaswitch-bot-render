@@ -441,10 +441,10 @@ export const NanasoreAssistantBubble: React.FC<NanasoreAssistantBubbleProps> = (
                 {/* Questions rapides visiteurs */}
                 <div className="px-3 py-1.5 flex items-center gap-1.5 overflow-x-auto border-t border-slate-800/80 bg-slate-900/60">
                   {[
-                    'Quel module pour mon activité ?',
-                    'Combien ça coûte ?',
-                    'Orange Money / Wave ?',
-                    'Créer ma boutique'
+                    'Comment créer mon univers ?',
+                    'Activer les 37 services',
+                    'Moyens de paiement ?',
+                    'Quel module pour mon activité ?'
                   ].map((q) => (
                     <button
                       key={q}
