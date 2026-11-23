@@ -1415,6 +1415,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   const [withdrawalProvider, setWithdrawalProvider] = useState<'wave' | 'orange' | 'moov' | 'mtn'>('wave');
   const [withdrawalPhone, setWithdrawalPhone] = useState<string>('');
+  const [withdrawalPin, setWithdrawalPin] = useState<string>('');
   const [withdrawalSuccess, setWithdrawalSuccess] = useState(false);
   const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
   const [withdrawalError, setWithdrawalError] = useState<string | null>(null);
@@ -1610,6 +1611,10 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
       setWithdrawalError('Veuillez renseigner votre numéro Mobile Money bénéficiaire.');
       return;
     }
+    if (!/^\d{4,6}$/.test(withdrawalPin.trim())) {
+      setWithdrawalError('Veuillez saisir votre Master PIN (4 à 6 chiffres) pour confirmer le retrait.');
+      return;
+    }
 
     setIsSubmittingWithdrawal(true);
     try {
@@ -1635,6 +1640,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
           operatorName: providerLabels[withdrawalProvider] || withdrawalProvider.toUpperCase(),
           destination: withdrawalPhone.trim(),
           beneficiary: profile.fullName || 'Formateur',
+          pin: withdrawalPin.trim(),
           mode: 'PRODUCTION',
         }),
       });
@@ -3078,6 +3084,19 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
                     onChange={(e) => setWithdrawalPhone(e.target.value)}
                     placeholder="+226 70 00 00 00"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-300">Master PIN (4 à 6 chiffres)</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={withdrawalPin}
+                    onChange={(e) => setWithdrawalPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono tracking-widest focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 

@@ -3015,8 +3015,8 @@ function TabWallet({
   onUpdateApp?: (app: NanaMerchantApp) => void;
   showToast: (m: string, t?: any) => void 
 }) {
-  const [payoutMode, setPayoutMode] = useState<'PRODUCTION' | 'SIMULATION'>('PRODUCTION');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawPin, setWithdrawPin] = useState('');
   const [selectedCountryCode, setSelectedCountryCode] = useState('BF');
   const [selectedOperatorId, setSelectedOperatorId] = useState('orange_bf');
   const [beneficiaryName, setBeneficiaryName] = useState(app.kyc?.companyName || app.kyc?.fullName || '');
@@ -3027,7 +3027,7 @@ function TabWallet({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
-  // Historique des demandes de reversement réelles (chargées depuis Supabase sans aucun mock)
+  // Historique des demandes de reversement réelles
   const [payoutHistory, setPayoutHistory] = useState<Array<{
     id: string;
     amount: number;
@@ -3038,36 +3038,28 @@ function TabWallet({
     account: string;
     date: string;
     status: 'COMPLETED' | 'PENDING';
-    isSimulation?: boolean;
   }>>([]);
 
-  // 1. Chargement temps réel de l'historique réel depuis Supabase
+  // 1. Chargement temps réel de l'historique réel depuis le serveur
   useEffect(() => {
     let isMounted = true;
 
     const fetchRealPayouts = async () => {
       setIsLoadingHistory(true);
       try {
-        // Interroger wallet_transactions dans Supabase pour cet univers
-        const { data: txs, error } = await supabase
-          .from('wallet_transactions')
-          .select('*')
-          .eq('universe_id', app.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
-
-        if (!error && txs && txs.length > 0) {
-          const mapped = txs.map((t: any) => ({
+        const res = await fetch(`/api/payouts?universeId=${encodeURIComponent(app.id)}`);
+        const json = await res.json().catch(() => null);
+        if (res.ok && Array.isArray(json?.payouts)) {
+          const mapped = json.payouts.map((t: any) => ({
             id: t.id,
             amount: Number(t.amount) || 0,
-            currency: t.metadata?.currency || 'XOF',
-            country: t.metadata?.country || t.country || 'International',
-            flag: t.metadata?.flag || '🌍',
-            methodName: t.metadata?.operator_name || t.payment_method || 'Virement',
-            account: t.metadata?.destination || t.account_details || 'Compte renseigné',
-            date: t.created_at ? new Date(t.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récent',
-            status: t.status === 'COMPLETED' ? 'COMPLETED' : 'PENDING',
-            isSimulation: t.metadata?.mode === 'SIMULATION'
+            currency: t.currency || 'XOF',
+            country: t.country || 'International',
+            flag: t.flag || '🌍',
+            methodName: t.operatorName || 'Mobile Money',
+            account: t.destination || 'Compte renseigné',
+            date: t.createdAt ? new Date(t.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'Récent',
+            status: t.status === 'COMPLETED' ? ('COMPLETED' as const) : ('PENDING' as const),
           }));
           if (isMounted) {
             setPayoutHistory(mapped);
@@ -3075,39 +3067,7 @@ function TabWallet({
             return;
           }
         }
-
-        // Interroger app_registry pour la clé spécifique de cet univers
-        const { data: reg } = await supabase
-          .from('app_registry')
-          .select('value')
-          .eq('key', `nanasore_payout_history_${app.id}`)
-          .single();
-
-        if (reg?.value && Array.isArray(reg.value)) {
-          if (isMounted) {
-            setPayoutHistory(reg.value);
-            setIsLoadingHistory(false);
-            return;
-          }
-        }
-
-        // Fallback localstorage purgé de tout mock historique
-        const stored = localStorage.getItem(`nanasore_payout_history_${app.id}`);
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && isMounted) {
-              const clean = parsed.filter((p: any) => !p.id?.includes('9482') && !p.id?.includes('8192'));
-              setPayoutHistory(clean);
-              setIsLoadingHistory(false);
-              return;
-            }
-          } catch (_) {}
-        }
-
-        if (isMounted) {
-          setPayoutHistory([]);
-        }
+        if (isMounted) setPayoutHistory([]);
       } catch (err) {
         console.warn('[WALLET] Erreur historique retraits:', err);
         if (isMounted) setPayoutHistory([]);
@@ -3169,19 +3129,16 @@ function TabWallet({
   const feeAmount = Math.round(Number(withdrawAmount || 0) * 0.005);
   const netAmount = Math.max(0, Number(withdrawAmount || 0) - feeAmount);
 
-  // Exécution du virement (Production Réelle ou Simulation Sandbox)
+  // Exécution du virement (Production Réelle uniquement, protégée par Master PIN + contrôle solde serveur)
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = Number(withdrawAmount);
-    if (!amountNum || amountNum <= 0) {
-      showToast('Veuillez saisir un montant valide.', 'warning');
+    const amountNum = Math.round(Number(withdrawAmount) || 0);
+    if (amountNum < 1000) {
+      showToast('Montant minimum de retrait : 1 000 XOF.', 'warning');
       return;
     }
 
-    const isRealProd = payoutMode === 'PRODUCTION';
-
-    // En Production : vérification stricte du solde réel
-    if (isRealProd && amountNum > (app.balances.XOF || 0)) {
+    if (amountNum > (app.balances.XOF || 0)) {
       showToast(`Solde réel insuffisant. Votre solde disponible est de ${(app.balances.XOF || 0).toLocaleString('fr-FR')} XOF.`, 'error');
       return;
     }
@@ -3201,131 +3158,73 @@ function TabWallet({
       return;
     }
 
+    if (!/^\d{4,6}$/.test(withdrawPin.trim())) {
+      showToast('Veuillez saisir votre Master PIN (4 à 6 chiffres) pour autoriser ce retrait.', 'warning');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const payoutId = `WD-${selectedCountry.code}-${Date.now().toString().slice(-6)}`;
-      const destinationStr = isBankTransfer 
-        ? `${bankName} • IBAN: ${bankRibIban}${swiftCode ? ` (SWIFT: ${swiftCode})` : ''}` 
+      const destinationStr = isBankTransfer
+        ? `${bankName} • IBAN: ${bankRibIban}${swiftCode ? ` (SWIFT: ${swiftCode})` : ''}`
         : `${selectedCountry.dialCode} ${recipientPhone}`;
 
-      const nowIso = new Date().toISOString();
-      const metadataPayload = {
-        mode: isRealProd ? 'PRODUCTION' : 'SIMULATION',
-        currency: 'XOF',
-        country: selectedCountry.name,
-        country_code: selectedCountry.code,
-        flag: selectedCountry.flag,
-        operator_id: selectedOperator.id,
-        operator_name: selectedOperator.name,
-        destination: destinationStr,
-        beneficiary: beneficiaryName,
-        fee: feeAmount,
-        net: netAmount,
-        initiated_by_user_id: currentUser?.id || 'anonymous',
-        created_at: nowIso
-      };
+      const apiRes = await fetch('/api/payouts/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: app.id,
+          userId: currentUser?.id || null,
+          amount: amountNum,
+          fee: feeAmount,
+          netAmount,
+          currency: 'XOF',
+          country: selectedCountry.name,
+          countryCode: selectedCountry.code,
+          flag: selectedCountry.flag,
+          operatorId: selectedOperator.id,
+          operatorName: selectedOperator.name,
+          destination: destinationStr,
+          beneficiary: beneficiaryName,
+          pin: withdrawPin.trim(),
+          mode: 'PRODUCTION',
+        }),
+      });
+      const apiJson = await apiRes.json().catch(() => null);
+      if (!apiRes.ok || !apiJson?.success) {
+        throw new Error(apiJson?.error || 'Retrait refusé par le serveur.');
+      }
 
-      // 1. Enregistrement sécurisé côté serveur (POST /api/payouts/request) + Supabase
-      let serverPayoutId = payoutId;
-      try {
-        const apiRes = await fetch('/api/payouts/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            universeId: app.id,
-            userId: currentUser?.id || null,
-            amount: amountNum,
-            fee: feeAmount,
-            netAmount,
-            currency: 'XOF',
-            country: selectedCountry.name,
-            countryCode: selectedCountry.code,
-            flag: selectedCountry.flag,
-            operatorId: selectedOperator.id,
-            operatorName: selectedOperator.name,
-            destination: destinationStr,
-            beneficiary: beneficiaryName,
-            mode: isRealProd ? 'PRODUCTION' : 'SIMULATION',
-          }),
+      const nextBalanceXof =
+        typeof apiJson.balanceXof === 'number'
+          ? apiJson.balanceXof
+          : Math.max(0, (app.balances.XOF || 0) - amountNum);
+
+      if (onUpdateApp) {
+        onUpdateApp({
+          ...app,
+          balances: { ...app.balances, XOF: nextBalanceXof },
         });
-        const apiJson = await apiRes.json().catch(() => null);
-        if (!apiRes.ok || !apiJson?.success) {
-          throw new Error(apiJson?.error || 'Erreur validation retrait serveur');
-        }
-        if (apiJson?.payout?.id) serverPayoutId = apiJson.payout.id;
-      } catch (errApi: any) {
-        console.warn('[WALLET] Fallback insertion Supabase:', errApi);
-        try {
-          await supabase.from('wallet_transactions').insert({
-            id: serverPayoutId,
-            universe_id: app.id,
-            user_id: currentUser?.id || null,
-            type: 'WITHDRAWAL',
-            amount: amountNum,
-            status: isRealProd ? 'PENDING' : 'COMPLETED',
-            metadata: metadataPayload,
-            created_at: nowIso
-          });
-        } catch {}
       }
 
-      // 2. Si Production : déduction effective du solde réel de l'univers dans Supabase
-      if (isRealProd) {
-        const updatedBalanceXof = Math.max(0, (app.balances.XOF || 0) - amountNum);
-        const updatedBalances = { ...app.balances, XOF: updatedBalanceXof };
-
-        try {
-          await supabase.from('universes').update({
-            balances: updatedBalances
-          }).eq('id', app.id);
-        } catch (errBal) {
-          console.warn('[WALLET] Notice mise à jour solde univers:', errBal);
-        }
-
-        if (onUpdateApp) {
-          onUpdateApp({
-            ...app,
-            balances: updatedBalances
-          });
-        }
-      }
-
-      // 3. Mise à jour de l'historique local & app_registry Supabase
       const newPayoutRecord = {
-        id: payoutId,
+        id: apiJson.payout?.id || `PAYOUT-${Date.now().toString(36).toUpperCase()}`,
         amount: amountNum,
         currency: 'XOF',
         country: selectedCountry.name,
         flag: selectedCountry.flag,
         methodName: selectedOperator.name,
         account: destinationStr,
-        date: 'À l\'instant',
-        status: isRealProd ? ('PENDING' as const) : ('COMPLETED' as const),
-        isSimulation: !isRealProd
+        date: "À l'instant",
+        status: 'PENDING' as const,
       };
 
-      const updatedHistory = [newPayoutRecord, ...payoutHistory];
-      setPayoutHistory(updatedHistory);
-      try {
-        localStorage.setItem(`nanasore_payout_history_${app.id}`, JSON.stringify(updatedHistory));
-        await supabase.from('app_registry').upsert({
-          key: `nanasore_payout_history_${app.id}`,
-          name: `Historique Payouts ${app.name}`,
-          type: 'payout_history',
-          value: updatedHistory,
-          updated_at: nowIso
-        });
-      } catch (_) {}
-
-      if (isRealProd) {
-        showToast(`Retrait réel de ${amountNum.toLocaleString('fr-FR')} XOF vers ${selectedCountry.name} ordonné ! Débit immédiat appliqué.`, 'success');
-      } else {
-        showToast(`[SIMULATION TEST] Retrait fictif de ${amountNum.toLocaleString('fr-FR')} XOF validé sans impact sur la trésorerie.`, 'info');
-      }
-
+      setPayoutHistory((prev) => [newPayoutRecord, ...prev]);
+      showToast(`Retrait réel de ${amountNum.toLocaleString('fr-FR')} XOF vers ${selectedCountry.name} enregistré !`, 'success');
       setWithdrawAmount('');
+      setWithdrawPin('');
     } catch (err: any) {
-      showToast(`Erreur lors de l'enregistrement du virement : ${err.message || 'Erreur inconnue'}`, 'error');
+      showToast(err?.message || 'Erreur lors de la demande de retrait.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -3450,11 +3349,6 @@ function TabWallet({
                         <td className="py-3.5">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold text-slate-800">{pt.id}</span>
-                            {pt.isSimulation && (
-                              <span className="px-1.5 py-0.5 text-[9px] bg-amber-50 text-amber-700 font-bold rounded border border-amber-200">
-                                SIMULATION
-                              </span>
-                            )}
                           </div>
                           <span className="block text-[10px] text-slate-400">{pt.date}</span>
                         </td>
@@ -3502,57 +3396,15 @@ function TabWallet({
             </span>
           </div>
 
-          {/* Sélecteur de Mode : Production uniquement pour les marchands (Simulation réservée Super Admin / localhost) */}
-          {(currentUser?.role === 'SUPER_ADMIN' || (typeof window !== 'undefined' && window.location.hostname === 'localhost')) && (
-          <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setPayoutMode('PRODUCTION')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl font-extrabold text-xs transition cursor-pointer ${
-                payoutMode === 'PRODUCTION'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Retrait Réel (Prod)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPayoutMode('SIMULATION')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${
-                payoutMode === 'SIMULATION'
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FlaskConical className="w-3.5 h-3.5" />
-              <span>Mode Test (Sandbox)</span>
-            </button>
+          <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-emerald-900">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Retrait Réel Protégé par Master PIN</p>
+              <p className="text-emerald-800 leading-relaxed mt-0.5">
+                Le montant demandé est vérifié et <strong>débité côté serveur</strong> de votre solde disponible ({app.balances.XOF.toLocaleString('fr-FR')} XOF) après validation de votre Master PIN.
+              </p>
+            </div>
           </div>
-          )}
-
-          {payoutMode === 'PRODUCTION' ? (
-            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-emerald-900">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Mode Production Réel Actif</p>
-                <p className="text-emerald-800 leading-relaxed mt-0.5">
-                  Le montant demandé sera <strong>débité directement</strong> de votre solde disponible ({app.balances.XOF.toLocaleString('fr-FR')} XOF) et transmis au virement bancaire / Mobile Money.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-amber-900">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold">Mode Simulation / Sandbox</p>
-                <p className="text-amber-800 leading-relaxed mt-0.5">
-                  Permet de tester le circuit et les notifications sans débiter votre trésorerie réelle.
-                </p>
-              </div>
-            </div>
-          )}
 
           <form onSubmit={handleWithdraw} className="space-y-4 text-xs">
             {/* Montant */}
@@ -3718,6 +3570,22 @@ function TabWallet({
               </div>
             )}
 
+            {/* Master PIN obligatoire */}
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">
+                Master PIN (4 à 6 chiffres) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="••••"
+                value={withdrawPin}
+                onChange={(e) => setWithdrawPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-blue-600 font-mono font-black tracking-widest text-sm text-slate-900"
+              />
+            </div>
+
             {/* Récapitulatif Frais & Montant Net */}
             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-slate-600 space-y-1.5 text-[11px]">
               <div className="flex justify-between">
@@ -3733,26 +3601,17 @@ function TabWallet({
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className={`w-full py-3.5 text-white font-extrabold rounded-xl shadow-md active:scale-[0.99] transition cursor-pointer flex items-center justify-center gap-2 ${
-                payoutMode === 'PRODUCTION'
-                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-700/20'
-                  : 'bg-amber-600 hover:bg-amber-700 shadow-amber-700/20'
-              }`}
+              className="w-full py-3.5 text-white font-extrabold rounded-xl shadow-md active:scale-[0.99] transition cursor-pointer flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 shadow-emerald-700/20"
             >
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Traitement de l'opération...</span>
                 </>
-              ) : payoutMode === 'PRODUCTION' ? (
+              ) : (
                 <>
                   <Send className="w-4 h-4" />
                   <span>Confirmer le Virement Réel ({selectedCountry.flag})</span>
-                </>
-              ) : (
-                <>
-                  <FlaskConical className="w-4 h-4" />
-                  <span>Exécuter la Simulation Sandbox ({selectedCountry.flag})</span>
                 </>
               )}
             </button>

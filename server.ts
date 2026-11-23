@@ -3137,8 +3137,8 @@ async function startServer() {
     return res.json({ success: true, settings });
   });
 
-  // POST /api/affiliate/settings — Mise à jour des taux par le Super-Admin
-  app.post('/api/affiliate/settings', async (req, res) => {
+  // POST /api/affiliate/settings — Mise à jour des taux par le Super-Admin uniquement
+  app.post('/api/affiliate/settings', requireAdminOrInternal, async (req, res) => {
     const body = req.body || {};
     const prev = getStoredAffiliateSettings();
     const updated = {
@@ -3241,8 +3241,8 @@ async function startServer() {
     return res.json({ success: true, ...hub });
   });
 
-  // POST /api/affiliate/withdrawals/request — Demande de retrait Mobile Money sécurisée côté serveur
-  app.post('/api/affiliate/withdrawals/request', async (req, res) => {
+  // POST /api/affiliate/withdrawals/request — Demande de retrait Mobile Money sécurisée côté serveur (Authentifié + contrôle solde + PIN si configuré)
+  app.post('/api/affiliate/withdrawals/request', requireAuthenticatedUser, async (req, res) => {
     const {
       affiliateCode,
       affiliateId = '',
@@ -3251,8 +3251,11 @@ async function startServer() {
       amount = 0,
       provider = 'WAVE',
       accountName = '',
+      universeId = '',
+      pin = '',
     } = req.body || {};
 
+    const authUser = (req as any).authUser;
     const cleanCode = normalizeAffiliateKey(affiliateCode || affiliateId);
     const cleanAmount = Math.round(Number(amount) || 0);
     const settings = getStoredAffiliateSettings();
@@ -3267,63 +3270,97 @@ async function startServer() {
       return res.status(400).json({ success: false, error: 'Numéro Mobile Money valide requis.' });
     }
 
-    const hub = await loadUnifiedAffiliateHubData(cleanCode);
-    if (cleanAmount > hub.availableBalance) {
-      return res.status(400).json({
-        success: false,
-        error: `Solde insuffisant. Disponible : ${hub.availableBalance} FCFA.`,
-        availableBalance: hub.availableBalance,
-      });
+    // Contrôle Master PIN si le partenaire en a défini un sur son compte ou son univers
+    const ownerPinKey = String(universeId || authUser?.id || cleanCode).trim();
+    const pinRecord =
+      (await getWalletPinRecord(ownerPinKey)) ||
+      (authUser?.id ? await getWalletPinRecord(String(authUser.id)) : null);
+    if (pinRecord?.pinHash) {
+      if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+        return res.status(403).json({
+          success: false,
+          code: 'INVALID_MASTER_PIN',
+          error: 'Master PIN requis ou incorrect pour autoriser ce retrait affilié.',
+        });
+      }
     }
 
-    const withdrawal = {
-      id: `WITH-${Date.now().toString(36).toUpperCase()}`,
-      affiliateId: affiliateId || `aff_${cleanCode.toLowerCase()}`,
-      affiliateCode: cleanCode,
-      affiliateName: String(affiliateName || 'Partenaire').trim(),
-      phone: String(phone).trim(),
-      amount: cleanAmount,
-      provider: String(provider || 'WAVE').toUpperCase(),
-      status: 'PENDING',
-      createdAt: Date.now(),
-      adminNotes: `Bénéficiaire : ${String(accountName || affiliateName || 'Partenaire').trim()}. En attente de transfert.`,
-    };
+    const lockResult: any = await paymentSecurity.withLock(`aff_withdraw_${cleanCode}`, async () => {
+      const hub = await loadUnifiedAffiliateHubData(cleanCode);
+      if (cleanAmount > hub.availableBalance) {
+        return {
+          insufficient: true,
+          availableBalance: hub.availableBalance,
+        };
+      }
 
-    const all = getStoredAffiliateWithdrawals();
-    all.unshift(withdrawal);
-    saveStoredAffiliateWithdrawals(all);
+      const withdrawal = {
+        id: `WITH-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`,
+        affiliateId: affiliateId || authUser?.id || `aff_${cleanCode.toLowerCase()}`,
+        affiliateCode: cleanCode,
+        affiliateName: String(affiliateName || 'Partenaire').trim(),
+        phone: String(phone).trim(),
+        amount: cleanAmount,
+        provider: String(provider || 'WAVE').toUpperCase(),
+        status: 'PENDING',
+        createdAt: Date.now(),
+        adminNotes: `Bénéficiaire : ${String(accountName || affiliateName || 'Partenaire').trim()}. En attente de transfert.`,
+      };
 
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('affiliate_withdrawals').insert({
-          id: withdrawal.id,
-          affiliate_id: withdrawal.affiliateId,
-          affiliate_code: withdrawal.affiliateCode,
-          affiliate_name: withdrawal.affiliateName,
-          phone: withdrawal.phone,
-          amount: withdrawal.amount,
-          provider: withdrawal.provider,
-          status: 'PENDING',
-          admin_notes: withdrawal.adminNotes,
-          created_at: new Date(withdrawal.createdAt).toISOString(),
-        });
-      } catch {}
+      const all = getStoredAffiliateWithdrawals();
+      all.unshift(withdrawal);
+      saveStoredAffiliateWithdrawals(all);
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('affiliate_withdrawals').insert({
+            id: withdrawal.id,
+            affiliate_id: withdrawal.affiliateId,
+            affiliate_code: withdrawal.affiliateCode,
+            affiliate_name: withdrawal.affiliateName,
+            phone: withdrawal.phone,
+            amount: withdrawal.amount,
+            provider: withdrawal.provider,
+            status: 'PENDING',
+            admin_notes: withdrawal.adminNotes,
+            created_at: new Date(withdrawal.createdAt).toISOString(),
+          });
+        } catch {}
+      }
+
+      return {
+        withdrawal,
+        availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
+      };
+    });
+
+    if (lockResult?.locked) {
+      return res.status(409).json({ success: false, error: 'Une demande de retrait est déjà en cours de traitement.' });
+    }
+    if (lockResult?.insufficient) {
+      return res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_BALANCE',
+        error: `Solde insuffisant. Disponible : ${lockResult.availableBalance} FCFA.`,
+        availableBalance: lockResult.availableBalance,
+      });
     }
 
     return res.json({
       success: true,
-      withdrawal,
-      availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
+      withdrawal: lockResult.withdrawal,
+      availableBalance: lockResult.availableBalance,
     });
   });
 
-  // POST /api/affiliate/transfer-to-wallet — Transfert instantané des commissions vers NaNa Wallet Marchand
+  // POST /api/affiliate/transfer-to-wallet — Transfert instantané des commissions vers NaNa Wallet Marchand (Authentifié + contrôle propriétaire)
   app.post('/api/affiliate/transfer-to-wallet', async (req, res) => {
     const {
       affiliateCode,
       universeId,
       affiliateName = 'Partenaire',
       amount = 0,
+      pin = '',
     } = req.body || {};
 
     const cleanCode = normalizeAffiliateKey(affiliateCode);
@@ -3334,99 +3371,127 @@ async function startServer() {
     if (!cleanCode || !cleanUniverseId) {
       return res.status(400).json({ success: false, error: 'affiliateCode et universeId requis.' });
     }
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId: cleanUniverseId });
+    if (!ctx) return;
+
     if (cleanAmount < settings.minWalletTransferXof) {
       return res.status(400).json({ success: false, error: `Montant minimum de transfert Wallet : ${settings.minWalletTransferXof} FCFA.` });
     }
 
-    const hub = await loadUnifiedAffiliateHubData(cleanCode);
-    if (cleanAmount > hub.availableBalance) {
-      return res.status(400).json({
-        success: false,
-        error: `Solde affilié insuffisant (${hub.availableBalance} FCFA disponibles).`,
-      });
+    // Contrôle Master PIN si configuré sur l'univers
+    const pinRecord = await getWalletPinRecord(cleanUniverseId);
+    if (pinRecord?.pinHash) {
+      if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+        return res.status(403).json({
+          success: false,
+          code: 'INVALID_MASTER_PIN',
+          error: 'Master PIN requis ou incorrect pour transférer vos commissions.',
+        });
+      }
     }
 
-    const nowIso = new Date().toISOString();
-    const txId = `WAL-AFF-${Date.now().toString(36).toUpperCase()}`;
+    const lockResult: any = await paymentSecurity.withLock(`aff_withdraw_${cleanCode}`, async () => {
+      const hub = await loadUnifiedAffiliateHubData(cleanCode);
+      if (cleanAmount > hub.availableBalance) {
+        return {
+          insufficient: true,
+          availableBalance: hub.availableBalance,
+        };
+      }
 
-    // 1. Marquer la sortie du solde affilié (statut PAID vers NANA_WALLET)
-    const withdrawal = {
-      id: txId,
-      affiliateId: `aff_${cleanCode.toLowerCase()}`,
-      affiliateCode: cleanCode,
-      affiliateName: String(affiliateName || 'Partenaire').trim(),
-      phone: `WALLET:${cleanUniverseId}`,
-      amount: cleanAmount,
-      provider: 'NANA_WALLET',
-      status: 'PAID',
-      createdAt: Date.now(),
-      processedAt: Date.now(),
-      adminNotes: `Transfert instantané vers NaNa Wallet Marchand (${cleanUniverseId})`,
-    };
-    const allW = getStoredAffiliateWithdrawals();
-    allW.unshift(withdrawal);
-    saveStoredAffiliateWithdrawals(allW);
+      const nowIso = new Date().toISOString();
+      const txId = `WAL-AFF-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
-    // 2. Créditer NaNa Wallet Marchand (universes.balances & merchants.balances + wallet_transactions)
-    let newWalletBalanceXof: number | null = null;
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('affiliate_withdrawals').insert({
-          id: withdrawal.id,
-          affiliate_id: withdrawal.affiliateId,
-          affiliate_code: withdrawal.affiliateCode,
-          affiliate_name: withdrawal.affiliateName,
-          phone: withdrawal.phone,
-          amount: withdrawal.amount,
-          provider: 'NANA_WALLET',
-          status: 'PAID',
-          admin_notes: withdrawal.adminNotes,
-          created_at: nowIso,
-          processed_at: nowIso,
-        });
-      } catch {}
-      try {
-        await supabaseAdmin.from('wallet_transactions').insert({
-          id: txId,
-          universe_id: cleanUniverseId,
-          type: 'AFFILIATE_TRANSFER',
-          amount: cleanAmount,
-          status: 'COMPLETED',
-          metadata: {
-            currency: 'XOF',
-            source: 'affiliate_studio',
-            affiliate_code: cleanCode,
+      // 1. Marquer la sortie du solde affilié (statut PAID vers NANA_WALLET)
+      const withdrawal = {
+        id: txId,
+        affiliateId: `aff_${cleanCode.toLowerCase()}`,
+        affiliateCode: cleanCode,
+        affiliateName: String(affiliateName || 'Partenaire').trim(),
+        phone: `WALLET:${cleanUniverseId}`,
+        amount: cleanAmount,
+        provider: 'NANA_WALLET',
+        status: 'PAID',
+        createdAt: Date.now(),
+        processedAt: Date.now(),
+        adminNotes: `Transfert instantané vers NaNa Wallet Marchand (${cleanUniverseId})`,
+      };
+      const allW = getStoredAffiliateWithdrawals();
+      allW.unshift(withdrawal);
+      saveStoredAffiliateWithdrawals(allW);
+
+      // 2. Créditer NaNa Wallet Marchand unifié
+      const currentWallet = await readUnifiedWalletBalance(cleanUniverseId, ctx.userId);
+      const updatedWallet = await writeUnifiedWalletBalance(
+        cleanUniverseId,
+        ctx.userId,
+        currentWallet.balanceXof + cleanAmount,
+        currentWallet.balances
+      );
+
+      if (supabaseAdmin) {
+        try {
+          await supabaseAdmin.from('affiliate_withdrawals').insert({
+            id: withdrawal.id,
+            affiliate_id: withdrawal.affiliateId,
+            affiliate_code: withdrawal.affiliateCode,
+            affiliate_name: withdrawal.affiliateName,
+            phone: withdrawal.phone,
+            amount: withdrawal.amount,
+            provider: 'NANA_WALLET',
+            status: 'PAID',
+            admin_notes: withdrawal.adminNotes,
             created_at: nowIso,
-          },
-          created_at: nowIso,
-        });
-      } catch {}
-      try {
-        const { data: uRow } = await supabaseAdmin
-          .from('universes')
-          .select('balances')
-          .eq('id', cleanUniverseId)
-          .maybeSingle();
-        const prevBal = uRow?.balances && typeof uRow.balances === 'object' ? uRow.balances : { XOF: 0 };
-        const updatedBalances = { ...prevBal, XOF: (Number(prevBal.XOF) || 0) + cleanAmount };
-        newWalletBalanceXof = updatedBalances.XOF;
-        await Promise.allSettled([
-          supabaseAdmin.from('universes').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', cleanUniverseId),
-          supabaseAdmin.from('merchants').update({ balances: updatedBalances, updated_at: nowIso }).eq('id', cleanUniverseId),
-        ]);
-      } catch {}
+            processed_at: nowIso,
+          });
+        } catch {}
+        try {
+          await supabaseAdmin.from('wallet_transactions').insert({
+            id: txId,
+            universe_id: cleanUniverseId,
+            user_id: ctx.userId || null,
+            type: 'AFFILIATE_TRANSFER',
+            amount: cleanAmount,
+            status: 'COMPLETED',
+            metadata: {
+              currency: 'XOF',
+              source: 'affiliate_studio',
+              affiliate_code: cleanCode,
+              created_at: nowIso,
+            },
+            created_at: nowIso,
+          });
+        } catch {}
+      }
+
+      return {
+        withdrawal,
+        availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
+        newWalletBalanceXof: updatedWallet.balanceXof,
+      };
+    });
+
+    if (lockResult?.locked) {
+      return res.status(409).json({ success: false, error: 'Une opération affiliée est déjà en cours.' });
+    }
+    if (lockResult?.insufficient) {
+      return res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_BALANCE',
+        error: `Solde affilié insuffisant (${lockResult.availableBalance} FCFA disponibles).`,
+      });
     }
 
     return res.json({
       success: true,
-      transfer: withdrawal,
-      availableBalance: Math.max(0, hub.availableBalance - cleanAmount),
-      newWalletBalanceXof,
+      transfer: lockResult.withdrawal,
+      availableBalance: lockResult.availableBalance,
+      newWalletBalanceXof: lockResult.newWalletBalanceXof,
     });
   });
 
-  // GET /api/admin/affiliate/withdrawals — Liste complète pour le Super-Admin
-  app.get('/api/admin/affiliate/withdrawals', async (_req, res) => {
+  // GET /api/admin/affiliate/withdrawals — Liste complète protégée Super-Admin uniquement
+  app.get('/api/admin/affiliate/withdrawals', requireAdminOrInternal, async (_req, res) => {
     const localList = getStoredAffiliateWithdrawals();
     const map = new Map<string, any>();
     for (const w of localList) map.set(String(w.id), w);
@@ -3462,8 +3527,8 @@ async function startServer() {
     return res.json({ success: true, withdrawals, settings: getStoredAffiliateSettings() });
   });
 
-  // POST /api/admin/affiliate/withdrawals/:id/status — Validation / Rejet d'un retrait affilié par le Super-Admin
-  app.post('/api/admin/affiliate/withdrawals/:id/status', async (req, res) => {
+  // POST /api/admin/affiliate/withdrawals/:id/status — Validation / Rejet d'un retrait affilié par le Super-Admin uniquement
+  app.post('/api/admin/affiliate/withdrawals/:id/status', requireAdminOrInternal, async (req, res) => {
     const withdrawalId = String(req.params.id || '').trim();
     const nextStatus = String(req.body?.status || 'PAID').toUpperCase();
     const adminNotes = String(req.body?.adminNotes || '').trim();
@@ -3503,14 +3568,13 @@ async function startServer() {
     return res.json({ success: true, withdrawalId, status: nextStatus, withdrawal: updated });
   });
 
-  // POST /api/affiliate/credit-commission — Crédite automatiquement la commission d'un créateur (idempotent)
-  app.post('/api/affiliate/credit-commission', (req, res) => {
+  // POST /api/affiliate/credit-commission — Crédite la commission d'un créateur UNIQUEMENT si la commande est confirmée par le routeur de paiement (ou appel interne/admin)
+  app.post('/api/affiliate/credit-commission', async (req, res) => {
     const {
       affiliateRef,
       affiliateHandle,
       orderRef,
       orderTotal,
-      commissionRate = 10,
       channel = 'FUNNEL',
       productName = '',
       tenantId = '',
@@ -3520,15 +3584,45 @@ async function startServer() {
     } = req.body || {};
 
     const handle = String(affiliateHandle || affiliateRef || '').trim();
-    if (!handle || !orderRef) {
+    const cleanOrderRef = String(orderRef || '').trim();
+    if (!handle || !cleanOrderRef) {
       return res.status(400).json({ success: false, error: 'affiliateRef et orderRef requis' });
+    }
+
+    const settings = getStoredAffiliateSettings();
+    const serverRate =
+      channel === 'COURSE'
+        ? settings.defaultCourseRate
+        : channel === 'PRODUCT'
+        ? settings.defaultProductRate
+        : settings.defaultFunnelRate;
+
+    const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
+    const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
+    const isInternal = Boolean(internalSecret && providedKey && timingSafeEqualsServer(providedKey, internalSecret));
+
+    let verifiedAmount = Math.max(0, Number(orderTotal) || 0);
+    if (!isInternal) {
+      const verified = await paymentSecurity.verifyPayment({
+        orderId: cleanOrderRef,
+        expectedAmount: Math.max(100, verifiedAmount),
+        expectedCurrency: 'XOF',
+      });
+      if (!verified.verified) {
+        return res.status(402).json({
+          success: false,
+          code: 'ORDER_NOT_PAID',
+          error: 'Commission refusée : le paiement de cette commande n\'est pas confirmé par le routeur.',
+        });
+      }
+      verifiedAmount = verified.amount;
     }
 
     const record = creditAffiliateCommissionIdempotent({
       affiliateHandle: handle,
-      orderRef,
-      orderTotal: Number(orderTotal) || 0,
-      commissionRate: Number(commissionRate) || 10,
+      orderRef: cleanOrderRef,
+      orderTotal: verifiedAmount,
+      commissionRate: serverRate,
       channel: channel as AffiliateChannel,
       productName,
       tenantId,
@@ -3570,43 +3664,72 @@ async function startServer() {
     });
   });
 
-  // POST /api/payments/trigger — Enregistre la commande Mini-Market / Caisse Express & crédite l'affilié automatiquement
-  app.post('/api/payments/trigger', (req, res) => {
+  // POST /api/payments/trigger — Enregistre la commande Mini-Market / Caisse Express :
+  // - Jetons physiques guichet (PHYSICAL_POS_TOKEN) : enregistrés en 'pending_pos_counter' SANS aucune commission affiliée.
+  // - Commandes Mobile Money : ne passent en 'confirmed' (et ne créditent l'affilié au taux serveur) QUE si le paiement est vérifié auprès du routeur.
+  app.post('/api/payments/trigger', async (req, res) => {
     const body = req.body || {};
     const orderId = String(body.order_id || `CMD-${Date.now().toString(36).toUpperCase()}`).trim();
-    const amount = Math.max(0, Number(body.amount) || 0);
+    const requestedAmount = Math.max(0, Number(body.amount) || 0);
     const affiliateRef = String(body.affiliate_ref || '').trim();
+    const operator = String(body.operator || 'WAVE').trim();
+    const isPosCounterToken =
+      operator.toUpperCase() === 'PHYSICAL_POS_TOKEN' ||
+      String(body.status || '').toLowerCase() === 'pending_pos_counter';
+
+    let finalStatus: 'pending_pos_counter' | 'pending_payment' | 'confirmed' = 'pending_payment';
+    let confirmedAmount = requestedAmount;
+
+    if (isPosCounterToken) {
+      finalStatus = 'pending_pos_counter';
+    } else if (requestedAmount > 0) {
+      const verified = await paymentSecurity.verifyPayment({
+        orderId,
+        expectedAmount: requestedAmount,
+        expectedCurrency: 'XOF',
+      });
+      if (verified.verified) {
+        finalStatus = 'confirmed';
+        confirmedAmount = verified.amount;
+      } else {
+        finalStatus = 'pending_payment';
+      }
+    }
 
     const orderRecord = {
       orderId,
       tenantId: String(body.tenant_id || '').trim(),
-      amount,
+      amount: confirmedAmount,
       currency: 'XOF',
       customerName: String(body.customer_name || 'Client Nanasore').trim(),
       customerPhone: String(body.customer_phone || '').trim(),
       customerCity: String(body.customer_city || 'Abidjan').trim(),
-      operator: String(body.operator || 'WAVE').trim(),
+      operator,
       promoCode: String(body.promo_code || '').trim(),
       discountPercent: Number(body.discount_percent) || 0,
       groupBuyId: String(body.group_buy_id || '').trim(),
       affiliateRef: affiliateRef.replace(/^@/, '').toLowerCase(),
       deal: body.deal || null,
       composedItems: Array.isArray(body.composed_items) ? body.composed_items : [],
-      status: 'confirmed',
+      status: finalStatus,
       createdAt: new Date().toISOString(),
     };
 
     const orders = getStoredMiniMarketOrders();
-    orders.unshift(orderRecord);
+    const existingIdx = orders.findIndex((o: any) => o.orderId === orderId);
+    if (existingIdx >= 0) orders[existingIdx] = orderRecord;
+    else orders.unshift(orderRecord);
     saveStoredMiniMarketOrders(orders);
 
+    // Commission affiliée créditée UNIQUEMENT si le paiement a été confirmé par le routeur (et au taux serveur officiel)
     let affiliateCommission = null;
-    if (affiliateRef && amount > 0) {
+    if (finalStatus === 'confirmed' && affiliateRef && confirmedAmount > 0) {
+      const serverRate = getStoredAffiliateSettings().defaultFunnelRate;
       affiliateCommission = creditAffiliateCommissionIdempotent({
         affiliateHandle: affiliateRef,
         orderRef: orderId,
-        orderTotal: amount,
-        commissionRate: Number(body.commission_rate) || getStoredAffiliateSettings().defaultFunnelRate,
+        orderTotal: confirmedAmount,
+        commissionRate: serverRate,
         channel: 'FUNNEL',
         productName: body.deal?.title || 'Commande Tunnel / Mini-Market',
         tenantId: orderRecord.tenantId,
@@ -3615,11 +3738,23 @@ async function startServer() {
       });
     }
 
+    if (!isPosCounterToken && finalStatus !== 'confirmed') {
+      return res.status(202).json({
+        success: false,
+        code: 'PAYMENT_NOT_VERIFIED',
+        orderId,
+        amount: confirmedAmount,
+        status: finalStatus,
+        affiliateCommission: null,
+        error: 'Commande enregistrée en attente : le paiement n\'a pas encore été confirmé par le routeur.',
+      });
+    }
+
     return res.json({
       success: true,
       orderId,
-      amount,
-      status: 'confirmed',
+      amount: confirmedAmount,
+      status: finalStatus,
       affiliateCommission,
     });
   });
@@ -4307,7 +4442,7 @@ async function startServer() {
 
   app.post('/api/merchant/wallet/recharge', handleVerifiedRechargeConfirm);
 
-  // 2H.3 Retraits & Reversements sécurisés côté serveur (authentifié + contrôle propriétaire + contrôle solde + PIN)
+  // 2H.3 Retraits & Reversements sécurisés côté serveur (authentifié + contrôle propriétaire + contrôle solde + PIN obligatoire + zéro simulation)
   app.post('/api/payouts/request', async (req, res) => {
     const {
       universeId = '',
@@ -4324,7 +4459,16 @@ async function startServer() {
       destination = '',
       beneficiary = '',
       pin = '',
+      mode = 'PRODUCTION',
     } = req.body || {};
+
+    if (String(mode || 'PRODUCTION').toUpperCase() !== 'PRODUCTION') {
+      return res.status(400).json({
+        success: false,
+        code: 'SIMULATION_DISABLED',
+        error: 'Le mode simulation est désactivé en production. Seuls les retraits réels vérifiés sont autorisés.',
+      });
+    }
 
     const cleanUniverseId = String(universeId || '').trim();
     const isInstructorScope = cleanUniverseId.startsWith('instructor_');
@@ -4345,12 +4489,23 @@ async function startServer() {
     const effectiveUniverseId = cleanUniverseId || ctx.universeId;
     const ownerKey = effectiveUniverseId || ctx.userId;
 
-    // 1. Contrôle Master PIN côté serveur s'il est configuré sur ce Wallet
-    const pinRecord = await getWalletPinRecord(ownerKey);
-    if (pinRecord?.pinHash) {
-      if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
-        return res.status(403).json({ success: false, code: 'INVALID_MASTER_PIN', error: 'Master PIN requis ou incorrect pour autoriser ce retrait.' });
-      }
+    // 1. Contrôle Master PIN OBLIGATOIRE côté serveur (recherche par univers puis par utilisateur)
+    const pinRecord =
+      (await getWalletPinRecord(ownerKey)) ||
+      (ctx.userId && ctx.userId !== ownerKey ? await getWalletPinRecord(ctx.userId) : null);
+    if (!pinRecord?.pinHash) {
+      return res.status(403).json({
+        success: false,
+        code: 'PIN_NOT_CONFIGURED',
+        error: 'Veuillez d\'abord configurer votre Master PIN (4 à 6 chiffres) dans NaNa Wallet avant d\'effectuer un retrait.',
+      });
+    }
+    if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+      return res.status(403).json({
+        success: false,
+        code: 'INVALID_MASTER_PIN',
+        error: 'Master PIN requis ou incorrect pour autoriser ce retrait.',
+      });
     }
 
     // 2. Contrôle strict du solde réel côté serveur (refus 402 si solde insuffisant)

@@ -63,9 +63,13 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       const isProtectedFinanceRoute =
         urlStr.startsWith('/api/merchant/') ||
         urlStr.startsWith('/api/payouts') ||
+        urlStr.startsWith('/api/admin/') ||
+        urlStr.startsWith('/api/affiliate/') ||
         urlStr.includes('/api/merchant/wallet') ||
         urlStr.includes('/api/merchant/subscription') ||
-        urlStr.includes('/api/payouts');
+        urlStr.includes('/api/payouts') ||
+        urlStr.includes('/api/admin/') ||
+        urlStr.includes('/api/affiliate/');
       if (isProtectedFinanceRoute) {
         const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
         if (!headers.has('Authorization')) {
