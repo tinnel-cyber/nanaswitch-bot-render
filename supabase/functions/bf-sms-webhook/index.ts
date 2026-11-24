@@ -115,7 +115,14 @@ Deno.serve(async (req: Request) => {
       body.merchant_code || body.merchantCode || url.searchParams.get("merchant_code") || ""
     ).trim() || null;
 
+    console.log(
+      `[BF-SMS-WEBHOOK] SMS reçu | sender=${sender || "N/A"} | txId=${transactionId || "NONE"} | amount=${amount} | operator=${operator} | merchantCode=${merchantCode || "CENTRAL"}`
+    );
+
     if (!transactionId || amount <= 0) {
+      console.warn(
+        `[BF-SMS-WEBHOOK] SMS ignoré (${!transactionId ? "NO_TRANSACTION_ID_FOUND" : "INVALID_OR_MISSING_AMOUNT"})`
+      );
       return new Response(
         JSON.stringify({
           success: false,
@@ -158,11 +165,16 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (error) {
+      console.error(`[BF-SMS-WEBHOOK] Erreur insertion Supabase:`, error.message);
       return new Response(JSON.stringify({ success: false, error: error.message }), {
         status: 500,
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
+
+    console.log(
+      `[BF-SMS-WEBHOOK] Enregistré dans bf_sms_payments | txId=${transactionId} | amount=${amount} | inserted=${Boolean(data)}`
+    );
 
     return new Response(
       JSON.stringify({

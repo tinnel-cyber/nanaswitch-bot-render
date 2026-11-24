@@ -923,6 +923,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     setBfSmsStatus('CHECKING');
     setPaymentError(null);
     setBfSmsNotice(`ID détecté (${cleanTx}) — Vérification en temps réel avec Supabase...`);
+    console.log(`[BF-SMS-CHECKOUT] Vérification RPC verify_bf_sms_payment | orderId=${orderId} | txId=${cleanTx} | expectedAmount=${Math.round(finalTotal)} | merchantCode=${selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : 'WAVE'}`);
 
     try {
       const { data, error } = await supabase.rpc('verify_bf_sms_payment', {
@@ -996,6 +997,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     let bfChannel: any = null;
     try {
       const channelName = `bf_sms_watch_${orderId}_${Math.random().toString(36).substring(7)}`;
+      console.log(`[BF-SMS-CHECKOUT] Abonnement Supabase Realtime activé sur bf_sms_payments (${channelName})`);
       bfChannel = supabase
         .channel(channelName)
         .on(
@@ -1008,6 +1010,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
           async (payload) => {
             if (bfVerificationDoneRef.current) return;
             const row = payload.new as any;
+            console.log('[BF-SMS-CHECKOUT] Événement Supabase Realtime reçu sur bf_sms_payments:', row);
             if (!row || !row.transaction_id) return;
 
             const currentTargetTx = bfExtractedTxIdRef.current.trim().toUpperCase();
