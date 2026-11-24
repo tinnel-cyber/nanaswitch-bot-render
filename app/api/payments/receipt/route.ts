@@ -119,31 +119,37 @@ export async function POST(request: NextRequest) {
       console.warn("[API /api/payments/receipt] Note journalisation :", dbErr);
     }
 
-    // 2. Envoi automatique par email transactionnel si customerEmail est fourni et Brevo disponible
+    // 2. Envoi automatique par email transactionnel (Acheteur + Vendeur) via Brevo
     let emailDispatched = false;
+    let sellerEmailDispatched = false;
     const brevoApiKey = process.env.BREVO_API_KEY || process.env.VITE_BREVO_SMTP_KEY;
+    const resolvedSellerEmail =
+      (storeEmail && storeEmail.includes("@") ? storeEmail.trim() : "") ||
+      process.env.PLATFORM_ADMIN_EMAIL ||
+      process.env.ADMIN_NOTIFICATION_EMAIL ||
+      "";
+
+    const itemsRows = (items || [])
+      .map(
+        (it) => `
+      <tr style="border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 10px 0; font-weight: 600; color: #1e293b;">
+          ${it.name} ${it.isDigital ? '<span style="color: #2563eb; font-size: 11px;">[Produit Numérique]</span>' : ''}
+        </td>
+        <td style="padding: 10px 0; text-align: center; color: #64748b;">${it.quantity || 1}</td>
+        <td style="padding: 10px 0; text-align: right; font-weight: 700; color: #0f172a;">
+          ${((it.total || it.price * (it.quantity || 1)) || 0).toLocaleString("fr-FR")} F CFA
+        </td>
+      </tr>
+    `
+      )
+      .join("");
 
     if (customerEmail && customerEmail.includes("@") && brevoApiKey) {
       try {
         const hasDigital = items?.some(
           (i) => i.isDigital || i.downloadUrl || i.fileKey || (i.category || "").toLowerCase().includes("digital")
         );
-
-        const itemsRows = (items || [])
-          .map(
-            (it) => `
-          <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 10px 0; font-weight: 600; color: #1e293b;">
-              ${it.name} ${it.isDigital ? '<span style="color: #2563eb; font-size: 11px;">[Produit Numérique]</span>' : ''}
-            </td>
-            <td style="padding: 10px 0; text-align: center; color: #64748b;">${it.quantity || 1}</td>
-            <td style="padding: 10px 0; text-align: right; font-weight: 700; color: #0f172a;">
-              ${((it.total || it.price * (it.quantity || 1)) || 0).toLocaleString("fr-FR")} F CFA
-            </td>
-          </tr>
-        `
-          )
-          .join("");
 
         const digitalSectionHtml = hasDigital
           ? `
@@ -242,7 +248,69 @@ export async function POST(request: NextRequest) {
           emailDispatched = true;
         }
       } catch (mailErr) {
-        console.warn("[API /api/payments/receipt] Erreur envoi Brevo :", mailErr);
+        console.warn("[API /api/payments/receipt] Erreur envoi Brevo acheteur :", mailErr);
+      }
+    }
+
+    // 3. Notification automatique par email au VENDEUR (boutique / plateforme)
+    if (resolvedSellerEmail && brevoApiKey) {
+      try {
+        const sellerHtml = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; padding: 24px; border: 1px solid #e2e8f0; border-radius: 20px;">
+            <div style="border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
+              <h1 style="margin: 0; font-size: 20px; color: #059669; font-weight: 900;">💰 Nouvelle commande validée !</h1>
+              <p style="margin: 4px 0 0 0; font-size: 13px; color: #64748b;">
+                Boutique : <strong>${storeName}</strong>
+              </p>
+            </div>
+            <div style="background-color: #f8fafc; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: #334155; line-height: 1.7;">
+              <div><strong>Commande :</strong> #${orderId}</div>
+              <div><strong>Réf. Transaction :</strong> ${transactionId || orderId}</div>
+              <div><strong>Client :</strong> ${customerName || "Client"}</div>
+              <div><strong>Téléphone client :</strong> ${customerPhone || "Non précisé"}</div>
+              <div><strong>Email client :</strong> ${customerEmail || "Non précisé"}</div>
+              <div><strong>Moyen de paiement :</strong> ${paymentMethod}</div>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
+              <thead>
+                <tr style="border-bottom: 2px solid #cbd5e1; text-align: left; color: #475569; font-size: 12px; text-transform: uppercase;">
+                  <th style="padding-bottom: 8px;">Article</th>
+                  <th style="padding-bottom: 8px; text-align: center;">Qté</th>
+                  <th style="padding-bottom: 8px; text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>${itemsRows}</tbody>
+            </table>
+            <div style="text-align: right; padding-top: 10px; border-top: 2px solid #e2e8f0;">
+              <span style="font-size: 14px; color: #475569;">Montant encaissé : </span>
+              <span style="font-size: 20px; font-weight: 900; color: #059669;">${(totalAmount || 0).toLocaleString("fr-FR")} F CFA</span>
+            </div>
+          </div>
+        `;
+
+        const sellerRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "api-key": brevoApiKey,
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            sender: {
+              name: "Nanasore Notifications",
+              email: process.env.BREVO_SENDER_EMAIL || "notifications@nanasore.com"
+            },
+            to: [{ email: resolvedSellerEmail, name: storeName }],
+            subject: `💰 Nouvelle commande validée #${orderId} (${(totalAmount || 0).toLocaleString("fr-FR")} F CFA) - ${storeName}`,
+            htmlContent: sellerHtml
+          })
+        });
+
+        if (sellerRes.ok) {
+          sellerEmailDispatched = true;
+        }
+      } catch (sellerMailErr) {
+        console.warn("[API /api/payments/receipt] Erreur envoi Brevo vendeur :", sellerMailErr);
       }
     }
 
@@ -252,6 +320,7 @@ export async function POST(request: NextRequest) {
       receiptId,
       orderId,
       emailDispatched,
+      sellerEmailDispatched,
       downloadUrl: effectiveDownloadUrl,
       clientDashboardUrl: effectiveDashboardUrl
     });

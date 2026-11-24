@@ -16,7 +16,6 @@ import {
   MapPin,
   ExternalLink,
   MessageCircle,
-  Sparkles,
   Copy,
   Check,
   X,
@@ -48,6 +47,7 @@ import {
   sendDigitalReceiptViaApi
 } from '../../digitalReceiptService';
 import { recordAffiliateSaleCommission } from '../../liveAffiliateService';
+import { recordUnifiedOrder } from '../../../services/supabaseOrderService';
 
 const LazyBuyerLiveCallButton = React.lazy(() =>
   import('../../../components/live/BuyerLiveCallButton').then((m) => ({
@@ -988,15 +988,15 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     playCashChime();
   }, [currentStep, orderId, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, logBfPaymentStep]);
 
-  // Comparaison directe avec Supabase (RPC atomique verify_bf_sms_payment)
+  // Comparaison directe avec le serveur de vérification
   const verifyBfSmsAgainstSupabase = useCallback(async (txIdCandidate: string, rawInputText: string) => {
     const cleanTx = String(txIdCandidate || '').trim();
     if (!cleanTx || cleanTx.length < 4 || bfVerificationDoneRef.current) return false;
 
     setBfSmsStatus('CHECKING');
     setPaymentError(null);
-    setBfSmsNotice(`ID détecté (${cleanTx}) — Vérification en temps réel avec Supabase...`);
-    console.log(`[BF-SMS-CHECKOUT] Vérification RPC verify_bf_sms_payment | orderId=${orderId} | txId=${cleanTx} | expectedAmount=${Math.round(finalTotal)} | merchantCode=${selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : 'WAVE'}`);
+    setBfSmsNotice(`ID détecté (${cleanTx}) — Vérification en temps réel en cours...`);
+    console.log(`[BF-CHECKOUT] Vérification paiement | orderId=${orderId} | txId=${cleanTx} | expectedAmount=${Math.round(finalTotal)} | merchantCode=${selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : 'WAVE'}`);
     logBfPaymentStep('ID_SUBMITTED', cleanTx, { rawInput: rawInputText || cleanTx });
 
     try {
@@ -1011,9 +1011,9 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       });
 
       if (error) {
-        console.warn('[BF SMS RPC]', error.message);
+        console.warn('[BF VERIFY]', error.message);
         setBfSmsStatus('WAITING_REALTIME');
-        setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active pour confirmation automatique...`);
+        setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de validation par le système...`);
         logBfPaymentStep('WAITING_REALTIME', cleanTx, { rpcError: error.message });
         return false;
       }
@@ -1025,7 +1025,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
 
       if (data?.alreadyUsed) {
         setBfSmsStatus('ERROR');
-        setPaymentError('Cet ID de transaction SMS a déjà été utilisé pour une autre commande.');
+        setPaymentError('Cet ID de transaction a déjà été utilisé pour une autre commande.');
         logBfPaymentStep('TRANSACTION_ALREADY_USED', cleanTx);
         playCancelSound();
         return false;
@@ -1052,15 +1052,15 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
         return false;
       }
 
-      // SMS pas encore arrivé dans Supabase : l'écoute Realtime va l'intercepter dès réception
+      // En attente de réception : l'écoute en direct va l'intercepter dès réception
       setBfSmsStatus('WAITING_REALTIME');
-      setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de réception du SMS dans Supabase Realtime...`);
+      setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de validation par le système...`);
       logBfPaymentStep('WAITING_REALTIME', cleanTx);
       return false;
     } catch (err: any) {
-      console.warn('[BF SMS VERIFY]', err?.message);
+      console.warn('[BF VERIFY]', err?.message);
       setBfSmsStatus('WAITING_REALTIME');
-      setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active...`);
+      setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de validation par le système...`);
       logBfPaymentStep('WAITING_REALTIME', cleanTx, { error: err?.message });
       return false;
     }
@@ -1090,7 +1090,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     let bfChannel: any = null;
     try {
       const channelName = `bf_sms_watch_${orderId}_${Math.random().toString(36).substring(7)}`;
-      console.log(`[BF-SMS-CHECKOUT] Abonnement Supabase Realtime activé sur bf_sms_payments (${channelName})`);
+      console.log(`[BF-CHECKOUT] Écoute temps réel activée (${channelName})`);
       bfChannel = supabase
         .channel(channelName)
         .on(
@@ -1103,7 +1103,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
           async (payload) => {
             if (bfVerificationDoneRef.current) return;
             const row = payload.new as any;
-            console.log('[BF-SMS-CHECKOUT] Événement Supabase Realtime reçu sur bf_sms_payments:', row);
+            console.log('[BF-CHECKOUT] Notification reçue :', row);
             if (!row || !row.transaction_id) return;
 
             const currentTargetTx = bfExtractedTxIdRef.current.trim().toUpperCase();
@@ -1292,6 +1292,13 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
     storeName: effectiveStoreName,
     storePhone: effectiveWPhone,
+    storeEmail:
+      storeConfig?.contactEmail ||
+      (storeConfig as any)?.siteSettings?.contactEmail ||
+      (storeConfig as any)?.footerEmail ||
+      sellerConfig?.email ||
+      sellerConfig?.contactEmail ||
+      undefined,
     storeAddress: `${city.trim()} • Boutique Agréée`,
     items: resolvedProduct.items && resolvedProduct.items.length > 0
       ? resolvedProduct.items.map((i) => ({
@@ -1376,12 +1383,50 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [resolvedProduct, isDigitalProduct]);
 
-  // Envoi automatique du reçu + Enrôlement Campus Privé + Livraison Double Accès (Email + /download/:orderId)
+  // Envoi automatique du reçu + Enregistrement Bon & Commande + Notification Vendeur + Livraison Double Accès
   useEffect(() => {
     if (currentStep === 'STEP_3' && orderId) {
       sendDigitalReceiptViaApi(digitalReceiptPayload).catch(() => {});
 
       if (completedDetails?.paymentMethod !== 'CASH_ON_DELIVERY') {
+        const targetStoreKey = merchantId || storeConfig?.slug || 'boutique';
+        recordUnifiedOrder(
+          {
+            id: orderId,
+            orderNumber: orderId,
+            storeId: targetStoreKey,
+            storeSlug: storeConfig?.slug || targetStoreKey,
+            storeName: effectiveStoreName,
+            customerName: customerName.trim() || 'Client',
+            customerPhone: paymentPhone.trim() || deliveryPhone.trim(),
+            deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
+            paymentMethod: selectedOperator?.name || 'Mobile Money',
+            status: 'confirmed_paid',
+            type: 'BON_COMMANDE',
+            subtotal,
+            total: finalTotal,
+            items: digitalReceiptPayload.items.map((it) => ({
+              name: it.name,
+              quantity: it.quantity,
+              price: it.price,
+              category: it.category || 'Général',
+            })),
+            notes: `Réf : ${completedDetails?.transactionId || orderId}`,
+            createdAt: Date.now(),
+          },
+          targetStoreKey
+        ).catch(() => {});
+
+        supabase
+          .from('sales')
+          .insert({
+            total_amount: finalTotal,
+            payment_method: selectedOperator?.name || 'MOBILE_MONEY',
+            status: 'PAYE',
+            is_paid: true,
+          })
+          .then(null, () => {});
+
         import('../../studentAuthService')
           .then(({ trackDestinationConversion }) => {
             trackDestinationConversion(finalTotal, orderId);
@@ -1553,7 +1598,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               {/* Titre & Description */}
               <div className="space-y-1.5 text-left">
                 <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-blue-600">
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <ShoppingBag className="w-3.5 h-3.5" />
                   <span>Commande Express 1-Clic</span>
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-slate-950 leading-snug">
@@ -1902,7 +1947,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 text-xs font-black text-blue-700 bg-blue-100/70 px-2.5 py-1 rounded-lg border border-blue-300 w-fit">
-                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                       <span>Instantané • 0% Frais • Reçu direct</span>
                     </div>
                   </div>
@@ -2816,7 +2861,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             <div className="max-w-md mx-auto p-4.5 rounded-3xl bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-blue-200 text-left space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
-                  <Sparkles className="w-4 h-4" />
+                  <Lock className="w-4 h-4" />
                 </div>
                 <div>
                   <h4 className="text-xs sm:text-sm font-black text-slate-900">

@@ -5090,11 +5090,20 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
   useEffect(() => {
     loadSalesData();
 
-    // Connexion temps réel Supabase
+    // Connexion temps réel pour notifier le vendeur dès qu'une commande est payée
     const salesChannel = supabase
       .channel('sales_analytics_feed')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, (payload: any) => {
         loadSalesData();
+        if (payload?.eventType === 'INSERT' && payload?.new) {
+          const amt = Number(payload.new.total_amount || 0);
+          if (amt > 0) {
+            showToast(
+              `Nouvelle commande validée (${amt.toLocaleString('fr-FR')} F CFA) !`,
+              'success'
+            );
+          }
+        }
       })
       .subscribe();
 
