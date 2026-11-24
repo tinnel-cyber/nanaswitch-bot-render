@@ -24,7 +24,6 @@
 
 const https = require('https');
 const crypto = require('crypto');
-const admin = require('./firebase-admin-fallback');
 const { refreshAccessToken } = require('./youtube-oauth');
 
 // Quota maximum de diffusions YouTube par jour

@@ -190,15 +190,23 @@ class NaNaSwitchManager {
   isEligibleForFailover(err) {
     if (!err) return false;
 
-    // Ne JAMAIS failover sur une erreur de validation client (OTP manquant ou numéro invalide)
-    if (err.code === 'OTP_REQUIRED' || err.code === 'INVALID_PHONE_NUMBER') {
-      return false;
+    // 1. Erreurs réseau pré-connexion explicites (avant création de charge)
+    const preConnectionCodes = ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'EAI_AGAIN'];
+    if (preConnectionCodes.includes(String(err.code || '').toUpperCase())) {
+      return true;
     }
 
-    // Erreurs d'API ou HTTP (400, 401, 402, 403, 404, 409, 422, 429, 500, 502, 503, 504...)
-    const status = Number(err.status || err.statusCode || err.response?.status || 0);
-    if (status >= 400 && status <= 599) {
-      return true;
+    // 2. Rejets métier ou validation client : JAMAIS de failover (évite le double débit)
+    const nonFailoverCodes = [
+      'OTP_REQUIRED',
+      'INVALID_PHONE_NUMBER',
+      'INSUFFICIENT_BALANCE',
+      'PAYMENT_DECLINED',
+      'ORDER_ALREADY_PAID',
+      'AMOUNT_MISMATCH'
+    ];
+    if (nonFailoverCodes.includes(String(err.code || '').toUpperCase())) {
+      return false;
     }
 
     const errorStr = (
@@ -208,49 +216,55 @@ class NaNaSwitchManager {
       JSON.stringify(err.response?.data || {})
     ).toLowerCase();
 
-    // Mots-clés caractéristiques de rejet opérateur, quota ou indisponibilité réseau
-    const failoverKeywords = [
+    const businessRejectKeywords = [
+      'insufficient_balance',
+      'solde insuffisant',
       'declined',
       'payment_declined',
       'rejected',
-      'refused',
-      'failed',
-      'insufficient_balance',
-      'operator',
-      'the operator declined',
-      'operator declined',
-      'quota',
-      'limit',
-      'rate limit',
-      'too many requests',
-      'ip_not_whitelisted',
-      'ip not whitelisted',
-      'forbidden',
-      'unauthorized',
-      'not found',
-      'econnrefused',
-      'etimedout',
-      'enotfound',
-      'und_err_connect_timeout',
-      'aborterror',
-      'time-out',
-      'timeout',
-      'fetch failed',
-      'service unavailable',
-      'bad gateway',
-      'gateway timeout',
-      'network error',
-      'socket hang up',
-      'api error'
+      'payment_refused',
+      'transaction refused',
+      'invalid_pin',
+      'wrong_pin',
+      'otp',
+      'user_cancelled',
+      'cancelled',
+      'invalid_account',
+      'account_not_found'
     ];
-
-    if (failoverKeywords.some(kw => errorStr.includes(kw))) {
-      return true;
+    if (businessRejectKeywords.some(kw => errorStr.includes(kw))) {
+      return false;
     }
 
-    // Par défaut, toute exception survenue lors de l'appel d'une passerelle
-    // justifie le déclenchement de la passerelle de secours
-    return true;
+    // 3. Timeout ambigu post-création : ne pas basculer aveuglément
+    if (err.chargeCreated === true) {
+      return false;
+    }
+
+    // 4. Statuts HTTP d'infrastructure passerelle
+    const status = Number(err.status || err.statusCode || err.response?.status || 0);
+    if ([401, 403, 429, 502, 503, 504].includes(status)) {
+      return true;
+    }
+    if (status === 400 || status === 402 || status === 422) {
+      return false;
+    }
+
+    const preConnectionKeywords = [
+      'econnrefused',
+      'enotfound',
+      'ehostunreach',
+      'eai_again',
+      'ip_not_whitelisted',
+      'ip not whitelisted',
+      'rate limit',
+      'too many requests',
+      'service unavailable',
+      'bad gateway',
+      'gateway timeout'
+    ];
+
+    return preConnectionKeywords.some(kw => errorStr.includes(kw));
   }
 
   /**
@@ -400,6 +414,19 @@ class NaNaSwitchManager {
       if (!supabase) return;
 
       const orderId = originalParams.orderId || initResult.orderId || `ORD_${Date.now()}`;
+
+      // Protection anti-squat (Audit C4) : Ne JAMAIS écraser une transaction déjà payée vers PENDING
+      const { data: existingTx } = await supabase
+        .from('nanaswitch_transactions')
+        .select('status')
+        .eq('order_id', String(orderId))
+        .maybeSingle();
+
+      if (existingTx && ['PAID', 'COMPLETED', 'SUCCESS'].includes(String(existingTx.status || '').toUpperCase())) {
+        console.warn(`[SECURITY GUARD C4] Transaction ${orderId} déjà payée. Refus de réinitialiser en PENDING.`);
+        return;
+      }
+
       const externalReference =
         originalParams.externalReference ||
         initResult.reference ||

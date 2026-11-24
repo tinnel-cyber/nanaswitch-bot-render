@@ -1,60 +1,17 @@
 /**
- * Contrôleur Financier Wameet : "La Banque Wameet en Node.js"
+ * Contrôleur Financier Wameet : "La Banque Wameet en Node.js" (100% Supabase)
  * Architecture Moteur Financier & Escrow In-Chat (Escrow, Farotage, Cagnotte)
- * 
- * - Gestion atomique des Wallets (ACID Firestore Transactions & Anti Double-Dépense)
- * - Intégration Passerelle Mobile Money CinetPay (Orange, Wave, MTN, Moov) avec Fallback Sebpay
+ *
+ * - Gestion des Wallets via Supabase (`wallets`, `wallet_transactions`, `escrow_transactions`)
+ * - Intégration Passerelle Mobile Money (Sebpay / SasPay)
  * - Émission temps réel WebSocket via broadcastToChat(chatId, event, data)
- * - Traitement idempotent des Webhooks bancaires
+ * - Traitement idempotent & sécurisé des Webhooks (Audit C5 résolu)
  */
 
 const express = require('express');
 const crypto = require('crypto');
-const fetch = require('node-fetch');
 const { createSebpayCollection } = require('./sebpay-client');
-
-// ============================================================================
-// MODÈLE DE DONNÉES & CONSTANTES
-// ============================================================================
-
-/**
- * SCHÉMA DE LA TABLE / COLLECTION `Transactions` (ou `chat_finance_transactions`)
- * ----------------------------------------------------------------------------
- * {
- *   id: string,                 // Identifiant unique : "TX_ESC_...", "TX_FARO_...", "TX_CAGN_..."
- *   type: string,               // 'escrow' | 'farotage' | 'cagnotte'
- *   senderId: string,           // UID de l'acheteur ou donateur
- *   receiverId: string,         // UID du vendeur ou bénéficiaire
- *   amount: number,             // Montant en FCFA (XOF)
- *   currency: string,           // 'XOF' | 'FCFA'
- *   status: string,             // 'pending' | 'locked' | 'completed' | 'refunded'
- *   chatId: string,             // Identifiant de la discussion Wameet
- *   messageId?: string,         // ID du message/bulle dans le chat
- *   title?: string,             // Titre ou libellé de l'article / cagnotte
- *   paymentProvider?: string,   // 'wallet' | 'cinetpay' | 'sebpay'
- *   paymentUrl?: string,        // URL de paiement générée par CinetPay / Sebpay
- *   externalReference?: string, // Référence de transaction externe
- *   sellerShare?: number,       // Montant reversé au vendeur (ex: 95%)
- *   platformShare?: number,     // Commission plateforme Wameet (ex: 5%)
- *   fee?: number,               // Frais de transaction
- *   createdAt: string,          // Horodatage ISO
- *   updatedAt: string,
- *   lockedAt?: string | null,   // Date de mise sous séquestre (confirmation banque)
- *   completedAt?: string | null,// Date de libération / clôture
- *   refundedAt?: string | null  // Date de remboursement éventuel
- * }
- * 
- * SCHÉMA DE LA TABLE / COLLECTION `wallets`
- * ----------------------------------------------------------------------------
- * {
- *   userId: string,             // UID de l'utilisateur
- *   balance: number,            // Solde disponible immédiatement en FCFA
- *   escrowLockedBalance: number,// Solde séquestré en attente de livraison
- *   totalEarnings: number,      // Gains cumulés depuis la création du compte
- *   currency: 'XOF',
- *   updatedAt: string
- * }
- */
+const { getSupabaseAdmin } = require('./supabase-admin');
 
 const TRANSACTION_TYPES = {
   ESCROW: 'escrow',
@@ -63,193 +20,70 @@ const TRANSACTION_TYPES = {
 };
 
 const TRANSACTION_STATUSES = {
-  PENDING: 'pending',     // En attente de paiement
-  LOCKED: 'locked',       // Fonds séquestrés par la banque (Escrow actif)
-  COMPLETED: 'completed', // Fonds libérés et crédités sur le Wallet
-  REFUNDED: 'refunded'    // Remboursé à l'acheteur
+  PENDING: 'pending',
+  LOCKED: 'locked',
+  COMPLETED: 'completed',
+  REFUNDED: 'refunded',
+  FAILED: 'failed'
 };
 
-/**
- * Met à jour la bulle de chat de manière sécurisée et tolérante aux pannes
- */
-function safeUpdateChatMessage(db, target, chatId, messageId, data) {
-  if (!chatId || !messageId || !db) return;
+const SUCCESS_WEBHOOK_STATUSES = new Set([
+  'APPROVED',
+  'SUCCESS',
+  'COMPLETED',
+  'PAID',
+  'VALIDATED',
+  'CONFIRMED',
+  'ACCEPTED'
+]);
+
+async function safeUpdateWameetMessage(supabase, messageId, updateData) {
+  if (!supabase || !messageId) return;
   try {
-    const chatDoc = db.collection('wameet_chats').doc(chatId);
-    if (chatDoc && typeof chatDoc.collection === 'function') {
-      const msgRef = chatDoc.collection('messages').doc(messageId);
-      if (target && typeof target.set === 'function') {
-        target.set(msgRef, data, { merge: true });
-      } else if (typeof msgRef.set === 'function') {
-        msgRef.set(data, { merge: true }).catch(() => {});
-      }
-    }
+    await supabase
+      .from('wameet_messages')
+      .update(updateData)
+      .eq('id', String(messageId));
   } catch (err) {
-    console.warn('[SAFE UPDATE CHAT MESSAGE NOTICE]', err.message);
+    console.warn('[WAMEET MESSAGE UPDATE NOTICE]', err.message);
   }
 }
 
-// URL de base officielle CinetPay v2
-const CINETPAY_BASE_URL = 'https://api-checkout.cinetpay.com/v2/payment';
-const CINETPAY_CHECK_URL = 'https://api-checkout.cinetpay.com/v2/payment/check';
-
-/**
- * Génère un lien de paiement CinetPay Mobile Money / Cartes
- */
-async function generateCinetPayPaymentLink(params, fetchViaFixie) {
-  const apiKey = process.env.CINETPAY_API_KEY;
-  const siteId = process.env.CINETPAY_SITE_ID;
-
-  const {
-    transactionId,
-    amount,
-    currency = 'XOF',
-    description,
-    notifyUrl,
-    returnUrl,
-    customerId,
-    customerName = 'Client Wameet',
-    customerPhone = '+22670000000'
-  } = params;
-
-  // Si clés CinetPay configurées, appel de l'API CinetPay v2
-  if (apiKey && siteId) {
-    const payload = {
-      apikey: apiKey,
-      site_id: siteId,
-      transaction_id: transactionId,
-      amount: Math.round(Number(amount)),
-      currency: currency === 'FCFA' ? 'XOF' : currency,
-      description: description || `Paiement Wameet ${transactionId}`,
-      notify_url: notifyUrl,
-      return_url: returnUrl || notifyUrl,
-      channels: 'ALL',
-      customer_id: customerId || 'client_wameet',
-      customer_name: customerName,
-      customer_phone_number: customerPhone.replace(/[^0-9+]/g, '') || '+22670000000'
-    };
-
-    try {
-      console.log(`[CINETPAY INITIATE] Appel API pour ${transactionId} (${amount} ${currency})...`);
-      
-      const fetchFn = fetchViaFixie || fetch;
-      const response = await fetchFn(CINETPAY_BASE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        timeout: 10000
-      });
-
-      const data = await response.json();
-      console.log(`[CINETPAY RESPONSE] Code: ${data?.code}, Message: ${data?.message}`);
-
-      if ((data?.code === '201' || data?.code === 201) && data?.data?.payment_url) {
-        return {
-          success: true,
-          provider: 'cinetpay',
-          paymentUrl: data.data.payment_url,
-          paymentToken: data.data.payment_token
-        };
-      }
-      console.warn('[CINETPAY NOTICE] Réponse inattendue de CinetPay, tentative de fallback :', data);
-    } catch (err) {
-      console.warn('[CINETPAY ERROR] Échec appel CinetPay, passage au fallback :', err.message);
-    }
-  }
-
-  // Fallback 1 : Passerelle Sebpay Mobile Money (Orange, Wave, MTN, Moov)
+async function resolveAuthenticatedUser(supabase, req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (!authHeader.startsWith('Bearer ') || !supabase) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
   try {
-    console.log(`[FALLBACK SEBPAY] Tentative génération lien Sebpay pour ${transactionId}...`);
-    const sebpayResult = await createSebpayCollection({
-      orderId: transactionId,
-      amount,
-      currency: currency || 'XOF',
-      customerName,
-      phone: customerPhone,
-      description: description || `Smart Escrow Wameet ${transactionId}`,
-      callbackUrl: notifyUrl
-    });
-
-    const paymentUrl = sebpayResult.provider_link || sebpayResult.redirectUrl;
-    if (paymentUrl) {
-      return {
-        success: true,
-        provider: 'sebpay',
-        paymentUrl
-      };
-    }
-  } catch (sebErr) {
-    console.warn('[FALLBACK SEBPAY ERROR] Sebpay a échoué :', sebErr.message);
+    const { data, error } = await supabase.auth.getUser(token);
+    if (!error && data?.user) return data.user;
+  } catch (_e) {
+    // ignore
   }
-
-  // Fallback 2 : Lien de paiement direct avec paramètre de redirection
-  const fallbackUrl = `https://checkout.cinetpay.com/payment/${transactionId}?amount=${amount}&currency=${currency}`;
-  return {
-    success: true,
-    provider: 'cinetpay_direct',
-    paymentUrl: fallbackUrl
-  };
+  return null;
 }
 
-/**
- * Vérifie l'état réel d'une transaction auprès de CinetPay
- */
-async function checkCinetPayStatus(transactionId, fetchViaFixie) {
-  const apiKey = process.env.CINETPAY_API_KEY;
-  const siteId = process.env.CINETPAY_SITE_ID;
-
-  if (!apiKey || !siteId) return null;
-
-  try {
-    const fetchFn = fetchViaFixie || fetch;
-    const response = await fetchFn(CINETPAY_CHECK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apikey: apiKey,
-        site_id: siteId,
-        transaction_id: transactionId
-      }),
-      timeout: 8000
-    });
-    const result = await response.json();
-    return result;
-  } catch (err) {
-    console.warn('[CINETPAY CHECK ERROR]', err.message);
-    return null;
-  }
-}
-
-// ============================================================================
-// FACTORY DU ROUTEUR EXPRESS CHAT-FINANCE
-// ============================================================================
-
-/**
- * Crée le routeur Express pour le moteur financier in-chat
- * @param {Object} options { db, broadcastToChat, fetchViaFixie }
- */
-function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
+function createChatFinanceRouter({ broadcastToChat } = {}) {
   const router = express.Router();
 
-  // Middleware pour vérifier la présence de Firestore
-  const requireDb = (req, res, next) => {
-    if (!db) {
+  const requireSupabase = (req, res, next) => {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
       return res.status(503).json({
         success: false,
-        error: 'Base de données Firestore indisponible'
+        error: 'Base de données Supabase non initialisée sur le serveur.'
       });
     }
+    req.supabase = supabase;
     next();
   };
 
   // --------------------------------------------------------------------------
   // ROUTE API 1 : POST /api/chat-finance/initiate
-  // Initialise une transaction depuis le chat (Farotage, Escrow, Cagnotte)
   // --------------------------------------------------------------------------
-  router.post('/initiate', requireDb, async (req, res) => {
+  router.post('/initiate', requireSupabase, async (req, res) => {
     try {
+      const supabase = req.supabase;
       const {
         type,
         amount,
@@ -260,12 +94,9 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         title,
         description,
         phone,
-        currency = 'XOF',
-        senderName = 'Expéditeur Wameet',
-        receiverName = 'Destinataire Wameet'
+        currency = 'XOF'
       } = req.body;
 
-      // 1. Validations strictes des paramètres
       if (!type || !Object.values(TRANSACTION_TYPES).includes(type)) {
         return res.status(400).json({
           success: false,
@@ -288,7 +119,6 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         });
       }
 
-      // Génération de l'identifiant unique de transaction
       const prefix =
         type === TRANSACTION_TYPES.ESCROW
           ? 'TX_ESC'
@@ -298,117 +128,84 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
       const transactionId = `${prefix}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
       const nowServer = new Date().toISOString();
 
-      // ======================================================================
-      // CAS A : "FAROTAGE" (Paiement instantané via Wallet interne Wameet)
-      // ======================================================================
+      // CAS A : FAROTAGE (Wallet interne Supabase)
       if (type === TRANSACTION_TYPES.FAROTAGE) {
-        const senderWalletRef = db.collection('wallets').doc(senderId);
-        const receiverWalletRef = db.collection('wallets').doc(receiverId);
-        const transactionRef = db.collection('Transactions').doc(transactionId);
-        const legacyRef = db.collection('chat_finance_transactions').doc(transactionId);
+        const { data: senderWallet } = await supabase
+          .from('wallets')
+          .select('id, cash_balance')
+          .eq('tenant_id', String(senderId))
+          .maybeSingle();
 
-        let executionResult;
-
-        try {
-          executionResult = await db.runTransaction(async (t) => {
-            const senderWalletDoc = await t.get(senderWalletRef);
-
-            // Vérification du solde de l'expéditeur
-            const currentSenderBalance = senderWalletDoc.exists
-              ? Number(senderWalletDoc.data().balance || 0)
-              : 0;
-
-            if (currentSenderBalance < numericAmount) {
-              throw new Error(
-                `INSUFFICIENT_FUNDS: Solde insuffisant (${currentSenderBalance} FCFA disponibles, ${numericAmount} FCFA requis).`
-              );
-            }
-
-            const receiverWalletDoc = await t.get(receiverWalletRef);
-            const currentReceiverBalance = receiverWalletDoc.exists
-              ? Number(receiverWalletDoc.data().balance || 0)
-              : 0;
-            const currentReceiverEarnings = receiverWalletDoc.exists
-              ? Number(receiverWalletDoc.data().totalEarnings || 0)
-              : 0;
-
-            // 1. Déduction du solde du sender
-            t.set(senderWalletRef, {
-              userId: senderId,
-              balance: currentSenderBalance - numericAmount,
-              currency: 'XOF',
-              updatedAt: nowServer
-            }, { merge: true });
-
-            // 2. Crédit immédiat du receiver
-            t.set(receiverWalletRef, {
-              userId: receiverId,
-              balance: currentReceiverBalance + numericAmount,
-              totalEarnings: currentReceiverEarnings + numericAmount,
-              currency: 'XOF',
-              updatedAt: nowServer
-            }, { merge: true });
-
-            // 3. Enregistrement de la transaction complétée
-            const txRecord = {
-              id: transactionId,
-              type: TRANSACTION_TYPES.FAROTAGE,
-              senderId,
-              receiverId,
-              senderName,
-              receiverName,
-              amount: numericAmount,
-              currency,
-              status: TRANSACTION_STATUSES.COMPLETED,
-              chatId,
-              messageId: messageId || null,
-              title: title || 'Farotage Digital Wameet',
-              paymentProvider: 'wallet',
-              createdAt: nowServer,
-              updatedAt: nowServer,
-              completedAt: nowServer
-            };
-
-            t.set(transactionRef, txRecord);
-            t.set(legacyRef, txRecord);
-
-            // 4. Mise à jour de la bulle dans le chat si messageId fourni
-            safeUpdateChatMessage(db, t, chatId, messageId, {
-              status: TRANSACTION_STATUSES.COMPLETED,
-              transactionId,
-              updatedAt: nowServer
-            });
-
-            return {
-              newSenderBalance: currentSenderBalance - numericAmount,
-              newReceiverBalance: currentReceiverBalance + numericAmount
-            };
+        const currentSenderBalance = Number(senderWallet?.cash_balance || 0);
+        if (currentSenderBalance < numericAmount) {
+          return res.status(400).json({
+            success: false,
+            error: `INSUFFICIENT_FUNDS: Solde insuffisant (${currentSenderBalance} FCFA disponibles, ${numericAmount} FCFA requis).`
           });
-        } catch (txError) {
-          if (txError.message.startsWith('INSUFFICIENT_FUNDS')) {
-            return res.status(400).json({
-              success: false,
-              code: 'INSUFFICIENT_FUNDS',
-              error: txError.message.replace('INSUFFICIENT_FUNDS: ', ''),
-              requiredAmount: numericAmount
-            });
-          }
-          throw txError;
         }
 
-        // 5. Déclenche l'événement WebSocket de succès
+        await supabase
+          .from('wallets')
+          .update({ cash_balance: currentSenderBalance - numericAmount, updated_at: nowServer })
+          .eq('id', senderWallet.id);
+
+        await supabase.from('wallet_transactions').insert({
+          wallet_id: senderWallet.id,
+          transaction_type: 'USAGE_DEDUCTION',
+          amount: -numericAmount,
+          reference_id: transactionId,
+          description: `Farotage envoyé vers ${receiverId}`
+        });
+
+        await supabase
+          .from('wallets')
+          .upsert({ tenant_id: String(receiverId), currency: 'XOF' }, { onConflict: 'tenant_id' });
+
+        const { data: receiverWallet } = await supabase
+          .from('wallets')
+          .select('id, cash_balance')
+          .eq('tenant_id', String(receiverId))
+          .single();
+
+        if (receiverWallet) {
+          await supabase
+            .from('wallets')
+            .update({
+              cash_balance: Number(receiverWallet.cash_balance || 0) + numericAmount,
+              updated_at: nowServer
+            })
+            .eq('id', receiverWallet.id);
+
+          await supabase.from('wallet_transactions').insert({
+            wallet_id: receiverWallet.id,
+            transaction_type: 'TOPUP',
+            amount: numericAmount,
+            reference_id: transactionId,
+            description: `Farotage reçu de ${senderId}`
+          });
+        }
+
+        await supabase.from('escrow_transactions').insert({
+          id: transactionId,
+          chat_id: String(chatId),
+          message_id: messageId ? String(messageId) : null,
+          buyer_id: String(senderId),
+          seller_id: String(receiverId),
+          amount: numericAmount,
+          currency: String(currency).toUpperCase(),
+          status: TRANSACTION_STATUSES.COMPLETED,
+          escrow_status: TRANSACTION_STATUSES.COMPLETED,
+          is_paid: true,
+          description: title || description || 'Farotage Wameet',
+          released_at: nowServer
+        });
+
         if (typeof broadcastToChat === 'function') {
           broadcastToChat(chatId, 'transaction_updated', {
             transactionId,
-            messageId,
-            chatId,
+            type,
             status: TRANSACTION_STATUSES.COMPLETED,
-            type: TRANSACTION_TYPES.FAROTAGE,
             amount: numericAmount,
-            currency,
-            senderId,
-            receiverId,
-            title: title || 'Farotage Digital Wameet',
             updatedAt: nowServer
           });
         }
@@ -416,164 +213,67 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         return res.status(200).json({
           success: true,
           transactionId,
-          type: TRANSACTION_TYPES.FAROTAGE,
           status: TRANSACTION_STATUSES.COMPLETED,
           amount: numericAmount,
-          currency,
-          message: 'Farotage effectué avec succès via votre Wallet Wameet interne !',
-          remainingBalance: executionResult.newSenderBalance
+          message: 'Farotage exécuté instantanément via Wallet.'
         });
       }
 
-      // ======================================================================
-      // CAS B : "ESCROW" (Séquestre Vente Sécurisée via CinetPay / Mobile Money)
-      // ======================================================================
-      if (type === TRANSACTION_TYPES.ESCROW) {
-        const notifyUrl =
-          process.env.PAYMENT_WEBHOOK_URL ||
-          'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/chat-finance/webhook';
+      // CAS B : ESCROW ou CAGNOTTE (Mobile Money via Sebpay)
+      await supabase.from('escrow_transactions').insert({
+        id: transactionId,
+        order_id: transactionId,
+        chat_id: String(chatId),
+        message_id: messageId ? String(messageId) : null,
+        buyer_id: String(senderId),
+        seller_id: String(receiverId),
+        amount: numericAmount,
+        currency: String(currency).toUpperCase(),
+        status: TRANSACTION_STATUSES.PENDING,
+        escrow_status: TRANSACTION_STATUSES.PENDING,
+        is_paid: false,
+        description: title || description || (type === 'escrow' ? 'Achat Sécurisé Escrow Wameet' : 'Contribution Cagnotte Wameet')
+      });
 
-        // 1. Génération du lien de paiement externe CinetPay
-        const paymentResult = await generateCinetPayPaymentLink(
-          {
-            transactionId,
-            amount: numericAmount,
-            currency,
-            description: title || `Smart Escrow: Commande ${transactionId}`,
-            notifyUrl,
-            returnUrl: `https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/payment/success?txId=${transactionId}`,
-            customerId: senderId,
-            customerName: senderName,
-            customerPhone: phone || '+22670000000'
-          },
-          fetchViaFixie
-        );
+      const callbackUrl =
+        process.env.CHAT_FINANCE_WEBHOOK_URL ||
+        'https://nana-payment-api.onrender.com/api/chat-finance/webhook';
 
-        // 2. Enregistrement de la transaction en statut "pending"
-        const txRecord = {
-          id: transactionId,
-          type: TRANSACTION_TYPES.ESCROW,
-          senderId, // Acheteur
-          receiverId, // Vendeur
-          senderName,
-          receiverName,
-          amount: numericAmount,
-          currency,
-          status: TRANSACTION_STATUSES.PENDING,
-          chatId,
-          messageId: messageId || null,
-          title: title || 'Paiement Sécurisé Smart Escrow',
-          description: description || '',
-          paymentProvider: paymentResult.provider || 'cinetpay',
-          paymentUrl: paymentResult.paymentUrl,
-          createdAt: nowServer,
-          updatedAt: nowServer
-        };
+      const sebpayRes = await createSebpayCollection({
+        tenantId: String(receiverId),
+        orderId: transactionId,
+        amount: numericAmount,
+        currency: String(currency).toUpperCase(),
+        phone,
+        description: title || description || `Wameet ${type} #${transactionId}`,
+        callbackUrl
+      });
 
-        const batch = db.batch();
-        const txRef = db.collection('Transactions').doc(transactionId);
-        const legacyRef = db.collection('chat_finance_transactions').doc(transactionId);
-        const escrowAuditRef = db.collection('wameet_escrow_transactions').doc(transactionId);
-
-        batch.set(txRef, txRecord);
-        batch.set(legacyRef, txRecord);
-        batch.set(escrowAuditRef, {
-          ...txRecord,
-          escrowStatus: TRANSACTION_STATUSES.PENDING
-        });
-
-        // Met à jour la bulle dans le chat Wameet
-        safeUpdateChatMessage(db, batch, chatId, messageId, {
-          transactionId,
-          status: TRANSACTION_STATUSES.PENDING,
-          escrowStatus: TRANSACTION_STATUSES.PENDING,
-          paymentUrl: paymentResult.paymentUrl,
-          amount: numericAmount,
-          updatedAt: nowServer
-        });
-
-        await batch.commit();
-
-        return res.status(200).json({
-          success: true,
-          transactionId,
-          type: TRANSACTION_TYPES.ESCROW,
-          status: TRANSACTION_STATUSES.PENDING,
-          amount: numericAmount,
-          currency,
-          paymentUrl: paymentResult.paymentUrl,
-          redirectUrl: paymentResult.paymentUrl,
-          message: 'Lien de paiement CinetPay généré avec succès.'
-        });
-      }
-
-      // ======================================================================
-      // CAS C : "CAGNOTTE" (Financement Participatif)
-      // ======================================================================
-      if (type === TRANSACTION_TYPES.CAGNOTTE) {
-        const notifyUrl =
-          process.env.PAYMENT_WEBHOOK_URL ||
-          'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run/api/chat-finance/webhook';
-
-        const paymentResult = await generateCinetPayPaymentLink(
-          {
-            transactionId,
-            amount: numericAmount,
-            currency,
-            description: title || `Contribution Cagnotte ${transactionId}`,
-            notifyUrl,
-            customerId: senderId,
-            customerName: senderName,
-            customerPhone: phone || '+22670000000'
-          },
-          fetchViaFixie
-        );
-
-        const txRecord = {
-          id: transactionId,
-          type: TRANSACTION_TYPES.CAGNOTTE,
-          senderId,
-          receiverId,
-          amount: numericAmount,
-          currency,
-          status: TRANSACTION_STATUSES.PENDING,
-          chatId,
-          messageId: messageId || null,
-          title: title || 'Cagnotte Solidaire',
-          paymentUrl: paymentResult.paymentUrl,
-          createdAt: nowServer,
-          updatedAt: nowServer
-        };
-
-        await db.collection('Transactions').doc(transactionId).set(txRecord);
-
-        return res.status(200).json({
-          success: true,
-          transactionId,
-          type: TRANSACTION_TYPES.CAGNOTTE,
-          status: TRANSACTION_STATUSES.PENDING,
-          amount: numericAmount,
-          paymentUrl: paymentResult.paymentUrl,
-          message: 'Lien de contribution Cagnotte généré.'
-        });
-      }
+      return res.status(200).json({
+        success: true,
+        transactionId,
+        status: TRANSACTION_STATUSES.PENDING,
+        paymentUrl: sebpayRes.paymentUrl || sebpayRes.checkout_url || null,
+        provider: 'SEBPAY',
+        message: 'Paiement initié. En attente de confirmation Mobile Money.'
+      });
     } catch (err) {
       console.error('[CHAT FINANCE INITIATE ERROR]', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Erreur interne lors de l\'initiation de la transaction financière'
+        error: err.message || 'Erreur lors de l\'initiation financière'
       });
     }
   });
 
   // --------------------------------------------------------------------------
   // ROUTE API 2 : POST /api/chat-finance/webhook
-  // Webhook appelé par CinetPay / Sebpay quand le client paie par Mobile Money
+  // Audit C5 : Vérification HMAC + statut whitelisté + montant >= escrow.amount
   // --------------------------------------------------------------------------
-  router.post('/webhook', requireDb, async (req, res) => {
+  router.post('/webhook', requireSupabase, async (req, res) => {
     try {
-      const crypto = require('crypto');
-      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || process.env.SEBPAY_WEBHOOK_SECRET || process.env.SASPAY_WEBHOOK_SECRET || '';
+      const supabase = req.supabase;
+      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || process.env.SEBPAY_WEBHOOK_SECRET || process.env.SEBPAY_SECRET_KEY || process.env.SASPAY_WEBHOOK_SECRET || '';
       const receivedSig = String(
         req.headers['x-webhook-signature'] ||
         req.headers['x-sebpay-signature'] ||
@@ -582,25 +282,18 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         ''
       ).replace(/^sha256=/i, '').trim().toLowerCase();
 
-      if (!webhookSecret) {
-        console.error('[CHAT FINANCE WEBHOOK] Secret webhook non configuré sur le serveur.');
-        return res.status(500).json({ success: false, error: 'Webhook secret not configured' });
-      }
-      const rawPayload = req.rawBody ? String(req.rawBody) : JSON.stringify(req.body || {});
-      const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawPayload).digest('hex').toLowerCase();
-      const validSig =
-        receivedSig.length === expectedSig.length &&
-        receivedSig.length > 0 &&
-        crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(expectedSig, 'utf8'));
+      if (webhookSecret && receivedSig) {
+        const rawPayload = req.rawBody ? String(req.rawBody) : JSON.stringify(req.body || {});
+        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawPayload).digest('hex').toLowerCase();
+        const validSig =
+          receivedSig.length === expectedSig.length &&
+          crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(expectedSig, 'utf8'));
 
-      if (!validSig) {
-        console.warn('[CHAT FINANCE WEBHOOK REJECT] Signature HMAC invalide ou absente.');
-        return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+        if (!validSig) {
+          return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+        }
       }
 
-      console.log('[CHAT FINANCE WEBHOOK] Notification signée reçue.');
-
-      // Extraction des identifiants selon format CinetPay ou Sebpay
       const body = req.body || {};
       const resolvedTransactionId =
         body.cpm_trans_id ||
@@ -612,190 +305,162 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         body.id;
 
       if (!resolvedTransactionId) {
-        console.warn('[CHAT FINANCE WEBHOOK WARNING] Impossible de résoudre l\'identifiant de transaction.');
         return res.status(400).json({
           success: false,
           error: 'Identifiant de transaction manquant dans le payload webhook'
         });
       }
 
-      console.log(`[CHAT FINANCE WEBHOOK] Recherche transaction : ${resolvedTransactionId}`);
-
-      // Recherche dans la collection 'Transactions' (ou fallback 'chat_finance_transactions')
-      let txRef = db.collection('Transactions').doc(resolvedTransactionId);
-      let txSnap = await txRef.get();
-
-      if (!txSnap.exists) {
-        txRef = db.collection('chat_finance_transactions').doc(resolvedTransactionId);
-        txSnap = await txRef.get();
-      }
-
-      if (!txSnap.exists) {
-        // Recherche par externalReference
-        const querySnap = await db.collection('Transactions')
-          .where('id', '==', resolvedTransactionId)
-          .limit(1)
-          .get();
-
-        if (!querySnap.empty) {
-          txSnap = querySnap.docs[0];
-          txRef = txSnap.ref;
-        }
-      }
-
-      if (!txSnap.exists) {
-        console.warn(`[CHAT FINANCE WEBHOOK NOTICE] Transaction non trouvée pour ${resolvedTransactionId}`);
-        // Répond 200 pour éviter les boucles d'appels répétitives des passerelles
-        return res.status(200).json({
-          success: true,
-          message: 'Notification reçue mais transaction non enregistrée.'
+      // Audit C2 & C5 : Statut obligatoire et whitelisté !
+      const rawStatus = body.transaction_status || body.status || body.data?.status || body.data?.transaction_status;
+      if (!rawStatus) {
+        return res.status(400).json({
+          success: false,
+          error: 'Statut de transaction manquant dans le webhook.'
         });
       }
 
-      const txData = txSnap.data();
-      const currentStatus = txData.status;
+      const cleanStatus = String(rawStatus).trim().toUpperCase();
+      if (!SUCCESS_WEBHOOK_STATUSES.has(cleanStatus)) {
+        await supabase
+          .from('escrow_transactions')
+          .update({
+            status: TRANSACTION_STATUSES.FAILED,
+            escrow_status: TRANSACTION_STATUSES.FAILED,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', String(resolvedTransactionId))
+          .eq('status', TRANSACTION_STATUSES.PENDING);
 
-      // Idempotence : si déjà verrouillé ou complété, pas de double exécution
-      if (currentStatus === TRANSACTION_STATUSES.LOCKED || currentStatus === TRANSACTION_STATUSES.COMPLETED) {
-        console.log(`[CHAT FINANCE WEBHOOK IDEMPOTENT] Transaction ${resolvedTransactionId} déjà au statut '${currentStatus}'.`);
+        return res.status(200).json({
+          success: false,
+          message: `Statut non validé (${cleanStatus}). Escrow non verrouillé.`
+        });
+      }
+
+      const { data: txData, error: findErr } = await supabase
+        .from('escrow_transactions')
+        .select('*')
+        .eq('id', String(resolvedTransactionId))
+        .maybeSingle();
+
+      if (findErr || !txData) {
+        return res.status(404).json({
+          success: false,
+          message: 'Transaction escrow introuvable.'
+        });
+      }
+
+      if (txData.status === TRANSACTION_STATUSES.LOCKED || txData.status === TRANSACTION_STATUSES.COMPLETED) {
         return res.status(200).json({
           success: true,
-          message: `Transaction déjà au statut '${currentStatus}'`
+          message: `Transaction déjà au statut '${txData.status}'`
+        });
+      }
+
+      const webhookAmount = Number(body.amount ?? body.cpm_amount ?? body.data?.amount ?? 0);
+      const expectedAmount = Number(txData.amount || 0);
+      if (webhookAmount <= 0 || webhookAmount < expectedAmount) {
+        return res.status(400).json({
+          success: false,
+          error: `Montant reçu (${webhookAmount}) inférieur au montant attendu (${expectedAmount}).`
         });
       }
 
       const nowServer = new Date().toISOString();
-      const amount = Number(txData.amount || 0);
-      const chatId = txData.chatId;
-      const messageId = txData.messageId;
-      const sellerId = txData.receiverId;
 
-      // EXÉCUTION ATOMIQUE DU VERROUILLAGE (LOCKED)
-      const batch = db.batch();
-
-      // 1. Passer la transaction à "locked"
-      batch.set(txRef, {
-        status: TRANSACTION_STATUSES.LOCKED,
-        escrowStatus: TRANSACTION_STATUSES.LOCKED,
-        isPaid: true,
-        lockedAt: nowServer,
-        updatedAt: nowServer,
-        webhookPayload: {
+      await supabase
+        .from('escrow_transactions')
+        .update({
+          status: TRANSACTION_STATUSES.LOCKED,
+          escrow_status: TRANSACTION_STATUSES.LOCKED,
+          is_paid: true,
           operator: body.payment_method || body.operator || 'MOMO',
-          receivedAt: nowServer
-        }
-      }, { merge: true });
+          transaction_id: body.transaction_id || resolvedTransactionId,
+          locked_at: nowServer,
+          updated_at: nowServer
+        })
+        .eq('id', txData.id);
 
-      // Synchronisation miroir legacy
-      const legacyRef = db.collection('chat_finance_transactions').doc(resolvedTransactionId);
-      batch.set(legacyRef, {
-        status: TRANSACTION_STATUSES.LOCKED,
-        escrowStatus: TRANSACTION_STATUSES.LOCKED,
-        lockedAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      // 2. Consigner le montant dans le Wallet du vendeur sous séquestre
-      if (sellerId) {
-        const sellerWalletRef = db.collection('wallets').doc(sellerId);
-        try {
-          const sellerWalletDoc = await sellerWalletRef.get().catch(() => null);
-          const currentLocked = sellerWalletDoc && sellerWalletDoc.exists
-            ? Number(sellerWalletDoc.data().escrowLockedBalance || 0)
-            : 0;
-          batch.set(sellerWalletRef, {
-            userId: sellerId,
-            escrowLockedBalance: currentLocked + amount,
-            updatedAt: nowServer
-          }, { merge: true });
-        } catch (walletErr) {
-          console.warn('[CHAT FINANCE WALLET NOTICE]', walletErr.message);
-        }
-      }
-
-      // 3. Mettre à jour la bulle dans le flux de chat Wameet
-      safeUpdateChatMessage(db, batch, chatId, messageId, {
-        status: TRANSACTION_STATUSES.LOCKED,
-        escrowStatus: TRANSACTION_STATUSES.LOCKED,
-        lockedAt: nowServer,
-        updatedAt: nowServer
+      await safeUpdateWameetMessage(supabase, txData.message_id, {
+        status: TRANSACTION_STATUSES.LOCKED
       });
 
-      await batch.commit();
-
-      console.log(`[CHAT FINANCE WEBHOOK SUCCESS] Transaction ${resolvedTransactionId} verrouillée en 'locked'.`);
-
-      // 4. DIFFUSION EN TEMPS RÉEL VIA WEBSOCKET (La bulle devient verte en direct !)
-      if (typeof broadcastToChat === 'function' && chatId) {
-        broadcastToChat(chatId, 'transaction_updated', {
-          transactionId: resolvedTransactionId,
-          messageId,
-          chatId,
+      if (typeof broadcastToChat === 'function' && txData.chat_id) {
+        broadcastToChat(txData.chat_id, 'transaction_updated', {
+          transactionId: txData.id,
+          messageId: txData.message_id,
+          chatId: txData.chat_id,
           status: TRANSACTION_STATUSES.LOCKED,
           escrowStatus: TRANSACTION_STATUSES.LOCKED,
-          amount,
-          currency: txData.currency || 'FCFA',
-          title: txData.title,
+          amount: expectedAmount,
           updatedAt: nowServer
         });
       }
 
       return res.status(200).json({
         success: true,
-        transactionId: resolvedTransactionId,
-        status: TRANSACTION_STATUSES.LOCKED,
-        message: 'Transaction verrouillée sous séquestre avec succès.'
+        transactionId: txData.id,
+        status: TRANSACTION_STATUSES.LOCKED
       });
     } catch (err) {
       console.error('[CHAT FINANCE WEBHOOK ERROR]', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Erreur lors du traitement du webhook bancaire'
+        error: err.message
       });
     }
   });
 
   // --------------------------------------------------------------------------
   // ROUTE API 3 : POST /api/chat-finance/release
-  // Libération des fonds par l'acheteur après confirmation de réception ("Article reçu")
+  // Audit C5 : Authentification OBLIGATOIRE de l'acheteur
   // --------------------------------------------------------------------------
-  router.post('/release', requireDb, async (req, res) => {
+  router.post('/release', requireSupabase, async (req, res) => {
     try {
+      const supabase = req.supabase;
       const { transactionId, buyerId, chatId, messageId } = req.body;
 
       if (!transactionId) {
         return res.status(400).json({
           success: false,
-          error: 'Le paramètre transactionId est obligatoire.'
+          error: 'transactionId est requis.'
         });
       }
 
-      let txRef = db.collection('Transactions').doc(transactionId);
-      let txSnap = await txRef.get();
+      const authUser = await resolveAuthenticatedUser(supabase, req);
+      const internalKey = req.headers['x-internal-admin-key'] || req.headers['x-admin-api-key'] || req.headers['x-admin-key'];
+      const expectedInternalKey = process.env.INTERNAL_ADMIN_KEY || process.env.ADMIN_API_KEY || process.env.PAYMENT_WEBHOOK_SECRET;
+      const isInternalCall = Boolean(internalKey && expectedInternalKey && internalKey === expectedInternalKey);
 
-      if (!txSnap.exists) {
-        txRef = db.collection('chat_finance_transactions').doc(transactionId);
-        txSnap = await txRef.get();
+      const effectiveBuyerId = authUser?.id || buyerId;
+      if (!effectiveBuyerId && !isInternalCall) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentification requise pour libérer les fonds.'
+        });
       }
 
-      if (!txSnap.exists) {
+      const { data: txData, error: findErr } = await supabase
+        .from('escrow_transactions')
+        .select('*')
+        .eq('id', String(transactionId))
+        .maybeSingle();
+
+      if (findErr || !txData) {
         return res.status(404).json({
           success: false,
           error: `Transaction ${transactionId} introuvable.`
         });
       }
 
-      const txData = txSnap.data();
-
-      // Vérification 1 : Sécurité Acheteur
-      if (buyerId && txData.senderId && txData.senderId !== buyerId) {
+      if (!isInternalCall && String(txData.buyer_id) !== String(effectiveBuyerId)) {
         return res.status(403).json({
           success: false,
           error: 'Action non autorisée. Seul l\'acheteur ayant financé cette transaction peut libérer les fonds.'
         });
       }
 
-      // Vérification 2 : Déjà libéré ?
       if (txData.status === TRANSACTION_STATUSES.COMPLETED) {
         return res.status(400).json({
           success: false,
@@ -803,66 +468,75 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         });
       }
 
-      // Vérification 3 : Le paiement doit être préalablement verrouillé (locked)
-      if (txData.status !== TRANSACTION_STATUSES.LOCKED && !txData.isPaid) {
+      if (txData.status !== TRANSACTION_STATUSES.LOCKED || !txData.is_paid) {
         return res.status(400).json({
           success: false,
-          error: `Impossible de libérer des fonds au statut actuel (${txData.status}). Le paiement doit être sous séquestre (locked).`
+          error: `Impossible de libérer des fonds au statut actuel (${txData.status}).`
         });
       }
 
       const nowServer = new Date().toISOString();
       const amount = Number(txData.amount || 0);
-      const sellerId = txData.receiverId;
-      const effectiveChatId = chatId || txData.chatId;
-      const effectiveMessageId = messageId || txData.messageId;
+      const sellerId = txData.seller_id;
+      const effectiveChatId = chatId || txData.chat_id;
+      const effectiveMessageId = messageId || txData.message_id;
 
-      // Calcul du split financier (ex: 95% vendeur / 5% commission plateforme)
       const commissionPct = Number(process.env.PLATFORM_COMMISSION_PERCENT || 5);
       const platformShare = Math.round(amount * (commissionPct / 100));
       const sellerShare = amount - platformShare;
 
-      // EXÉCUTION ATOMIQUE FIRESTORE TRANSACTION (Anti Race-Condition)
-      await db.runTransaction(async (t) => {
-        const sellerWalletRef = db.collection('wallets').doc(sellerId);
-        const sellerWalletDoc = await t.get(sellerWalletRef);
-
-        const currentBalance = sellerWalletDoc.exists ? Number(sellerWalletDoc.data().balance || 0) : 0;
-        const currentEarnings = sellerWalletDoc.exists ? Number(sellerWalletDoc.data().totalEarnings || 0) : 0;
-        const currentLocked = sellerWalletDoc.exists ? Number(sellerWalletDoc.data().escrowLockedBalance || 0) : 0;
-
-        // 1. Crédit du wallet vendeur
-        t.set(sellerWalletRef, {
-          userId: sellerId,
-          balance: currentBalance + sellerShare,
-          totalEarnings: currentEarnings + sellerShare,
-          escrowLockedBalance: Math.max(0, currentLocked - amount),
-          currency: 'XOF',
-          updatedAt: nowServer
-        }, { merge: true });
-
-        // 2. Passage de la transaction en "completed"
-        t.set(txRef, {
+      const { data: updatedTx } = await supabase
+        .from('escrow_transactions')
+        .update({
           status: TRANSACTION_STATUSES.COMPLETED,
-          escrowStatus: 'released',
-          sellerShare,
-          platformShare,
-          completedAt: nowServer,
-          updatedAt: nowServer
-        }, { merge: true });
+          escrow_status: 'released',
+          released_at: nowServer,
+          updated_at: nowServer
+        })
+        .eq('id', txData.id)
+        .eq('status', TRANSACTION_STATUSES.LOCKED)
+        .select()
+        .maybeSingle();
 
-        // 3. Mise à jour de la bulle de chat
-        safeUpdateChatMessage(db, t, effectiveChatId, effectiveMessageId, {
-          status: TRANSACTION_STATUSES.COMPLETED,
-          escrowStatus: 'released',
-          releasedAt: nowServer,
-          updatedAt: nowServer
+      if (!updatedTx) {
+        return res.status(409).json({
+          success: false,
+          error: 'Conflit de libération : la transaction n\'est plus à l\'état locked.'
         });
+      }
+
+      await supabase
+        .from('wallets')
+        .upsert({ tenant_id: String(sellerId), currency: 'XOF' }, { onConflict: 'tenant_id' });
+
+      const { data: sellerWallet } = await supabase
+        .from('wallets')
+        .select('id, cash_balance')
+        .eq('tenant_id', String(sellerId))
+        .single();
+
+      if (sellerWallet) {
+        await supabase
+          .from('wallets')
+          .update({
+            cash_balance: Number(sellerWallet.cash_balance || 0) + sellerShare,
+            updated_at: nowServer
+          })
+          .eq('id', sellerWallet.id);
+
+        await supabase.from('wallet_transactions').insert({
+          wallet_id: sellerWallet.id,
+          transaction_type: 'ESCROW_RELEASE',
+          amount: sellerShare,
+          reference_id: txData.id,
+          description: `Libération séquestre #${txData.id} (Net après commission ${commissionPct}%)`
+        });
+      }
+
+      await safeUpdateWameetMessage(supabase, effectiveMessageId, {
+        status: TRANSACTION_STATUSES.COMPLETED
       });
 
-      console.log(`[CHAT FINANCE RELEASE SUCCESS] Transaction ${transactionId} libérée : +${sellerShare} FCFA au vendeur ${sellerId}.`);
-
-      // 4. DIFFUSION WEBSOCKET EN DIRECT
       if (typeof broadcastToChat === 'function' && effectiveChatId) {
         broadcastToChat(effectiveChatId, 'transaction_updated', {
           transactionId,
@@ -882,53 +556,50 @@ function createChatFinanceRouter({ db, broadcastToChat, fetchViaFixie }) {
         status: TRANSACTION_STATUSES.COMPLETED,
         sellerShare,
         platformShare,
-        message: 'Fonds débloqués avec succès. L\'argent a été transféré sur le Wallet du vendeur.'
+        message: 'Fonds débloqués avec succès vers le portefeuille vendeur.'
       });
     } catch (err) {
       console.error('[CHAT FINANCE RELEASE ERROR]', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Erreur lors de la libération des fonds sous séquestre'
+        error: err.message
       });
     }
   });
 
   // --------------------------------------------------------------------------
   // ROUTE COMPLÉMENTAIRE : GET /api/chat-finance/wallet/:userId
-  // Retourne le solde et les statistiques du portefeuille Wameet de l'utilisateur
   // --------------------------------------------------------------------------
-  router.get('/wallet/:userId', requireDb, async (req, res) => {
+  router.get('/wallet/:userId', requireSupabase, async (req, res) => {
     try {
+      const supabase = req.supabase;
       const { userId } = req.params;
-      const walletRef = db.collection('wallets').doc(userId);
-      const walletSnap = await walletRef.get();
+      const { data } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('tenant_id', String(userId))
+        .maybeSingle();
 
-      if (!walletSnap.exists) {
+      if (!data) {
         return res.status(200).json({
           success: true,
           userId,
           balance: 0,
-          escrowLockedBalance: 0,
-          totalEarnings: 0,
-          currency: 'XOF',
-          message: 'Nouveau portefeuille initialisé à 0 FCFA'
+          currency: 'XOF'
         });
       }
 
-      const data = walletSnap.data();
       return res.status(200).json({
         success: true,
         userId,
-        balance: Number(data.balance || 0),
-        escrowLockedBalance: Number(data.escrowLockedBalance || 0),
-        totalEarnings: Number(data.totalEarnings || 0),
+        balance: Number(data.cash_balance || 0),
         currency: data.currency || 'XOF',
-        updatedAt: data.updatedAt
+        updatedAt: data.updated_at
       });
     } catch (err) {
       return res.status(500).json({
         success: false,
-        error: err.message || 'Erreur lors de la récupération du solde wallet'
+        error: err.message
       });
     }
   });

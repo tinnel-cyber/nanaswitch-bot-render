@@ -146,6 +146,26 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Vérification stricte du montant payé vs montant en base (Audit C1)
+      const { data: existingSale } = await supabase
+        .from("sales")
+        .select("id, total_amount, organization_id, payment_status")
+        .eq("id", String(order_id))
+        .maybeSingle();
+
+      if (existingSale) {
+        const expectedAmount = Number(existingSale.total_amount || 0);
+        if (expectedAmount > 0 && numericAmount < expectedAmount) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `AMOUNT_MISMATCH: reçu ${numericAmount}, attendu ${expectedAmount}`,
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      }
+
       // Mise à jour sécurisée sans interpolation PostgREST brute et sans contournement de tenant_id
       let salesQuery = supabase
         .from("sales")

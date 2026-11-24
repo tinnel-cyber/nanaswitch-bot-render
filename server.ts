@@ -9359,7 +9359,7 @@ async function startServer() {
       const passthroughHeaders = [
         'authorization', 'content-type', 'x-api-key', 'x-nanakey',
         'x-nanaswitch-key', 'x-nanaswitch-skey', 'x-merchant-id',
-        'x-admin-api-key', 'x-internal-secret',
+        'x-admin-api-key', 'x-internal-admin-key', 'x-admin-key', 'x-internal-secret',
         'x-sebpay-signature', 'x-saspay-signature', 'x-webhook-signature',
         'x-webhook-timestamp', 'x-webhook-event', 'x-signature-sha256'
       ];

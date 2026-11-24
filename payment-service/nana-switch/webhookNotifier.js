@@ -246,7 +246,7 @@ async function dispatchMerchantWebhook(db, { merchantId, event, data, orderId = 
   // 5. Journalisation d'audit dans Firestore (collection `webhook_deliveries`)
   if (db) {
     try {
-      const nowServer = require('../firebase-admin-fallback').firestore.FieldValue.serverTimestamp();
+      const nowServer = new Date().toISOString();
       await db.collection('webhook_deliveries').doc(deliveryId).set({
         delivery_id: deliveryId,
         merchant_id: merchantId,

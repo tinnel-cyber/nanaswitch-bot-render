@@ -36,10 +36,11 @@ RUN chown -R node:node /app
 USER node
 
 ENV PORT=10000
+ENV PAYMENT_API_URL=http://127.0.0.1:10001
 EXPOSE 10000
 EXPOSE 3000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:10000/health || wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
-CMD ["node", "--max-old-space-size=768", "dist/server.cjs"]
+CMD ["sh", "-c", "PORT=10001 node /app/payment-service/server.js & exec node --max-old-space-size=768 dist/server.cjs"]

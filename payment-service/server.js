@@ -20,8 +20,8 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const admin = require('./firebase-admin-fallback');
 const { WebSocketServer } = require('ws');
+const { getSupabaseAdmin: _getSupabaseAdmin, checkSupabaseHealth, sanitizeRedirectUrl } = require('./supabase-admin');
 const { FIXIE_URL, fetchViaFixie, getOutboundIp } = require('./fixie-proxy');
 const {
   SEBPAY_DEFAULT_BASE_URL,
@@ -101,9 +101,15 @@ function timingSafeStrEqual(a, b) {
  */
 async function requireInternalAdminAuth(req, res, next) {
   try {
-    const adminSecret = process.env.ADMIN_API_KEY || process.env.NANASWITCH_INTERNAL_KEY || '';
+    const adminSecret =
+      process.env.INTERNAL_ADMIN_KEY ||
+      process.env.ADMIN_API_KEY ||
+      process.env.NANASWITCH_INTERNAL_KEY ||
+      '';
     const providedApiKey =
+      req.headers['x-internal-admin-key'] ||
       req.headers['x-admin-api-key'] ||
+      req.headers['x-admin-key'] ||
       req.headers['x-internal-secret'] ||
       req.headers['x-nanaswitch-skey'] ||
       req.headers['x-api-key'] ||
@@ -116,25 +122,46 @@ async function requireInternalAdminAuth(req, res, next) {
       return next();
     }
 
-    // Alternative : JWT Supabase vérifié d'un administrateur/utilisateur authentifié
+    // Alternative : JWT Supabase vérifié appartenant OBLIGATOIREMENT à un Super Admin en base (Audit C3)
     if (bearerToken) {
       const supabase = getSupabaseAdmin();
       if (supabase) {
         const { data: { user }, error } = await supabase.auth.getUser(bearerToken);
         if (!error && user) {
-          req.authUser = user;
-          return next();
+          const { data: superAdmin } = await supabase
+            .from('super_admins')
+            .select('user_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (superAdmin) {
+            req.authUser = user;
+            req.isInternalAdmin = true;
+            return next();
+          }
+
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profile && String(profile.role).toLowerCase() === 'super_admin') {
+            req.authUser = user;
+            req.isInternalAdmin = true;
+            return next();
+          }
         }
       }
     }
 
-    return res.status(401).json({
+    return res.status(403).json({
       success: false,
-      error: 'Unauthorized',
-      message: 'Authentification requise (x-admin-api-key ou Bearer JWT valide).'
+      error: 'Forbidden',
+      message: 'Accès refusé. Clé interne admin ou rôle Super-Administrateur requis.'
     });
   } catch (err) {
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
+    return res.status(403).json({ success: false, error: 'Forbidden' });
   }
 }
 
@@ -164,44 +191,9 @@ function isAllowedBankProxyUrl(rawUrl) {
   }
 }
 
-// 1. Initialisation résiliente de Firebase Admin SDK (legacy optionnel)
-let isDatabaseInitialized = false;
-let db = null;
-
-try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: PROJECT_ID
-    });
-    db = admin.firestore();
-    isDatabaseInitialized = true;
-    console.log('[FIREBASE ADMIN] Connecté avec succès via FIREBASE_SERVICE_ACCOUNT.');
-  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    admin.initializeApp();
-    db = admin.firestore();
-    isDatabaseInitialized = true;
-    console.log('[FIREBASE ADMIN] Connecté via GOOGLE_APPLICATION_CREDENTIALS.');
-  } else {
-    // Mode autonome / Cloud standard
-    admin.initializeApp({
-      projectId: PROJECT_ID
-    });
-    db = admin.firestore();
-    isDatabaseInitialized = true;
-    console.log(`[FIREBASE ADMIN] Initialisé en mode projet par défaut (${PROJECT_ID}).`);
-  }
-} catch (fbErr) {
-  console.warn('[FIREBASE ADMIN NOTICE] Initialisation sans clé de service :', fbErr.message);
-  console.log('[FIREBASE ADMIN] Les mises à jour Firestore utiliseront le mode REST fallback si nécessaire.');
-}
-
-// Initialisation du compte de référence B2B NANASORE TECHNOLOGIES & de la matrice tarifaire
-if (db) {
-  merchantService.ensureDefaultNanasoreMerchant(db).catch(err => console.warn('[STARTUP MERCHANT SEED]', err.message));
-  merchantService.getPricingMatrix(db).catch(err => console.warn('[STARTUP PRICING SEED]', err.message));
-}
+// 1. Persistance unifiée 100% Supabase (Firebase complètement supprimé)
+const db = null;
+const isDatabaseInitialized = Boolean(getSupabaseAdmin());
 
 // ============================================================================
 // GESTIONNAIRE DE SALONS WEBSOCKET TEMPS RÉEL (SMART TRANSACTIONS & LIVE COMMERCE)
@@ -442,11 +434,12 @@ app.get('/api/payment/ip', async (req, res) => {
 // ============================================================================
 // ROUTE 2 : Healthcheck Render & Monitoring (Réponse 100% Locale, ZÉRO appel réseau Fixie)
 // ============================================================================
-app.get(['/', '/health', '/api/health', '/healthz', '/ping', '/api/ping'], (req, res) => {
-  return res.status(200).json({
-    status: 'online',
+app.get(['/', '/health', '/api/health', '/healthz', '/ping', '/api/ping'], async (req, res) => {
+  const dbHealthy = await checkSupabaseHealth();
+  return res.status(dbHealthy ? 200 : 503).json({
+    status: dbHealthy ? 'online' : 'degraded',
     service: 'nana-payment-gateway-api',
-    version: '2.2.0',
+    version: '2.3.0-supabase',
     environment: process.env.NODE_ENV || 'production',
     proxyStrategy: {
       globalProxy: false,
@@ -459,7 +452,8 @@ app.get(['/', '/health', '/api/health', '/healthz', '/ping', '/api/ping'], (req,
       sebpay: Boolean(process.env.SEBPAY_PUBLIC_KEY && process.env.SEBPAY_SECRET_KEY),
       saspay: Boolean(process.env.SASPAY_SECRET_KEY || process.env.SASPAY_API_KEY)
     },
-    databaseConnected: isDatabaseInitialized,
+    databaseProvider: 'supabase',
+    databaseConnected: dbHealthy,
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
@@ -530,17 +524,9 @@ app.post(
           console.warn(`[SECURITY REJECT] Webhook SasPay sur /api/payment/webhook invalide : ${sigCheck.reason}`);
           return res.status(401).json({ error: `Signature SasPay invalide (${sigCheck.reason})` });
         }
-        res.status(200).json({ received: true });
-        console.log('[SASPAY WEBHOOK] Reçu et validé sur endpoint unifié /api/payment/webhook (200 OK)');
-        setImmediate(async () => {
-          try {
-            const payload = JSON.parse(rawBuffer.toString('utf8'));
-            await processWebhookTransaction({ ...payload, provider: 'SASPAY' });
-          } catch (e) {
-            console.error('[SASPAY ASYNC WEBHOOK ERROR]', e.message);
-          }
-        });
-        return;
+        const payload = JSON.parse(rawBuffer.toString('utf8'));
+        const result = await processWebhookTransaction({ ...payload, provider: 'SASPAY' }, { gateway: 'saspay', signature: sasSig });
+        return res.status(200).json({ received: true, ...result });
       }
 
       // 1. Récupération stricte de la signature X-SebPay-Signature
@@ -551,16 +537,24 @@ app.post(
         req.headers['x-webhook-signature'] ||
         req.headers['x-signature-sha256'] ||
         req.headers['x-signature'] ||
-        req.headers['X-Signature'] ||
-        req.headers['x-fedapay-signature'] ||
-        req.headers['x-cinetpay-signature'];
+        req.headers['X-Signature'];
 
       if (!sebpaySignature) {
         console.error('[SECURITY REJECT] Webhook Sebpay rejeté : En-tête X-SebPay-Signature manquant.');
         return res.status(401).json({ error: 'Signature cryptographique X-SebPay-Signature absente.' });
       }
 
-      // Clé secrète Sebpay pour la vérification HMAC (priorité absolue à SEBPAY_SECRET_KEY comme documenté)
+      // Anti-rejeu sur timestamp si fourni (Audit M4)
+      const sebTimestamp = req.headers['x-webhook-timestamp'] || req.headers['x-sebpay-timestamp'];
+      if (sebTimestamp) {
+        const tsNum = Number(sebTimestamp);
+        const tsMs = tsNum > 1e12 ? tsNum : tsNum * 1000;
+        if (!isNaN(tsMs) && Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+          return res.status(401).json({ error: 'Timestamp webhook expiré (anti-rejeu > 5 min).' });
+        }
+      }
+
+      // Clé secrète Sebpay pour la vérification HMAC
       const secretKey =
         process.env.SEBPAY_WEBHOOK_SECRET ||
         process.env.SEBPAY_SECRET_KEY ||
@@ -583,30 +577,21 @@ app.post(
         return res.status(401).json({ error: 'Invalid signature' });
       }
 
-      // 4. Réponse HTTP 200 immédiate (< 10 secondes) selon la documentation officielle Sebpay
-      res.status(200).json({ received: true });
-      console.log('[SEBPAY WEBHOOK] Signature validée avec succès. Réponse 200 { received: true } envoyée immédiatement à Sebpay.');
+      let payload = {};
+      try {
+        payload = JSON.parse(rawBuffer.toString('utf8'));
+      } catch (_jsonErr) {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
 
-      // 6. TRAITEMENT ASYNCHRONE & IDEMPOTENCE (En arrière-plan sans bloquer Sebpay)
-      setImmediate(async () => {
-        try {
-          let payload = {};
-          try {
-            payload = JSON.parse(rawBuffer.toString('utf8'));
-          } catch (jsonErr) {
-            console.error('[WEBHOOK JSON PARSE ERROR]', jsonErr.message);
-            return;
-          }
-
-          await processWebhookTransaction(payload);
-        } catch (asyncErr) {
-          console.error('[ASYNC WEBHOOK ERROR]', asyncErr);
-        }
-      });
+      // 4. Traitement atomique avec inbox (Audit M2, C1, C2)
+      const result = await processWebhookTransaction(payload, { gateway: 'sebpay', signature: cleanSignature });
+      return res.status(200).json({ received: true, ...result });
     } catch (err) {
-      console.error('[FATAL WEBHOOK ERROR]', err);
+      console.error('[FATAL WEBHOOK ERROR]', err.message);
       if (!res.headersSent) {
-        return res.status(500).json({ error: 'Erreur interne traitement webhook', details: err.message });
+        const isClientErr = ['MISSING_WEBHOOK_STATUS', 'AMOUNT_MISMATCH', 'ORDER_ALREADY_PAID', 'ORDER_NOT_FOUND'].includes(err.code || err.message);
+        return res.status(isClientErr ? 400 : 500).json({ error: err.message, code: err.code || null });
       }
     }
   }
@@ -644,12 +629,56 @@ app.use('/api/chat-finance', createChatFinanceRouter({
 app.use('/api/live', createLiveCommerceRouter({ engine: liveCommerceEngine }));
 
 /**
- * Traitement asynchrone sécurisé de la transaction Sebpay avec protection d'idempotence stricte
+ * Enregistre le webhook brut dans l'inbox Supabase avant traitement (Audit M2)
  */
-async function processWebhookTransaction(payload) {
+async function recordWebhookToInbox(supabase, { gateway, transactionId, orderId, signature, payload }) {
+  if (!supabase) return { inboxId: null, duplicate: false };
+  try {
+    if (transactionId) {
+      const { data: existing } = await supabase
+        .from('payment_webhook_inbox')
+        .select('id, status')
+        .eq('gateway', String(gateway).toLowerCase())
+        .eq('gateway_transaction_id', String(transactionId))
+        .maybeSingle();
+
+      if (existing && existing.status === 'processed') {
+        return { inboxId: existing.id, duplicate: true };
+      }
+      if (existing) {
+        return { inboxId: existing.id, duplicate: false };
+      }
+    }
+
+    const { data: inserted, error } = await supabase
+      .from('payment_webhook_inbox')
+      .insert({
+        gateway: String(gateway).toLowerCase(),
+        gateway_transaction_id: transactionId ? String(transactionId) : null,
+        order_id: orderId ? String(orderId) : null,
+        signature: signature ? String(signature).slice(0, 255) : null,
+        raw_payload: payload || {},
+        status: 'received'
+      })
+      .select('id')
+      .single();
+
+    if (error && error.code === '23505') {
+      return { inboxId: null, duplicate: true };
+    }
+    return { inboxId: inserted?.id || null, duplicate: false };
+  } catch (err) {
+    console.warn('[WEBHOOK INBOX NOTICE]', err.message);
+    return { inboxId: null, duplicate: false };
+  }
+}
+
+/**
+ * Traitement sécurisé de la transaction webhook 100% Supabase (Audit C1, C2, C4, C5, C6, M2, M3, M5, M7)
+ */
+async function processWebhookTransaction(payload, options = {}) {
   const txData = payload.data || payload;
 
-  // Extraction robuste des identifiants Sebpay
   const transactionId = String(
     txData.transaction_id ||
     txData.transactionId ||
@@ -671,13 +700,21 @@ async function processWebhookTransaction(payload) {
     ''
   ).trim();
 
-  const status = String(
+  // Audit C2 : Statut obligatoire ! Jamais de fallback 'SUCCESS' par défaut
+  const rawStatus =
     txData.transaction_status ||
     payload.transaction_status ||
     txData.status ||
-    payload.status ||
-    'SUCCESS'
-  ).toUpperCase();
+    payload.status;
+
+  if (!rawStatus) {
+    console.error('[SECURITY REJECT C2] Webhook reçu sans statut explicite. Rejet immédiat.');
+    const err = new Error('MISSING_WEBHOOK_STATUS');
+    err.code = 'MISSING_WEBHOOK_STATUS';
+    throw err;
+  }
+
+  const status = String(rawStatus).trim().toUpperCase();
 
   const amount = Number(txData.amount || payload.amount || txData.price || 0);
   const chargedAmount = Number(txData.charged || payload.charged || txData.amount || amount);
@@ -703,426 +740,199 @@ async function processWebhookTransaction(payload) {
 
   console.log(`[PAYMENT WEBHOOK PROCESSING] Provider: ${resolvedProvider} | Transaction: ${transactionId} | Order: ${resolvedOrderId} | Tenant: ${resolvedTenantId} | Status: ${status} | Montant: ${amount}`);
 
-  if (!db) {
-    const supabase = getSupabaseAdmin();
-    const isSuccessSupabase = ['APPROVED', 'SUCCESS', 'COMPLETED', 'PAID', 'VALIDATED', 'CONFIRMED', 'VALIDE', 'PAYÉ'].includes(status);
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
 
-    if (!supabase) {
-      console.error('[PAYMENT WEBHOOK CRITICAL] Ni Supabase Service Role ni Firestore ne sont initialisés — impossible de persister la transaction.');
-      return;
-    }
+  // Enregistrement dans l'inbox webhooks avant traitement (Audit M2)
+  const { inboxId, duplicate } = await recordWebhookToInbox(supabase, {
+    gateway: options.gateway || resolvedProvider,
+    transactionId,
+    orderId: resolvedOrderId,
+    signature: options.signature,
+    payload
+  });
 
-    if (isSuccessSupabase) {
-      try {
-        // 1. Marquer la commande comme payée dans Supabase (`orders` & `sales`)
-        const nowIso = new Date().toISOString();
-        await Promise.allSettled([
-          supabase
-            .from('orders')
-            .update({ payment_status: 'paid', status: 'paid', updated_at: nowIso })
-            .eq('id', resolvedOrderId),
-          supabase
-            .from('sales')
-            .update({ payment_status: 'paid', updated_at: nowIso })
-            .eq('id', resolvedOrderId),
-          supabase.from('payment_logs').insert({
-            tenant_id: resolvedTenantId,
+  if (duplicate) {
+    console.log(`[IDEMPOTENCE GUARD] Webhook ${resolvedProvider}/${transactionId} déjà traité.`);
+    return { success: true, alreadyProcessed: true };
+  }
+
+  const isSuccessSupabase = ["APPROVED", "SUCCESS", "COMPLETED", "PAID", "VALIDATED", "CONFIRMED", "ACCEPTED"].includes(status);
+
+  if (isSuccessSupabase) {
+    try {
+      const nowIso = new Date().toISOString();
+
+      // Audit C1, C4, M5 : Vérification stricte de la commande en base (montant, statut, tenant)
+      const { data: orderRow } = await supabase
+        .from("orders")
+        .select("id, total_amount, status, payment_status, tenant_id, metadata")
+        .eq("id", String(resolvedOrderId))
+        .maybeSingle();
+
+      const { data: saleRow } = !orderRow ? await supabase
+        .from("sales")
+        .select("id, total_amount, payment_status, organization_id, metadata")
+        .eq("id", String(resolvedOrderId))
+        .maybeSingle() : { data: null };
+
+      const dbRecord = orderRow || saleRow;
+      if (dbRecord) {
+        const expectedAmount = Number(dbRecord.total_amount || 0);
+        const existingTxId = dbRecord.metadata?.transaction_id;
+        const alreadyPaid =
+          String(dbRecord.payment_status || "").toLowerCase() === "paid" ||
+          ["paid", "completed"].includes(String(dbRecord.status || "").toLowerCase());
+
+        if (alreadyPaid) {
+          if (transactionId && existingTxId === transactionId) {
+            if (inboxId) {
+              await supabase.from("payment_webhook_inbox").update({ status: "processed", processed_at: nowIso }).eq("id", inboxId);
+            }
+            return { success: true, alreadyProcessed: true, orderId: resolvedOrderId };
+          }
+          const dupErr = new Error(`ORDER_ALREADY_PAID: Commande #${resolvedOrderId} déjà payée`);
+          dupErr.code = "ORDER_ALREADY_PAID";
+          throw dupErr;
+        }
+
+        if (expectedAmount > 0 && amount < expectedAmount) {
+          await supabase.from("payment_logs").insert({
+            tenant_id: orderRow?.tenant_id || saleRow?.organization_id || resolvedTenantId,
             transaction_id: transactionId || null,
-            amount: Number(amount) || 0,
-            status,
-            customer_phone: txData.client_phone || txData.phone || payload.client_phone || null,
-            raw_payload: payload,
+            amount,
+            status: "UNDERPAID_REJECTED",
+            raw_payload: { order_id: resolvedOrderId, expected: expectedAmount, received: amount, gateway: resolvedProvider },
             created_at: nowIso
-          })
-        ]);
+          });
+          const amtErr = new Error(`AMOUNT_MISMATCH: Reçu ${amount}, attendu ${expectedAmount}`);
+          amtErr.code = "AMOUNT_MISMATCH";
+          throw amtErr;
+        }
 
-        // 2. Exécuter le Split Financier Atomique ACID sur Supabase (95% Vendeur / 5% Plateforme)
-        await switchManager.dispatchPostPaymentWorkflow({
-          db: null,
-          orderId: resolvedOrderId,
-          storeId: resolvedTenantId,
-          totalAmount: Number(amount),
-          transactionId: transactionId || `tx_${Date.now()}`,
-          gateway: String(resolvedProvider || 'saspay').toLowerCase(),
-          currency,
-          customerPhone: txData.client_phone || txData.phone || payload.client_phone || '',
-          customerEmail: txData.client_email || txData.email || payload.client_email || '',
-          customerName: txData.client_name || txData.name || 'Client Wameet',
-          productTitle: txData.description || payload.description || 'Commande Nanasore',
-          storeName: resolvedTenantId
-        });
-
-        broadcastPaymentEvent({
-          type: 'PAYMENT_CONFIRMED',
-          orderId: resolvedOrderId,
-          transactionId,
-          storeId: resolvedTenantId,
-          amount,
-          currency,
-          status: 'PAID'
-        });
-
-        console.log(`[SUPABASE WEBHOOK SUCCESS] Transaction ${transactionId} / Commande ${resolvedOrderId} validée et splittée atomiquement.`);
-      } catch (supaErr) {
-        console.error('[SUPABASE WEBHOOK ERROR]', supaErr.message);
+        // Audit M5 : le tenant réel vient de la base
+        if (orderRow?.tenant_id) resolvedTenantId = String(orderRow.tenant_id);
+        if (saleRow?.organization_id) resolvedTenantId = String(saleRow.organization_id);
       }
-    } else {
+
+      if (orderRow) {
+        const { error: orderErr } = await supabase
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            status: "paid",
+            metadata: { ...(orderRow.metadata || {}), transaction_id: transactionId, amount_paid: amount, paid_at: nowIso },
+            updated_at: nowIso
+          })
+          .eq("id", resolvedOrderId);
+        if (orderErr) throw new Error(`ORDERS_UPDATE_FAILED: ${orderErr.message}`);
+      }
+
+      if (saleRow) {
+        const { error: saleErr } = await supabase
+          .from("sales")
+          .update({
+            payment_status: "paid",
+            metadata: { ...(saleRow.metadata || {}), transaction_id: transactionId, amount_paid: amount, paid_at: nowIso },
+            updated_at: nowIso
+          })
+          .eq("id", resolvedOrderId);
+        if (saleErr) throw new Error(`SALES_UPDATE_FAILED: ${saleErr.message}`);
+      }
+
+      await supabase.from("payment_logs").insert({
+        tenant_id: resolvedTenantId,
+        transaction_id: transactionId || null,
+        amount: Number(amount) || 0,
+        status,
+        customer_phone: customerPhone || null,
+        raw_payload: payload,
+        created_at: nowIso
+      });
+
+      await switchManager.dispatchPostPaymentWorkflow({
+        db: null,
+        orderId: resolvedOrderId,
+        storeId: resolvedTenantId,
+        totalAmount: Number(amount),
+        transactionId: transactionId || `tx_${Date.now()}`,
+        gateway: String(resolvedProvider || "saspay").toLowerCase(),
+        currency,
+        customerPhone,
+        customerEmail: txData.client_email || txData.email || payload.client_email || "",
+        customerName: txData.client_name || txData.name || "Client Wameet",
+        productTitle: txData.description || payload.description || "Commande Nanasore",
+        storeName: resolvedTenantId
+      });
+
+      if (String(resolvedOrderId).startsWith("ESC_") || String(resolvedOrderId).startsWith("TX_ESC_") || externalRef.startsWith("escrow___")) {
+        const escrowTxId = externalRef.startsWith("escrow___") ? externalRef.replace(/^escrow___/, "") : String(resolvedOrderId);
+        const { data: escrowData } = await supabase.from("escrow_transactions").select("*").eq("id", escrowTxId).maybeSingle();
+        if (escrowData && amount >= Number(escrowData.amount || 0)) {
+          await supabase
+            .from("escrow_transactions")
+            .update({ status: "locked", escrow_status: "locked", is_paid: true, operator, transaction_id: transactionId || escrowTxId, locked_at: nowIso, updated_at: nowIso })
+            .eq("id", escrowTxId)
+            .eq("status", "pending");
+          if (escrowData.chat_id) {
+            broadcastToChat(escrowData.chat_id, "transaction_updated", {
+              transactionId: escrowTxId,
+              messageId: escrowData.message_id,
+              chatId: escrowData.chat_id,
+              status: "locked",
+              escrowStatus: "locked",
+              updatedAt: nowIso
+            });
+          }
+        }
+      }
+
+      if (inboxId) {
+        await supabase.from("payment_webhook_inbox").update({ status: "processed", processed_at: nowIso }).eq("id", inboxId);
+      }
+
+      broadcastPaymentEvent({
+        type: "PAYMENT_CONFIRMED",
+        orderId: resolvedOrderId,
+        transactionId,
+        storeId: resolvedTenantId,
+        amount,
+        currency,
+        status: "PAID"
+      });
+
+      console.log(`[SUPABASE WEBHOOK SUCCESS] Transaction ${transactionId} / Commande ${resolvedOrderId} validée et splittée atomiquement.`);
+      return { success: true, orderId: resolvedOrderId, tenantId: resolvedTenantId };
+    } catch (supaErr) {
+      console.error("[SUPABASE WEBHOOK ERROR]", supaErr.message);
+      if (inboxId) {
+        await supabase.from("payment_webhook_inbox").update({ status: "failed", error_message: supaErr.message, retry_count: 1 }).eq("id", inboxId);
+      }
+      throw supaErr;
+    }
+  } else {
+    const { data: existingTx } = await supabase.from("nanaswitch_transactions").select("status").eq("order_id", resolvedOrderId).maybeSingle();
+    if (!existingTx || !["PAID", "COMPLETED"].includes(String(existingTx.status || "").toUpperCase())) {
       await supabase
-        .from('nanaswitch_transactions')
+        .from("nanaswitch_transactions")
         .upsert({
           order_id: resolvedOrderId,
           store_id: resolvedTenantId,
           transaction_id: transactionId || null,
           amount: Number(amount) || 0,
           currency,
-          gateway: String(resolvedProvider || 'saspay').toLowerCase(),
-          status: status || 'FAILED',
+          gateway: String(resolvedProvider || "saspay").toLowerCase(),
+          status: status || "FAILED",
           updated_at: new Date().toISOString()
-        })
-        .catch(err => console.warn('[SUPABASE WEBHOOK FAILED LOG]', err.message));
+        }, { onConflict: "order_id" })
+        .catch(err => console.warn("[SUPABASE WEBHOOK FAILED LOG]", err.message));
     }
-    return;
-  }
-
-  // IDEMPOTENCE 1 : Vérification de la collection 'processed_transactions' (anti-double crédit en cas de retry)
-  if (transactionId) {
-    try {
-      const processedDoc = await db.collection('processed_transactions').doc(transactionId).get();
-      if (processedDoc.exists) {
-        const pData = processedDoc.data();
-        if (pData?.processed === true || pData?.status === 'COMPLETED' || pData?.status === 'PAID') {
-          console.log(`[IDEMPOTENCE GUARD] Transaction ${transactionId} déjà traitée précédemment. Aucune action répétée (protection anti-double crédit).`);
-          return;
-        }
-      }
-    } catch (checkErr) {
-      console.warn('[IDEMPOTENCE CHECK NOTICE]', checkErr.message);
+    if (inboxId) {
+      await supabase.from("payment_webhook_inbox").update({ status: "processed", processed_at: new Date().toISOString() }).eq("id", inboxId);
     }
-  }
-
-  // IDEMPOTENCE 2 : Vérification de la collection 'payment_intents'
-  try {
-    const intentCheck = await db.collection('payment_intents').doc(resolvedOrderId).get();
-    if (intentCheck.exists) {
-      const intentData = intentCheck.data();
-      if (intentData?.isPaid === true && intentData?.transactionId === transactionId) {
-        console.log(`[IDEMPOTENCE GUARD] Commande ${resolvedOrderId} déjà marquée comme payée avec le transaction_id ${transactionId}.`);
-        return;
-      }
-    }
-  } catch (intentCheckErr) {
-    console.warn('[INTENT CHECK NOTICE]', intentCheckErr.message);
-  }
-
-  // Statuts Sebpay officiels : 'approved' (succès), 'rejected' (échec/expiration)
-  const isSuccess = ['APPROVED', 'SUCCESS', 'COMPLETED', 'PAID', 'VALIDATED', 'CONFIRMED', 'VALIDE', 'PAYÉ'].includes(status);
-
-  if (isSuccess) {
-    try {
-      const batch = db.batch();
-      const nowServer = admin.firestore.FieldValue.serverTimestamp();
-
-      // 1. Verrouillage Idempotence immédiat
-      if (transactionId) {
-        const procRef = db.collection('processed_transactions').doc(transactionId);
-        batch.set(procRef, {
-          transactionId,
-          externalReference: externalRef,
-          orderId: resolvedOrderId,
-          tenantId: resolvedTenantId,
-          amount,
-          charged: chargedAmount,
-          net_amount: netAmount,
-          currency,
-          operator,
-          status: 'COMPLETED',
-          processed: true,
-          processedAt: nowServer
-        }, { merge: true });
-      }
-
-      // 2. Mise à jour de 'payment_intents' (déclenche immédiatement onSnapshot sur le client)
-      const updateIntentPayload = {
-        status: 'COMPLETED',
-        paymentStatus: 'PAID',
-        isPaid: true,
-        paid: true,
-        amountPaid: amount,
-        charged: chargedAmount,
-        net_amount: netAmount,
-        currency,
-        transactionId: transactionId || resolvedOrderId,
-        externalReference: externalRef,
-        tenantId: resolvedTenantId,
-        orderId: resolvedOrderId,
-        operator,
-        provider: resolvedProvider,
-        validatedAt: nowServer,
-        updatedAt: nowServer
-      };
-
-      const intentRef = db.collection('payment_intents').doc(resolvedOrderId);
-      batch.set(intentRef, updateIntentPayload, { merge: true });
-
-      if (externalRef && externalRef !== resolvedOrderId) {
-        const extIntentRef = db.collection('payment_intents').doc(externalRef);
-        batch.set(extIntentRef, updateIntentPayload, { merge: true });
-      }
-
-      if (transactionId && transactionId !== resolvedOrderId && transactionId !== externalRef) {
-        const txIntentRef = db.collection('payment_intents').doc(transactionId);
-        batch.set(txIntentRef, updateIntentPayload, { merge: true });
-      }
-
-      // 3. Enregistrement comptable dans 'transactions'
-      const txDocRef = db.collection('transactions').doc(transactionId || resolvedOrderId);
-      batch.set(txDocRef, {
-        id: transactionId || resolvedOrderId,
-        transactionId: transactionId || resolvedOrderId,
-        externalReference: externalRef,
-        orderId: resolvedOrderId,
-        userId: resolvedTenantId,
-        amount,
-        currency,
-        provider: resolvedProvider,
-        status: 'completed',
-        paymentReference: paymentRef,
-        completedAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      // 3a. Validation automatique de la commande 'orders' & Décrémentation Stock POS
-      const orderRef = db.collection('orders').doc(resolvedOrderId);
-      batch.set(orderRef, {
-        orderId: resolvedOrderId,
-        status: 'PAID',
-        paymentStatus: 'PAID',
-        isPaid: true,
-        paid: true,
-        amountPaid: amount,
-        currency,
-        paymentMethod: 'MOBILE_MONEY',
-        paymentProvider: operator || 'SEBPAY',
-        transactionId: transactionId || resolvedOrderId,
-        validatedAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      // Décrémentation atomique de l'inventaire produit POS
-      try {
-        const orderSnap = await db.collection('orders').doc(resolvedOrderId).get().catch(() => null);
-        if (orderSnap && orderSnap.exists) {
-          const oData = orderSnap.data();
-          const items = oData.items || (oData.productId ? [{ id: oData.productId, quantity: oData.quantity || 1 }] : []);
-          for (const item of items) {
-            const pId = item.id || item.productId;
-            const qty = Number(item.quantity || 1);
-            if (pId && qty > 0) {
-              const storeProdRef = db.collection('stores').doc(resolvedTenantId).collection('products').doc(pId);
-              batch.set(storeProdRef, {
-                stock: admin.firestore.FieldValue.increment(-qty),
-                totalSales: admin.firestore.FieldValue.increment(qty),
-                updatedAt: nowServer
-              }, { merge: true });
-
-              const tenantProdRef = db.collection('tenants').doc(resolvedTenantId).collection('products').doc(pId);
-              batch.set(tenantProdRef, {
-                stock: admin.firestore.FieldValue.increment(-qty),
-                totalSales: admin.firestore.FieldValue.increment(qty),
-                updatedAt: nowServer
-              }, { merge: true });
-            }
-          }
-        }
-      } catch (stockErr) {
-        console.warn('[STOCK POS UPDATE NOTICE]', stockErr.message);
-      }
-
-      // 3b. SMART ESCROW WAMEET : Verrouillage sous séquestre lors de la confirmation bancaire
-      const isEscrowTx = resolvedOrderId.startsWith('ESC_') || externalRef.startsWith('escrow___');
-      if (isEscrowTx) {
-        const escrowTxId = resolvedOrderId.startsWith('ESC_')
-          ? resolvedOrderId
-          : externalRef.replace(/^escrow___/, '');
-
-        console.log(`[SMART ESCROW WEBHOOK] Détection paiement séquestre pour : ${escrowTxId}`);
-        const escrowRef = db.collection('wameet_escrow_transactions').doc(escrowTxId);
-        const escrowSnap = await escrowRef.get().catch(() => null);
-
-        if (escrowSnap && escrowSnap.exists) {
-          const escrowData = escrowSnap.data();
-          const chatId = escrowData.chatId;
-          const messageId = escrowData.messageId;
-
-          // 1. Verrouille la transaction en statut 'locked' (séquestre actif)
-          batch.set(escrowRef, {
-            escrowStatus: 'locked',
-            status: 'locked',
-            isPaid: true,
-            paidAt: nowServer,
-            lockedAt: nowServer,
-            operator,
-            transactionId,
-            updatedAt: nowServer
-          }, { merge: true });
-
-          // 2. Met à jour le message dans le chat (déclenche immédiatement onSnapshot sur le client)
-          if (chatId && messageId) {
-            const chatMsgRef = db.collection('wameet_chats').doc(chatId).collection('messages').doc(messageId);
-            batch.set(chatMsgRef, {
-              escrowStatus: 'locked',
-              status: 'locked',
-              lockedAt: nowServer,
-              updatedAt: nowServer
-            }, { merge: true });
-            console.log(`[SMART ESCROW WEBHOOK] Message ${messageId} dans le chat ${chatId} mis à jour -> 'locked'.`);
-
-            // 3. Diffuse l'événement WebSocket transaction_updated instantanément
-            broadcastToChat(chatId, 'transaction_updated', {
-              transactionId: escrowTxId,
-              messageId,
-              chatId,
-              status: 'locked',
-              escrowStatus: 'locked',
-              updatedAt: nowServer
-            });
-          }
-        }
-      }
-
-      // 4. Déblocage du produit / Abonnement Élite (vérification explicite uniquement)
-      const isElitePurchase =
-        String(resolvedOrderId).toLowerCase().includes('elite') ||
-        String(externalRef).toLowerCase().includes('elite') ||
-        txData.metadata?.plan === 'elite';
-
-      if (isElitePurchase) {
-        const tenantRef = db.collection('tenants').doc(resolvedTenantId);
-        batch.set(tenantRef, {
-          plan: 'elite',
-          subscriptionPlan: 'elite',
-          subscriptionStatus: 'ACTIVE',
-          multiCountryActive: true,
-          isPaid: true,
-          updatedAt: nowServer
-        }, { merge: true });
-
-        const storeRef = db.collection('stores').doc(resolvedTenantId);
-        batch.set(storeRef, {
-          subscription: 'elite',
-          plan: 'elite',
-          status: 'active',
-          multiCountryActive: true,
-          updatedAt: nowServer
-        }, { merge: true });
-
-        const userRef = db.collection('users').doc(resolvedTenantId);
-        batch.set(userRef, {
-          plan: 'elite',
-          subscriptionPlan: 'elite',
-          subscriptionStatus: 'ACTIVE',
-          updatedAt: nowServer
-        }, { merge: true });
-      }
-
-      // 5. Crédit du Wallet du tenant (mise à jour atomique incrémentale)
-      const walletRef = db.collection('wallets').doc(resolvedTenantId);
-      batch.set(walletRef, {
-        tenantId: resolvedTenantId,
-        balance: admin.firestore.FieldValue.increment(amount),
-        totalEarnings: admin.firestore.FieldValue.increment(amount),
-        lastPaymentAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      await batch.commit();
-      console.log(`[FIRESTORE COMMIT SUCCESS] Transaction ${transactionId} validée avec succès, produit débloqué et wallet crédité.`);
-
-      // 6. Moteur NaNaSwitch : Split Financier Automatisé ACID (95% Vendeur / 5% Nanasore) & Communication Asynchrone (SMS/Email)
-      switchManager.dispatchPostPaymentWorkflow({
-        db,
-        orderId: resolvedOrderId,
-        storeId: resolvedTenantId,
-        totalAmount: amount,
-        transactionId,
-        gateway: 'sebpay',
-        customerPhone: txData.client_phone || txData.phone || payload.client_phone || '',
-        customerEmail: txData.client_email || txData.email || payload.client_email || '',
-        customerName: txData.client_name || txData.name || 'Client Wameet',
-        productTitle: txData.description || payload.description || 'Commande en direct Wameet',
-        storeName: resolvedTenantId
-      }).catch(switchErr => {
-        console.error('[NANASWITCH ASYNC WORKFLOW ERROR]', switchErr);
-      });
-
-      // 7. Notification Webhook Sortante vers le serveur du marchand (Signée HMAC-SHA256)
-      webhookNotifier.dispatchMerchantWebhook(db, {
-        merchantId: resolvedTenantId,
-        event: 'payment.success',
-        orderId: resolvedOrderId,
-        transactionId,
-        data: {
-          id: transactionId,
-          order_id: resolvedOrderId,
-          external_reference: externalRef,
-          amount,
-          currency,
-          status: 'SUCCESS',
-          operator,
-          provider: resolvedProvider,
-          customer_phone: customerPhone,
-          paid_at: new Date().toISOString()
-        }
-      }).catch(whErr => console.warn('[MERCHANT WEBHOOK DISPATCH ERROR]', whErr.message));
-    } catch (dbErr) {
-      console.error('[FIRESTORE UPDATE ERROR]', dbErr.message);
-    }
-  } else {
-    console.warn(`[SEBPAY STATUS NOTICE] Transaction ${transactionId} statut échec ou rejeté : ${status}`);
-    try {
-      const isCancelled = ['CANCELLED', 'CANCELED', 'ANNULE', 'ANNULÉ'].includes(status);
-      const isRejected = ['REJECTED', 'FAILED', 'DECLINED', 'EXPIRED'].includes(status);
-      const normalizedStatus = isCancelled ? 'CANCELLED' : (isRejected ? 'REJECTED' : 'FAILED');
-
-      const intentRef = db.collection('payment_intents').doc(resolvedOrderId);
-      await intentRef.set({
-        status: normalizedStatus,
-        paymentStatus: 'FAILED',
-        isPaid: false,
-        customerPhone,
-        error: `Paiement ${normalizedStatus.toLowerCase()} via ${operator}`,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      const orderRef = db.collection('orders').doc(resolvedOrderId);
-      await orderRef.set({
-        status: normalizedStatus,
-        paymentStatus: 'FAILED',
-        isPaid: false,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      // Notification Webhook Sortante d'échec vers le serveur du marchand
-      webhookNotifier.dispatchMerchantWebhook(db, {
-        merchantId: resolvedTenantId,
-        event: 'payment.failed',
-        orderId: resolvedOrderId,
-        transactionId,
-        data: {
-          id: transactionId,
-          order_id: resolvedOrderId,
-          external_reference: externalRef,
-          amount,
-          currency,
-          status: 'FAILED',
-          operator,
-          failure_reason: status,
-          failed_at: new Date().toISOString()
-        }
-      }).catch(whErr => console.warn('[MERCHANT WEBHOOK DISPATCH ERROR]', whErr.message));
-    } catch (e) {
-      console.warn('[INTENT FAIL UPDATE ERROR]', e.message);
-    }
+    return { success: false, status, orderId: resolvedOrderId };
   }
 }
 
@@ -2004,30 +1814,26 @@ app.post(
         return res.status(401).json({ error: `Signature webhook SasPay invalide (${sigCheck.reason})` });
       }
 
-      // Règle SasPay : Réponse HTTP 2xx rapide immédiate pour accuser réception
-      res.status(200).json({ received: true });
+      let payload = {};
+      try {
+        payload = JSON.parse(rawBuffer.toString('utf8'));
+      } catch (_jsonErr) {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
 
-      // Traitement asynchrone et idempotent en arrière-plan
-      setImmediate(async () => {
-        try {
-          const payload = JSON.parse(rawBuffer.toString('utf8'));
-          const event = eventName || payload.event;
-          console.log(`[SASPAY WEBHOOK VALIDATED] Événement: ${event || 'inconnu'}`);
+      const event = eventName || payload.event;
+      console.log(`[SASPAY WEBHOOK VALIDATED] Événement: ${event || 'inconnu'}`);
 
-          // Traitement spécifique de l'événement de test déclenché depuis le dashboard SasPay
-          if (event === 'webhook.test') {
-            console.log('[SASPAY WEBHOOK TEST] Événement webhook.test validé avec succès par NaNaSwitch.');
-            return;
-          }
+      if (event === 'webhook.test') {
+        return res.status(200).json({ received: true, test: true });
+      }
 
-          await processWebhookTransaction(payload);
-        } catch (procErr) {
-          console.error('[SASPAY WEBHOOK PROCESSING ERROR]', procErr.message);
-        }
-      });
+      const result = await processWebhookTransaction({ ...payload, provider: 'SASPAY' }, { gateway: 'saspay', signature });
+      return res.status(200).json({ received: true, ...result });
     } catch (err) {
-      console.error('[SASPAY WEBHOOK ERROR]', err);
-      return res.status(500).json({ error: err.message });
+      console.error('[SASPAY WEBHOOK ERROR]', err.message);
+      const isClientErr = ['MISSING_WEBHOOK_STATUS', 'AMOUNT_MISMATCH', 'ORDER_ALREADY_PAID', 'ORDER_NOT_FOUND'].includes(err.code || err.message);
+      return res.status(isClientErr ? 400 : 500).json({ error: err.message, code: err.code || null });
     }
   }
 );
@@ -2160,17 +1966,17 @@ app.post(['/api/payments/initiate', '/api/switch/initiate', '/api/payment/switch
   try {
     const {
       gateway = switchManager.getPrimaryGateway(),
-      orderId = `ORD_${Date.now()}`,
+      orderId: rawOrderId,
       storeId = 'nanasore_central_hub',
-      amount,
+      amount: clientAmount,
       currency = 'XOF',
       customerPhone,
       phone,
       customerEmail,
       customerName = 'Client Wameet',
       description = 'Commande Wameet / Nanasore Live',
-      returnUrl,
-      callbackUrl,
+      returnUrl: rawReturnUrl,
+      callbackUrl: rawCallbackUrl,
       country,
       countryCode,
       operator = req.body.provider || req.body.operator_code || req.body.slug,
@@ -2178,13 +1984,46 @@ app.post(['/api/payments/initiate', '/api/switch/initiate', '/api/payment/switch
       metadata = {}
     } = req.body;
 
-    if (!amount || Number(amount) <= 0) {
+    const orderId = rawOrderId || `ORD_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    let amount = Number(clientAmount || 0);
+    let dbTenantId = null;
+
+    // 0. Source de vérité serveur (Audit C1, C4, M5) : Si orderId existe en base Supabase, lire montant et statut !
+    const supabase = getSupabaseAdmin();
+    if (supabase && rawOrderId) {
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id, total_amount, status, payment_status, tenant_id')
+        .eq('id', String(rawOrderId))
+        .maybeSingle();
+
+      if (existingOrder) {
+        const isAlreadyPaid =
+          String(existingOrder.payment_status || '').toLowerCase() === 'paid' ||
+          ['paid', 'completed'].includes(String(existingOrder.status || '').toLowerCase());
+        if (isAlreadyPaid) {
+          return res.status(409).json({
+            success: false,
+            errorCode: 'ORDER_ALREADY_PAID',
+            error: `La commande #${rawOrderId} est déjà payée.`
+          });
+        }
+        if (Number(existingOrder.total_amount) > 0) {
+          amount = Number(existingOrder.total_amount);
+        }
+        if (existingOrder.tenant_id) {
+          dbTenantId = String(existingOrder.tenant_id);
+        }
+      }
+    }
+
+    if (!amount || amount <= 0) {
       return res.status(400).json({ success: false, error: 'Montant de paiement invalide (amount > 0 requis).' });
     }
 
     // 1. Authentification & Résolution du Marchand (B2B Hybride : Agrégé vs Développeurs BYOK)
     const apiKeyHeader = req.headers['x-nanaswitch-skey'] || req.headers['x-nanaswitch-key'] || req.headers['x-api-key'] || req.headers['authorization'] || '';
-    const merchantIdParam = req.body.merchantId || req.body.merchant_id || storeId;
+    const merchantIdParam = dbTenantId || req.body.merchantId || req.body.merchant_id || storeId;
     const merchant = await merchantService.resolveMerchant(db, apiKeyHeader, merchantIdParam);
 
     // 1.b. Contrôle strict du risque & des plafonds mensuels KYC (Particulier: 1M XOF vs Entreprise: 5M XOF)
@@ -2199,9 +2038,12 @@ app.post(['/api/payments/initiate', '/api/switch/initiate', '/api/payment/switch
       return res.status(402).json(creditCheck.errorResponse);
     }
 
-    // 3. Formatage de la référence externe standardisée : ${merchant_id}___${order_id}
-    const resolvedMerchantId = merchant?.merchant_id || 'm_live_bf_001';
-    const externalReference = req.body.externalReference || req.body.external_reference || `${resolvedMerchantId}___${orderId}`;
+    // 3. Référence serveur unique & assainissement des URLs (Audit C4, M6)
+    const resolvedMerchantId = dbTenantId || merchant?.merchant_id || 'm_live_bf_001';
+    const paymentReference = `PAY_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const externalReference = `${resolvedMerchantId}___${orderId}`;
+    const returnUrl = sanitizeRedirectUrl(rawReturnUrl, 'https://nsore.shop');
+    const callbackUrl = sanitizeRedirectUrl(rawCallbackUrl, process.env.PAYMENT_CALLBACK_URL || 'https://nana-payment-api.onrender.com/api/payment/webhook');
 
     // Clés personnalisées si le marchand est en mode BYOK
     const customCredentials = (merchant?.integration_config?.mode === 'BYOK')

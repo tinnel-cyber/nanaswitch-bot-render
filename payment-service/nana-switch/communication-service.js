@@ -15,7 +15,6 @@
  */
 
 const https = require('https');
-const admin = require('../firebase-admin-fallback');
 
 // Coûts unitaires par canal (paramétrables via variables d'environnement)
 const SMS_UNIT_COST_FCFA = Number(process.env.COMMUNICATION_SMS_COST_FCFA || 25);
