@@ -28,7 +28,8 @@ import {
   Download,
   FileText,
   Store,
-  Receipt
+  Receipt,
+  Video
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +48,12 @@ import {
   sendDigitalReceiptViaApi
 } from '../../digitalReceiptService';
 import { recordAffiliateSaleCommission } from '../../liveAffiliateService';
+
+const LazyBuyerLiveCallButton = React.lazy(() =>
+  import('../../../components/live/BuyerLiveCallButton').then((m) => ({
+    default: m.BuyerLiveCallButton || (m as any).default,
+  }))
+);
 
 // =============================================================================
 // TYPES DU CHECKOUT FINTECH ULTIME
@@ -447,6 +454,16 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const bfExtractedTxIdRef = useRef('');
   const bfSmsInputRef = useRef('');
   const bfVerificationDoneRef = useRef(false);
+
+  // Support WhatsApp (15 min) & Confirmation verte avec compte à rebours
+  const [showBfSupportForm, setShowBfSupportForm] = useState(false);
+  const [bfSupportName, setBfSupportName] = useState('');
+  const [bfSupportPhone, setBfSupportPhone] = useState('');
+  const [bfSupportTxId, setBfSupportTxId] = useState('');
+  const [bfSupportNote, setBfSupportNote] = useState('');
+  const [bfRedirectCountdown, setBfRedirectCountdown] = useState<number | null>(null);
+  const pendingBfSuccessDetailsRef = useRef<PaymentSuccessDetails | null>(null);
+  const bfOnSuccessTriggeredRef = useRef(false);
 
   // Traitement en cours & validation
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -876,6 +893,56 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [orderId, isProcessingPayment, currentStep, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, onSuccess]);
 
+  // Enregistrement obligatoire de chaque étape BF dans payment_logs (Super Admin)
+  const logBfPaymentStep = useCallback(async (
+    stepStatus: string,
+    txIdOverride?: string | null,
+    extraPayload: Record<string, any> = {}
+  ) => {
+    try {
+      await supabase.rpc('log_bf_payment_step', {
+        p_tenant_id: String(merchantId || storeConfig?.slug || 'nanasore_platform'),
+        p_order_id: String(orderId),
+        p_transaction_id: txIdOverride || bfExtractedTxIdRef.current || orderId,
+        p_amount: Math.round(finalTotal),
+        p_status: stepStatus,
+        p_customer_phone: (paymentPhone || deliveryPhone || '').trim() || null,
+        p_raw_payload: {
+          country: selectedCountry.code,
+          operator: selectedOperator.id,
+          operatorName: selectedOperator.name,
+          merchantCode: selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : null,
+          customerName: customerName.trim() || null,
+          productName: resolvedProduct?.name || orderDescription || null,
+          ...extraPayload
+        }
+      });
+    } catch {}
+  }, [merchantId, storeConfig?.slug, orderId, finalTotal, paymentPhone, deliveryPhone, selectedCountry.code, selectedOperator.id, selectedOperator.name, effectiveBfOrangeMerchantCode, customerName, resolvedProduct?.name, orderDescription]);
+
+  // Déclenchement final de onSuccess (après affichage de l'écran vert ou clic utilisateur)
+  const handleBfContinueNow = useCallback(() => {
+    if (bfOnSuccessTriggeredRef.current) return;
+    bfOnSuccessTriggeredRef.current = true;
+    setBfRedirectCountdown(null);
+    if (onSuccess && pendingBfSuccessDetailsRef.current) {
+      onSuccess(pendingBfSuccessDetailsRef.current);
+    }
+  }, [onSuccess]);
+
+  // Compte à rebours de redirection douce sur l'écran vert STEP_3
+  useEffect(() => {
+    if (bfRedirectCountdown === null) return;
+    if (bfRedirectCountdown <= 0) {
+      handleBfContinueNow();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setBfRedirectCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [bfRedirectCountdown, handleBfContinueNow]);
+
   // Finalisation immédiate d'un paiement BF vérifié par SMS / Supabase Realtime
   const completeBfSmsPaymentSuccess = useCallback((verifiedTxId: string, verifiedAmount?: number) => {
     if (bfVerificationDoneRef.current || currentStep === 'STEP_3') return;
@@ -909,11 +976,17 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       status: 'PAID'
     };
 
+    logBfPaymentStep('VALIDATED_REALTIME', cleanTxId, {
+      verifiedAmount: successDetails.amount
+    });
+
+    pendingBfSuccessDetailsRef.current = successDetails;
+    bfOnSuccessTriggeredRef.current = false;
     setCompletedDetails(successDetails);
     setCurrentStep('STEP_3');
+    setBfRedirectCountdown(5);
     playCashChime();
-    if (onSuccess) onSuccess(successDetails);
-  }, [currentStep, orderId, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, onSuccess]);
+  }, [currentStep, orderId, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, logBfPaymentStep]);
 
   // Comparaison directe avec Supabase (RPC atomique verify_bf_sms_payment)
   const verifyBfSmsAgainstSupabase = useCallback(async (txIdCandidate: string, rawInputText: string) => {
@@ -924,6 +997,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     setPaymentError(null);
     setBfSmsNotice(`ID détecté (${cleanTx}) — Vérification en temps réel avec Supabase...`);
     console.log(`[BF-SMS-CHECKOUT] Vérification RPC verify_bf_sms_payment | orderId=${orderId} | txId=${cleanTx} | expectedAmount=${Math.round(finalTotal)} | merchantCode=${selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : 'WAVE'}`);
+    logBfPaymentStep('ID_SUBMITTED', cleanTx, { rawInput: rawInputText || cleanTx });
 
     try {
       const { data, error } = await supabase.rpc('verify_bf_sms_payment', {
@@ -940,6 +1014,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
         console.warn('[BF SMS RPC]', error.message);
         setBfSmsStatus('WAITING_REALTIME');
         setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active pour confirmation automatique...`);
+        logBfPaymentStep('WAITING_REALTIME', cleanTx, { rpcError: error.message });
         return false;
       }
 
@@ -951,6 +1026,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       if (data?.alreadyUsed) {
         setBfSmsStatus('ERROR');
         setPaymentError('Cet ID de transaction SMS a déjà été utilisé pour une autre commande.');
+        logBfPaymentStep('TRANSACTION_ALREADY_USED', cleanTx);
         playCancelSound();
         return false;
       }
@@ -960,6 +1036,10 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
         setPaymentError(
           `Montant reçu (${data.received_amount} FCFA) inférieur au montant attendu (${data.expected_amount} FCFA).`
         );
+        logBfPaymentStep('AMOUNT_MISMATCH', cleanTx, {
+          receivedAmount: data.received_amount,
+          expectedAmount: data.expected_amount
+        });
         playCancelSound();
         return false;
       }
@@ -967,6 +1047,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       if (data?.reason === 'MERCHANT_CODE_MISMATCH') {
         setBfSmsStatus('ERROR');
         setPaymentError(`Ce paiement n'a pas été envoyé au numéro marchand attendu (${effectiveBfOrangeMerchantCode}).`);
+        logBfPaymentStep('MERCHANT_CODE_MISMATCH', cleanTx);
         playCancelSound();
         return false;
       }
@@ -974,21 +1055,33 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       // SMS pas encore arrivé dans Supabase : l'écoute Realtime va l'intercepter dès réception
       setBfSmsStatus('WAITING_REALTIME');
       setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de réception du SMS dans Supabase Realtime...`);
+      logBfPaymentStep('WAITING_REALTIME', cleanTx);
       return false;
     } catch (err: any) {
       console.warn('[BF SMS VERIFY]', err?.message);
       setBfSmsStatus('WAITING_REALTIME');
       setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active...`);
+      logBfPaymentStep('WAITING_REALTIME', cleanTx, { error: err?.message });
       return false;
     }
-  }, [orderId, finalTotal, paymentPhone, deliveryPhone, selectedOperator, effectiveBfOrangeMerchantCode, completeBfSmsPaymentSuccess]);
+  }, [orderId, finalTotal, paymentPhone, deliveryPhone, selectedOperator, effectiveBfOrangeMerchantCode, completeBfSmsPaymentSuccess, logBfPaymentStep]);
 
   // Réinitialiser l'état de vérification BF si l'orderId change
   useEffect(() => {
     bfVerificationDoneRef.current = false;
+    bfOnSuccessTriggeredRef.current = false;
+    pendingBfSuccessDetailsRef.current = null;
+    setBfRedirectCountdown(null);
     setBfSmsStatus('IDLE');
     setBfSmsNotice(null);
   }, [orderId]);
+
+  // Enregistrer automatiquement l'ouverture de STEP_2B côté Super Admin
+  useEffect(() => {
+    if (isBurkinaFaso && currentStep === 'STEP_2B' && orderId) {
+      logBfPaymentStep('STEP_2B_OPENED', orderId);
+    }
+  }, [isBurkinaFaso, currentStep, orderId, logBfPaymentStep]);
 
   // Écoute Supabase Realtime active pendant toute la transaction Burkina Faso (STEP_2B)
   useEffect(() => {
@@ -2352,6 +2445,129 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               </div>
             )}
 
+            {/* Bloc Support WhatsApp (15 min) + Appel Vidéo Voir Direct en bas du checkout */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-left">
+              <p className="text-xs text-slate-700 font-semibold leading-relaxed text-center">
+                Si après <strong>15 minutes</strong> votre ID est reçu mais que le paiement n'est pas validé, contactez le support pour soumettre vos informations à vérifier.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setBfSupportName((prev) => prev || customerName);
+                    setBfSupportPhone((prev) => prev || paymentPhone || deliveryPhone);
+                    setBfSupportTxId((prev) => prev || bfExtractedTxId || bfSmsInput);
+                    setShowBfSupportForm((prev) => !prev);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Support WhatsApp</span>
+                </button>
+
+                <React.Suspense
+                  fallback={
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-2.5 px-4 rounded-xl bg-blue-600/70 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-2"
+                    >
+                      <Video className="w-4 h-4" />
+                      <span>Voir Direct...</span>
+                    </button>
+                  }
+                >
+                  <LazyBuyerLiveCallButton
+                    productId={resolvedProduct?.id || orderId}
+                    productName={resolvedProduct?.name || orderDescription}
+                    productPrice={finalTotal}
+                    productImage={resolvedProduct?.imageUrl}
+                    storeName={effectiveStoreName}
+                    whatsappPhone={effectiveWPhone}
+                    sellerId={merchantId || storeConfig?.slug || 'nanasore_platform'}
+                    buttonText="Appel Vidéo (Voir Direct)"
+                    className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                  />
+                </React.Suspense>
+              </div>
+
+              {showBfSupportForm && (
+                <div className="p-3.5 rounded-xl bg-white border border-emerald-300 space-y-2.5 animate-in fade-in duration-200">
+                  <div className="text-xs font-black text-emerald-900">
+                    Soumettre vos informations au support (+22666782920)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={bfSupportName}
+                      onChange={(e) => setBfSupportName(e.target.value)}
+                      placeholder="Votre nom complet *"
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <input
+                      type="tel"
+                      value={bfSupportPhone}
+                      onChange={(e) => setBfSupportPhone(e.target.value)}
+                      placeholder="Votre numéro payeur *"
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={bfSupportTxId}
+                      onChange={(e) => setBfSupportTxId(e.target.value)}
+                      placeholder="ID de transaction / SMS reçu *"
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-mono font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none sm:col-span-2"
+                    />
+                    <input
+                      type="text"
+                      value={bfSupportNote}
+                      onChange={(e) => setBfSupportNote(e.target.value)}
+                      placeholder="Précision (ex: heure du paiement, opérateur...)"
+                      className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none sm:col-span-2"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sName = (bfSupportName || customerName || 'Client').trim();
+                      const sPhone = (bfSupportPhone || paymentPhone || deliveryPhone || 'Non précisé').trim();
+                      const sTx = (bfSupportTxId || bfExtractedTxId || bfSmsInput || 'Non précisé').trim();
+                      const sNote = bfSupportNote.trim();
+                      const cleanWa = '22666782920';
+
+                      logBfPaymentStep('SUPPORT_SUBMITTED', sTx, {
+                        supportName: sName,
+                        supportPhone: sPhone,
+                        supportNote: sNote || null
+                      });
+
+                      const waLines = [
+                        `Bonjour Support *${effectiveStoreName}* 👋`,
+                        `Mon paiement n'a pas encore été validé automatiquement (vérification demandée).`,
+                        ``,
+                        `• *Client :* ${sName}`,
+                        `• *Téléphone payeur :* ${sPhone}`,
+                        `• *Commande / Réf :* ${orderId}`,
+                        `• *Produit / Offre :* ${resolvedProduct?.name || orderDescription}`,
+                        `• *Montant :* ${formatCFA(finalTotal)}`,
+                        `• *Opérateur :* ${selectedOperator.name} (${selectedCountry.name})`,
+                        `• *ID Transaction / SMS :* ${sTx}`,
+                        sNote ? `• *Note :* ${sNote}` : ''
+                      ].filter(Boolean).join('\n');
+
+                      window.open(`https://wa.me/${cleanWa}?text=${encodeURIComponent(waLines)}`, '_blank', 'noopener,noreferrer');
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Envoyer toutes mes infos sur WhatsApp</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Bouton de secours si le paiement est en cours de traitement */}
             {isProcessingPayment && (
               <div className="p-4.5 rounded-2xl bg-blue-50/60 border-2 border-blue-300 text-center space-y-3 animate-in fade-in duration-200">
@@ -2457,15 +2673,43 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             }
           `}</style>
 
-          {/* Titre & Sous-titre */}
-          <div className="space-y-2 max-w-md mx-auto">
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
-              Paiement effectué avec succès !
-            </h2>
-            <p className="text-sm sm:text-base text-slate-800 font-semibold">
-              Votre commande est confirmée et validée par la passerelle de paiement.
-            </p>
-          </div>
+          {/* Titre & Sous-titre contextuel en vert */}
+          {(() => {
+            const labelLower = `${orderDescription || ''} ${resolvedProduct?.name || ''} ${orderId || ''}`.toLowerCase();
+            const isSub = orderId.startsWith('SUB-') || labelLower.includes('abonnement') || labelLower.includes('plan ');
+            const isWebinar = labelLower.includes('webinaire') || labelLower.includes('formation') || labelLower.includes('cours') || labelLower.includes('souscription');
+
+            const contextualSuccessMsg = isSub
+              ? `Votre paiement de ${formatCFA(finalTotal)} pour l'abonnement « ${resolvedProduct.name} » a été validé avec succès !`
+              : isWebinar
+                ? `Votre paiement de ${formatCFA(finalTotal)} pour la souscription à « ${resolvedProduct.name} » a été validé avec succès !`
+                : `Votre paiement de ${formatCFA(finalTotal)} a été validé avec succès ! Vous allez être redirigé vers le site pour continuer vos achats à volonté.`;
+
+            return (
+              <div className="space-y-3 max-w-md mx-auto">
+                <h2 className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight">
+                  Paiement validé avec succès !
+                </h2>
+                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-400 text-emerald-950 text-sm sm:text-base font-bold leading-relaxed">
+                  {contextualSuccessMsg}
+                </div>
+                {bfRedirectCountdown !== null && (
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-1">
+                    <span className="text-xs font-bold text-emerald-700">
+                      Redirection automatique dans {bfRedirectCountdown}s...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleBfContinueNow}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition cursor-pointer shadow-sm"
+                    >
+                      Continuer maintenant →
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Coordonnées de la boutique concernée */}
           <div className="max-w-md mx-auto p-3.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-left flex items-center justify-between">

@@ -163,3 +163,43 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.verify_bf_sms_payment(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated, service_role;
+
+-- RPC d'audit obligatoire : enregistre chaque étape de paiement BF dans payment_logs pour le Super Admin
+CREATE OR REPLACE FUNCTION public.log_bf_payment_step(
+    p_tenant_id TEXT,
+    p_order_id TEXT,
+    p_transaction_id TEXT DEFAULT NULL,
+    p_amount NUMERIC DEFAULT 0,
+    p_status TEXT DEFAULT 'STEP_2B_OPENED',
+    p_customer_phone TEXT DEFAULT NULL,
+    p_raw_payload JSONB DEFAULT '{}'::jsonb
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    INSERT INTO public.payment_logs (
+        tenant_id,
+        transaction_id,
+        amount,
+        status,
+        customer_phone,
+        raw_payload
+    )
+    VALUES (
+        COALESCE(NULLIF(TRIM(p_tenant_id), ''), 'nanasore_platform'),
+        NULLIF(TRIM(COALESCE(p_transaction_id, p_order_id, '')), ''),
+        COALESCE(p_amount, 0),
+        COALESCE(NULLIF(TRIM(p_status), ''), 'BF_STEP'),
+        NULLIF(TRIM(COALESCE(p_customer_phone, '')), ''),
+        COALESCE(p_raw_payload, '{}'::jsonb) || jsonb_build_object('order_id', p_order_id, 'logged_at', NOW())
+    );
+EXCEPTION WHEN OTHERS THEN
+    -- Ne jamais bloquer le tunnel de paiement si la table payment_logs est absente
+    NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.log_bf_payment_step(TEXT, TEXT, TEXT, NUMERIC, TEXT, TEXT, JSONB) TO anon, authenticated, service_role;
