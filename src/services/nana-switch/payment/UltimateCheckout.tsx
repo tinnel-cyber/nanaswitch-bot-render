@@ -858,6 +858,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
         countryCode: selectedCountry.code || 'BF',
         phone: rawPhone,
         customerPhone: rawPhone,
+        customerName: customerName.trim() || undefined,
+        customerEmail: customerEmail.trim() || undefined,
         operator: selectedOperator.code || selectedOperator.id,
         provider: selectedOperator.code || selectedOperator.id,
         otpCode: selectedOperator.needsOtp ? otpCode.trim() : undefined,
