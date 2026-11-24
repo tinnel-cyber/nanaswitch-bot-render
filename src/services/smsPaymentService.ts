@@ -38,20 +38,22 @@ export function extractTransactionReferenceFromSms(message: string, fallbackKey:
   }
 
   const patterns = [
-    // 1. Mots-clés explicites avec séparateurs : "Trans ID: ...", "Ref: ...", "ID de transaction: ...", "Transaction ID: ...", "ID Transaction : ..."
-    /(?:trans(?:action)?\s*id|id\s*(?:de\s*(?:la\s*)?)?trans(?:action)?|txn?\s*id|code\s*(?:de\s*)?trans(?:action)?|num(?:ero)?\s*(?:de\s*)?trans(?:action)?)\s*[:.]?\s*([A-Za-z0-9._-]+)/i,
-    /(?:ref(?:erence)?|ref\s*paiement|ref\s*tx)\s*[:.]?\s*([A-Za-z0-9._-]+)/i,
+    // 1. Mots-clés explicites avec séparateurs : "Trans ID: ...", "Réf: ...", "ID de transaction: ...", "Transaction ID: ...", "ID : ..."
+    /(?:trans(?:action)?\s*id|id\s*(?:de\s*(?:la\s*)?)?trans(?:action)?|txn?\s*id|code\s*(?:de\s*)?trans(?:action)?|num(?:[eé]ro)?\s*(?:de\s*)?trans(?:action)?|identifiant)\s*[:.]?\s*([A-Za-z0-9._-]+)/i,
+    /(?:r[eé]f(?:[eé]rence)?|r[eé]f\s*paiement|r[eé]f\s*tx)\s*[:.]?\s*([A-Za-z0-9._-]+)/i,
+    /\b(?:id)\s*[:]\s*([A-Za-z0-9._-]{5,35})/i,
 
     // 2. Formats Orange Money : CI240916.1234..., MP24..., PP24..., OM...
     /\b((?:CI|MP|PP|OM|BF|SN|ML|BJ|CG)\d{6,}\.[A-Za-z0-9._-]+)\b/i,
     /\b((?:CI|MP|PP|OM|BF|SN|ML|BJ|CG)[0-9]{8,}[A-Za-z0-9._-]*)\b/i,
 
-    // 3. Formats Wave : WAV-..., ULID Wave (26 caractères alphanumériques commençant par 01)
+    // 3. Formats Wave : WAV-..., ULID Wave (26 caractères alphanumériques commençant par 01), IDs Wave T...
     /\b(WAV(?:E)?-[A-Za-z0-9_-]+)\b/i,
     /\b(01[0-9A-HJ-KM-NP-TV-Z]{24})\b/i,
+    /\b(T[A-Z0-9]{8,24})\b/,
 
     // 4. Formats Moov & MTN : Références numériques ou alphanumériques longues
-    /(?:trans(?:action)?|reference|ref)\s*[:.]?\s*([0-9]{8,20})\b/i,
+    /(?:trans(?:action)?|r[eé]f[eé]rence|r[eé]f)\s*[:.]?\s*([0-9]{8,20})\b/i,
 
     // 5. Blocs avec points multiples typiques (ex: PP260926.1234.B56789)
     /\b([A-Z0-9]{2,8}\.[0-9]{4,}\.[A-Z0-9]{3,})\b/i,

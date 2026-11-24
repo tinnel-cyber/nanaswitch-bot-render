@@ -37,6 +37,7 @@ import {
   verifySPayment,
   SCollectionResponse
 } from '../../../services/paymentApiService';
+import { extractTransactionReferenceFromSms } from '../../../services/smsPaymentService';
 import { getOperatorLogo } from '../../../utils/operatorLogos';
 import { ALL_20_COUNTRIES_CONFIG, detectCountryFromPhone, CountryPaymentConfigItem, getDynamicFailoverNotice } from '../../../utils/countryPaymentConfig';
 import {
@@ -435,9 +436,17 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     }
   }, [deliveryPhone]);
 
-  // Code OTP
+  // Code OTP (Pays hors BF) & SMS / ID de paiement (Burkina Faso)
   const [otpCode, setOtpCode] = useState('');
+  const [bfSmsInput, setBfSmsInput] = useState('');
+  const [bfExtractedTxId, setBfExtractedTxId] = useState('');
+  const [bfSmsStatus, setBfSmsStatus] = useState<'IDLE' | 'CHECKING' | 'WAITING_REALTIME' | 'MATCHED' | 'ERROR'>('IDLE');
+  const [bfSmsNotice, setBfSmsNotice] = useState<string | null>(null);
+  const [moovRedirectNotice, setMoovRedirectNotice] = useState<string | null>(null);
   const [isCopiedUssd, setIsCopiedUssd] = useState(false);
+  const bfExtractedTxIdRef = useRef('');
+  const bfSmsInputRef = useRef('');
+  const bfVerificationDoneRef = useRef(false);
 
   // Traitement en cours & validation
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -731,11 +740,50 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     setCurrentStep('STEP_2B');
   };
 
+  // Détection Burkina Faso & Paramètres Marchands (Central vs Boutique Produit Physique)
+  const isBurkinaFaso = selectedCountry.code === 'BF';
+  const isPhysicalStoreContext = Boolean(storeConfig || sellerConfig);
+
+  const customBfOrangeCode = useMemo(() => {
+    const raw =
+      storeConfig?.orangeMerchantCode ||
+      (storeConfig as any)?.siteSettings?.orangeMerchantCode ||
+      (storeConfig as any)?.themeCustomization?.orangeMerchantCode ||
+      sellerConfig?.orangeMerchantCode ||
+      '';
+    return String(raw).replace(/[^0-9]/g, '');
+  }, [storeConfig, sellerConfig]);
+
+  const customBfWaveLink = useMemo(() => {
+    return String(
+      storeConfig?.wavePaymentLink ||
+      (storeConfig as any)?.siteSettings?.wavePaymentLink ||
+      (storeConfig as any)?.themeCustomization?.wavePaymentLink ||
+      sellerConfig?.wavePaymentLink ||
+      ''
+    ).trim();
+  }, [storeConfig, sellerConfig]);
+
+  // Pour les produits physiques d'un marchand BF, on utilise SON code marchand ; sinon le code central (65565805) pour abonnements/wallet/digital/commissions
+  const effectiveBfOrangeMerchantCode = (isPhysicalStoreContext && customBfOrangeCode)
+    ? customBfOrangeCode
+    : '65565805';
+
+  const effectiveBfWaveUrl = useMemo(() => {
+    if (customBfWaveLink && /^https?:\/\//i.test(customBfWaveLink)) {
+      return customBfWaveLink;
+    }
+    return 'https://pay.wave.com/';
+  }, [customBfWaveLink]);
+
   // Code USSD dynamique adapté à l'opérateur et au montant
   const currentUssdCode = useMemo(() => {
+    if (isBurkinaFaso && selectedOperator.id === 'orange') {
+      return `*144*10*${effectiveBfOrangeMerchantCode}*${Math.round(finalTotal)}#`;
+    }
     if (!selectedOperator.ussdTemplate) return '*144*4*6#';
     return selectedOperator.ussdTemplate.replace('{amount}', finalTotal.toString());
-  }, [selectedOperator, finalTotal]);
+  }, [isBurkinaFaso, effectiveBfOrangeMerchantCode, selectedOperator, finalTotal]);
 
   const handleCopyUssd = () => {
     if (typeof navigator !== 'undefined') {
@@ -828,12 +876,209 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [orderId, isProcessingPayment, currentStep, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, onSuccess]);
 
-  // Déclenchement de la requête S
+  // Finalisation immédiate d'un paiement BF vérifié par SMS / Supabase Realtime
+  const completeBfSmsPaymentSuccess = useCallback((verifiedTxId: string, verifiedAmount?: number) => {
+    if (bfVerificationDoneRef.current || currentStep === 'STEP_3') return;
+    bfVerificationDoneRef.current = true;
+
+    const cleanTxId = String(verifiedTxId || bfExtractedTxIdRef.current || orderId).trim();
+
+    // Rafraîchir le champ SMS immédiatement sans autre manipulation du client
+    setBfSmsInput('');
+    bfSmsInputRef.current = '';
+    setBfExtractedTxId('');
+    bfExtractedTxIdRef.current = '';
+    setBfSmsStatus('MATCHED');
+    setBfSmsNotice(`Paiement confirmé en temps réel (Réf : ${cleanTxId}). Validation automatique...`);
+    setPaymentError(null);
+    setIsProcessingPayment(false);
+
+    const successDetails: PaymentSuccessDetails = {
+      transactionId: cleanTxId,
+      orderId,
+      amount: verifiedAmount && verifiedAmount > 0 ? verifiedAmount : finalTotal,
+      currency,
+      customerName: customerName.trim(),
+      phoneNumber: paymentPhone.trim() || deliveryPhone.trim(),
+      deliveryAddress: `${city.trim()}, ${deliveryAddress.trim()}`,
+      customerEmail: customerEmail.trim() || undefined,
+      paymentMethod: 'MOBILE_MONEY',
+      country: selectedCountry,
+      operator: selectedOperator,
+      timestamp: Date.now(),
+      status: 'PAID'
+    };
+
+    setCompletedDetails(successDetails);
+    setCurrentStep('STEP_3');
+    playCashChime();
+    if (onSuccess) onSuccess(successDetails);
+  }, [currentStep, orderId, finalTotal, currency, customerName, paymentPhone, deliveryPhone, city, deliveryAddress, customerEmail, selectedCountry, selectedOperator, onSuccess]);
+
+  // Comparaison directe avec Supabase (RPC atomique verify_bf_sms_payment)
+  const verifyBfSmsAgainstSupabase = useCallback(async (txIdCandidate: string, rawInputText: string) => {
+    const cleanTx = String(txIdCandidate || '').trim();
+    if (!cleanTx || cleanTx.length < 4 || bfVerificationDoneRef.current) return false;
+
+    setBfSmsStatus('CHECKING');
+    setPaymentError(null);
+    setBfSmsNotice(`ID détecté (${cleanTx}) — Vérification en temps réel avec Supabase...`);
+
+    try {
+      const { data, error } = await supabase.rpc('verify_bf_sms_payment', {
+        p_order_id: String(orderId),
+        p_transaction_id: cleanTx,
+        p_expected_amount: Math.round(finalTotal),
+        p_customer_phone: (paymentPhone || deliveryPhone || '').trim() || null,
+        p_merchant_code: selectedOperator.id === 'orange' ? effectiveBfOrangeMerchantCode : null,
+        p_operator: selectedOperator.code || selectedOperator.id,
+        p_raw_input: rawInputText || cleanTx
+      });
+
+      if (error) {
+        console.warn('[BF SMS RPC]', error.message);
+        setBfSmsStatus('WAITING_REALTIME');
+        setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active pour confirmation automatique...`);
+        return false;
+      }
+
+      if (data?.matched === true) {
+        completeBfSmsPaymentSuccess(data.transaction_id || cleanTx, Number(data.amount) || finalTotal);
+        return true;
+      }
+
+      if (data?.alreadyUsed) {
+        setBfSmsStatus('ERROR');
+        setPaymentError('Cet ID de transaction SMS a déjà été utilisé pour une autre commande.');
+        playCancelSound();
+        return false;
+      }
+
+      if (data?.reason === 'AMOUNT_MISMATCH') {
+        setBfSmsStatus('ERROR');
+        setPaymentError(
+          `Montant reçu (${data.received_amount} FCFA) inférieur au montant attendu (${data.expected_amount} FCFA).`
+        );
+        playCancelSound();
+        return false;
+      }
+
+      if (data?.reason === 'MERCHANT_CODE_MISMATCH') {
+        setBfSmsStatus('ERROR');
+        setPaymentError(`Ce paiement n'a pas été envoyé au numéro marchand attendu (${effectiveBfOrangeMerchantCode}).`);
+        playCancelSound();
+        return false;
+      }
+
+      // SMS pas encore arrivé dans Supabase : l'écoute Realtime va l'intercepter dès réception
+      setBfSmsStatus('WAITING_REALTIME');
+      setBfSmsNotice(`ID extrait : ${cleanTx}. En attente de réception du SMS dans Supabase Realtime...`);
+      return false;
+    } catch (err: any) {
+      console.warn('[BF SMS VERIFY]', err?.message);
+      setBfSmsStatus('WAITING_REALTIME');
+      setBfSmsNotice(`ID extrait : ${cleanTx}. Écoute Supabase Realtime active...`);
+      return false;
+    }
+  }, [orderId, finalTotal, paymentPhone, deliveryPhone, selectedOperator, effectiveBfOrangeMerchantCode, completeBfSmsPaymentSuccess]);
+
+  // Réinitialiser l'état de vérification BF si l'orderId change
+  useEffect(() => {
+    bfVerificationDoneRef.current = false;
+    setBfSmsStatus('IDLE');
+    setBfSmsNotice(null);
+  }, [orderId]);
+
+  // Écoute Supabase Realtime active pendant toute la transaction Burkina Faso (STEP_2B)
+  useEffect(() => {
+    if (!isBurkinaFaso || currentStep !== 'STEP_2B' || !orderId) return;
+
+    let bfChannel: any = null;
+    try {
+      const channelName = `bf_sms_watch_${orderId}_${Math.random().toString(36).substring(7)}`;
+      bfChannel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'bf_sms_payments'
+          },
+          async (payload) => {
+            if (bfVerificationDoneRef.current) return;
+            const row = payload.new as any;
+            if (!row || !row.transaction_id) return;
+
+            const currentTargetTx = bfExtractedTxIdRef.current.trim().toUpperCase();
+            const incomingTx = String(row.transaction_id || '').trim().toUpperCase();
+
+            // Si le client a collé un SMS/ID, on compare immédiatement avec le SMS entrant
+            if (currentTargetTx && incomingTx === currentTargetTx) {
+              await verifyBfSmsAgainstSupabase(row.transaction_id, bfSmsInputRef.current);
+            }
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn('[BF REALTIME WATCHER]', e);
+    }
+
+    return () => {
+      if (bfChannel) supabase.removeChannel(bfChannel);
+    };
+  }, [isBurkinaFaso, currentStep, orderId, verifyBfSmsAgainstSupabase]);
+
+  // Extraction automatique de l'ID dès que le client colle un SMS ou un ID de paiement (BF)
+  const handleBfSmsInputChange = (rawVal: string) => {
+    setBfSmsInput(rawVal);
+    bfSmsInputRef.current = rawVal;
+    setPaymentError(null);
+
+    const trimmed = rawVal.trim();
+    if (!trimmed) {
+      setBfExtractedTxId('');
+      bfExtractedTxIdRef.current = '';
+      setBfSmsStatus('IDLE');
+      setBfSmsNotice(null);
+      return;
+    }
+
+    const extracted = extractTransactionReferenceFromSms(trimmed, '');
+    const resolvedId = extracted || (trimmed.length >= 5 && !/\s/.test(trimmed) ? trimmed : '');
+    setBfExtractedTxId(resolvedId);
+    bfExtractedTxIdRef.current = resolvedId;
+
+    if (resolvedId && resolvedId.length >= 4) {
+      verifyBfSmsAgainstSupabase(resolvedId, trimmed);
+    } else {
+      setBfSmsStatus('IDLE');
+      setBfSmsNotice('Collez le SMS complet de confirmation ou l\'ID de transaction.');
+    }
+  };
+
+  // Déclenchement de la requête S (ou validation SMS Burkina Faso)
   const handleInitiateSPayment = async () => {
     const rawPhone = paymentPhone.trim();
     if (!rawPhone || rawPhone.length < 6) {
       setPaymentError('Veuillez renseigner un numéro Mobile Money valide.');
       playCancelSound();
+      return;
+    }
+
+    if (isBurkinaFaso) {
+      const targetId = bfExtractedTxId.trim() || extractTransactionReferenceFromSms(bfSmsInput.trim(), '');
+      if (!targetId || targetId.length < 4) {
+        setPaymentError("Veuillez coller le SMS de paiement reçu ou saisir l'ID de transaction.");
+        playCancelSound();
+        return;
+      }
+      setIsProcessingPayment(true);
+      playTapBeep();
+      const ok = await verifyBfSmsAgainstSupabase(targetId, bfSmsInput.trim());
+      if (!ok) {
+        setIsProcessingPayment(false);
+      }
       return;
     }
 
@@ -1741,21 +1986,43 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               {selectedCountry.operators.map((op) => {
                 const logoUrl = getOperatorLogo(op.id, selectedCountry.code);
                 const isSelected = selectedOperator.id === op.id;
+                const isComingSoonBf = isBurkinaFaso && (op.id === 'moov' || op.id === 'wligdicash');
 
                 return (
                   <button
                     key={op.id}
                     type="button"
                     onClick={() => {
+                      if (isComingSoonBf) {
+                        const fallbackOp =
+                          selectedCountry.operators.find((o) => o.id === 'orange') ||
+                          selectedCountry.operators.find((o) => o.id === 'wave') ||
+                          selectedCountry.operators[0];
+                        setSelectedOperator(fallbackOp);
+                        setMoovRedirectNotice(
+                          `${op.name} sera disponible bientôt. Vous avez été redirigé automatiquement vers ${fallbackOp.name}.`
+                        );
+                        playTapBeep();
+                        return;
+                      }
+                      setMoovRedirectNotice(null);
                       setSelectedOperator(op);
                       playTapBeep();
                     }}
                     className={`p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-3 cursor-pointer relative hover:scale-[1.02] active:scale-[0.98] bg-black hover:bg-neutral-950 ${
                       isSelected
                         ? 'border-blue-500 ring-4 ring-blue-500/35 shadow-xl shadow-blue-500/25'
-                        : 'border-neutral-800 hover:border-blue-400'
+                        : isComingSoonBf
+                          ? 'border-neutral-800/90 opacity-85 hover:border-amber-400/70'
+                          : 'border-neutral-800 hover:border-blue-400'
                     }`}
                   >
+                    {/* Badge Bientôt pour Moov & LigdiCash Wallet au Burkina */}
+                    {isComingSoonBf && (
+                      <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-black uppercase tracking-wider">
+                        Bientôt
+                      </span>
+                    )}
                     {/* Logo vectoriel officiel sur fond noir agrandi */}
                     <div className="h-16 sm:h-18 w-full flex items-center justify-center p-2 rounded-xl bg-black">
                       {logoUrl ? (
@@ -1786,13 +2053,106 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 );
               })}
             </div>
+
+            {moovRedirectNotice && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in duration-200">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{moovRedirectNotice}</span>
+              </div>
+            )}
           </div>
 
-          {/* L'EXPÉRIENCE DYNAMIQUE (EXEMPLE: ORANGE BURKINA & CODE OTP) */}
+          {/* L'EXPÉRIENCE DYNAMIQUE (BURKINA FASO : MARCHAND USSD / WAVE + SMS REALTIME, OU OTP HORS BF) */}
           <div className="space-y-4 text-left">
-            
-            {/* Si l'opérateur exige un code OTP : Encart avec code USSD exact à composer */}
-            {selectedOperator.needsOtp && (
+
+            {/* 1. BURKINA FASO — ORANGE MONEY MARCHAND (*144*10*CODE*MONTANT#) */}
+            {isBurkinaFaso && selectedOperator.id === 'orange' && (
+              <div className="p-5 sm:p-6 rounded-2xl bg-orange-50/80 border-2 border-orange-400 space-y-3.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-orange-950 text-sm sm:text-base font-black">
+                    <Smartphone className="w-5 h-5 text-orange-600" />
+                    <span>Paiement Marchand Orange Money Burkina</span>
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-orange-200/80 text-orange-900 border border-orange-300">
+                    N° Marchand : {effectiveBfOrangeMerchantCode}
+                  </span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-semibold">
+                  Composez le code USSD ci-dessous sur votre téléphone pour payer <strong className="text-orange-700">{formatCFA(finalTotal)}</strong> au Numéro Marchand <strong className="font-mono text-orange-800">{effectiveBfOrangeMerchantCode}</strong>, puis collez le SMS reçu ou l'ID de paiement ci-dessous :
+                </p>
+
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-white border-2 border-orange-500 shadow-sm">
+                  <span className="font-mono text-lg sm:text-2xl font-black text-orange-700 tracking-wider">
+                    {currentUssdCode}
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyUssd}
+                      className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-black flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                    >
+                      {isCopiedUssd ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                      <span>{isCopiedUssd ? 'Copié !' : 'Copier'}</span>
+                    </button>
+
+                    <a
+                      href={`tel:${currentUssdCode.replace(/#/g, '%23')}`}
+                      className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-black sm:hidden flex items-center gap-1 shadow-sm"
+                    >
+                      <Phone className="w-4 h-4" />
+                      <span>Lancer</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. BURKINA FASO — WAVE DIRECT (OUVERTURE APPLICATION WAVE + INSTRUCTIONS) */}
+            {isBurkinaFaso && selectedOperator.id === 'wave' && (
+              <div className="p-5 sm:p-6 rounded-2xl bg-sky-50/80 border-2 border-sky-400 space-y-3.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-sky-950 text-sm sm:text-base font-black">
+                    <ExternalLink className="w-5 h-5 text-sky-600" />
+                    <span>Paiement Direct Wave Burkina</span>
+                  </div>
+                  <span className="text-xs font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-sky-200/80 text-sky-900 border border-sky-300">
+                    0% Frais • Rapide
+                  </span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-900 leading-relaxed font-semibold">
+                  Ouvrez votre application Wave pour envoyer <strong className="text-sky-700">{formatCFA(finalTotal)}</strong>
+                  {customBfWaveLink && !/^https?:\/\//i.test(customBfWaveLink) ? (
+                    <> au numéro Wave <strong className="font-mono text-sky-800">{customBfWaveLink}</strong></>
+                  ) : null}
+                  , puis collez l'ID de transaction (ou le SMS/reçu Wave) dans le champ ci-dessous pour validation instantanée.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <a
+                    href={effectiveBfWaveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-sm transition"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Ouvrir Wave (Web / App)</span>
+                  </a>
+                  <a
+                    href="wave://"
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-black flex items-center gap-2 shadow-sm transition sm:hidden"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Lancer l'App Wave</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* 3. HORS BURKINA FASO — CODE OTP CLASSIQUE */}
+            {!isBurkinaFaso && selectedOperator.needsOtp && (
               <div className="p-5 sm:p-6 rounded-2xl bg-blue-50/70 border-2 border-blue-400 space-y-3.5 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-blue-950 text-sm sm:text-base font-black">
@@ -1837,7 +2197,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             )}
 
             {/* CHAMPS D'ACTION */}
-            <div className={`grid grid-cols-1 ${selectedOperator.needsOtp ? 'sm:grid-cols-2' : ''} gap-4.5`}>
+            <div className={`grid grid-cols-1 ${(isBurkinaFaso || selectedOperator.needsOtp) ? 'sm:grid-cols-2' : ''} gap-4.5`}>
               
               {/* Le champ Numéro : Récupère le state de l'Étape 1 MAIS reste modifiable ! */}
               <div className="space-y-1.5">
@@ -1862,32 +2222,65 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                   />
                 </div>
                 <p className="text-xs sm:text-sm text-slate-700 font-semibold pl-1">
-                  Le compte qui sera débité de {formatCFA(finalTotal)}.
+                  Le compte qui effectue le règlement de {formatCFA(finalTotal)}.
                 </p>
               </div>
 
-              {/* Champ "Code OTP" affiché STRICTEMENT si l'opérateur en a besoin (Orange Money) */}
-              {selectedOperator.needsOtp && (
+              {/* BURKINA FASO : Champ "Coller SMS de paiement ou ID" à la place de l'OTP */}
+              {isBurkinaFaso ? (
                 <div className="space-y-1.5 animate-in fade-in">
                   <div className="flex items-center justify-between">
                     <label className="text-sm sm:text-base font-black text-slate-950 block">
-                      Code OTP <span className="text-rose-600">*</span>
+                      Coller le SMS de paiement ou l'ID <span className="text-rose-600">*</span>
                     </label>
-                    <span className="text-xs text-amber-700 font-black">
-                      Généré par {selectedOperator.name}
+                    <span className="text-xs text-emerald-700 font-black flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Écoute Realtime active
                     </span>
                   </div>
                   <input
                     type="text"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Code OTP à 4 ou 6 chiffres"
-                    className="w-full px-4 py-3.5 rounded-2xl bg-white border-2 border-blue-200 text-base sm:text-lg font-mono font-black tracking-widest text-center text-slate-950 transition duration-200 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/20 focus:outline-none placeholder:text-slate-400 placeholder:font-normal"
+                    value={bfSmsInput}
+                    onChange={(e) => handleBfSmsInputChange(e.target.value)}
+                    placeholder="Collez le SMS reçu ou l'ID (ex: PP261124...)"
+                    className="w-full px-4 py-3.5 rounded-2xl bg-white border-2 border-blue-200 text-sm sm:text-base font-mono font-bold text-slate-950 transition duration-200 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/20 focus:outline-none placeholder:text-slate-400 placeholder:font-normal"
                   />
+                  {bfExtractedTxId && (
+                    <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
+                      <span>ID extrait : <code className="font-mono font-black">{bfExtractedTxId}</code></span>
+                      {bfSmsStatus === 'CHECKING' && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />}
+                      {bfSmsStatus === 'WAITING_REALTIME' && <span className="text-[11px] text-amber-700">En attente SMS...</span>}
+                      {bfSmsStatus === 'MATCHED' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                  )}
                   <p className="text-xs sm:text-sm text-slate-700 font-semibold pl-1">
-                    Saisissez le code secret généré par l'opérateur pour autoriser la transaction.
+                    {bfSmsNotice || "Dès que vous collez le SMS ou l'ID, la validation est automatique sans autre manipulation."}
                   </p>
                 </div>
+              ) : (
+                /* HORS BURKINA : Champ "Code OTP" affiché STRICTEMENT si l'opérateur en a besoin */
+                selectedOperator.needsOtp && (
+                  <div className="space-y-1.5 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm sm:text-base font-black text-slate-950 block">
+                        Code OTP <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="text-xs text-amber-700 font-black">
+                        Généré par {selectedOperator.name}
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      placeholder="Code OTP à 4 ou 6 chiffres"
+                      className="w-full px-4 py-3.5 rounded-2xl bg-white border-2 border-blue-200 text-base sm:text-lg font-mono font-black tracking-widest text-center text-slate-950 transition duration-200 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/20 focus:outline-none placeholder:text-slate-400 placeholder:font-normal"
+                    />
+                    <p className="text-xs sm:text-sm text-slate-700 font-semibold pl-1">
+                      Saisissez le code secret généré par l'opérateur pour autoriser la transaction.
+                    </p>
+                  </div>
+                )
               )}
 
             </div>
@@ -1933,6 +2326,28 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               <ShieldCheck className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
               <span>Paiement 100% Sécurisé • Traitement direct instantané • Confirmation immédiate par SMS / WhatsApp.</span>
             </p>
+
+            {/* Indicateur visible d'écoute temps réel en bas du checkout (Burkina Faso) */}
+            {isBurkinaFaso && (
+              <div className="px-4 py-3 rounded-2xl border border-orange-300 bg-orange-50/80 text-orange-900 text-center flex flex-wrap items-center justify-center gap-2.5 animate-in fade-in duration-200">
+                <Loader2 className="w-4 h-4 text-orange-500 animate-spin shrink-0" />
+                <span className="text-xs sm:text-sm font-bold">
+                  {bfExtractedTxId
+                    ? `En attente de validation par le système (ID : ${bfExtractedTxId}).`
+                    : 'En attente de validation par le système.'}
+                </span>
+                {bfSmsStatus === 'WAITING_REALTIME' && bfExtractedTxId && (
+                  <button
+                    type="button"
+                    onClick={() => verifyBfSmsAgainstSupabase(bfExtractedTxId, bfSmsInput)}
+                    className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-black inline-flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Vérifier</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Bouton de secours si le paiement est en cours de traitement */}
             {isProcessingPayment && (

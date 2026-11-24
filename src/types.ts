@@ -2001,12 +2001,15 @@ export interface ThemeCustomizationConfig {
     };
   };
 
-  // 1. Identité, Contact & Barre d'Annonce
+  // Identité, Contact & Barre d'Annonce
   storeName?: string;
   storeTagline?: string;
   logoUrl?: string;
   whatsappNumber?: string;
   supportPhone?: string;
+  orangeMerchantCode?: string;
+  wavePaymentLink?: string;
+  merchantCountry?: string;
   announcementBarEnabled?: boolean;
   announcementBarText?: string; // ex: "🔥 Livraison Express & Paiement Mobile Money à la livraison !"
   primaryAccentColor?: string;
@@ -2145,6 +2148,9 @@ export interface ThemeSiteSettings {
   customDomain?: string;
   linkedinUrl?: string;
   twitterUrl?: string;
+  orangeMerchantCode?: string;
+  wavePaymentLink?: string;
+  merchantCountry?: string;
 
   // Mentions Légales & Politiques
   companyLegalName?: string;

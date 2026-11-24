@@ -129,6 +129,9 @@ export const ThemeSiteSettingsModal: React.FC<ThemeSiteSettingsModalProps> = ({
       privacyPolicyText: s.privacyPolicyText || '',
       shippingReturnPolicyText: s.shippingReturnPolicyText || '',
       cookieBannerEnabled: Boolean(s.cookieBannerEnabled),
+      orangeMerchantCode: s.orangeMerchantCode || config.orangeMerchantCode || '',
+      wavePaymentLink: s.wavePaymentLink || config.wavePaymentLink || '',
+      merchantCountry: s.merchantCountry || config.merchantCountry || 'BF',
     });
   }, [isOpen, config, storeName]);
 
@@ -153,6 +156,9 @@ export const ThemeSiteSettingsModal: React.FC<ThemeSiteSettingsModalProps> = ({
       metaPixelId: metaPixelId.trim(),
       tiktokPixelId: tiktokPixelId.trim(),
       googleTagId: googleTagId.trim(),
+      orangeMerchantCode: site.orangeMerchantCode?.trim() || '',
+      wavePaymentLink: site.wavePaymentLink?.trim() || '',
+      merchantCountry: site.merchantCountry || 'BF',
       socialLinks: {
         ...(config.socialLinks || {}),
         ...socialLinks,
@@ -164,6 +170,9 @@ export const ThemeSiteSettingsModal: React.FC<ThemeSiteSettingsModalProps> = ({
         seoKeywords: site.seoKeywords?.trim(),
         contactEmail: site.contactEmail?.trim(),
         customDomain: site.customDomain?.trim(),
+        orangeMerchantCode: site.orangeMerchantCode?.trim() || '',
+        wavePaymentLink: site.wavePaymentLink?.trim() || '',
+        merchantCountry: site.merchantCountry || 'BF',
       },
     };
     onSave(updated);
@@ -345,6 +354,66 @@ export const ThemeSiteSettingsModal: React.FC<ThemeSiteSettingsModalProps> = ({
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:border-blue-500 focus:outline-none"
                     />
                   </div>
+                </div>
+
+                {/* Encaissement Direct Produits Physiques — Burkina Faso (Orange Money & Wave) */}
+                <div className="p-4 rounded-2xl bg-orange-950/20 border-2 border-orange-500/40 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-orange-300 uppercase tracking-wider flex items-center gap-2">
+                        <span>🇧🇫 Paiement Marchand Burkina Faso (Produits Physiques)</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-300 mt-1">
+                        Obligatoire si vous vendez des produits physiques au Burkina Faso : le checkout générera automatiquement <code className="text-orange-300 font-mono">*144*10*VOTRE_CODE*MONTANT#</code> sur votre propre numéro marchand.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-200 mb-1.5">Pays du Marchand</label>
+                      <select
+                        value={site.merchantCountry || 'BF'}
+                        onChange={(e) => updateSite('merchantCountry', e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:border-orange-500 focus:outline-none"
+                      >
+                        <option value="BF">🇧🇫 Burkina Faso</option>
+                        <option value="CI">🇨🇮 Côte d'Ivoire</option>
+                        <option value="SN">🇸🇳 Sénégal</option>
+                        <option value="ML">🇲🇱 Mali</option>
+                        <option value="BJ">🇧🇯 Bénin</option>
+                        <option value="TG">🇹🇬 Togo</option>
+                        <option value="OTHER">🌍 Autre pays</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-orange-300 mb-1.5">
+                        Numéro Marchand Orange Money BF *
+                      </label>
+                      <input
+                        type="text"
+                        value={site.orangeMerchantCode || ''}
+                        onChange={(e) => updateSite('orangeMerchantCode', e.target.value)}
+                        placeholder="Ex: 65565805"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-orange-500/50 text-sm text-white font-mono focus:border-orange-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-sky-300 mb-1.5">
+                        Lien ou Numéro Wave Burkina *
+                      </label>
+                      <input
+                        type="text"
+                        value={site.wavePaymentLink || ''}
+                        onChange={(e) => updateSite('wavePaymentLink', e.target.value)}
+                        placeholder="https://pay.wave.com/m/... ou +226..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-sky-500/50 text-sm text-white font-mono focus:border-sky-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1.5">Horaires d'ouverture</label>
                     <input

@@ -103,6 +103,9 @@ export interface StoreConfig {
   category?: string;
   searchTags?: string[];
   quarter?: string;
+  orangeMerchantCode?: string;
+  wavePaymentLink?: string;
+  merchantCountry?: string;
 }
 
 export const DEFAULT_LAYOUT_BLOCKS: StoreBlock[] = [

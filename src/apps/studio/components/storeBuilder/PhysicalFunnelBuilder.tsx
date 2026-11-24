@@ -1328,6 +1328,37 @@ export const PhysicalFunnelBuilder: React.FC<{
                     );
                   })}
                 </div>
+
+                {/* Numéros Marchands Burkina Faso (Produits Physiques) */}
+                <div className="pt-2 border-t border-slate-800 space-y-2.5">
+                  <div className="text-[10.5px] font-black text-orange-300 uppercase tracking-wider">
+                    🇧🇫 Numéros Marchands Burkina (Obligatoire si vous vendez au BF)
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">
+                      Code / Numéro Marchand Orange Money BF (*144*10*CODE*MONTANT#) :
+                    </label>
+                    <input
+                      type="text"
+                      value={funnelConfig.orangeMerchantCode || ''}
+                      onChange={(e) => setFunnelConfig(prev => ({ ...prev, orangeMerchantCode: e.target.value }))}
+                      placeholder="Ex: 65565805"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-orange-500/40 text-xs text-white font-mono focus:border-orange-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">
+                      Lien ou Numéro Wave Burkina :
+                    </label>
+                    <input
+                      type="text"
+                      value={funnelConfig.wavePaymentLink || ''}
+                      onChange={(e) => setFunnelConfig(prev => ({ ...prev, wavePaymentLink: e.target.value }))}
+                      placeholder="https://pay.wave.com/m/... ou +226..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-sky-500/40 text-xs text-white font-mono focus:border-sky-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* 8. Référencement & OpenGraph */}

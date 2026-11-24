@@ -15,7 +15,7 @@ import {
 } from '../../utils/firestoreService';
 import { getSuperAdminPlatformConfig, isSuperAdminLocally } from '../../services/superAdminService';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
-import { SPaymentGateway, PaymentSuccessDetails } from '../../services/nana-switch/payment/SPaymentGateway';
+import { UltimateCheckout, PaymentSuccessDetails } from '../../services/nana-switch/payment/UltimateCheckout';
 import { PricingComparisonMatrix } from './pricing/PricingComparisonMatrix';
 import { calculateModularPrice, MODULAR_PILLARS } from '../../utils/planFeatures';
 import {
@@ -1042,16 +1042,26 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
               </div>
             </div>
 
-            {/* Passerelle de paiement 100% automatique S */}
+            {/* Passerelle de paiement 100% automatique UltimateCheckout */}
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-1 sm:p-3 overflow-hidden">
-              <SPaymentGateway
+              <UltimateCheckout
                 isModal={false}
-                productType="subscription"
+                enablePhysicalPosToken={false}
+                merchantId="nanasore_platform"
+                storeName="NaNaSwitch Cloud"
+                product={{
+                  id: currentPlan.id,
+                  name: currentPlan.name,
+                  price: montantTotal,
+                  description: `Abonnement SaaS Nanasore - ${currentPlan.name}`
+                }}
                 amount={montantTotal}
                 currency="FCFA"
                 orderDescription={`Abonnement SaaS Nanasore - ${currentPlan.name}`}
                 orderId={`SUB-${effectiveStoreId}-${Date.now().toString(36).toUpperCase()}`}
                 defaultPhone={safeUser.phone || ''}
+                defaultCustomerName={safeUser.name || ''}
+                defaultEmail={safeUser.email || ''}
                 onSuccess={handleGatewaySuccess}
                 onCancel={() => {
                   playTapBeep();
