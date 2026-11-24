@@ -511,15 +511,14 @@ app.post(
       // Détection automatique si notification SasPay arrivant sur l'endpoint unifié
       const isSaspayEvent = Boolean(req.headers['x-webhook-event'] || req.headers['X-Webhook-Event'] || req.headers['x-webhook-timestamp']);
       if (isSaspayEvent) {
-        const sasSig = req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature'];
-        const sasTs = req.headers['x-webhook-timestamp'] || req.headers['X-Webhook-Timestamp'];
-        const sasSecret = process.env.SASPAY_WEBHOOK_SECRET || process.env.SASPAY_API_KEY;
-        const sigCheck = verifySaspayWebhookSignature({
-          rawBody: rawBuffer,
-          signature: sasSig,
-          timestamp: sasTs,
-          secret: sasSecret
-        });
+        const sasSig = req.headers['x-saspay-signature'] || req.headers['X-Saspay-Signature'] || req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature'];
+        const sasTs = req.headers['x-webhook-timestamp'] || req.headers['X-Webhook-Timestamp'] || req.headers['x-saspay-timestamp'];
+        const candidateSecrets = [process.env.SASPAY_WEBHOOK_SECRET, process.env.SASPAY_API_KEY, process.env.PAYMENT_WEBHOOK_SECRET].filter(Boolean);
+        let sigCheck = { valid: false, reason: 'missing_secret' };
+        for (const secret of candidateSecrets) {
+          sigCheck = verifySaspayWebhookSignature({ rawBody: rawBuffer, signature: sasSig, timestamp: sasTs, secret });
+          if (sigCheck.valid) break;
+        }
         if (!sigCheck.valid) {
           console.warn(`[SECURITY REJECT] Webhook SasPay sur /api/payment/webhook invalide : ${sigCheck.reason}`);
           return res.status(401).json({ error: `Signature SasPay invalide (${sigCheck.reason})` });
@@ -1795,19 +1794,23 @@ app.post(
         ? req.body
         : Buffer.from(req.rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {})), 'utf8');
 
-      // Vérification cryptographique stricte avec SASPAY_WEBHOOK_SECRET
-      const sasSecret = process.env.SASPAY_WEBHOOK_SECRET || process.env.SASPAY_API_KEY;
-      if (!sasSecret) {
+      // Vérification cryptographique stricte avec SASPAY_WEBHOOK_SECRET / SASPAY_API_KEY
+      const candidateSasSecrets = [process.env.SASPAY_WEBHOOK_SECRET, process.env.SASPAY_API_KEY, process.env.PAYMENT_WEBHOOK_SECRET].filter(Boolean);
+      if (candidateSasSecrets.length === 0) {
         console.error('[SASPAY WEBHOOK REJECT] Variable SASPAY_WEBHOOK_SECRET non configurée sur le serveur.');
         return res.status(500).json({ error: 'Configuration serveur incomplète (SASPAY_WEBHOOK_SECRET manquant).' });
       }
 
-      const sigCheck = verifySaspayWebhookSignature({
-        rawBody: rawBuffer,
-        signature,
-        timestamp,
-        secret: sasSecret
-      });
+      let sigCheck = { valid: false, reason: 'missing_secret' };
+      for (const sasSecret of candidateSasSecrets) {
+        sigCheck = verifySaspayWebhookSignature({
+          rawBody: rawBuffer,
+          signature,
+          timestamp,
+          secret: sasSecret
+        });
+        if (sigCheck.valid) break;
+      }
 
       if (!sigCheck.valid) {
         console.error(`[SASPAY WEBHOOK REJECT] Échec vérification cryptographique HMAC : ${sigCheck.reason}`);

@@ -241,6 +241,18 @@ class NaNaSwitchManager {
       return false;
     }
 
+    // 3b. Indisponibilité explicite d'un fournisseur côté agrégateur (ex: SasPay 422 "Aucun fournisseur disponible")
+    const providerUnavailableKeywords = [
+      'aucun fournisseur disponible',
+      'no provider available',
+      'provider unavailable',
+      'fournisseur indisponible',
+      'channel unavailable'
+    ];
+    if (providerUnavailableKeywords.some(kw => errorStr.includes(kw))) {
+      return true;
+    }
+
     // 4. Statuts HTTP d'infrastructure passerelle
     const status = Number(err.status || err.statusCode || err.response?.status || 0);
     if ([401, 403, 429, 502, 503, 504].includes(status)) {

@@ -9520,15 +9520,17 @@ async function startServer() {
 
       console.log(`[SUCCESS] Webhook signé HMAC validé (Tx: ${txId}, Order: ${candidateOrderId}, Montant: ${amount})`);
 
-      // Relais asynchrone best-effort au micro-service Northflank (s'il est distinct et en ligne) pour synchroniser le split
+      // Relais asynchrone best-effort au micro-service interne (port 10001) pour synchroniser le split
       const targetBase = PAYMENT_API_BASE_URL.replace(/\/+$/, '');
       const currentHost = (req.get('host') || '').toLowerCase();
       if (targetBase && (!currentHost || !targetBase.toLowerCase().includes(currentHost))) {
-        fetch(`${targetBase}/api/payment/webhook`, {
+        fetch(`${targetBase}${req.originalUrl || '/api/payment/webhook'}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-webhook-signature': String(providedSignature),
+            ...(req.headers['x-sebpay-signature'] ? { 'x-sebpay-signature': String(req.headers['x-sebpay-signature']) } : {}),
+            ...(req.headers['x-saspay-signature'] ? { 'x-saspay-signature': String(req.headers['x-saspay-signature']) } : {}),
             ...(webhookTimestamp ? { 'x-webhook-timestamp': webhookTimestamp } : {}),
             ...(req.headers['x-webhook-event'] ? { 'x-webhook-event': String(req.headers['x-webhook-event']) } : {}),
           },
