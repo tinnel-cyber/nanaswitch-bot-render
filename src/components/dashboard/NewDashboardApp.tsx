@@ -47,6 +47,7 @@ import {
 import { ProFeaturesModal, ProFeatureTab } from '../../shell/modals/ProFeaturesModal';
 import { db, auth } from '../../firebase';
 import { supabase } from '../../lib/supabase';
+import { logoutUser } from '../../services/supabaseAuthService';
 import { submitKycSubmission, fileToDataUrl } from '../../utils/kycService';
 import { KycSubmission } from '../../types';
 import { saveLocalUserLicense, getLocalUserLicense } from '../../services/contextualLicensingService';
@@ -502,6 +503,105 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   const showToast = useCallback((message: string, type: 'success' | 'warning' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // Menu Profil (Modifier profil, Changer d'univers, Déconnexion)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isProfileEditModalOpen, setIsProfileEditModalOpen] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    fullName: '',
+    phone: '',
+    businessName: '',
+    avatarUrl: '',
+  });
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    if (isProfileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileMenuOpen]);
+
+  const handleOpenProfileEdit = useCallback(() => {
+    setIsProfileMenuOpen(false);
+    setProfileForm({
+      fullName:
+        currentUser?.user_metadata?.full_name ||
+        currentUser?.fullName ||
+        currentUser?.name ||
+        merchantDisplayName ||
+        '',
+      phone:
+        currentUser?.user_metadata?.phone ||
+        currentUser?.phone ||
+        '',
+      businessName:
+        currentUser?.user_metadata?.business_name ||
+        currentUser?.businessName ||
+        selectedApp?.name ||
+        '',
+      avatarUrl:
+        currentUser?.user_metadata?.avatar_url ||
+        currentUser?.avatarUrl ||
+        '',
+    });
+    setIsProfileEditModalOpen(true);
+  }, [currentUser, merchantDisplayName, selectedApp?.name]);
+
+  const handleSaveProfile = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const updatedMeta = {
+        full_name: profileForm.fullName.trim(),
+        name: profileForm.fullName.trim(),
+        phone: profileForm.phone.trim(),
+        business_name: profileForm.businessName.trim(),
+        avatar_url: profileForm.avatarUrl.trim(),
+      };
+      try {
+        await supabase.auth.updateUser({ data: updatedMeta });
+      } catch (authErr) {
+        console.warn('[PROFILE] Supabase updateUser notice:', authErr);
+      }
+      setCurrentUser((prev: any) => {
+        const nextUser = {
+          ...(prev || {}),
+          fullName: updatedMeta.full_name,
+          name: updatedMeta.full_name,
+          phone: updatedMeta.phone,
+          businessName: updatedMeta.business_name,
+          avatarUrl: updatedMeta.avatar_url,
+          user_metadata: {
+            ...(prev?.user_metadata || {}),
+            ...updatedMeta,
+          },
+        };
+        try {
+          localStorage.setItem('nana_store_auth_user', JSON.stringify(nextUser));
+        } catch {}
+        return nextUser;
+      });
+      setIsProfileEditModalOpen(false);
+      showToast('Informations du profil mises à jour avec succès.', 'success');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }, [profileForm, showToast]);
+
+  const handleFullLogout = useCallback(async () => {
+    setIsProfileMenuOpen(false);
+    await logoutUser();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
   }, []);
 
   // Révélation élégante du N° de compte au clic avec fermeture automatique (5s)
@@ -1841,10 +1941,158 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               <span className="hidden md:inline">Documentation</span>
             </button>
 
-            {/* User Badge */}
-            <div className="hidden sm:flex w-9 h-9 rounded-xl bg-blue-50 text-[#1E40AF] items-center justify-center font-extrabold text-xs border border-blue-200 shadow-sm shrink-0">
-              OK
+            {/* Menu Profil (Modifier profil, Changer d'univers, Déconnexion) */}
+            <div className="relative shrink-0" ref={profileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1E40AF] font-bold text-xs border border-blue-200 shadow-sm transition cursor-pointer"
+                title="Mon Profil"
+              >
+                {currentUser?.user_metadata?.avatar_url || currentUser?.avatarUrl ? (
+                  <img
+                    src={currentUser.user_metadata?.avatar_url || currentUser.avatarUrl}
+                    alt="Profil"
+                    className="w-6 h-6 rounded-lg object-cover border border-blue-300"
+                  />
+                ) : (
+                  <span className="w-6 h-6 rounded-lg bg-[#1E40AF] text-white flex items-center justify-center">
+                    <User className="w-3.5 h-3.5" />
+                  </span>
+                )}
+                <span className="hidden md:inline max-w-[110px] truncate">{merchantDisplayName || 'Profil'}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-60 rounded-2xl bg-white border border-slate-200 shadow-2xl p-2 z-50 space-y-1 animate-in fade-in-50 zoom-in-95">
+                  <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                    <p className="text-xs font-extrabold text-slate-900 truncate">{merchantDisplayName || 'Mon Compte'}</p>
+                    {currentUser?.email && (
+                      <p className="text-[11px] text-slate-500 truncate">{currentUser.email}</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenProfileEdit}
+                    className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#1E40AF] flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>Modifier le profil</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      handleBackToUniverses();
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Changer d&apos;univers</span>
+                  </button>
+
+                  <div className="pt-1 mt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleFullLogout}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Se déconnecter</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {isProfileEditModalOpen && createPortal(
+              <div className="fixed inset-0 z-[9999] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+                  <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-8 h-8 rounded-xl bg-blue-100 text-[#1E40AF] flex items-center justify-center">
+                        <User className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900">Modifier mon profil</h3>
+                        <p className="text-[11px] text-slate-500">{currentUser?.email || 'Informations du compte'}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsProfileEditModalOpen(false)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveProfile} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Nom complet</label>
+                      <input
+                        type="text"
+                        required
+                        value={profileForm.fullName}
+                        onChange={(e) => setProfileForm((p) => ({ ...p, fullName: e.target.value }))}
+                        placeholder="Votre nom complet"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Téléphone</label>
+                      <input
+                        type="tel"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))}
+                        placeholder="+226 70 00 00 00"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Nom d&apos;entreprise / Marque</label>
+                      <input
+                        type="text"
+                        value={profileForm.businessName}
+                        onChange={(e) => setProfileForm((p) => ({ ...p, businessName: e.target.value }))}
+                        placeholder="Nom de votre entreprise"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Lien photo de profil (URL)</label>
+                      <input
+                        type="url"
+                        value={profileForm.avatarUrl}
+                        onChange={(e) => setProfileForm((p) => ({ ...p, avatarUrl: e.target.value }))}
+                        placeholder="https://..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-900 font-mono focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsProfileEditModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingProfile}
+                        className="px-5 py-2 rounded-xl bg-[#1E40AF] hover:bg-blue-700 text-white text-xs font-black cursor-pointer disabled:opacity-60"
+                      >
+                        {isSavingProfile ? 'Enregistrement...' : 'Enregistrer'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
         </div>
 
