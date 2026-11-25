@@ -915,25 +915,6 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
                     {isCashierMode && <Lock className="w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0 ml-auto" />}
                   </button>
                 )}
-
-                {onOpenSettings && (
-                  <button
-                    id="dropdown-item-settings"
-                    type="button"
-                    onClick={() => {
-                      setIsToolsDropdownOpen(false);
-                      handleGuardedNav(onOpenSettings, 'Paramètres & Modules', 'Paramètres');
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer font-semibold border-t border-slate-800 mt-1 pt-1.5"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="text-xs flex items-center gap-1.5">
-                      <span>Paramètres & Modules</span>
-                      {isFreeAccount && <ProCrownIcon size="xs" />}
-                    </span>
-                    {isCashierMode && <Lock className="w-3 h-3 text-amber-400 shrink-0 ml-auto" />}
-                  </button>
-                )}
               </div>
             )}
           </div>

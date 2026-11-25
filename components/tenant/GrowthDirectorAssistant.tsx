@@ -469,22 +469,9 @@ export function GrowthDirectorAssistant({
                         </div>
                       )}
                     </div>
-                    {(msg.timestamp || (!isUser && msg.internalThought)) && (
+                    {msg.timestamp && (
                       <div className={`flex items-center gap-2 px-1 flex-wrap ${isUser ? 'justify-end' : 'justify-start'}`}>
-                        {msg.timestamp && (
-                          <span className="text-[9.5px] text-slate-400">{msg.timestamp}</span>
-                        )}
-                        {!isUser && msg.internalThought && (
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-                              msg.internalThought.includes('gemini-') && !msg.internalThought.includes('fallback')
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
-                          >
-                            {msg.internalThought}
-                          </span>
-                        )}
+                        <span className="text-[9.5px] text-slate-400">{msg.timestamp}</span>
                       </div>
                     )}
                   </div>

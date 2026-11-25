@@ -7,7 +7,7 @@ import {
 } from '../../types';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 import {
-  Sparkles,
+  Cpu,
   AlertTriangle,
   TrendingUp,
   ArrowLeft,
@@ -93,19 +93,36 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
   const [isWaitingAnswer, setIsWaitingAnswer] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // Computed live metrics
+  // Computed live metrics (100% données réelles)
   const totalDebt = customers.reduce((sum, c) => sum + (c.totalDebt || 0), 0);
-  const overdueCustomers = customers.filter((c) => c.status === 'OVERDUE' || c.totalDebt > 15000);
+  const overdueCustomers = customers.filter((c) => c.status === 'OVERDUE' || (c.totalDebt || 0) > 15000);
   const overdueCustomersCount = overdueCustomers.length;
-  const criticalStockProducts = inventory.filter((p) => p.stock < 5);
+  const criticalStockProducts = [...inventory]
+    .filter((p) => (p.stock ?? 0) < 5)
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
+  const primaryLowStockProduct = criticalStockProducts[0] || null;
   const todaySalesTotal = sales.reduce((sum, s) => sum + (s.total || 0), 0);
   const topProductsSummary = inventory.slice(0, 8).map((p) => ({
     name: p.name,
     price: p.price || 0,
     stock: p.stock ?? 0,
   }));
-  const sucreProduct = inventory.find((p) => p.id === 'sucre');
-  const mamadouCustomer = customers.find((c) => c.shortName?.toLowerCase().includes('mamadou') || c.id === 'cust-mamadou');
+  const topDebtCustomer = [...customers]
+    .filter((c) => (c.totalDebt || 0) > 0)
+    .sort((a, b) => (b.totalDebt || 0) - (a.totalDebt || 0))[0] || null;
+
+  const topProfitableProducts = [...inventory]
+    .map((p) => {
+      const unitCost = Number((p as any).costPrice || (p as any).purchasePrice || 0);
+      const unitPrice = Number(p.price || 0);
+      const unitMargin = Math.max(0, unitPrice - unitCost);
+      const marginPct = unitPrice > 0 ? Math.round((unitMargin / unitPrice) * 100) : 0;
+      return { ...p, unitCost, unitPrice, unitMargin, marginPct };
+    })
+    .sort((a, b) => b.unitMargin - a.unitMargin)
+    .slice(0, 3);
+
+  const totalCatalogValue = inventory.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
 
   // Scroll chat to bottom on new message
   useEffect(() => {
@@ -154,7 +171,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
             summary: auditPayload.summary,
             concreteActions: Array.isArray(auditPayload.concreteActions) ? auditPayload.concreteActions : undefined,
             reinvestmentSuggestion: auditPayload.reinvestmentSuggestion,
-            source: json?.source || 'gemini-2.5-flash',
+            source: 'Nanasore IA Pro',
           });
         }
       }
@@ -460,195 +477,167 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
               </span>
             </div>
 
-            {/* CARTE 1 : ALERTE RUPTURE (SUCRE & CRITIQUES) */}
-            <div
-              id="card-alert-rupture-sucre"
-              className="rounded-xl bg-gradient-to-br from-red-950/40 via-slate-900 to-amber-950/30 border-2 border-red-500/50 p-3.5 shadow-lg relative overflow-hidden"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-red-600/30 border border-red-500/50 flex items-center justify-center text-red-300">
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+            {/* CARTE 1 : ALERTE RUPTURE (DONNÉES RÉELLES) */}
+            {primaryLowStockProduct ? (
+              <div
+                id="card-alert-rupture-sucre"
+                className="rounded-xl bg-gradient-to-br from-red-950/40 via-slate-900 to-amber-950/30 border-2 border-red-500/50 p-3.5 shadow-lg relative overflow-hidden"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-red-600/30 border border-red-500/50 flex items-center justify-center text-red-300">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div>
                       <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-red-500/30 text-red-300 border border-red-500/40">
-                        Alerte Rupture Imminente (J+2)
+                        Stock Critique
                       </span>
+                      <h3 className="text-sm font-extrabold text-white mt-0.5">
+                        {primaryLowStockProduct.name} bientôt en rupture
+                      </h3>
                     </div>
-                    <h3 className="text-sm font-extrabold text-white mt-0.5">
-                      Rupture imminente sur les produits de base
-                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-red-400">Stock restant</span>
+                    <div className="text-lg font-black text-amber-300">{primaryLowStockProduct.stock ?? 0} unité(s)</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-red-400">Sucre en stock</span>
-                  <div className="text-lg font-black text-amber-300">{sucreProduct?.stock ?? 50} pqt</div>
-                </div>
-              </div>
 
-              {/* Message spécifique demandé par l'utilisateur */}
-              <div className="bg-red-950/60 border border-red-800/60 rounded-lg p-2.5 mb-3 text-red-100 text-xs font-semibold leading-relaxed flex items-start gap-2">
-                <span className="text-base">⚠️</span>
-                <div>
-                  <span className="font-extrabold text-red-300 text-xs block mb-0.5">
-                    Notification IA :
-                  </span>
-                  « Attention, vous allez manquer de Sucre dans 2 jours selon vos ventes récentes et autres. »
-                </div>
-              </div>
-
-              {/* Diagnostic précis */}
-              <p className="text-xs text-slate-300 mb-3 leading-relaxed">
-                Votre rythme de vente moyen est de <strong>18 paquets de sucre par jour</strong>. Avec un stock actuel de {sucreProduct?.stock ?? 50} paquets, la rupture interviendra dès ce week-end lors du pic du matin.
-              </p>
-
-              {/* Autres articles en rupture critique (< 5 unités) */}
-              {criticalStockProducts.length > 0 && (
-                <div className="mb-3 pt-2 border-t border-slate-800/80">
-                  <div className="text-[11px] font-bold text-slate-300 mb-1.5 flex items-center gap-1">
-                    <Boxes className="w-3.5 h-3.5 text-amber-400" />
-                    Autres articles sous le seuil critique (moins de 5 unités) :
+                {criticalStockProducts.length > 1 && (
+                  <div className="mb-3 pt-2 border-t border-slate-800/80">
+                    <div className="text-[11px] font-bold text-slate-300 mb-1.5 flex items-center gap-1">
+                      <Boxes className="w-3.5 h-3.5 text-amber-400" />
+                      Articles sous le seuil critique (moins de 5 unités) :
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      {criticalStockProducts.slice(0, 6).map((p) => (
+                        <div
+                          key={p.id}
+                          className="bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 flex items-center justify-between text-xs"
+                        >
+                          <span className="font-semibold text-slate-200 truncate">{p.name}</span>
+                          <span className="font-extrabold text-red-400 px-1.5 py-0.5 rounded bg-red-950/80 text-[10px]">
+                            {p.stock} restant{p.stock > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                    {criticalStockProducts.map((p) => (
-                      <div
-                        key={p.id}
-                        className="bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1.5 flex items-center justify-between text-xs"
-                      >
-                        <span className="font-semibold text-slate-200 truncate">{p.name}</span>
-                        <span className="font-extrabold text-red-400 px-1.5 py-0.5 rounded bg-red-950/80 text-[10px]">
-                          {p.stock} restant{p.stock > 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Actions directes en 1 clic */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  id="btn-restock-sucre-direct"
-                  type="button"
-                  onClick={handleRestockSucre}
-                  className="flex-1 min-w-[140px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-900/40 cursor-pointer"
-                >
-                  <Boxes className="w-4 h-4" />
-                  <span>Arrivage Rapide Sucre (+24)</span>
-                </button>
-
-                {onOpenInventory && (
-                  <button
-                    id="btn-view-all-stock"
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      onOpenInventory('sucre');
-                    }}
-                    className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center gap-1 transition-all cursor-pointer"
-                  >
-                    <span>Gérer tout le Stock</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
                 )}
-              </div>
-            </div>
 
-            {/* CARTE 2 : ALERTE IMPAYÉS (MAMADOU ET DÉPASSEMENTS) */}
-            <div
-              id="card-alert-impayes-mamadou"
-              className="rounded-xl bg-gradient-to-br from-rose-950/40 via-slate-900 to-red-950/20 border-2 border-rose-500/50 p-3.5 shadow-lg relative overflow-hidden"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-rose-600/30 border border-rose-500/50 flex items-center justify-center text-rose-300">
-                    <ShieldAlert className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {onQuickRestock && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playValidationBeep();
+                        onQuickRestock(primaryLowStockProduct.id, 10);
+                      }}
+                      className="flex-1 min-w-[140px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Boxes className="w-4 h-4" />
+                      <span>Réapprovisionner {primaryLowStockProduct.name} (+10)</span>
+                    </button>
+                  )}
+                  {onOpenInventory && (
+                    <button
+                      id="btn-view-all-stock"
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        onOpenInventory(primaryLowStockProduct.id);
+                      }}
+                      className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                    >
+                      <span>Gérer tout le Stock</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-slate-900 border border-emerald-500/30 p-4 text-xs text-emerald-300 font-semibold flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Aucun article en rupture critique actuellement ({inventory.length} référence(s) suivie(s)).</span>
+              </div>
+            )}
+
+            {/* CARTE 2 : ALERTE IMPAYÉS RÉELS */}
+            {topDebtCustomer ? (
+              <div
+                id="card-alert-impayes-mamadou"
+                className="rounded-xl bg-gradient-to-br from-rose-950/40 via-slate-900 to-red-950/20 border-2 border-rose-500/50 p-3.5 shadow-lg relative overflow-hidden"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-rose-600/30 border border-rose-500/50 flex items-center justify-center text-rose-300">
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <div>
                       <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-rose-500/30 text-rose-300 border border-rose-500/40">
-                        Alerte Plafond de Crédit Dépassé
+                        Créance Client Active
                       </span>
+                      <h3 className="text-sm font-extrabold text-white mt-0.5">
+                        {topDebtCustomer.fullName || topDebtCustomer.shortName || 'Client'} — Solde à recouvrer
+                      </h3>
                     </div>
-                    <h3 className="text-sm font-extrabold text-white mt-0.5">
-                      Risque de trésorerie sur crédit client
-                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-400">Dette actuelle</span>
+                    <div className="text-base font-black text-rose-400">
+                      {formatCFA(topDebtCustomer.totalDebt || 0)}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-bold text-slate-400">Total impayés</span>
-                  <div className="text-base font-black text-rose-400">
-                    {formatCFA(mamadouCustomer?.totalDebt || 35000)}
+
+                <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 mb-3 text-xs text-slate-300 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total impayés boutique :</span>
+                    <span className="font-bold text-rose-400">{formatCFA(totalDebt)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Clients en dépassement :</span>
+                    <span className="font-semibold text-slate-200">{overdueCustomersCount} client(s)</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Message spécifique demandé par l'utilisateur */}
-              <div className="bg-rose-950/60 border border-rose-800/60 rounded-lg p-2.5 mb-3 text-rose-100 text-xs font-semibold leading-relaxed flex items-start gap-2">
-                <span className="text-base">🔴</span>
-                <div>
-                  <span className="font-extrabold text-rose-300 text-xs block mb-0.5">
-                    Alerte Recouvrement :
-                  </span>
-                  « Mamadou a dépassé son plafond de crédit de 15 000 F CFA. »
+                <div className="flex flex-wrap items-center gap-2">
+                  {onOpenDebtBook && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        onOpenDebtBook(topDebtCustomer.id);
+                      }}
+                      className="flex-1 min-w-[130px] py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Ouvrir le Cahier de Dettes</span>
+                    </button>
+                  )}
+
+                  {topDebtCustomer.phone && (
+                    <a
+                      href={`https://wa.me/${topDebtCustomer.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                        `Bonjour ${topDebtCustomer.shortName || topDebtCustomer.fullName || ''}, votre compte présente un solde de ${formatCFA(topDebtCustomer.totalDebt || 0)}. Merci de passer pour le règlement.`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => playValidationBeep()}
+                      className="py-2 px-3 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition-all border border-emerald-500/40 cursor-pointer"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Relancer par WhatsApp</span>
+                    </a>
+                  )}
                 </div>
               </div>
-
-              {/* Analyse & Chiffres réels */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 mb-3 text-xs text-slate-300 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Dette cumulée actuelle :</span>
-                  <span className="font-bold text-rose-400">{formatCFA(mamadouCustomer?.totalDebt || 35000)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Plafond de sécurité boutique :</span>
-                  <span className="font-semibold text-slate-200">20 000 F CFA</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Dépassement net non autorisé :</span>
-                  <span className="font-extrabold text-red-400">+15 000 F CFA</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Retard de paiement constaté :</span>
-                  <span className="font-bold text-amber-400">14 jours sans règlement</span>
-                </div>
+            ) : (
+              <div className="rounded-xl bg-slate-900 border border-emerald-500/30 p-4 text-xs text-emerald-300 font-semibold flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Aucun impayé client enregistré pour le moment.</span>
               </div>
-
-              {/* Actions directes en 1 clic */}
-              <div className="flex flex-wrap items-center gap-2">
-                {onOpenDebtBook && (
-                  <button
-                    id="btn-open-fiche-mamadou"
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      onOpenDebtBook(mamadouCustomer?.id || 'cust-mamadou');
-                    }}
-                    className="flex-1 min-w-[130px] py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-900/30 cursor-pointer"
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>Fiche Mamadou (Cahier)</span>
-                  </button>
-                )}
-
-                <a
-                  id="btn-whatsapp-relance-mamadou"
-                  href={`https://wa.me/${mamadouCustomer?.phone ? mamadouCustomer.phone.replace(/[^0-9]/g, '') : ''}?text=${encodeURIComponent(
-                    `Bonjour M. Mamadou, sauf erreur de notre part, votre compte à la boutique Nana présente un solde de ${formatCFA(
-                      mamadouCustomer?.totalDebt || 35000
-                    )}. Merci de passer nous voir pour faire un point sur vos règlements. Excellente journée !`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => playValidationBeep()}
-                  className="py-2 px-3 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 transition-all border border-emerald-500/40 cursor-pointer"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>Relancer par WhatsApp</span>
-                </a>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -693,147 +682,65 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                 </span>
               </div>
 
-              {/* 3 Cartes Podium */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
-                {/* 1ER : RIZ 25KG */}
-                <div className="rounded-xl bg-slate-900/90 border border-amber-500/50 p-3 relative overflow-hidden flex flex-col justify-between">
-                  <div className="absolute top-2 right-2 text-2xl font-black text-amber-400/30">#1</div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-sm">🥇</span>
-                      <span className="font-extrabold text-white text-sm">Riz 25kg</span>
+              {/* 3 Cartes Podium (100% Catalogue Réel) */}
+              {topProfitableProducts.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
+                  {topProfitableProducts.map((item, idx) => (
+                    <div
+                      key={item.id || idx}
+                      className="rounded-xl bg-slate-900/90 border border-emerald-500/40 p-3 relative overflow-hidden flex flex-col justify-between"
+                    >
+                      <div className="absolute top-2 right-2 text-2xl font-black text-emerald-400/20">#{idx + 1}</div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
+                          <span className="font-extrabold text-white text-sm truncate pr-6">{item.name}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mb-2">Stock : {item.stock ?? 0} unité(s)</p>
+                      </div>
+                      <div className="space-y-1 pt-2 border-t border-slate-800 text-xs">
+                        {item.unitCost > 0 && (
+                          <div className="flex justify-between text-slate-300">
+                            <span>Prix d'achat :</span>
+                            <span className="font-semibold">{formatCFA(item.unitCost)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-slate-300">
+                          <span>Prix de vente :</span>
+                          <span className="font-semibold">{formatCFA(item.unitPrice)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
+                          <span className="text-emerald-400 font-bold">Marge / Valeur :</span>
+                          <span className="text-sm font-black text-emerald-300">
+                            +{formatCFA(item.unitMargin)} ({item.marginPct}%)
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-400 mb-2">Grand sac familial</p>
-                  </div>
-                  <div className="space-y-1 pt-2 border-t border-slate-800 text-xs">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix d'achat :</span>
-                      <span className="font-semibold">14 500 F</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix de vente :</span>
-                      <span className="font-semibold">17 500 F</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
-                      <span className="text-emerald-400 font-bold">Marge brute :</span>
-                      <span className="text-sm font-black text-emerald-300">+3 000 F CFA</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
-                    💡 <strong>Champion du cash</strong> : Chaque sac vendu injecte 3 000 F nets de marge immédiate.
-                  </div>
+                  ))}
                 </div>
-
-                {/* 2E : LAIT EN BOÎTE */}
-                <div className="rounded-xl bg-slate-900/90 border border-slate-400/40 p-3 relative overflow-hidden flex flex-col justify-between">
-                  <div className="absolute top-2 right-2 text-2xl font-black text-slate-400/20">#2</div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-sm">🥈</span>
-                      <span className="font-extrabold text-white text-sm">Lait (boîte)</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mb-2">Rotation quotidienne</p>
-                  </div>
-                  <div className="space-y-1 pt-2 border-t border-slate-800 text-xs">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix d'achat :</span>
-                      <span className="font-semibold">350 F</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix de vente :</span>
-                      <span className="font-semibold">500 F</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
-                      <span className="text-emerald-400 font-bold">Marge brute :</span>
-                      <span className="text-sm font-black text-emerald-300">+150 F CFA (30%)</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
-                    💡 <strong>Forte rotation</strong> : 1 carton vendu par semaine = 3 600 F CFA de marge nette récurrente.
-                  </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-400 text-center mb-3">
+                  Ajoutez vos produits dans le catalogue pour afficher le classement réel de rentabilité.
                 </div>
-
-                {/* 3E : HUILE 1L */}
-                <div className="rounded-xl bg-slate-900/90 border border-amber-700/40 p-3 relative overflow-hidden flex flex-col justify-between">
-                  <div className="absolute top-2 right-2 text-2xl font-black text-amber-700/20">#3</div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-sm">🥉</span>
-                      <span className="font-extrabold text-white text-sm">Huile 1L</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mb-2">Bouteille ménagère</p>
-                  </div>
-                  <div className="space-y-1 pt-2 border-t border-slate-800 text-xs">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix d'achat :</span>
-                      <span className="font-semibold">900 F</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Prix de vente :</span>
-                      <span className="font-semibold">1 100 F</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-800/80">
-                      <span className="text-emerald-400 font-bold">Marge brute :</span>
-                      <span className="text-sm font-black text-emerald-300">+200 F CFA (18%)</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
-                    💡 <strong>Indispensable</strong> : 24 bouteilles vendues par semaine garantissent 4 800 F de marge.
-                  </div>
-                </div>
-              </div>
+              )}
 
               <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-lg p-2 text-xs text-indigo-200 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                  Ces 3 articles représentent <strong>62% de votre bénéfice brut mensuel</strong>.
-                </span>
-                <span className="text-[10px] bg-indigo-900/60 px-2 py-0.5 rounded text-indigo-300 font-bold">
-                  À protéger absolument
+                  <TrendingUp className="w-4 h-4 text-indigo-400 shrink-0" />
+                  Valeur totale du stock actif : <strong>{formatCFA(totalCatalogValue)}</strong> ({inventory.length} référence(s)).
                 </span>
               </div>
             </div>
 
-            {/* ENCADRÉ SUGGESTION DE RÉINVESTISSEMENT (PAIN + BEURRE DU VENDREDI) */}
-            <div
-              id="box-suggestion-reinvestissement"
-              className="rounded-xl bg-gradient-to-br from-amber-950/30 via-slate-900 to-slate-900 border-2 border-amber-500/40 p-3.5 shadow-xl relative overflow-hidden"
-            >
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400">
-                    <Lightbulb className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-black tracking-wider text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/30">
-                      Suggestion de Réinvestissement IA
-                    </span>
-                    <h3 className="text-sm font-extrabold text-white mt-0.5">
-                      Opportunité de vente croisée (Cross-Selling)
-                    </h3>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-950/60 border border-amber-700/40">
-                  Pic du Vendredi
-                </span>
+            {/* RÉCAPITULATIF RÉEL DES VENTES */}
+            <div className="rounded-xl bg-slate-900 border border-slate-800 p-3.5 text-xs text-slate-300 flex items-center justify-between">
+              <div>
+                <div className="font-extrabold text-white">Activité Caisse & Encaissements</div>
+                <div className="text-slate-400 mt-0.5">{sales.length} vente(s) enregistrée(s)</div>
               </div>
-
-              {/* Message spécifique demandé par l'utilisateur */}
-              <div className="bg-amber-950/50 border border-amber-700/50 rounded-lg p-2.5 mb-3 text-amber-100 text-xs font-semibold leading-relaxed flex items-start gap-2">
-                <span className="text-base">🥐</span>
-                <div>
-                  <span className="font-extrabold text-amber-300 text-xs block mb-0.5">
-                    Conseil Stratégique Nanasore IA :
-                  </span>
-                  « Vos ventes de pain augmentent de 20% le vendredi, pensez à commander plus de beurre. »
-                </div>
-              </div>
-
-              {/* Explication du mécanisme financier */}
-              <div className="text-xs text-slate-300 space-y-2 mb-3">
-                <p>
-                  <strong>Pourquoi cette recommandation ?</strong> Les données de vente de votre caisse montrent que les clients achètent 65 baguettes de pain le vendredi matin (contre 45 en semaine). 8 clients sur 10 qui achètent du pain demandent du <strong>beurre en portion</strong> ou du lait concentré.
-                </p>
+              <div className="text-base font-black text-emerald-400">{formatCFA(todaySalesTotal)}</div>
+            </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                   <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
                     <div className="text-slate-400">Sans beurre en rayon :</div>
@@ -942,11 +849,11 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                 <div className="p-4 rounded-2xl bg-indigo-950/60 border border-indigo-500/40 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-black text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <Cpu className="w-3.5 h-3.5 text-amber-400" />
                       Synthèse Directe de l&apos;Audit IA
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-400/30">
-                      {aiAuditResult.source || 'gemini-2.5-flash'}
+                      Nanasore IA Pro
                     </span>
                   </div>
                   {aiAuditResult.summary && (
@@ -993,7 +900,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                 </span>
               </div>
 
-              {/* ACTION 1 : RECOUVREMENT & SÉCURISATION DU CRÉDIT */}
+              {/* ACTION 1 : RECOUVREMENT RÉEL */}
               <div
                 id="action-concrete-1"
                 className="rounded-xl bg-slate-900 border border-slate-800 p-3.5 hover:border-indigo-500/40 transition-all shadow-md flex flex-col gap-2"
@@ -1006,32 +913,36 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                     <div>
                       <span className="text-[10px] uppercase font-bold text-red-400">Trésorerie & Impayés</span>
                       <h4 className="text-sm font-bold text-white">
-                        Bloquer les crédits au-dessus du plafond et récupérer 35 000 F CFA
+                        {totalDebt > 0
+                          ? `Recouvrer ${formatCFA(totalDebt)} d'impayés (${overdueCustomersCount} client(s) prioritaire(s))`
+                          : 'Trésorerie saine : aucun impayé critique en attente'}
                       </h4>
                     </div>
                   </div>
                   <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                    +35 000 F cash
+                    {formatCFA(totalDebt)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  <strong>Plan d'action :</strong> Mamadou a dépassé son plafond de 15 000 F CFA (total 35 000 F CFA). Exigez un règlement d'au moins 50% en cash aujourd'hui avant tout nouvel achat à crédit. Récupérer cet argent finance directement votre réapprovisionnement sans emprunt.
+                  {topDebtCustomer
+                    ? `Client prioritaire : ${topDebtCustomer.fullName || topDebtCustomer.shortName} (${formatCFA(topDebtCustomer.totalDebt || 0)}). Relancez-le directement pour réinjecter du cash dans votre stock.`
+                    : 'Vos clients sont à jour de leurs règlements. Continuez à privilégier l’encaissement direct.'}
                 </p>
-                <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
-                  {onOpenDebtBook && (
+                {onOpenDebtBook && totalDebt > 0 && (
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
                     <button
                       type="button"
-                      onClick={() => onOpenDebtBook('cust-mamadou')}
+                      onClick={() => onOpenDebtBook(topDebtCustomer?.id)}
                       className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
                     >
                       <span>Voir dans le Cahier de Dettes</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              {/* ACTION 2 : ANTI-RUPTURE SUR LE SUCRE ET ARTICLES CRITIQUES */}
+              {/* ACTION 2 : STOCK CRITIQUE RÉEL */}
               <div
                 id="action-concrete-2"
                 className="rounded-xl bg-slate-900 border border-slate-800 p-3.5 hover:border-indigo-500/40 transition-all shadow-md flex flex-col gap-2"
@@ -1044,30 +955,36 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                     <div>
                       <span className="text-[10px] uppercase font-bold text-amber-400">Gestion de Stock</span>
                       <h4 className="text-sm font-bold text-white">
-                        Réapprovisionner le Sucre et les 3 produits d'urgence avant vendredi soir
+                        {criticalStockProducts.length > 0
+                          ? `Réapprovisionner ${criticalStockProducts.length} article(s) en seuil critique`
+                          : 'Niveaux de stock maîtrisés'}
                       </h4>
                     </div>
                   </div>
-                  <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                    +24 000 F préservés
+                  <span className="text-[11px] font-black text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">
+                    {criticalStockProducts.length} alerte(s)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  <strong>Plan d'action :</strong> Le Sucre sera en rupture dans 48h selon la cadence actuelle. De plus, la Tomate concentrée (3 boîtes restantes), les Sardines (2 restantes) et les Spaghetti (4 restants) sont au niveau critique. Un refus de vente fait partir le client chez le concurrent.
+                  {primaryLowStockProduct
+                    ? `Article le plus bas : ${primaryLowStockProduct.name} (${primaryLowStockProduct.stock ?? 0} restant(s)). Anticipez le réapprovisionnement pour éviter toute vente manquée.`
+                    : `Toutes vos ${inventory.length} référence(s) disposent d'un stock supérieur au seuil critique.`}
                 </p>
-                <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
-                  <button
-                    type="button"
-                    onClick={handleRestockSucre}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Commander Sucre d'urgence</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {onOpenInventory && criticalStockProducts.length > 0 && (
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => onOpenInventory(primaryLowStockProduct?.id)}
+                      className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Ouvrir le Stock</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* ACTION 3 : VENTE ASSOCIÉE PAIN + BEURRE / LAIT */}
+              {/* ACTION 3 : VENTES & RENTABILITÉ RÉELLE */}
               <div
                 id="action-concrete-3"
                 className="rounded-xl bg-slate-900 border border-slate-800 p-3.5 hover:border-indigo-500/40 transition-all shadow-md flex flex-col gap-2"
@@ -1078,18 +995,22 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                       3
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-400">Marge & Vente Croisée</span>
+                      <span className="text-[10px] uppercase font-bold text-emerald-400">Performance Commerciale</span>
                       <h4 className="text-sm font-bold text-white">
-                        Créer le réflexe "Duo Pain + Beurre / Lait" dès le jeudi
+                        {topProfitableProducts[0]
+                          ? `Mettre en avant « ${topProfitableProducts[0].name} » (meilleure marge)`
+                          : 'Développer votre catalogue et vos encaissements'}
                       </h4>
                     </div>
                   </div>
                   <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                    +18 000 F de marge nette
+                    {formatCFA(todaySalesTotal)}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  <strong>Plan d'action :</strong> Vos ventes de pain progressent de +20% le vendredi. En disposant le beurre frais et les sticks de café juste à côté du présentoir à pain, vous augmentez le panier moyen de 150 F à 450 F sans effort de prospection.
+                  {sales.length > 0
+                    ? `${sales.length} vente(s) enregistrée(s) pour un total de ${formatCFA(todaySalesTotal)}. Cliquez sur « Demander un conseil à l'IA » ci-dessus pour générer un audit personnalisé.`
+                    : `Aucune vente enregistrée pour l'instant. Ajoutez vos produits et réalisez vos premiers encaissements pour activer l'audit IA complet.`}
                 </p>
               </div>
             </div>
