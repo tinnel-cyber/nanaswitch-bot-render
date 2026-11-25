@@ -146,6 +146,7 @@ export const ThemeSiteSettingsModal: React.FC<ThemeSiteSettingsModalProps> = ({
     const updated: ThemeCustomizationConfig = {
       ...config,
       brandName: brandName.trim() || config.brandName,
+      storeName: brandName.trim() || config.storeName || config.brandName,
       whatsappNumber: whatsappNumber.trim(),
       footerEmail: site.contactEmail?.trim() || config.footerEmail,
       footerAddress: footerAddress.trim(),

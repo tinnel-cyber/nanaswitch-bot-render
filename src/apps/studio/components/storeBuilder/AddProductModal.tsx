@@ -825,17 +825,6 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const url = window.prompt("Entrez l'URL directe de l'image (ex: https://...) :");
-                        if (url && url.trim()) setPhotoUrl(url.trim());
-                      }}
-                      className="text-[11px] font-bold text-blue-600 hover:text-blue-500 underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>🔗 Ou coller une URL d'image web</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
                         playTapBeep();
                         handlePremiumAction('pro', () => {
                           setAiImagePrompt(name ? `Photo studio 4K professionnelle de ${name}, fond blanc épuré` : 'Photo studio 4K d\'article e-commerce');
@@ -856,6 +845,43 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Champ lien image direct + Liens ImgBB / Postimages + Explication */}
+              <div className="p-3 rounded-xl bg-secondary/70 border border-theme space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold text-body">
+                    🔗 Lien direct de l'image (ImgBB, Postimages, URL)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href="https://imgbb.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/25 transition"
+                    >
+                      ImgBB ↗
+                    </a>
+                    <a
+                      href="https://postimages.org"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-400 text-[10px] font-bold hover:bg-sky-500/25 transition"
+                    >
+                      Postimages ↗
+                    </a>
+                  </div>
+                </div>
+                <input
+                  type="url"
+                  value={photoUrl.startsWith('data:image/') ? '' : photoUrl}
+                  onChange={(e) => setPhotoUrl(e.target.value.trim())}
+                  placeholder="Collez ici le lien direct (ex: https://i.ibb.co/... ou https://i.postimg.cc/...)"
+                  className="w-full px-3 py-2 rounded-lg bg-card border border-theme text-xs text-body font-mono focus:border-emerald-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-muted leading-relaxed">
+                  Astuce : Téléversez votre photo gratuitement sur <strong>ImgBB</strong> ou <strong>Postimages</strong>, copiez le <em>« Lien direct »</em> et collez-le ci-dessus (ou utilisez le bouton d'import depuis votre appareil).
+                </p>
+              </div>
             </div>
 
             {/* Titre & Catégorie */}

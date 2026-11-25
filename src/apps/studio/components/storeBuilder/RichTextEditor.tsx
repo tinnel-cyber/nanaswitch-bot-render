@@ -3,7 +3,8 @@ import {
   Bold, Italic, Underline, Heading2, Heading3, 
   List, ListOrdered, Palette, Highlighter, Tag, 
   Sparkles, Eye, Edit3, Wand2, Check, RotateCcw,
-  AlignLeft, AlignCenter, AlignRight, Image as ImageIcon
+  AlignLeft, AlignCenter, AlignRight, Image as ImageIcon,
+  Link2, Video, Share2, ExternalLink
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { sanitizeRichHtml } from '../../../../utils/security';
@@ -91,8 +92,49 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [showColorPalette, setShowColorPalette] = useState(false);
   const [showHighlightPalette, setShowHighlightPalette] = useState(false);
   const [showBadgesMenu, setShowBadgesMenu] = useState(false);
+  const [showLinkMenu, setShowLinkMenu] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [showVideoMenu, setShowVideoMenu] = useState(false);
+  const [showSocialMenu, setShowSocialMenu] = useState(false);
+
+  const [linkUrlInput, setLinkUrlInput] = useState('');
+  const [linkTextInput, setLinkTextInput] = useState('');
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [selectedSocialId, setSelectedSocialId] = useState('whatsapp');
+  const [socialUrlInput, setSocialUrlInput] = useState('');
+
+  const savedRangeRef = useRef<Range | null>(null);
   const [selectedColor, setSelectedColor] = useState('#10b981');
   const [isUpdatingFromProps, setIsUpdatingFromProps] = useState(false);
+
+  const closeAllMenus = () => {
+    setShowColorPalette(false);
+    setShowHighlightPalette(false);
+    setShowBadgesMenu(false);
+    setShowLinkMenu(false);
+    setShowImageMenu(false);
+    setShowVideoMenu(false);
+    setShowSocialMenu(false);
+  };
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      const text = sel.toString().trim();
+      if (text) setLinkTextInput(text);
+    }
+  };
+
+  const restoreSelection = () => {
+    if (editorRef.current) editorRef.current.focus();
+    const sel = window.getSelection();
+    if (sel && savedRangeRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+    }
+  };
 
   // Synchronisation initiale du contenu
   useEffect(() => {
@@ -164,20 +206,85 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleInsertImage = () => {
-    playTapBeep();
-    const choice = window.prompt("Insérer une image dans la description :\nEntrez l'URL de l'image (ex: https://...) OU laissez vide pour choisir un fichier de votre appareil :");
-    if (choice === null) return;
-    if (choice.trim()) {
-      const imgHtml = `<p><img src="${choice.trim()}" alt="Illustration produit" style="max-width:100%; height:auto; border-radius:14px; margin:8px 0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);" /></p><p><br></p>`;
-      if (editorRef.current) {
-        editorRef.current.focus();
-        document.execCommand('insertHTML', false, imgHtml);
-        handleInput();
-      }
+  const SOCIAL_NETWORKS = [
+    { id: 'whatsapp', name: 'WhatsApp', emoji: '💬', bg: '#16a34a', placeholder: 'https://wa.me/226...' },
+    { id: 'facebook', name: 'Facebook', emoji: '📘', bg: '#2563eb', placeholder: 'https://facebook.com/...' },
+    { id: 'instagram', name: 'Instagram', emoji: '📸', bg: '#db2777', placeholder: 'https://instagram.com/...' },
+    { id: 'tiktok', name: 'TikTok', emoji: '🎵', bg: '#0f172a', placeholder: 'https://tiktok.com/@...' },
+    { id: 'youtube', name: 'YouTube', emoji: '▶️', bg: '#dc2626', placeholder: 'https://youtube.com/@...' },
+    { id: 'x', name: 'X / Twitter', emoji: '𝕏', bg: '#1e293b', placeholder: 'https://x.com/...' },
+    { id: 'linkedin', name: 'LinkedIn', emoji: '💼', bg: '#0284c7', placeholder: 'https://linkedin.com/in/...' },
+    { id: 'telegram', name: 'Telegram', emoji: '✈️', bg: '#0ea5e9', placeholder: 'https://t.me/...' }
+  ];
+
+  const handleInsertLinkConfirm = () => {
+    const rawUrl = linkUrlInput.trim();
+    if (!rawUrl) return;
+    const finalUrl = /^https?:\/\//i.test(rawUrl) || rawUrl.startsWith('mailto:') || rawUrl.startsWith('tel:')
+      ? rawUrl
+      : `https://${rawUrl}`;
+    playValidationBeep();
+    restoreSelection();
+    const sel = window.getSelection();
+    const selectedText = sel?.toString().trim() || linkTextInput.trim() || finalUrl;
+    const linkHtml = `<a href="${finalUrl}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; text-decoration:underline; font-weight:700;">${selectedText}</a>`;
+    document.execCommand('insertHTML', false, linkHtml);
+    setLinkUrlInput('');
+    setLinkTextInput('');
+    setShowLinkMenu(false);
+    handleInput();
+  };
+
+  const handleInsertImageUrlConfirm = () => {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    playValidationBeep();
+    restoreSelection();
+    const imgHtml = `<p><img src="${url}" alt="Illustration produit" style="max-width:100%; height:auto; border-radius:14px; margin:8px 0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);" /></p><p><br></p>`;
+    document.execCommand('insertHTML', false, imgHtml);
+    setImageUrlInput('');
+    setShowImageMenu(false);
+    handleInput();
+  };
+
+  const handleInsertVideoConfirm = () => {
+    const rawUrl = videoUrlInput.trim();
+    if (!rawUrl) return;
+    playValidationBeep();
+    restoreSelection();
+
+    let embedHtml = '';
+    const ytMatch = rawUrl.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+    const vimeoMatch = rawUrl.match(/vimeo\.com\/(\d+)/);
+
+    if (ytMatch?.[1]) {
+      embedHtml = `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:14px;margin:10px 0;"><iframe src="https://www.youtube.com/embed/${ytMatch[1]}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen></iframe></div><p><br></p>`;
+    } else if (vimeoMatch?.[1]) {
+      embedHtml = `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:14px;margin:10px 0;"><iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" allowfullscreen></iframe></div><p><br></p>`;
+    } else if (/\.(mp4|webm|ogg)(\?.*)?$/i.test(rawUrl)) {
+      embedHtml = `<p><video src="${rawUrl}" controls style="width:100%;max-height:380px;border-radius:14px;margin:10px 0;background:#000;"></video></p><p><br></p>`;
     } else {
-      fileInputRef.current?.click();
+      embedHtml = `<p><a href="${rawUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:#dc2626;color:#ffffff;font-weight:800;font-size:13px;text-decoration:none;">▶️ Regarder la vidéo</a></p><p><br></p>`;
     }
+
+    document.execCommand('insertHTML', false, embedHtml);
+    setVideoUrlInput('');
+    setShowVideoMenu(false);
+    handleInput();
+  };
+
+  const handleInsertSocialConfirm = () => {
+    const rawUrl = socialUrlInput.trim();
+    if (!rawUrl) return;
+    const net = SOCIAL_NETWORKS.find((s) => s.id === selectedSocialId) || SOCIAL_NETWORKS[0];
+    const finalUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    playValidationBeep();
+    restoreSelection();
+    const socialHtml = `&nbsp;<a href="${finalUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:9999px;background:${net.bg};color:#ffffff;font-weight:800;font-size:12px;text-decoration:none;margin:2px 4px;">${net.emoji} ${net.name}</a>&nbsp;`;
+    document.execCommand('insertHTML', false, socialHtml);
+    setSocialUrlInput('');
+    setShowSocialMenu(false);
+    handleInput();
   };
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -310,16 +417,245 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           </button>
         </div>
 
-        {/* Bouton Insérer Image dans la description */}
-        <button
-          type="button"
-          onClick={handleInsertImage}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 text-emerald-400 border border-slate-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
-          title="Insérer une image dans la description (URL ou fichier)"
-        >
-          <ImageIcon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline text-[10px]">🖼️ Image</span>
-        </button>
+        {/* Groupe Média & Liens : Lien texte, Image (ImgBB/Postimages), Vidéo, Réseaux sociaux */}
+        <div className="flex items-center gap-1 relative">
+          {/* 1. Inséreur de Lien sur n'importe quel texte */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                saveSelection();
+              }}
+              onClick={() => {
+                playTapBeep();
+                const next = !showLinkMenu;
+                closeAllMenus();
+                setShowLinkMenu(next);
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 text-sky-400 border border-slate-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              title="Transformer le texte sélectionné en lien cliquable"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[10px]">Lien</span>
+            </button>
+
+            {showLinkMenu && (
+              <div className="absolute top-full mt-1.5 left-0 z-40 bg-slate-950 border border-slate-700 rounded-2xl p-3 shadow-2xl w-72 space-y-2.5 animate-in fade-in-50 zoom-in-95">
+                <div className="text-[11px] font-black text-sky-300 uppercase tracking-wider">
+                  🔗 Insérer un lien sur le texte
+                </div>
+                <input
+                  type="text"
+                  value={linkTextInput}
+                  onChange={(e) => setLinkTextInput(e.target.value)}
+                  placeholder="Texte affiché (ou sélectionnez avant)"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white focus:border-sky-500 focus:outline-none"
+                />
+                <input
+                  type="url"
+                  value={linkUrlInput}
+                  onChange={(e) => setLinkUrlInput(e.target.value)}
+                  placeholder="https://votre-lien.com"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleInsertLinkConfirm}
+                  className="w-full py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-black cursor-pointer"
+                >
+                  Appliquer le lien
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Insérer Image (URL + ImgBB & Postimages + Fichier) */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                saveSelection();
+              }}
+              onClick={() => {
+                playTapBeep();
+                const next = !showImageMenu;
+                closeAllMenus();
+                setShowImageMenu(next);
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 text-emerald-400 border border-slate-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              title="Insérer une image (ImgBB, Postimages, URL ou fichier)"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[10px]">Image</span>
+            </button>
+
+            {showImageMenu && (
+              <div className="absolute top-full mt-1.5 left-0 z-40 bg-slate-950 border border-slate-700 rounded-2xl p-3 shadow-2xl w-80 space-y-2.5 animate-in fade-in-50 zoom-in-95">
+                <div className="text-[11px] font-black text-emerald-300 uppercase tracking-wider">
+                  🖼️ Insérer une image par lien
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Hébergez gratuitement votre image sur <strong>ImgBB</strong> ou <strong>Postimages</strong>, copiez le lien direct et collez-le ici :
+                </p>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="https://imgbb.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-1 px-2 rounded-lg bg-slate-900 border border-slate-700 hover:border-emerald-500 text-[10px] font-bold text-emerald-300 flex items-center justify-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" /> ImgBB
+                  </a>
+                  <a
+                    href="https://postimages.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-1 px-2 rounded-lg bg-slate-900 border border-slate-700 hover:border-sky-500 text-[10px] font-bold text-sky-300 flex items-center justify-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Postimages
+                  </a>
+                </div>
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  placeholder="https://i.ibb.co/... ou https://i.postimg.cc/..."
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleInsertImageUrlConfirm}
+                    className="flex-1 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer"
+                  >
+                    Insérer le lien
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImageMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer"
+                  >
+                    Fichier
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Insérer Vidéo (YouTube, Vimeo, TikTok, MP4) */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                saveSelection();
+              }}
+              onClick={() => {
+                playTapBeep();
+                const next = !showVideoMenu;
+                closeAllMenus();
+                setShowVideoMenu(next);
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 text-rose-400 border border-slate-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              title="Coller le lien d'une vidéo dans la description"
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[10px]">Vidéo</span>
+            </button>
+
+            {showVideoMenu && (
+              <div className="absolute top-full mt-1.5 left-0 z-40 bg-slate-950 border border-slate-700 rounded-2xl p-3 shadow-2xl w-72 space-y-2.5 animate-in fade-in-50 zoom-in-95">
+                <div className="text-[11px] font-black text-rose-300 uppercase tracking-wider">
+                  🎬 Coller le lien d'une vidéo
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Compatible YouTube, Vimeo ou lien direct `.mp4` / `.webm`.
+                </p>
+                <input
+                  type="url"
+                  value={videoUrlInput}
+                  onChange={(e) => setVideoUrlInput(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=... ou .mp4"
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:border-rose-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleInsertVideoConfirm}
+                  className="w-full py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-black cursor-pointer"
+                >
+                  Intégrer la vidéo
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Insérer Logo Réseau Social + Lien */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                saveSelection();
+              }}
+              onClick={() => {
+                playTapBeep();
+                const next = !showSocialMenu;
+                closeAllMenus();
+                setShowSocialMenu(next);
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-950 text-amber-400 border border-slate-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95"
+              title="Insérer un logo de réseau social avec lien"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[10px]">Réseaux</span>
+            </button>
+
+            {showSocialMenu && (
+              <div className="absolute top-full mt-1.5 right-0 z-40 bg-slate-950 border border-slate-700 rounded-2xl p-3 shadow-2xl w-72 space-y-2.5 animate-in fade-in-50 zoom-in-95">
+                <div className="text-[11px] font-black text-amber-300 uppercase tracking-wider">
+                  📱 Logo Réseau Social + Lien
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {SOCIAL_NETWORKS.map((net) => (
+                    <button
+                      key={net.id}
+                      type="button"
+                      onClick={() => setSelectedSocialId(net.id)}
+                      className={`p-1.5 rounded-lg border text-center text-[10px] font-bold cursor-pointer transition ${
+                        selectedSocialId === net.id
+                          ? 'border-amber-400 bg-slate-800 text-white'
+                          : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                      title={net.name}
+                    >
+                      <div className="text-sm">{net.emoji}</div>
+                      <div className="truncate">{net.name.split(' ')[0]}</div>
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="url"
+                  value={socialUrlInput}
+                  onChange={(e) => setSocialUrlInput(e.target.value)}
+                  placeholder={SOCIAL_NETWORKS.find((s) => s.id === selectedSocialId)?.placeholder || 'https://...'}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleInsertSocialConfirm}
+                  className="w-full py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-black cursor-pointer"
+                >
+                  Insérer le bouton social
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Groupe 3 : Couleurs e-commerce, Surlignage et Badges */}
         <div className="flex items-center gap-1.5 relative">

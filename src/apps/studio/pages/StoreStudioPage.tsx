@@ -371,8 +371,12 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         themeRoutePattern: 'https://nsore.shop/{themePrefix}/{storeSlug}',
         productRoutePattern: 'https://nsore.shop/{themePrefix}/{storeSlug}/p/{productSlug}',
         funnelRoutePattern: 'https://nsore.shop/{themePrefix}/{storeSlug}/f/{funnelSlug}',
-        storeName: draftThemeConfig.storeName || storeConfig.storeName,
+        storeName: draftThemeConfig.storeName || draftThemeConfig.brandName || storeConfig.storeName,
         whatsappPhone: draftThemeConfig.whatsappNumber || storeConfig.whatsappPhone,
+        orangeMerchantCode: draftThemeConfig.orangeMerchantCode || draftThemeConfig.siteSettings?.orangeMerchantCode || (storeConfig as any).orangeMerchantCode || '',
+        wavePaymentLink: draftThemeConfig.wavePaymentLink || draftThemeConfig.siteSettings?.wavePaymentLink || (storeConfig as any).wavePaymentLink || '',
+        merchantCountry: draftThemeConfig.merchantCountry || draftThemeConfig.siteSettings?.merchantCountry || (storeConfig as any).merchantCountry || 'BF',
+        contactEmail: draftThemeConfig.siteSettings?.contactEmail || draftThemeConfig.footerEmail || '',
         logoUrl: draftThemeConfig.logoUrl || storeConfig.logoUrl,
         bannerImage: draftThemeConfig.heroBannerImageUrl || storeConfig.bannerImage,
         updatedAt: new Date().toISOString()
@@ -1323,9 +1327,28 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
         config={draftThemeConfig}
         storeName={storeConfig.storeName}
         storeSlug={effectiveStoreSlug}
-        onSave={(updatedConfig) => {
+        onSave={async (updatedConfig) => {
           handleConfigChange(updatedConfig);
-          showToast('⚙️ Paramètres du site enregistrés dans le brouillon !');
+          setSavedThemeConfig(updatedConfig);
+          try {
+            localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(updatedConfig));
+            await supabase.from('app_registry').upsert({
+              key: `theme_config_${targetStoreId}`,
+              name: 'theme_config',
+              tenant_id: targetStoreId,
+              module_key: 'theme_config',
+              theme_key: activeThemeId,
+              config_json: {
+                activeThemeId,
+                active_theme_id: activeThemeId,
+                storeSlug: effectiveStoreSlug,
+                customConfig: updatedConfig,
+                updated_at: new Date().toISOString()
+              },
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'key' });
+          } catch {}
+          showToast('Paramètres du thème enregistrés et appliqués !');
         }}
       />
 
