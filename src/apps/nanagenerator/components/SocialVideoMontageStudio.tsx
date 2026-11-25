@@ -1793,8 +1793,26 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           timelineClips[0].speed !== 1 ||
           timelineClips[0].muted));
 
-    if (isTimelineEdited && timelineClips.length > 0) {
+    const hasActiveStudioEffects =
+      isTimelineEdited ||
+      subtitleCues.length > 0 ||
+      visualLayers.length > 0 ||
+      Boolean(combinedOverlayText) ||
+      chromaConfig.mode !== 'none' ||
+      Boolean(enhancedVoiceUrl || rawVoiceUrl) ||
+      Boolean(playingTrackId);
+
+    // Wake Lock pour éviter que l'écran du téléphone ne s'éteigne pendant l'export
+    let wakeLockSentinel: any = null;
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).wakeLock?.request) {
+        wakeLockSentinel = await (navigator as any).wakeLock.request('screen').catch(() => null);
+      }
+    } catch {}
+
+    if (hasActiveStudioEffects && timelineClips.length > 0) {
       try {
+        const selectedMusicUrl = PRO_AUDIO_LIBRARY.find((t) => t.id === playingTrackId)?.url;
         const assembled = await exportTimelineToVideoBlob(timelineClips, {
           width: resolvedExportDimensions.width,
           height: resolvedExportDimensions.height,
@@ -1805,10 +1823,14 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           subtitles: subtitleCues,
           subtitleColor: resolvedSubtitleColor,
           visualLayers,
+          chromaKey: chromaConfig,
+          voiceOverUrl: enhancedVoiceUrl || rawVoiceUrl || undefined,
+          bgMusicUrl: selectedMusicUrl || undefined,
+          preferMp4: exportContainer === 'mp4',
           onProgress: (pct) => setEncodeProgress(pct)
         });
 
-        const ext = exportContainer === 'mp4' ? 'mp4' : 'webm';
+        const ext = assembled.extension;
         const outFile = new File(
           [assembled.blob],
           `nana-timeline-${socialFormat.replace(':', 'x')}-${exportResolution}-${Date.now()}.${ext}`,
@@ -1837,11 +1859,13 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(dlUrl), 15000);
         setIsEncoding(false);
+        wakeLockSentinel?.release?.().catch(() => {});
         return;
       } catch (tlErr: any) {
         playCancelSound();
         setEncodeError(tlErr?.message || 'Erreur lors de l\'assemblage de la timeline.');
         setIsEncoding(false);
+        wakeLockSentinel?.release?.().catch(() => {});
         return;
       }
     }
@@ -1882,6 +1906,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       playCancelSound();
       setEncodeError(err?.message || 'Erreur lors de la compilation vidéo locale.');
     } finally {
+      wakeLockSentinel?.release?.().catch(() => {});
       setIsEncoding(false);
     }
   };

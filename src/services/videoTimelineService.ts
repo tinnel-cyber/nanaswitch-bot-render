@@ -4,6 +4,8 @@
  * Vitesse, Mute, Trim In/Out et Export vidéo assemblé 100 % local sans stockage Cloud).
  */
 
+import { renderChromaKeyFrame, type ChromaKeyConfig } from './chromaKeyStudioService';
+
 export interface TimelineClip {
   id: string;
   label: string;
@@ -41,6 +43,12 @@ export interface TimelineExportOptions {
   subtitles?: Array<{ startSec: number; endSec: number; text: string }>;
   subtitleColor?: string;
   visualLayers?: VisualOverlayLayer[];
+  chromaKey?: ChromaKeyConfig;
+  voiceOverUrl?: string;
+  voiceOverVolume?: number;
+  bgMusicUrl?: string;
+  bgMusicVolume?: number;
+  preferMp4?: boolean;
   onProgress?: (pct: number) => void;
 }
 
@@ -248,7 +256,7 @@ export function updateClipInTimeline(
 export async function exportTimelineToVideoBlob(
   clips: TimelineClip[],
   options: TimelineExportOptions
-): Promise<{ blob: Blob; mimeType: string; durationSec: number }> {
+): Promise<{ blob: Blob; mimeType: string; extension: 'mp4' | 'webm'; durationSec: number }> {
   if (!clips.length) {
     throw new Error('La timeline est vide. Ajoutez au moins un clip vidéo.');
   }
@@ -286,13 +294,54 @@ export async function exportTimelineToVideoBlob(
     );
   }
 
+  // Préchargement de l'image de fond Chroma Key si activé
+  let chromaBgImg: HTMLImageElement | null = null;
+  let chromaOffscreenCtx: CanvasRenderingContext2D | null = null;
+  const isChromaActive = Boolean(options.chromaKey && options.chromaKey.mode !== 'none');
+  if (isChromaActive) {
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = width;
+    offCanvas.height = height;
+    chromaOffscreenCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+    if (options.chromaKey?.backdropImageUrl) {
+      chromaBgImg = await new Promise<HTMLImageElement | null>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = options.chromaKey!.backdropImageUrl!;
+      });
+    }
+  }
+
   const totalDuration = Math.max(0.5, getTotalTimelineDuration(clips));
   const canvasStream = canvas.captureStream(24);
 
-  // Mixage audio propre via AudioContext pour conserver le son de chaque clip non-muté
+  // Mixage audio propre via AudioContext (clips + Voix Off + Musique de fond)
   const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
   const audioCtx = AudioCtx ? new AudioCtx() : null;
   const audioDest = audioCtx ? audioCtx.createMediaStreamDestination() : null;
+
+  const extraAudioEls: HTMLAudioElement[] = [];
+  if (audioCtx && audioDest) {
+    const attachExtraAudio = (url: string | undefined, vol: number, loop: boolean) => {
+      if (!url) return;
+      try {
+        const audioEl = document.createElement('audio');
+        audioEl.crossOrigin = 'anonymous';
+        audioEl.src = url;
+        audioEl.loop = loop;
+        const src = audioCtx.createMediaElementSource(audioEl);
+        const gain = audioCtx.createGain();
+        gain.gain.value = Math.max(0, Math.min(1, vol));
+        src.connect(gain);
+        gain.connect(audioDest);
+        extraAudioEls.push(audioEl);
+      } catch {}
+    };
+    attachExtraAudio(options.voiceOverUrl, options.voiceOverVolume ?? 1, false);
+    attachExtraAudio(options.bgMusicUrl, options.bgMusicVolume ?? 0.35, true);
+  }
 
   const combinedTracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
   if (audioDest) {
@@ -300,11 +349,19 @@ export async function exportTimelineToVideoBlob(
   }
   const combinedStream = new MediaStream(combinedTracks);
 
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-    ? 'video/webm;codecs=vp9,opus'
-    : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-      ? 'video/webm;codecs=vp8,opus'
-      : 'video/webm';
+  // Choix honnête du conteneur supporté nativement (vrai MP4 si supporté, sinon WebM réel)
+  const mp4Candidates = ['video/mp4;codecs=avc1,mp4a', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const supportedMp4 = options.preferMp4 !== false
+    ? mp4Candidates.find((m) => MediaRecorder.isTypeSupported(m))
+    : undefined;
+
+  const mimeType = supportedMp4
+    || (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
+        : 'video/webm');
+  const extension: 'mp4' | 'webm' = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -322,6 +379,9 @@ export async function exportTimelineToVideoBlob(
   });
 
   recorder.start(250);
+  for (const extraEl of extraAudioEls) {
+    extraEl.play().catch(() => {});
+  }
   let timelineElapsedSec = 0;
 
   try {
@@ -377,12 +437,16 @@ export async function exportTimelineToVideoBlob(
             sy = (vH - sh) / 2;
           }
 
-          ctx.save();
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, width, height);
-          if (options.filterCss) ctx.filter = options.filterCss;
-          ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, width, height);
-          ctx.restore();
+          if (isChromaActive && options.chromaKey && chromaOffscreenCtx) {
+            renderChromaKeyFrame(ctx, chromaOffscreenCtx, videoEl, width, height, options.chromaKey, chromaBgImg);
+          } else {
+            ctx.save();
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+            if (options.filterCss) ctx.filter = options.filterCss;
+            ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, width, height);
+            ctx.restore();
+          }
 
           // Incrustation des éléments visuels superposés (Logos, Images PiP, Badges)
           if (options.visualLayers && options.visualLayers.length > 0) {
@@ -441,6 +505,12 @@ export async function exportTimelineToVideoBlob(
       timelineElapsedSec += clipOutDur;
     }
   } finally {
+    for (const extraEl of extraAudioEls) {
+      try {
+        extraEl.pause();
+        extraEl.src = '';
+      } catch {}
+    }
     if (recorder.state !== 'inactive') recorder.stop();
     if (audioCtx) {
       audioCtx.close().catch(() => {});
@@ -449,5 +519,5 @@ export async function exportTimelineToVideoBlob(
 
   const blob = await stopPromise;
   options.onProgress?.(100);
-  return { blob, mimeType, durationSec: totalDuration };
+  return { blob, mimeType, extension, durationSec: totalDuration };
 }
