@@ -6674,9 +6674,18 @@ export default function App() {
     );
   }
 
+  const isLightDashboardView =
+    currentView === 'NANA_SWITCH_APP' ||
+    currentView === 'nana_switch_app' ||
+    currentView === 'MASTER_HUB';
+
   return (
     <AuthProvider user={currentUser} subscription={subscription}>
-      <div className="h-screen h-[100dvh] w-full bg-[#070b14] text-slate-100 flex flex-col p-0 font-sans overflow-hidden">
+      <div
+        className={`h-screen h-[100dvh] w-full flex flex-col p-0 font-sans overflow-hidden ${
+          isLightDashboardView ? 'bg-[#F8FAFC] text-slate-800' : 'bg-[#070b14] text-slate-100'
+        }`}
+      >
       {/* Root POS App Container: full-width SaaS layout on desktop/tablets, smartphone layout on mobile */}
       <main 
         id="app-main-scroll-zone"

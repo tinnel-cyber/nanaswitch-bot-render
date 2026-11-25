@@ -1611,7 +1611,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
   };
 
   return (
-    <div className={`min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-blue-100 selection:text-blue-900 ${className}`}>
+    <div className={`min-h-full flex-1 bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-blue-100 selection:text-blue-900 ${className}`}>
       
       {/* GLOBAL TOAST NOTIFICATION */}
       {toast && (
