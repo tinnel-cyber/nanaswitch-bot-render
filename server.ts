@@ -3938,13 +3938,111 @@ async function startServer() {
       });
     }
 
+    // Crédit automatique du Wallet Marchand unifié (0% physique, 14% commission/formation/numérique)
+    let walletCredit: any = null;
+    if ((finalStatus === 'confirmed' || isPosCounterToken) && confirmedAmount > 0 && orderRecord.tenantId) {
+      try {
+        walletCredit = await creditMerchantSaleToWallet({
+          orderId,
+          universeId: orderRecord.tenantId,
+          grossAmount: confirmedAmount,
+          productType: String(body.product_type || (isPosCounterToken ? 'PHYSICAL' : '')),
+          productName: body.deal?.title || body.product_name || 'Commande Boutique',
+          customerName: orderRecord.customerName,
+          operator,
+          paymentMethod: isPosCounterToken ? 'PHYSICAL_POS_TOKEN' : 'MOBILE_MONEY',
+        });
+      } catch (wErr: any) {
+        console.warn('[PAYMENTS/TRIGGER] Wallet credit notice:', wErr?.message || wErr);
+      }
+    }
+
     return res.json({
       success: true,
       orderId,
       amount: confirmedAmount,
       status: finalStatus,
       affiliateCommission,
+      walletCredit,
     });
+  });
+
+  // POST /api/payments/confirm-sale — Crédite le Wallet Marchand après validation Checkout (SMS BF, Mobile Money ou Livraison physique)
+  app.post('/api/payments/confirm-sale', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const orderId = String(body.orderId || body.order_id || '').trim();
+      const transactionId = String(body.transactionId || body.transaction_id || '').trim();
+      const merchantId = String(body.merchantId || body.universeId || body.tenantId || '').trim();
+      const requestedAmount = Math.max(0, Math.round(Number(body.amount) || 0));
+      const productType = String(body.productType || '').toUpperCase().trim();
+      const paymentMethod = String(body.paymentMethod || 'MOBILE_MONEY').toUpperCase().trim();
+
+      if (!orderId || requestedAmount <= 0 || !merchantId) {
+        return res.status(400).json({ success: false, error: 'Paramètres de vente incomplets.' });
+      }
+
+      const isCodPhysical =
+        productType === 'PHYSICAL' &&
+        (paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'PHYSICAL_POS_TOKEN');
+
+      let verified = isCodPhysical;
+      let confirmedAmount = requestedAmount;
+
+      if (!verified && supabaseAdmin && (transactionId || orderId)) {
+        const { data: smsRow } = await supabaseAdmin
+          .from('bf_sms_payments')
+          .select('transaction_id, amount, status, order_id')
+          .or(
+            transactionId
+              ? `transaction_id.eq.${transactionId},order_id.eq.${orderId}`
+              : `order_id.eq.${orderId}`
+          )
+          .limit(1)
+          .maybeSingle();
+
+        if (smsRow && Number(smsRow.amount) >= requestedAmount) {
+          verified = true;
+          confirmedAmount = Math.round(Number(smsRow.amount));
+        }
+      }
+
+      if (!verified) {
+        const secCheck = await paymentSecurity.verifyPayment({
+          orderId,
+          transactionId: transactionId || undefined,
+          expectedAmount: requestedAmount,
+          expectedCurrency: 'XOF',
+        });
+        if (secCheck.verified) {
+          verified = true;
+          confirmedAmount = Math.round(secCheck.amount || requestedAmount);
+        }
+      }
+
+      if (!verified) {
+        return res.status(202).json({
+          success: false,
+          code: 'PAYMENT_NOT_VERIFIED',
+          error: 'Transaction non encore confirmée par le vérificateur.',
+        });
+      }
+
+      const walletCredit = await creditMerchantSaleToWallet({
+        orderId,
+        universeId: merchantId,
+        grossAmount: confirmedAmount,
+        productType,
+        productName: String(body.productName || 'Vente Boutique').trim(),
+        customerName: String(body.customerName || 'Client').trim(),
+        operator: String(body.operator || 'MOBILE_MONEY').trim(),
+        paymentMethod,
+      });
+
+      return res.json({ success: true, ...walletCredit });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur confirmation vente.' });
+    }
   });
 
   // ============================================================================
@@ -4399,6 +4497,112 @@ async function startServer() {
     allTxs.unshift(params.txRecord);
     writeJsonArrayFile(WALLET_TXS_FILE, allTxs);
     return { duplicate: false, balanceXof: updated.balanceXof, balances: updated.balances };
+  };
+
+  /**
+   * Crédite automatiquement le Wallet Marchand unifié lors d'une vente confirmée.
+   * - Produits physiques (Mobile Money ou paiement à la livraison) : 0% de commission (100% crédité).
+   * - Plan Commission, Formations & Produits Numériques : 14% de commission déduite, 86% crédité.
+   */
+  const creditMerchantSaleToWallet = async (params: {
+    orderId: string;
+    universeId?: string;
+    userId?: string;
+    grossAmount: number;
+    productType?: string;
+    productName?: string;
+    customerName?: string;
+    operator?: string;
+    paymentMethod?: string;
+  }) => {
+    const cleanOrderId = String(params.orderId || '').trim();
+    const grossAmount = Math.max(0, Math.round(Number(params.grossAmount) || 0));
+    if (!cleanOrderId || grossAmount <= 0) {
+      return { credited: false, reason: 'INVALID_AMOUNT_OR_ORDER' };
+    }
+
+    let universeId = String(params.universeId || '').trim();
+    let userId = String(params.userId || '').trim();
+    let pricingModel = '';
+
+    if (supabaseAdmin && universeId) {
+      try {
+        const { data: uRow } = await supabaseAdmin
+          .from('universes')
+          .select('id, user_id, pricing_model')
+          .eq('id', universeId)
+          .maybeSingle();
+        if (uRow) {
+          if (!userId && uRow.user_id) userId = String(uRow.user_id);
+          pricingModel = String((uRow as any).pricing_model || '').toLowerCase();
+        }
+      } catch {}
+    }
+
+    if (!universeId && !userId) {
+      return { credited: false, reason: 'MISSING_MERCHANT_OWNER' };
+    }
+
+    const pType = String(params.productType || '').toUpperCase().trim();
+    const pMethod = String(params.paymentMethod || '').toUpperCase().trim();
+    const isDigitalOrCourse = ['COURSE', 'FORMATION', 'DIGITAL', 'EBOOK', 'SOFTWARE'].includes(pType);
+    const isPhysical =
+      !isDigitalOrCourse &&
+      (pType === 'PHYSICAL' || pMethod === 'CASH_ON_DELIVERY' || pMethod === 'PHYSICAL_POS_TOKEN');
+
+    const applyFourteenPercent = !isPhysical && (isDigitalOrCourse || pricingModel === 'commission' || pricingModel === '');
+    const commissionRatePercent = applyFourteenPercent ? 14 : 0;
+    const feeAmount = applyFourteenPercent ? Math.round(grossAmount * 0.14) : 0;
+    const netCreditXof = Math.max(0, grossAmount - feeAmount);
+
+    const txId = `tx-sale-${cleanOrderId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const paymentRef = `SALE-${cleanOrderId}`;
+    const nowIso = new Date().toISOString();
+
+    const txRecord = {
+      id: txId,
+      universeId,
+      userId,
+      type: 'CREDIT',
+      title: params.productName ? `Vente : ${params.productName}` : `Paiement client (${cleanOrderId})`,
+      subtitle:
+        feeAmount > 0
+          ? `Brut ${grossAmount.toLocaleString('fr-FR')} F • Commission 14% (-${feeAmount.toLocaleString('fr-FR')} F)`
+          : `${isPhysical ? 'Produit physique (0% commission)' : 'Encaissement direct'} • ${params.operator || pMethod || 'Mobile Money'}`,
+      amount: netCreditXof,
+      grossAmount,
+      platformFeeXof: feeAmount,
+      commissionRatePercent,
+      currency: 'XOF',
+      category: 'SALE',
+      productType: pType || (isPhysical ? 'PHYSICAL' : 'DIGITAL'),
+      customerName: params.customerName || 'Client',
+      reference: paymentRef,
+      payment_reference: paymentRef,
+      status: 'COMPLETED',
+      createdAt: nowIso,
+    };
+
+    const mutated = await applyAtomicWalletMutation({
+      txId,
+      universeId,
+      userId,
+      type: 'CREDIT',
+      deltaXof: netCreditXof,
+      paymentReference: paymentRef,
+      status: 'COMPLETED',
+      txRecord,
+    });
+
+    return {
+      credited: !mutated.duplicate,
+      duplicate: mutated.duplicate,
+      grossAmount,
+      feeAmount,
+      commissionRatePercent,
+      netCreditXof,
+      balanceXof: mutated.balanceXof,
+    };
   };
 
   // Vérifie dans le fichier local ET dans la base de données si une référence a déjà été créditée
@@ -8038,11 +8242,19 @@ async function startServer() {
 
     const pinRecord = await getWalletPinRecord(ownerKey);
 
+    const creditSales = txs.filter(
+      (t: any) => String(t.type || '').toUpperCase() === 'CREDIT' || String(t.category || '').toUpperCase() === 'SALE'
+    );
+    const paymentsCount = creditSales.length;
+    const totalSalesNetXof = creditSales.reduce((acc: number, t: any) => acc + (Number(t.amount) || 0), 0);
+
     return res.json({
       success: true,
       universeId,
       balanceXof,
       balances,
+      paymentsCount,
+      totalSalesNetXof,
       hasMasterPin: Boolean(pinRecord?.pinHash),
       transactions: txs.slice(0, 80),
       paygCatalog: PAYG_MODULES_CATALOG,

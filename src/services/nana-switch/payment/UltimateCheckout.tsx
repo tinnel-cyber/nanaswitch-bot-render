@@ -667,6 +667,25 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       console.warn('[ORDER SAVE] Info sauvegarde Supabase :', e);
     }
 
+    if (merchantId) {
+      fetch('/api/payments/confirm-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          orderId,
+          transactionId: details.transactionId,
+          amount: finalTotal,
+          merchantId,
+          productType: 'PHYSICAL',
+          productName: resolvedProduct.name,
+          customerName: details.customerName,
+          operator: 'CASH_ON_DELIVERY',
+          paymentMethod: 'CASH_ON_DELIVERY',
+        }),
+      }).catch(() => {});
+    }
+
     setTimeout(() => {
       setIsProcessingPayment(false);
       setCompletedDetails(details);
@@ -863,6 +882,27 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 setCompletedDetails(successDetails);
                 setCurrentStep('STEP_3');
                 playCashChime();
+                if (merchantId) {
+                  const inferredType =
+                    (resolvedProduct as any)?.productType ||
+                    ((resolvedProduct as any)?.isDigital ? 'DIGITAL' : isPhysicalStoreContext ? 'PHYSICAL' : 'DIGITAL');
+                  fetch('/api/payments/confirm-sale', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    keepalive: true,
+                    body: JSON.stringify({
+                      orderId,
+                      transactionId: successDetails.transactionId,
+                      amount: successDetails.amount,
+                      merchantId,
+                      productType: inferredType,
+                      productName: resolvedProduct.name,
+                      customerName: successDetails.customerName,
+                      operator: selectedOperator?.name || selectedOperator?.id || 'MOBILE_MONEY',
+                      paymentMethod: 'MOBILE_MONEY',
+                    }),
+                  }).catch(() => {});
+                }
                 if (onSuccess) onSuccess(successDetails);
               } else {
                 const isFailedOrCancelled =
@@ -982,6 +1022,27 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
 
     pendingBfSuccessDetailsRef.current = successDetails;
     bfOnSuccessTriggeredRef.current = false;
+    if (merchantId) {
+      const inferredType =
+        (resolvedProduct as any)?.productType ||
+        ((resolvedProduct as any)?.isDigital ? 'DIGITAL' : isPhysicalStoreContext ? 'PHYSICAL' : 'DIGITAL');
+      fetch('/api/payments/confirm-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          orderId,
+          transactionId: cleanTxId,
+          amount: successDetails.amount,
+          merchantId,
+          productType: inferredType,
+          productName: resolvedProduct.name,
+          customerName: successDetails.customerName,
+          operator: selectedOperator?.name || selectedOperator?.id || 'MOBILE_MONEY',
+          paymentMethod: 'MOBILE_MONEY',
+        }),
+      }).catch(() => {});
+    }
     setCompletedDetails(successDetails);
     setCurrentStep('STEP_3');
     setBfRedirectCountdown(5);

@@ -96,6 +96,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
 
   // Source de vérité serveur (zéro mock, zéro solde fictif)
   const [balanceXof, setBalanceXof] = useState<number>(0);
+  const [paymentsCount, setPaymentsCount] = useState<number>(0);
+  const [totalSalesNetXof, setTotalSalesNetXof] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTxItem[]>([]);
   const [paygCatalog, setPaygCatalog] = useState<PaygModuleItem[]>([]);
   const [entitlements, setEntitlements] = useState<Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }>>({});
@@ -270,12 +272,26 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       if (selectedUniverseId) params.set('universeId', selectedUniverseId);
       if (resolvedUserId) params.set('userId', resolvedUserId);
 
-      const res = await fetch(`/api/merchant/wallet/summary?${params.toString()}`);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      const headers: Record<string, string> = accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : {};
+
+      const res = await fetch(`/api/merchant/wallet/summary?${params.toString()}`, { headers });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success) {
         const nextBal = Number(json.balanceXof ?? 0) || 0;
+        const txList = Array.isArray(json.transactions) ? json.transactions : [];
         setBalanceXof(nextBal);
-        setTransactions(Array.isArray(json.transactions) ? json.transactions : []);
+        setTransactions(txList);
+        const creditTxs = txList.filter((t: any) => t.type === 'CREDIT' || t.category === 'SALE');
+        setPaymentsCount(typeof json.paymentsCount === 'number' ? json.paymentsCount : creditTxs.length);
+        setTotalSalesNetXof(
+          typeof json.totalSalesNetXof === 'number'
+            ? json.totalSalesNetXof
+            : creditTxs.reduce((acc: number, t: any) => acc + (Number(t.amount) || 0), 0)
+        );
         setPaygCatalog(Array.isArray(json.paygCatalog) ? json.paygCatalog : []);
         setEntitlements(json.entitlements && typeof json.entitlements === 'object' ? json.entitlements : {});
         setHasMasterPin(Boolean(json.hasMasterPin));
@@ -793,6 +809,14 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
               </div>
               <div className="text-3xl sm:text-4xl font-black text-white mt-1 font-mono tracking-tight">
                 {isBalanceHidden ? '••••••••' : formatCFA(balanceXof)}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-blue-100/90 font-bold">
+                <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
+                  Paiements reçus : <strong className="text-amber-300">{paymentsCount}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
+                  Total encaissé : <strong className="text-emerald-300">{isBalanceHidden ? '••••••' : formatCFA(totalSalesNetXof)}</strong>
+                </span>
               </div>
             </div>
 
