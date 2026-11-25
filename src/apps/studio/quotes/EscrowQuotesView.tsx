@@ -13,7 +13,8 @@ import {
   updateEscrowStatus, 
   requestEscrowWithdrawal,
   getPublicProjectUrl,
-  getQuoteWhatsAppUrl 
+  getQuoteWhatsAppUrl,
+  sendEscrowChatMessage
 } from '../../../services/escrowService';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
@@ -460,6 +461,32 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
                         <span>Chat & Échanges</span>
+                      </button>
+
+                      {/* Envoyer Devis & Accès Séquestre directement dans le Chat */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          playValidationBeep();
+                          const publicUrl = getPublicProjectUrl(project.id);
+                          const accessMsg = [
+                            `📄 DEVIS & ACCÈS SÉQUESTRE — ${project.projectTitle}`,
+                            `💰 Montant total protégé : ${formatCFA(project.totalAmount)} (${project.milestones.length} jalon(s))`,
+                            `🔗 Votre espace client & paiement sécurisé : ${publicUrl}`,
+                            `🛡️ Rappel : Aucun paiement ne doit être effectué en dehors de ce lien officiel pour garantir la protection Séquestre.`,
+                          ].join('\n');
+                          await sendEscrowChatMessage(project.id, project.storeId, {
+                            senderRole: 'merchant',
+                            senderName: project.storeName || storeUser?.businessName || 'Prestataire',
+                            text: accessMsg,
+                          });
+                          setChatProject(project);
+                        }}
+                        className="py-1.5 px-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
+                        title="Générer et envoyer le devis et le lien d'accès dans le chat"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Envoyer Devis & Accès</span>
                       </button>
 
                       {/* Copier lien public */}

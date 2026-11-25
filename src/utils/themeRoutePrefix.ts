@@ -20,6 +20,7 @@ export const PREDEFINED_THEME_PREFIXES: Record<string, string> = {
   'theme-electro-orange': 'eo',  // Electro Orange
   'theme-beauty-emerald': 'ep',  // Émeraude Prestige
   'theme-livestream-pro': 'lp',  // LiveStream Pro
+  'theme-service-portfolio': 'sp', // Service Portfolio Prestige
   'theme-minimal': 'mc',         // Minimal Clean
   'theme-grid': 'gs',            // Grid Store
 };
@@ -36,6 +37,7 @@ export const PREFIX_TO_THEME_ID: Record<string, string> = {
   be: 'theme-beauty-emerald',
   lp: 'theme-livestream-pro',
   sl: 'theme-livestream-pro',
+  sp: 'theme-service-portfolio',
   mc: 'theme-minimal',
   gs: 'theme-grid',
 };

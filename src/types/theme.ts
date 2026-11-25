@@ -10,7 +10,7 @@ export interface WhiteLabelConfig {
   [key: string]: any;
 }
 
-export type ThemeId = 'theme-livestream-pro' | 'theme-beauty-emerald' | 'theme-electro-orange' | 'theme-default' | 'theme-digital-pro' | 'theme-electro-tech' | 'theme-mega-store-pro' | 'theme-blank-custom' | 'theme-minimal' | 'theme-grid' | string;
+export type ThemeId = 'theme-service-portfolio' | 'theme-livestream-pro' | 'theme-beauty-emerald' | 'theme-electro-orange' | 'theme-default' | 'theme-digital-pro' | 'theme-electro-tech' | 'theme-mega-store-pro' | 'theme-blank-custom' | 'theme-minimal' | 'theme-grid' | string;
 
 export interface StoreThemeProps {
   // Données de base de la boutique

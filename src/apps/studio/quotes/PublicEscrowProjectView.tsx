@@ -8,6 +8,7 @@ import {
   getPublicProjectUrl
 } from '../../../services/escrowService';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
+import UltimateCheckout, { PaymentSuccessDetails } from '../../../components/payment/UltimateCheckout';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
 import { 
   ShieldCheck, 
@@ -380,99 +381,74 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
 
         {/* ZONE D'ACTION PRINCIPALE (PAIEMENT OU VALIDATION DE LIVRAISON) */}
         {isPendingPayment && (
-          /* FORMULAIRE DE BLOCAGE DES FONDS (MOBILE MONEY) */
           <section className="bg-slate-900 border border-indigo-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                <Lock className="w-4 h-4" />
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Consigner les fonds sous Séquestre</h3>
+                  <p className="text-xs text-slate-400">
+                    Paiement multi-opérateurs sécurisé — les fonds restent bloqués jusqu&apos;à votre validation finale.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black text-white">Consigner les fonds sous Séquestre</h3>
-                <p className="text-xs text-slate-400">
-                  Effectuez le transfert Mobile Money pour sécuriser le démarrage des travaux
-                </p>
-              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-300">
+                <ShieldCheck className="w-3.5 h-3.5" /> Protection Séquestre 100%
+              </span>
             </div>
 
-            <form onSubmit={handleSubmitPayment} className="space-y-4">
-              {/* Opérateur selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  Choisissez votre opérateur Mobile Money
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {['Orange Money', 'Wave', 'Moov Africa', 'MTN Mobile'].map((op) => (
-                    <button
-                      key={op}
-                      type="button"
-                      onClick={() => {
-                        playTapBeep();
-                        setSelectedOperator(op);
-                      }}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition text-center cursor-pointer ${
-                        selectedOperator === op
-                          ? 'bg-blue-600/20 border-blue-500 text-white ring-1 ring-blue-400'
-                          : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      {op}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 flex items-center gap-2.5 text-xs text-amber-200">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Pour votre sécurité, aucun paiement ne doit être effectué en dehors de la plateforme : seul ce checkout officiel active la garantie Séquestre.
+              </span>
+            </div>
 
-              {/* Instructions Box */}
-              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Numéro Marchand Séquestre Nana :</span>
-                  <strong className="text-amber-300 font-mono font-bold">+226 70 00 00 00 / +225 07 00 00 00</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Montant exact à transférer :</span>
-                  <strong className="text-white font-bold">{formatCFA(project.totalAmount)}</strong>
-                </div>
-                <p className="text-[10px] text-slate-400 pt-1">
-                  Les fonds restent bloqués jusqu'à ce que vous validiez personnellement la conformité du travail.
-                </p>
-              </div>
-
-              {/* Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Votre numéro de téléphone</label>
-                  <input
-                    type="tel"
-                    value={clientPhoneNumber}
-                    onChange={(e) => setClientPhoneNumber(e.target.value)}
-                    placeholder="Ex: +226 70 12 34 56"
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Référence SMS de la transaction reçue <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={smsTransactionRef}
-                    onChange={(e) => setSmsTransactionRef(e.target.value)}
-                    placeholder="Ex: MP2409.12345.B98"
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isProcessingPayment || !smsTransactionRef.trim()}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-950/50 transition cursor-pointer"
-              >
-                <Lock className="w-4 h-4 text-amber-300" />
-                <span>Bloquer les fonds sous Séquestre ({formatCFA(project.totalAmount)})</span>
-              </button>
-            </form>
+            <div className="rounded-2xl overflow-hidden bg-slate-950/60 border border-slate-800 p-1 sm:p-2">
+              <UltimateCheckout
+                isModal={false}
+                enablePhysicalPosToken={false}
+                orderId={project.id}
+                amount={project.totalAmount}
+                currency="FCFA"
+                storeName={project.storeName}
+                merchantId={project.storeId}
+                product={{
+                  id: project.id,
+                  name: project.projectTitle,
+                  price: project.totalAmount,
+                  description: project.projectDescription || 'Prestation sécurisée sous Séquestre',
+                }}
+                defaultCustomerName={project.clientName}
+                defaultPhone={project.clientPhone || ''}
+                onSuccess={async (details: PaymentSuccessDetails) => {
+                  const providerName =
+                    typeof details.operator === 'string'
+                      ? details.operator
+                      : details.operator?.name || details.paymentMethod || 'Mobile Money';
+                  const paymentDetails: EscrowPaymentDetails = {
+                    provider: providerName,
+                    phoneNumber: details.phoneNumber || project.clientPhone || '',
+                    transactionRef: details.transactionId,
+                    paidAt: details.timestamp || Date.now(),
+                    amount: details.amount || project.totalAmount,
+                  };
+                  try {
+                    setIsProcessingPayment(true);
+                    await recordClientEscrowPayment(project.id, project.storeId, paymentDetails);
+                    playCashChime();
+                    setPaymentSuccess(true);
+                    setProject(prev => prev ? { ...prev, status: 'funds_locked', paymentDetails } : null);
+                  } catch (err) {
+                    console.warn('Erreur paiement séquestre :', err);
+                  } finally {
+                    setIsProcessingPayment(false);
+                  }
+                }}
+              />
+            </div>
           </section>
         )}
 

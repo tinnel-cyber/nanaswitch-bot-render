@@ -69,6 +69,17 @@ export interface StoreProductItem {
   isFeatured?: boolean;
   affiliateEnabled?: boolean;
   affiliateCommissionPercent?: number;
+  linkedToLiveCoaching?: boolean;
+  mediaSlides?: Array<{ id?: string; type: 'image' | 'video'; url: string; title?: string }>;
+  faqs?: Array<{ id?: string; question: string; answer: string }>;
+  reviews?: Array<{
+    id: string;
+    author: string;
+    rating: number;
+    isPositive: boolean;
+    comment: string;
+    createdAt: number;
+  }>;
 }
 
 export interface StoreConfig {

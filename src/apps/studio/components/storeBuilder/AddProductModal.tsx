@@ -95,6 +95,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [badge, setBadge] = useState<string>('');
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [hasLiveDemo, setHasLiveDemo] = useState(false);
+  const [linkedToLiveCoaching, setLinkedToLiveCoaching] = useState(true);
+  const [mediaSlides, setMediaSlides] = useState<Array<{ id: string; type: 'image' | 'video'; url: string; title?: string }>>([]);
+  const [slideTypeInput, setSlideTypeInput] = useState<'image' | 'video'>('image');
+  const [slideUrlInput, setSlideUrlInput] = useState('');
+  const [slideTitleInput, setSlideTitleInput] = useState('');
+  const [faqs, setFaqs] = useState<Array<{ id: string; question: string; answer: string }>>([]);
+  const [faqQuestionInput, setFaqQuestionInput] = useState('');
+  const [faqAnswerInput, setFaqAnswerInput] = useState('');
   const [affiliateEnabled, setAffiliateEnabled] = useState(false);
   const [affiliateCommissionPercent, setAffiliateCommissionPercent] = useState<number>(10);
 
@@ -183,6 +191,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setBadge(productToEdit.badge || '');
         setPhotoUrl(productToEdit.photoUrl || '');
         setHasLiveDemo(Boolean(productToEdit.hasLiveDemo));
+        setLinkedToLiveCoaching((productToEdit as any).linkedToLiveCoaching !== false);
+        setMediaSlides(Array.isArray((productToEdit as any).mediaSlides) ? (productToEdit as any).mediaSlides : []);
+        setFaqs(Array.isArray((productToEdit as any).faqs) ? (productToEdit as any).faqs : []);
         setAffiliateEnabled(Boolean((productToEdit as any).affiliateEnabled));
         setAffiliateCommissionPercent(Number((productToEdit as any).affiliateCommissionPercent) || 10);
         setLinkedFunnelId(productToEdit.linkedFunnelId || null);
@@ -235,6 +246,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setBadge('');
         setPhotoUrl('');
         setHasLiveDemo(false);
+        setLinkedToLiveCoaching(true);
+        setMediaSlides([]);
+        setFaqs([]);
         setLinkedFunnelId(null);
         setHasModularFunnel(true);
         setUseUltimateFunnel(false);
@@ -519,6 +533,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         shortDescription: (stripHtmlToPlainText(shortDescription) || cleanPlainDescription).slice(0, 160) || '',
         badge: badge.trim() || '',
         hasLiveDemo: Boolean(hasLiveDemo),
+        linkedToLiveCoaching: Boolean(linkedToLiveCoaching),
+        mediaSlides,
+        faqs,
         affiliateEnabled: Boolean(affiliateEnabled),
         affiliateCommissionPercent: Boolean(affiliateEnabled) ? Math.max(1, Math.min(80, Number(affiliateCommissionPercent) || 10)) : 0,
         linkedFunnelId: linkedFunnelId || (hasModularFunnel ? finalSlug : null),
@@ -1097,6 +1114,30 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               </label>
             </div>
 
+            {/* Toggle Lier au Live Coaching 1-to-1 (Prise de Rendez-vous & Appel Vidéo Direct) */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                  linkedToLiveCoaching ? 'bg-amber-500/20 text-amber-400' : 'bg-input text-muted'
+                }`}>
+                  <Video className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <div className="font-bold text-body text-xs">📅 Lier au Live Coaching 1-to-1 (RDV & Voir Direct)</div>
+                  <p className="text-[10px] text-muted">Active les boutons Prendre Rendez-vous et Appel Vidéo Direct sur le thème Prestataire</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={linkedToLiveCoaching}
+                  onChange={(e) => setLinkedToLiveCoaching(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 bg-input border border-theme peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
             {/* Toggle Affiliation Produit (% commission pour affiliés & liens partagés) */}
             <div className="p-3 bg-secondary/60 border border-theme rounded-xl space-y-2.5">
               <div className="flex items-center justify-between gap-3">
@@ -1217,6 +1258,176 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 placeholder="Rédigez la description produit avec titres, puces, badges et mise en gras..."
                 minHeight="140px"
               />
+            </div>
+
+            {/* 3. Module Slide / Carrousel Médias (Liens Images & Vidéos uniquement, sans upload) */}
+            <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h4 className="text-xs font-extrabold text-body flex items-center gap-2">
+                    🎞️ Slide / Carrousel Médias (Liens uniquement)
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black">
+                      {mediaSlides.length} média{mediaSlides.length > 1 ? 's' : ''}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-subtext">
+                    Collez vos liens d&apos;images ou de vidéos (YouTube, Vimeo, MP4). Le client voit la vue principale avec les vignettes juste à côté et le compteur total.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <select
+                  value={slideTypeInput}
+                  onChange={(e) => setSlideTypeInput(e.target.value as 'image' | 'video')}
+                  className="sm:col-span-3 px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-bold text-body"
+                >
+                  <option value="image">🖼️ Image (Lien)</option>
+                  <option value="video">🎬 Vidéo (Lien)</option>
+                </select>
+                <input
+                  type="url"
+                  value={slideUrlInput}
+                  onChange={(e) => setSlideUrlInput(e.target.value)}
+                  placeholder="https://... (lien image ou YouTube/MP4)"
+                  className="sm:col-span-5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-body font-mono"
+                />
+                <input
+                  type="text"
+                  value={slideTitleInput}
+                  onChange={(e) => setSlideTitleInput(e.target.value)}
+                  placeholder="Titre court (optionnel)"
+                  className="sm:col-span-2 px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-body"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = slideUrlInput.trim();
+                    if (!url) return;
+                    setMediaSlides((prev) => [
+                      ...prev,
+                      {
+                        id: `slide-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        type: slideTypeInput,
+                        url,
+                        title: slideTitleInput.trim() || undefined,
+                      },
+                    ]);
+                    setSlideUrlInput('');
+                    setSlideTitleInput('');
+                  }}
+                  className="sm:col-span-2 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black cursor-pointer transition"
+                >
+                  + Ajouter
+                </button>
+              </div>
+
+              {mediaSlides.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {mediaSlides.map((slide, idx) => (
+                    <div
+                      key={slide.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-black shrink-0">
+                          #{idx + 1} {slide.type === 'video' ? '🎬' : '🖼️'}
+                        </span>
+                        <span className="text-[11px] font-semibold text-body truncate">
+                          {slide.title || slide.url}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMediaSlides((prev) => prev.filter((s) => s.id !== slide.id))}
+                        className="text-[11px] font-bold text-rose-500 hover:text-rose-400 px-2 py-0.5 cursor-pointer shrink-0"
+                      >
+                        Retirer
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Constructeur de FAQ (Questions Fréquentes) */}
+            <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-extrabold text-body flex items-center gap-2">
+                    ❓ Constructeur de FAQ (Questions / Réponses)
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 text-[10px] font-black">
+                      {faqs.length} question{faqs.length > 1 ? 's' : ''}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-subtext">
+                    Ajoutez vos questions fréquentes pour rassurer vos clients avant la commande.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={faqQuestionInput}
+                  onChange={(e) => setFaqQuestionInput(e.target.value)}
+                  placeholder="Question (ex: Quels fichiers dois-je fournir au démarrage ?)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-body font-semibold"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={faqAnswerInput}
+                    onChange={(e) => setFaqAnswerInput(e.target.value)}
+                    placeholder="Réponse claire et rassurante..."
+                    className="flex-1 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs text-body"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!faqQuestionInput.trim() || !faqAnswerInput.trim()) return;
+                      setFaqs((prev) => [
+                        ...prev,
+                        {
+                          id: `faq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          question: faqQuestionInput.trim(),
+                          answer: faqAnswerInput.trim(),
+                        },
+                      ]);
+                      setFaqQuestionInput('');
+                      setFaqAnswerInput('');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black cursor-pointer transition shrink-0"
+                  >
+                    + Ajouter FAQ
+                  </button>
+                </div>
+              </div>
+
+              {faqs.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {faqs.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-body">
+                          Q{idx + 1}. {item.question}
+                        </div>
+                        <div className="text-[10.5px] text-subtext mt-0.5">{item.answer}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFaqs((prev) => prev.filter((f) => f.id !== item.id))}
+                        className="text-[11px] font-bold text-rose-500 hover:text-rose-400 px-2 py-0.5 cursor-pointer shrink-0"
+                      >
+                        Suppr.
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

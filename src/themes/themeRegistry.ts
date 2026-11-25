@@ -8,10 +8,29 @@ import { ThemeElectroOrange } from './electroOrange/ThemeElectroOrange';
 import { ThemeBeautyEmerald } from './beautyEmerald/ThemeBeautyEmerald';
 import { ThemeLiveStreamPro } from './liveStreamPro/ThemeLiveStreamPro';
 import { ThemeBlankCustom } from './blankCustom/ThemeBlankCustom';
+import { ThemeServicePortfolio } from './servicePortfolio/ThemeServicePortfolio';
 
 export const DEFAULT_THEME_ID: ThemeId = 'theme-default';
 
 export const AVAILABLE_THEMES: ThemeDefinition[] = [
+  {
+    id: 'theme-service-portfolio',
+    name: 'Prestige Services & Portfolio (Prestataires)',
+    subtitle: 'Design Haute Couture • Affiches Larges • Portfolio Vidéo/Figma • Coaching 1-to-1 & Escrow',
+    description: 'Conçu exclusivement pour les Prestataires de Services, Agences, Consultants et Freelances. Hero carrousel infini de 3 bannières, affiches de services larges en mini-bannières, page Réalisations (Vidéos, Figma, Liens & Diaporamas), prise de rendez-vous 1-to-1, appel vidéo Voir Direct et paiement sécurisé Escrow.',
+    badge: 'NOUVEAU • PRESTATAIRES',
+    version: '1.0.0',
+    previewMockup: 'service-portfolio',
+    features: [
+      'Hero Carrousel infini de 3 bannières d’annonces',
+      'Affiches de services larges (mini-bannières) avec photo & description riche',
+      'Page Réalisations & Portfolio (Vidéos, Maquettes Figma, Liens & Diaporamas par liens)',
+      'Boutons Prendre Rendez-vous 1-to-1 (notification Toast) & Voir Direct (Appel Vidéo)',
+      'Protection anti-paiement hors site & Séquestre Escrow intégré'
+    ],
+    isAvailable: true,
+    component: ThemeServicePortfolio
+  },
   {
     id: 'theme-blank-custom',
     name: 'Nanasore Architect (Constructeur Libre A à Z)',
@@ -213,6 +232,12 @@ export const normalizeThemeId = (themeId?: string | null): ThemeId => {
     'livestream': 'theme-livestream-pro',
     'live': 'theme-livestream-pro',
 
+    'theme-service-portfolio': 'theme-service-portfolio',
+    'service-portfolio': 'theme-service-portfolio',
+    'services': 'theme-service-portfolio',
+    'portfolio': 'theme-service-portfolio',
+    'prestataire': 'theme-service-portfolio',
+
     'theme-beauty-emerald': 'theme-beauty-emerald',
     'beauty-emerald': 'theme-beauty-emerald',
     'beauty': 'theme-beauty-emerald',
@@ -276,8 +301,8 @@ export const getThemeDefinition = (themeId?: string): ThemeDefinition => {
 export const THEMES_BY_PRICING_MODEL = {
   pay_per_use: ['theme-default', 'theme-electro-tech'],
   free: ['theme-default', 'theme-electro-tech'],
-  commission: ['theme-digital-pro', 'theme-livestream-pro'],
-  subscription_training: ['theme-digital-pro', 'theme-livestream-pro'],
+  commission: ['theme-digital-pro', 'theme-livestream-pro', 'theme-service-portfolio'],
+  subscription_training: ['theme-digital-pro', 'theme-livestream-pro', 'theme-service-portfolio'],
   subscription_caisse_vitrine: [
     'theme-default',
     'theme-electro-tech',
@@ -285,12 +310,14 @@ export const THEMES_BY_PRICING_MODEL = {
     'theme-beauty-emerald',
     'theme-mega-store-pro',
     'theme-blank-custom',
-    'theme-livestream-pro'
+    'theme-livestream-pro',
+    'theme-service-portfolio'
   ],
   subscription_all: [
     'theme-default',
     'theme-digital-pro',
     'theme-livestream-pro',
+    'theme-service-portfolio',
     'theme-electro-tech',
     'theme-electro-orange',
     'theme-beauty-emerald',

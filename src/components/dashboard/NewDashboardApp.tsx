@@ -5188,8 +5188,26 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
       })
       .subscribe();
 
+    // Écoute temps réel des nouveaux rendez-vous Coaching 1-to-1 -> Toast au prestataire
+    const bookingsChannel = supabase
+      .channel('coaching_bookings_toast_feed')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coaching_bookings' }, (payload: any) => {
+        const b = payload?.new;
+        if (b) {
+          const client = b.student_name || 'Un client';
+          const service = b.service_name || 'Prestation 1-to-1';
+          const when = b.scheduled_date ? `${b.scheduled_date}${b.scheduled_time ? ` à ${b.scheduled_time}` : ''}` : '';
+          showToast(
+            `Nouveau rendez-vous 1-to-1 : ${client} pour « ${service} »${when ? ` (${when})` : ''} !`,
+            'success'
+          );
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(salesChannel);
+      supabase.removeChannel(bookingsChannel);
     };
   }, [loadSalesData, app?.id]);
 

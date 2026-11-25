@@ -10,11 +10,17 @@ const ALLOWED_TAGS = new Set([
   'a', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
   'h5', 'h6', 'hr', 'i', 'li', 'ol', 'p', 'pre', 's', 'span', 'strike',
   'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
-  'img', 'small', 'mark'
+  'img', 'small', 'mark',
+  'svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'g',
+  'defs', 'lineargradient', 'stop'
 ]);
 
 const ALLOWED_ATTRS = new Set([
-  'href', 'title', 'target', 'rel', 'class', 'style', 'src', 'alt', 'width', 'height', 'align'
+  'href', 'title', 'target', 'rel', 'class', 'style', 'src', 'alt', 'width', 'height', 'align',
+  'colspan', 'rowspan',
+  'viewbox', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+  'd', 'cx', 'cy', 'r', 'x', 'y', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'points',
+  'xmlns', 'offset', 'stop-color', 'stop-opacity', 'opacity'
 ]);
 
 const DANGEROUS_PROTOCOLS = ['javascript:', 'data:text/html', 'vbscript:', 'file:'];
