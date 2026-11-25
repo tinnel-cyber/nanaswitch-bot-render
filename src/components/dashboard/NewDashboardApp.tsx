@@ -504,6 +504,36 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
     setTimeout(() => setToast(null), 4000);
   }, []);
 
+  // Révélation élégante du N° de compte au clic avec fermeture automatique (5s)
+  const [isAccountIdRevealed, setIsAccountIdRevealed] = useState(false);
+  const [copiedAccountId, setCopiedAccountId] = useState(false);
+  const accountIdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleToggleAccountIdReveal = useCallback(() => {
+    if (accountIdTimerRef.current) clearTimeout(accountIdTimerRef.current);
+    setIsAccountIdRevealed((prev) => {
+      const next = !prev;
+      if (next) {
+        accountIdTimerRef.current = setTimeout(() => {
+          setIsAccountIdRevealed(false);
+        }, 5000);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleCopyAccountId = useCallback((e: React.MouseEvent, idVal: string) => {
+    e.stopPropagation();
+    if (!idVal) return;
+    navigator.clipboard?.writeText(idVal).catch(() => {});
+    setCopiedAccountId(true);
+    if (accountIdTimerRef.current) clearTimeout(accountIdTimerRef.current);
+    accountIdTimerRef.current = setTimeout(() => {
+      setIsAccountIdRevealed(false);
+    }, 5000);
+    setTimeout(() => setCopiedAccountId(false), 1800);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onShowToast = (e: Event) => {
@@ -1672,9 +1702,32 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   >
                     <div className={`w-2 h-2 rounded-full ${selectedApp.status === 'PENDING_KYC' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shrink-0`} />
                     <span className="font-extrabold text-slate-900">{selectedApp.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500 font-bold px-1.5 py-0.5 bg-white rounded border border-slate-200">
-                      {selectedApp.id}
-                    </span>
+                  </button>
+
+                  {/* Pilule N° Compte élégante (masquée par défaut, ouvre au clic, se referme seule en 5s) */}
+                  <button
+                    type="button"
+                    onClick={handleToggleAccountIdReveal}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100/90 hover:bg-blue-50 text-slate-700 border border-slate-200/90 transition-all duration-200 cursor-pointer shadow-xs"
+                    title={isAccountIdRevealed ? 'Masquer le numéro de compte' : 'Afficher le numéro de compte (fermeture auto 5s)'}
+                  >
+                    <Eye className={`w-3.5 h-3.5 ${isAccountIdRevealed ? 'text-blue-600' : 'text-slate-400'}`} />
+                    {isAccountIdRevealed ? (
+                      <span className="font-mono text-[10px] font-extrabold text-slate-800 animate-in fade-in duration-150 flex items-center gap-1.5">
+                        <span>{selectedApp.id}</span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleCopyAccountId(e, selectedApp.id)}
+                          className="p-0.5 rounded bg-white border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600"
+                          title="Copier"
+                        >
+                          {copiedAccountId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-500 tracking-wider">ID ••••</span>
+                    )}
                   </button>
 
                   {/* Badge Statut Validation au niveau de l'ID du compte */}
@@ -1854,7 +1907,14 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div className="min-w-0">
                       <p className="text-sm font-black text-slate-900 truncate">{selectedApp.name}</p>
-                      <p className="text-[10px] font-mono text-slate-500 truncate">{selectedApp.id}</p>
+                      <button
+                        type="button"
+                        onClick={handleToggleAccountIdReveal}
+                        className="mt-0.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-[10px] font-mono text-slate-600 border border-slate-200 transition cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3 text-slate-400" />
+                        <span>{isAccountIdRevealed ? selectedApp.id : 'N° Compte ••••••'}</span>
+                      </button>
                     </div>
                     <button
                       type="button"
@@ -1962,11 +2022,32 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
 
               {/* Sidebar Header: Account Identifier & Activity Domain */}
               <div className="mx-1 p-3.5 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-2xl border border-slate-200/90 shadow-xs space-y-1.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">N° Compte</span>
-                  <span className="font-mono text-[10px] font-extrabold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                    {selectedApp.id}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={handleToggleAccountIdReveal}
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] font-extrabold text-slate-700 bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition-all duration-200 cursor-pointer shadow-2xs"
+                    title={isAccountIdRevealed ? 'Masquer (fermeture auto dans 5s)' : 'Cliquer pour afficher le N° de compte'}
+                  >
+                    <Eye className={`w-3 h-3 ${isAccountIdRevealed ? 'text-blue-600' : 'text-slate-400'}`} />
+                    {isAccountIdRevealed ? (
+                      <span className="flex items-center gap-1.5 animate-in fade-in duration-150">
+                        <span className="max-w-[115px] truncate">{selectedApp.id}</span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleCopyAccountId(e, selectedApp.id)}
+                          className="text-slate-500 hover:text-blue-600"
+                          title="Copier le N° de compte"
+                        >
+                          {copiedAccountId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="tracking-widest text-slate-500">••••••</span>
+                    )}
+                  </button>
                 </div>
                 <div className="pt-1 flex flex-col gap-0.5">
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Domaine d'activité :</span>
