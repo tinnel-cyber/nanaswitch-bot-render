@@ -160,10 +160,10 @@ export function resolveThemeFromPrefix(prefix: string): { themeId: string; isBla
 
 /**
  * Expression régulière pour identifier les préfixes de thèmes publics valides :
- * - Thèmes présents : se|dp|et|ms|mp|eo|ep|be|lp|sl|mc|gs
+ * - Thèmes présents : se|dp|et|ms|mp|eo|ep|be|lp|sl|sp|mc|gs
  * - Alias thèmes blank : b1, b2, b3... ou chiffres romains i|l|ii|ll|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx
  */
-export const THEME_PREFIX_REGEX = /^(?:se|dp|et|ms|mp|eo|ep|be|lp|sl|mc|gs|b\d+|[ivxlcdm]+|l{1,3})$/i;
+export const THEME_PREFIX_REGEX = /^(?:se|dp|et|ms|mp|eo|ep|be|lp|sl|sp|mc|gs|b\d+|[ivxlcdm]+|l{1,3})$/i;
 
 export interface PublicStoreRouteParams {
   storeIdFromPath: string | null;

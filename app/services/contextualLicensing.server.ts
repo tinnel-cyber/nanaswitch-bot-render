@@ -57,7 +57,8 @@ export const PHYSICAL_ECOMMERCE_THEMES = [
 
 export const DIGITAL_AND_WEBINAR_THEMES = [
   'theme-digital-pro',
-  'theme-livestream-pro'
+  'theme-livestream-pro',
+  'theme-service-portfolio'
 ] as const;
 
 export interface ModuleAccessEvaluation {
@@ -188,7 +189,8 @@ export function evaluateModuleAccess(
       'theme-beauty-emerald',
       'theme-megastore-pro',
       'theme-digital-pro',
-      'theme-livestream-pro'
+      'theme-livestream-pro',
+      'theme-service-portfolio'
     ]
   };
 }

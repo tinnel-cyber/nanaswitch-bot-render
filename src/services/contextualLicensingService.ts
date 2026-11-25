@@ -420,7 +420,7 @@ export async function submitAccountOpeningTunnel(payload: {
       pricingModel: effectivePricingModel,
       subscriptionOption: payload.subscriptionOption || null,
       kycStatus: isParticulier ? 'light' : 'full',
-      enabledThemes: data.enabled_themes || ['theme-default', 'theme-electro-tech', 'theme-digital-pro', 'theme-livestream-pro']
+      enabledThemes: data.enabled_themes || ['theme-default', 'theme-electro-tech', 'theme-digital-pro', 'theme-livestream-pro', 'theme-service-portfolio']
     };
     saveLocalUserLicense(updatedLicense);
   }

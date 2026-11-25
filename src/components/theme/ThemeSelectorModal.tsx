@@ -319,6 +319,44 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({
                       </span>
                     </div>
                     {/* Mockup Layout Dynamique */}
+                    {theme.id === 'theme-service-portfolio' && (
+                      <div className="w-full h-full flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity bg-[#07090E] rounded-xl p-1.5 border border-amber-500/40">
+                        {/* Header Prestige & Onglets */}
+                        <div className="w-full h-4 bg-slate-900/90 rounded flex items-center justify-between px-1.5 border border-amber-500/20">
+                          <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-amber-400" />
+                            <span className="text-[6.5px] font-black text-white tracking-wide">PRESTATAIRE VÉRIFIÉ</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[5.5px] font-black bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 px-1.5 py-0.2 rounded">Prestations</span>
+                            <span className="text-[5.5px] font-bold text-slate-300 px-1">Portfolio</span>
+                          </div>
+                        </div>
+                        {/* Hero Carrousel Prestige */}
+                        <div className="w-full h-11 rounded-lg bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/30 p-1.5 flex items-center justify-between gap-1.5">
+                          <div className="space-y-0.5">
+                            <span className="inline-block text-[5px] font-black text-amber-300 bg-amber-500/15 px-1 rounded border border-amber-400/30">ESCROW SÉCURISÉ</span>
+                            <div className="w-20 h-1.5 bg-white rounded" />
+                            <div className="w-12 h-2 bg-amber-400 rounded-sm mt-0.5" />
+                          </div>
+                          <div className="w-11 h-8 rounded bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-[8px]">💼</div>
+                        </div>
+                        {/* Affiches Larges Services + RDV 1-to-1 */}
+                        <div className="w-full flex-1 rounded bg-slate-900/70 border border-white/10 p-1 flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-1">
+                            <div className="w-8 h-6 rounded bg-amber-500/20 border border-amber-400/30 shrink-0" />
+                            <div className="space-y-0.5 flex-1">
+                              <div className="w-14 h-1.5 bg-white/90 rounded" />
+                              <div className="w-10 h-1 bg-slate-400 rounded" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[5px] font-bold bg-emerald-500/20 text-emerald-300 px-1 py-0.5 rounded border border-emerald-500/30">RDV 1:1</span>
+                            <span className="text-[5px] font-bold bg-amber-400 text-slate-950 px-1 py-0.5 rounded">Voir Direct</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {theme.id === 'theme-blank-custom' && (
                       <div className="w-full h-full flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity bg-gradient-to-b from-blue-950/40 via-slate-900 to-slate-950 rounded-xl p-2 border border-blue-500/40">
                         {/* Barre supérieure modulaire */}

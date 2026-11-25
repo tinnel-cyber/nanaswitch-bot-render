@@ -3026,7 +3026,9 @@ const tr = (x, h) => {
                             "bg-slate-800 text-indigo-300 text-xs px-3 py-1 rounded-full border border-indigo-500/30 font-bold",
                           children: [
                             "🎨 ",
-                            Ke === "theme-beauty-emerald"
+                            Ke === "theme-service-portfolio"
+                              ? "Prestige Services & Portfolio"
+                              : Ke === "theme-beauty-emerald"
                               ? "Émeraude Prestige"
                               : Ke === "theme-livestream-pro"
                                 ? "Studio Live Pro"
