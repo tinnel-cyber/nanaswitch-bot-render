@@ -131,7 +131,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
     setAnalysisStep(`📦 Vérification des ${criticalStockProducts.length} stock(s) critique(s) et ${formatCFA(totalDebt)} d'impayés...`);
     await new Promise((r) => setTimeout(r, 400));
 
-    setAnalysisStep('⚡ Synthèse des 3 actions à fort impact par Gemini 2.5 Flash...');
+    setAnalysisStep('⚡ Synthèse des 3 actions à fort impact par Nanasore IA...');
 
     try {
       const response = await fetch('/api/ai/advisor', {
@@ -230,7 +230,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
     } catch (e) {
       // Graceful local financial response
       setTimeout(() => {
-        let answer = `**💡 Recommandation Financière Gemini :**\n\n- **Trésorerie** : Sécurisez en priorité vos créances supérieures à 15 000 F CFA.\n- **Marge** : Concentrez-vous sur le Riz et le Lait qui assurent plus de 60% de votre marge.\n- **Disponibilité** : Réapprovisionnez le Sucre avant 48h pour ne pas rater les ventes du petit-déjeuner.`;
+        let answer = `**💡 Recommandation Financière Nanasore IA :**\n\n- **Trésorerie** : Sécurisez en priorité vos créances supérieures à 15 000 F CFA.\n- **Marge** : Concentrez-vous sur le Riz et le Lait qui assurent plus de 60% de votre marge.\n- **Disponibilité** : Réapprovisionnez le Sucre avant 48h pour ne pas rater les ventes du petit-déjeuner.`;
         if (query.toLowerCase().includes('impayé') || query.toLowerCase().includes('crédit')) {
           answer = `**💡 Comment réduire vos impayés sans perdre vos clients :**\n\n1. **Plafonnez le crédit** : Limitez le crédit à 15 000 F CFA maximum par famille.\n2. **Règle des 50%** : Exigez qu'un client avec dette ancienne règle au moins la moitié avant tout nouvel achat.\n3. **Relance WhatsApp amicale le 28 du mois** : Les gens paient en priorité les commerçants qui relancent poliment le jour de paie.`;
         }
@@ -287,7 +287,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-1.5">
-                  Conseils & Analyse IA de Gemini
+                  Conseils & Analyse Nanasore IA
                 </h1>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                   Gratuit
@@ -303,7 +303,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
         {/* Global AI status badge */}
         <div className="hidden sm:flex items-center gap-1.5 bg-indigo-950/60 border border-indigo-500/30 px-2 py-1 rounded-lg">
           <Zap className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[11px] font-medium text-indigo-200">Gemini 2.5 Flash</span>
+          <span className="text-[11px] font-medium text-indigo-200">Moteur Nanasore Pro</span>
         </div>
       </header>
 
@@ -416,7 +416,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
         {!isOnline && (
           <div className="px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
             <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Agent IA Gemini Cloud : <strong>Connexion requise</strong> pour les requêtes en temps réel. Vos données locales restent consultables.</span>
+            <span>Agent Nanasore IA Cloud : <strong>Connexion requise</strong> pour les requêtes en temps réel. Vos données locales restent consultables.</span>
           </div>
         )}
 
@@ -823,7 +823,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                 <span className="text-base">🥐</span>
                 <div>
                   <span className="font-extrabold text-amber-300 text-xs block mb-0.5">
-                    Conseil Stratégique Gemini :
+                    Conseil Stratégique Nanasore IA :
                   </span>
                   « Vos ventes de pain augmentent de 20% le vendredi, pensez à commander plus de beurre. »
                 </div>
@@ -1168,7 +1168,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
                     {msg.sender === 'gemini' ? (
                       <span className="text-[10px] font-extrabold text-indigo-400 flex items-center gap-1">
                         <Sparkles className="w-3 h-3 text-indigo-400" />
-                        Conseiller IA Gemini
+                        Conseiller Nanasore IA
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-400">Vous (Boutiquier)</span>
@@ -1191,7 +1191,7 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
               {isWaitingAnswer && (
                 <div className="flex items-center gap-2 text-xs text-indigo-300 bg-slate-800/60 p-2.5 rounded-xl w-fit">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Gemini analyse vos finances et rédige sa recommandation...</span>
+                  <span>Nanasore IA analyse vos finances et rédige sa recommandation...</span>
                 </div>
               )}
             </div>

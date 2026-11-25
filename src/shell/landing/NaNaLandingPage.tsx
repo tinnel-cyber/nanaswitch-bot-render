@@ -949,7 +949,7 @@ const NextGenDarkSection: React.FC<{
                       <Bot className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                       <span className="font-bold text-slate-900 text-[11px] truncate">{card.aiBadge}</span>
                     </div>
-                    <span className="text-[10px] text-indigo-600 font-bold shrink-0 ml-1">Gemini • Claude • GPT</span>
+                    <span className="text-[10px] text-indigo-600 font-bold shrink-0 ml-1">Agents Nanasore IA</span>
                   </div>
                 )}
               </div>

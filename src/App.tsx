@@ -5463,7 +5463,7 @@ export default function App() {
           setIsAcademyDrawerOpen(true);
         }}
         onOpenAiAdvisor={() => {
-          requireManagerAuth(() => setCurrentView('AI_ADVISOR'), 'Conseils IA Gemini', 'IA');
+          requireManagerAuth(() => setCurrentView('AI_ADVISOR'), 'Conseils Nanasore IA', 'IA');
         }}
         isAuthenticated={Boolean(currentUser)}
         onRequestAuth={handlePublicRequestAuthFromSarah}
@@ -6642,7 +6642,7 @@ export default function App() {
             currentView={currentView}
             onOpenAcademy={() => setIsAcademyDrawerOpen(true)}
             onOpenAiAdvisor={() => {
-              requireManagerAuth(() => setCurrentView('AI_ADVISOR'), 'Conseils IA Gemini', 'IA');
+              requireManagerAuth(() => setCurrentView('AI_ADVISOR'), 'Conseils Nanasore IA', 'IA');
             }}
             customAvatarUrl="/assets/avatar_aicha.jpg"
           />
@@ -8483,14 +8483,16 @@ export default function App() {
           </React.Suspense>
         )}
 
-        {/* Assistant IA Juridique & Financier OHADA (Flottant / Draggable) */}
-        <React.Suspense fallback={null}>
-          <LegalAiAdvisorWidget
-            isOpen={isGlobalLegalAiOpen}
-            onToggle={() => setIsGlobalLegalAiOpen((prev) => !prev)}
-            onClose={() => setIsGlobalLegalAiOpen(false)}
-          />
-        </React.Suspense>
+        {/* Assistant IA Juridique & Financier OHADA — Uniquement sur les pages IA et DocuSign */}
+        {(currentView === 'AI_ADVISOR' || currentView === 'AI_LEGAL' || currentView === 'DOCUSIGN' || currentView === 'NANA_GENERATOR' || currentView === 'AI_MARKETING') && (
+          <React.Suspense fallback={null}>
+            <LegalAiAdvisorWidget
+              isOpen={isGlobalLegalAiOpen}
+              onToggle={() => setIsGlobalLegalAiOpen((prev) => !prev)}
+              onClose={() => setIsGlobalLegalAiOpen(false)}
+            />
+          </React.Suspense>
+        )}
 
 
         {/* Toast Flottant Studio Pub IA Google Flow */}
@@ -8529,10 +8531,7 @@ export default function App() {
           />
         )}
 
-        {/* Bouton Flottant « ✨ Code Live » → Mini-Market Popup Dépliable instantané */}
-        <React.Suspense fallback={null}>
-          <LiveCodeMagicWidget />
-        </React.Suspense>
+        {/* Bouton Flottant « Code Live » masqué */}
 
         {/* =========================================================================
             TIROIR LATÉRAL NANA ACADÉMIE, MINI-LECTEUR & ASSISTANT SARAH

@@ -20,7 +20,7 @@ import {
   Key, Radio, History, AlertTriangle, Percent, HelpCircle, Settings, 
   Plus, CheckCircle2, Clock, XCircle, Search, Copy, Check, Eye, EyeOff, 
   ExternalLink, FileText, ChevronRight, LogOut, RefreshCw, Filter, Download,
-  Send, ShieldAlert, BookOpen, Layers, Lock, Sparkles, AlertCircle, Upload, FileCheck, ArrowLeft,
+  Send, ShieldAlert, BookOpen, Layers, Lock, Cpu, AlertCircle, Upload, FileCheck, ArrowLeft,
   ChevronDown, PhoneCall, Code2, Globe2, Server, Crown,
   TrendingUp, Activity, DollarSign, Zap, Maximize2, Info, Loader2,
   LayoutGrid, Blocks, MessageSquare, LifeBuoy, CheckCheck, Globe, Building, FlaskConical,
@@ -2138,7 +2138,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-100/50 to-indigo-100/20 rounded-full blur-3xl pointer-events-none" />
             <div className="relative z-10 max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-blue-50 text-[#1E40AF] px-3.5 py-1.5 rounded-full text-xs font-bold mb-4 border border-blue-200">
-                <Sparkles className="w-4 h-4 text-blue-600" />
+                <Layers className="w-4 h-4 text-blue-600" />
                 <span>Dashboard page</span>
               </div>
               <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
@@ -4348,7 +4348,7 @@ const OFFICIAL_PRODUCTION_MODULES: ServiceModuleDefinition[] = [
     route: '/dashboard/ai-studio',
     pricingType: 'PAY_AS_GO',
     pricingBadge: 'Pay-as-you-go • 0.02 XOF/req',
-    icon: Sparkles, // VRAIE IA UNIQUEMENT
+    icon: Cpu, // VRAIE IA UNIQUEMENT
     gradient: 'from-violet-600 to-purple-800',
     isAi: true
   },
@@ -6532,7 +6532,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
               Modèles Économiques & Grille Tarifaire
             </h1>
             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#1E40AF] border border-blue-200">
-              <Sparkles className="w-3.5 h-3.5 text-[#1E40AF]" />
+              <Zap className="w-3.5 h-3.5 text-[#1E40AF]" />
               Routeur Dynamique Nanasore
             </span>
           </div>
@@ -6808,7 +6808,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
               onClick={selectAllParts}
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/30 transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <Layers className="w-3.5 h-3.5 text-amber-300" />
               <span>Pack Tout-en-Un (Tout Cocher)</span>
             </button>
           </div>
@@ -7032,7 +7032,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
         <div className="pt-2">
           <div className="mb-4">
             <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#1E40AF]" />
+              <Globe2 className="w-4 h-4 text-[#1E40AF]" />
               <span>Ou choisissez un Pack Global Scalable (Multi-Boutiques, Campus & Marque Blanche)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">

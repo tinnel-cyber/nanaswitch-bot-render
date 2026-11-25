@@ -703,7 +703,7 @@ export const LegalAiAdvisorWidget: React.FC<LegalAiAdvisorWidgetProps> = ({
                     Juriste OHADA & Finance
                   </h3>
                   <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    Gemini Flash
+                    Nanasore IA Pro
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400 leading-tight">
@@ -828,7 +828,7 @@ export const LegalAiAdvisorWidget: React.FC<LegalAiAdvisorWidgetProps> = ({
                 </button>
               </div>
               <p className="text-[10px] text-slate-400">
-                Modèle gratuit : <code>gemini-2.5-flash</code> (15 req/min). Si aucune clé n'est saisie, l'appel transitera par le serveur Nanasore ou le moteur local.
+                Moteur interne : <code>Nanasore IA Pro</code>. Si aucune clé n'est saisie, l'appel transitera par le serveur Nanasore ou le moteur local.
               </p>
               <div className="flex gap-1.5">
                 <input
