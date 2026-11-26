@@ -63,7 +63,7 @@ import {
   LandingFooterConfig,
   PlatformLegalConfig
 } from '../../types';
-import { subscribeToLandingPageConfig, subscribeToPlatformSubscriptions, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
+import { subscribeToLandingPageConfig, subscribeToPlatformSubscriptions, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/supabaseDataService';
 import { subscribeToLandingPricing } from '../../services/landingPricingService';
 import { Logo } from '../../components/common/Logo';
 import { SubscriptionPaywallModal } from '../modals/SubscriptionPaywallModal';

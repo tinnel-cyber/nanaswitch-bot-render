@@ -1263,7 +1263,7 @@ export async function updateStoreSubscription(
     const isCallerSuperAdmin = 
       auth.currentUser?.email?.toLowerCase() === 'pousbila36@gmail.com' ||
       auth.currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
-      auth.currentUser?.email?.toLowerCase() === 'admin@nanasore.com';
+      auth.currentUser?.email?.toLowerCase() === 'contact@nanasore.com';
 
     if (isCallerSuperAdmin) {
       targetUserId = cleanStoreId.startsWith('store-') ? cleanStoreId.replace(/^store-/, '') : cleanStoreId;

@@ -73,7 +73,7 @@ import {
   playCashChime,
   formatCFA
 } from '../../utils/audio';
-import { addUserCredits } from '../../utils/firestoreService';
+import { addUserCredits } from '../../utils/supabaseDataService';
 import { ThemeSwitcher } from '../../shell/layout/ThemeSwitcher';
 import { FunnelBuilder } from '../../components/FunnelBuilder';
 import { saveFunnelConfig } from '../../services/omniFunnelService';

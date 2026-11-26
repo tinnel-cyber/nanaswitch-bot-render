@@ -13,7 +13,7 @@ import {
   LandingPageConfig,
   SubscriptionPlanConfig
 } from '../types';
-import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/firestoreService';
+import { DEFAULT_PLATFORM_SUBSCRIPTIONS, cleanFirestoreData, sanitizePlatformSubscriptions } from '../utils/supabaseDataService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 import { supabase } from '../lib/supabase';
 export const RTDB_DEFAULT_URL = "";
@@ -37,7 +37,7 @@ export const SUPER_ADMIN_EMAILS = [
   'pousbila04@gmail.com', // Super Admin Principal Officiel Supabase
   'pousbila36@gmail.com',
   'contact@nanasore.com',
-  'admin@nanasore.com'
+  'contact@nanasore.com'
 ];
 
 export const KNOWN_SUPERADMIN_EMAILS = SUPER_ADMIN_EMAILS;

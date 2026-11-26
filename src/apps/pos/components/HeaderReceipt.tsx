@@ -198,8 +198,8 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
           currentUser?.email?.toLowerCase() === 'pousbila36@gmail.com' ||
           auth.currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
           currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
-          auth.currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
-          currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
+          auth.currentUser?.email?.toLowerCase() === 'contact@nanasore.com' ||
+          currentUser?.email?.toLowerCase() === 'contact@nanasore.com' ||
           currentUser?.role === 'SUPER_ADMIN';
 
         if (isAuthorizedEmail) {

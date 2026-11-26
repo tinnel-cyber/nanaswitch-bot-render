@@ -713,7 +713,7 @@ export async function flushOfflineSyncQueue(maxBatchSize = 50): Promise<{ synced
     console.log(`[OfflineSync Batching] Dépilage de ${queue.length} opération(s) par lots de max ${maxBatchSize}...`);
 
     // Import dynamique pour éviter tout cycle de dépendance
-    const { commitFirestoreBatch } = await import('../utils/firestoreService');
+    const { commitFirestoreBatch } = await import('../utils/supabaseDataService');
 
     // Découpage en tranches de 20 à 50 opérations
     for (let i = 0; i < queue.length; i += maxBatchSize) {

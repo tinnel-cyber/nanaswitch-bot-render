@@ -10,7 +10,7 @@
  */
 
 import { CustomerOrder, OrderItem } from '../types';
-import { persistCustomerOrder, deleteCustomerOrder } from '../utils/firestoreService';
+import { persistCustomerOrder, deleteCustomerOrder } from '../utils/supabaseDataService';
 import { playNewOrderAlert } from '../utils/audio';
 import {
   saveOrderOffline,

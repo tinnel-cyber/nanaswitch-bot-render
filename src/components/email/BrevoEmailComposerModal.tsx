@@ -41,7 +41,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
   const [recipientInput, setRecipientInput] = useState<string>(defaultRecipient);
   const [subject, setSubject] = useState<string>(defaultSubject || 'Notification Officielle — Nanasore');
   const [senderName, setSenderName] = useState<string>('Nanasore Team');
-  const [senderEmail, setSenderEmail] = useState<string>('admin@nanasore.com');
+  const [senderEmail, setSenderEmail] = useState<string>('contact@nanasore.com');
   
   // Contenu du message (HTML)
   const [htmlContent, setHtmlContent] = useState<string>(`<p>Bonjour,</p>
@@ -52,7 +52,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
   <a href="https://nanasore.com" style="background-color:#2563EB;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:10px;font-weight:bold;display:inline-block;">Accéder au Central Master Hub</a>
 </p>
 <br/>
-<p style="font-size:12px;color:#64748b;">Cordialement,<br/><strong>L'équipe Nanasore & Nanasore</strong><br/>Support : admin@nanasore.com</p>`);
+<p style="font-size:12px;color:#64748b;">Cordialement,<br/><strong>L'équipe Nanasore & Nanasore</strong><br/>Support : contact@nanasore.com</p>`);
 
   // Modes d'affichage
   const [viewMode, setViewMode] = useState<'EDIT' | 'PREVIEW'>('EDIT');
@@ -65,7 +65,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
     {
       id: 'SUPER_ADMINS',
       label: '👑 Tous les Super-Admins',
-      emails: 'admin@nanasore.com, pousbila36@gmail.com',
+      emails: 'contact@nanasore.com, pousbila36@gmail.com',
       badge: 'Direction'
     },
     {
@@ -83,7 +83,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
     {
       id: 'TEST_SELF',
       label: '🧪 Mon E-mail de Test',
-      emails: currentUser?.email || 'admin@nanasore.com',
+      emails: currentUser?.email || 'contact@nanasore.com',
       badge: 'Test Immédiat'
     }
   ];
@@ -162,7 +162,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
     <!-- Header Officiel Nanasore -->
     <div style="background:linear-gradient(135deg,#0B1E48 0%,#1E3A8A 100%);padding:28px 24px;text-align:center;color:#FFFFFF;">
       <h1 style="margin:0;font-size:20px;font-weight:900;letter-spacing:-0.5px;">Nanasore & Commerce</h1>
-      <p style="margin:6px 0 0 0;font-size:11px;color:#93C5FD;text-transform:uppercase;letter-spacing:1px;font-weight:bold;">Expédié via Brevo API v3 • admin@nanasore.com</p>
+      <p style="margin:6px 0 0 0;font-size:11px;color:#93C5FD;text-transform:uppercase;letter-spacing:1px;font-weight:bold;">Expédié via Brevo API v3 • contact@nanasore.com</p>
     </div>
 
     <!-- Corps du Message -->
@@ -320,7 +320,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
               type="text"
               value={recipientInput}
               onChange={(e) => setRecipientInput(e.target.value)}
-              placeholder="ex: admin@nanasore.com, client@domaine.com, partenaire@gmail.com"
+              placeholder="ex: contact@nanasore.com, client@domaine.com, partenaire@gmail.com"
               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
@@ -345,7 +345,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
                   type="email"
                   value={senderEmail}
                   onChange={(e) => setSenderEmail(e.target.value)}
-                  placeholder="admin@nanasore.com"
+                  placeholder="contact@nanasore.com"
                   className="w-1/2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-emerald-400 font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -499,7 +499,7 @@ export const BrevoEmailComposerModal: React.FC<BrevoEmailComposerModalProps> = (
                     dangerouslySetInnerHTML={{ __html: htmlContent }} 
                   />
                   <div className="mt-5 pt-3 border-t border-slate-200 text-[10px] text-slate-500 text-center">
-                    Nanasore Team &lt;admin@nanasore.com&gt;
+                    Nanasore Team &lt;contact@nanasore.com&gt;
                   </div>
                 </div>
               </div>

@@ -59,7 +59,7 @@ import {
   saveLandingPageConfig,
   subscribeToLandingPageConfig,
   addUserCredits
-} from '../../utils/firestoreService';
+} from '../../utils/supabaseDataService';
 import { auth } from '../../lib/supabaseBridge';
 import { ThemeSwitcher } from '../../shell/layout/ThemeSwitcher';
 import { LegalTickerFooter } from '../../components/LegalTickerFooter';
@@ -428,8 +428,8 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
     auth.currentUser?.email?.toLowerCase() === 'pousbila36@gmail.com' ||
     currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
     auth.currentUser?.email?.toLowerCase() === 'pousbila04@gmail.com' ||
-    currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
-    auth.currentUser?.email?.toLowerCase() === 'admin@nanasore.com' ||
+    currentUser?.email?.toLowerCase() === 'contact@nanasore.com' ||
+    auth.currentUser?.email?.toLowerCase() === 'contact@nanasore.com' ||
     Boolean(currentUser?.email?.toLowerCase()?.includes('admin')) ||
     (typeof window !== 'undefined' && (
       localStorage.getItem('nana_is_superadmin') === 'true' ||

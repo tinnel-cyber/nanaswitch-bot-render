@@ -25,7 +25,7 @@ import {
   SubscriptionPlan
 } from '../types';
 import { isDemoStore } from './superAdminService';
-import { DEFAULT_PLATFORM_SUBSCRIPTIONS } from '../utils/firestoreService';
+import { DEFAULT_PLATFORM_SUBSCRIPTIONS } from '../utils/supabaseDataService';
 import { DEFAULT_CENTRAL_PAYMENT_CONFIG } from '../utils/countryPaymentMatrix';
 
 /**

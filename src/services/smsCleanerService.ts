@@ -6,7 +6,7 @@
  */
 
 import { supabase } from '../lib/supabase';
-import { addUserCredits } from '../utils/firestoreService';
+import { addUserCredits } from '../utils/supabaseDataService';
 import { verifyPaymentTransaction } from './paymentApiService';
 
 export const RTDB_BASE_URL = "";

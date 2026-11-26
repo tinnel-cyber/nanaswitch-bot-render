@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StoreUser, StoreApprovalStatus } from '../../types';
 
 import { supabase } from '@/lib/supabase';
-import { updateStoreApprovalStatus } from '../../utils/firestoreService';
+import { updateStoreApprovalStatus } from '../../utils/supabaseDataService';
 import { 
   Clock, 
   Store, 

@@ -62,7 +62,7 @@ import { PaymentRoutingSettings } from '../../components/PaymentRoutingSettings'
 import { PushNotificationTester } from '../../components/PushNotificationTester';
 import { isFreePlan } from '../../utils/planFeatures';
 import { sendTransactionalSms } from '../../services/smsSenderService';
-import { addUserCredits } from '../../utils/firestoreService';
+import { addUserCredits } from '../../utils/supabaseDataService';
 import { SPaymentGateway, PaymentSuccessDetails } from '../../components/payment/SPaymentGateway';
 import {
   EmailCampaign,

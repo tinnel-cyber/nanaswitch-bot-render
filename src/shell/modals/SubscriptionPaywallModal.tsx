@@ -12,7 +12,7 @@ import {
   subscribeToPlatformSubscriptions,
   DEFAULT_PLATFORM_SUBSCRIPTIONS,
   sanitizePlatformSubscriptions,
-} from '../../utils/firestoreService';
+} from '../../utils/supabaseDataService';
 import { getSuperAdminPlatformConfig, isSuperAdminLocally } from '../../services/superAdminService';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 import { UltimateCheckout, PaymentSuccessDetails } from '../../services/nana-switch/payment/UltimateCheckout';

@@ -44,7 +44,7 @@ import {
 } from '../../services/aiStudioService';
 import { auth, db } from '../../lib/supabaseBridge';
 import { doc, setDoc, serverTimestamp } from '../../lib/supabaseBridge';
-import { deductUserCredits } from '../../utils/firestoreService';
+import { deductUserCredits } from '../../utils/supabaseDataService';
 import { callAwsLambdaUnified } from '../NanaGeneratorModal';
 import { isFreePlan, triggerProFeatureUpsell } from '../../utils/planFeatures';
 import { playTapBeep, playValidationBeep, playCancelSound } from '../../utils/audio';

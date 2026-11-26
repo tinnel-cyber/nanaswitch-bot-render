@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PrivacyPolicyConfig } from '../../types';
-import { getPrivacyPolicy, savePrivacyPolicy } from '../../utils/firestoreService';
+import { getPrivacyPolicy, savePrivacyPolicy } from '../../utils/supabaseDataService';
 import { Shield, X, Edit3, Check, RefreshCw, Lock } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 

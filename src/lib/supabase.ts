@@ -79,7 +79,7 @@ export const KNOWN_SUPERADMIN_EMAILS = [
   'pousbila04@gmail.com', // Super Admin Principal Officiel Supabase
   'pousbila36@gmail.com',
   'contact@nanasore.com',
-  'admin@nanasore.com'
+  'contact@nanasore.com'
 ];
 
 /**

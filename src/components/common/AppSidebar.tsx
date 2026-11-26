@@ -42,7 +42,7 @@ import {
   resolveSellerMode,
   persistSellerModeLocally 
 } from '../../utils/planFeatures';
-import { updateSellerModeInFirestore } from '../../utils/firestoreService';
+import { updateSellerModeInFirestore } from '../../utils/supabaseDataService';
 import { playTapBeep, playValidationBeep } from '../../utils/audio';
 import { isSuperAdminLocally } from '../../services/superAdminService';
 import { WameetSquircleIcon } from '../wameet/WameetLogo';

@@ -44,7 +44,7 @@ import {
   addUserCredits, 
   GENERATOR_CREDIT_COSTS, 
   DEFAULT_FREE_CREDITS 
-} from '../../../utils/firestoreService';
+} from '../../../utils/supabaseDataService';
 import { UltimateCheckout } from '../../../services/nana-switch/payment/UltimateCheckout';
 const SocialVideoMontageStudio = React.lazy(() => import('./SocialVideoMontageStudio').then(m => ({ default: m.SocialVideoMontageStudio })));
 import { FLOW_STUDIO_URL, openFlowInApp, showGoogleFlowToast } from '../../../utils/launchGoogleFlow';

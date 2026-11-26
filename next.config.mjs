@@ -17,7 +17,7 @@ const nextConfig = {
       '@supabase/supabase-js',
     ],
   },
-  serverExternalPackages: ['archiver', '@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner', 'firebase-admin'],
+  serverExternalPackages: ['archiver', '@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
 };
 
 export default nextConfig;

@@ -93,7 +93,7 @@ const KNOWN_ADMIN_EMAILS = new Set([
   'pousbila04@gmail.com',
   'pousbila36@gmail.com',
   'contact@nanasore.com',
-  'admin@nanasore.com',
+  'contact@nanasore.com',
   ...(process.env.SUPER_ADMIN_EMAILS ? process.env.SUPER_ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : [])
 ]);
 
@@ -12229,7 +12229,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
 
   // =========================================================================
   // Endpoint Brevo Emailing Transactionnel & Notifications (v3 REST API)
-  // Expéditeur par défaut : Nanasore Team <admin@nanasore.com>
+  // Expéditeur par défaut : Nanasore Team <contact@nanasore.com>
   // =========================================================================
   app.post('/api/email/send', requireAuthenticatedUser, async (req, res) => {
     try {

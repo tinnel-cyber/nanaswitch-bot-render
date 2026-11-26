@@ -16,7 +16,7 @@ import {
   startOrderRealtimeSync, 
   saveCustomerOrderEverywhere 
 } from '../../services/orderSyncService';
-import { persistInventoryProduct, persistCustomerOrder } from '../../utils/firestoreService';
+import { persistInventoryProduct, persistCustomerOrder } from '../../utils/supabaseDataService';
 import { saveFunnelConfig } from '../../services/omniFunnelService';
 import { saveTenantCustomDomain } from '../../services/tenantDomainService';
 import { buildPublicShopUrl } from '../../config/domains';

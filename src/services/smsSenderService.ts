@@ -7,7 +7,7 @@
  */
 
 import { SmsGatewayConfig, SmsGatewayProvider } from '../types';
-import { deductUserCredits } from '../utils/firestoreService';
+import { deductUserCredits } from '../utils/supabaseDataService';
 
 export interface SendSmsParams {
   to: string;

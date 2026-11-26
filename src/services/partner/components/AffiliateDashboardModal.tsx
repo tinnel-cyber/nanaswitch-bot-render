@@ -9,7 +9,7 @@ import {
 import { 
   persistAffiliateProfile, 
   requestAffiliateWithdrawal 
-} from '../../../utils/firestoreService';
+} from '../../../utils/supabaseDataService';
 import {
   fetchUnifiedAffiliateHub,
   submitAffiliateWithdrawalRequest,

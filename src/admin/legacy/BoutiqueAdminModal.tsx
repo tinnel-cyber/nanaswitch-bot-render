@@ -23,7 +23,7 @@ import {
   Shield
 } from 'lucide-react';
 import { hashMasterPin, verifyMasterPin, generateStoreUniqueId } from '../../utils/managerSecurityService';
-import { saveUserProfile } from '../../utils/firestoreService';
+import { saveUserProfile } from '../../utils/supabaseDataService';
 import { checkAndBlockDemoAction } from '../../utils/demoSecurityGuard';
 import { updateStoreDirectorySettings, DIRECTORY_CATEGORIES } from '../../services/marketDirectoryService';
 

@@ -11,7 +11,7 @@ import {
   Store
 } from 'lucide-react';
 import { PlatformLegalConfig } from '../../types';
-import { subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
+import { subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/supabaseDataService';
 import { LegalTickerFooter } from '../../components/LegalTickerFooter';
 import { LegalDocModal } from '../../components/common/LegalDocModal';
 import { NanasorePasserelleIcon } from '../../components/common/NanasoreLogo';

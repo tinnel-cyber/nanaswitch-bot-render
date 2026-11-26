@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PlatformLegalConfig } from '../../types';
-import { ESCROW_USAGE_CLAUSES_TEXT } from '../../utils/firestoreService';
+import { ESCROW_USAGE_CLAUSES_TEXT } from '../../utils/supabaseDataService';
 import { playTapBeep } from '../../utils/audio';
 import { 
   FileText, 

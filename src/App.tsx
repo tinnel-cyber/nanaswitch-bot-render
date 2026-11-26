@@ -215,7 +215,7 @@ import {
   subscribeToUserProfile,
   pruneStaleStorageCaches,
   updateSellerModeInFirestore,
-} from './utils/firestoreService';
+} from './utils/supabaseDataService';
 import { queuePosSaleBatch } from './services/offlineSyncService';
 import { runAutomatedStorageGC, safeSetItem, safeGetItem, safeRemoveItem } from './utils/storageManager';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from './utils/audio';

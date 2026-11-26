@@ -13,7 +13,7 @@ import {
   getSupabaseCurrentUser
 } from '../../services/supabaseAuthService';
 import { supabase } from '../../lib/supabase';
-import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/firestoreService';
+import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/supabaseDataService';
 import { hashMasterPin, generateStoreUniqueId } from '../../utils/managerSecurityService';
 import { syncAuthProfileWithSupabase } from '../../services/authProfileSyncService';
 import { LegalDocModal } from '../../components/common/LegalDocModal';
