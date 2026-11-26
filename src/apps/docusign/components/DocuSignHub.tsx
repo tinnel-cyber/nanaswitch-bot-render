@@ -756,8 +756,8 @@ export default function DocuSignHub({
     });
 
     if (!paygRes.allowed) {
-      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'DocuSign (1 000 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
-      alert(paygRes.message || 'Solde NaNa Wallet insuffisant (1 000 F CFA requis pour ce document DocuSign).');
+      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'Signature Électronique (300 F CFA par signature via NaNa Wallet ou Abonnement)');
+      alert(paygRes.message || 'Solde NaNa Wallet insuffisant (300 F CFA requis par signature).');
       return false;
     }
     return true;
@@ -1624,8 +1624,9 @@ export default function DocuSignHub({
     };
   };
 
-  const downloadPdfDocument = () => {
+  const downloadPdfDocument = async () => {
     if (!checkDocumentQuota()) return;
+    if (!isPremium && !(await verifyDocuSignPayg('Signature Électronique (300 F CFA)'))) return;
     renderCertifiedDocumentCanvas((finalCanvas) => {
       try {
         const isLandscape = finalCanvas.width > finalCanvas.height;

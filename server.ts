@@ -8155,12 +8155,12 @@ async function startServer() {
     },
     {
       id: 'escrow-devis-pro',
-      name: 'DocuSign : Signature & Devis Pro',
+      name: 'Signature & Devis Pro',
       category: 'B2B & Juridique',
-      unitLabel: '1 document signé / exporté',
-      priceXof: 1000,
+      unitLabel: '1 signature certifiée',
+      priceXof: 300,
       supabaseModuleKey: 'escrow_devis_pro',
-      description: 'Signature électronique, scellement PDF et devis B2B certifiés.'
+      description: 'Signature électronique (300 F CFA / signature), scellement PDF et devis B2B certifiés.'
     },
     {
       id: 'salles-vip-live',
