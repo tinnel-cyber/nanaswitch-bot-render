@@ -626,3 +626,74 @@ export async function getStoreMarketCard(storeId: string): Promise<(MarketDirect
   return null;
 }
 
+export interface MarketplaceProductOffer {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  imageUrl: string;
+  category?: string;
+  storeId: string;
+  storeName: string;
+  shopUrl: string;
+  slug: string;
+  whatsappPhone?: string;
+}
+
+/**
+ * Récupère les vrais produits publiés appartenant uniquement aux boutiques validées sur NaNa Market.
+ */
+export async function fetchApprovedMarketplaceProducts(
+  approvedStores: MarketDirectoryStore[]
+): Promise<MarketplaceProductOffer[]> {
+  if (!approvedStores || approvedStores.length === 0) return [];
+  const storeMap = new Map<string, MarketDirectoryStore>();
+  const storeIds: string[] = [];
+  approvedStores.forEach((s) => {
+    const id = s.storeId || s.id;
+    if (id) {
+      storeMap.set(id, s);
+      storeIds.push(id);
+    }
+  });
+  if (storeIds.length === 0) return [];
+
+  try {
+    const { data: rows, error } = await supabase
+      .from('app_registry')
+      .select('tenant_id, config_json')
+      .eq('module_key', 'products')
+      .in('tenant_id', storeIds.slice(0, 50));
+
+    if (error || !rows) return [];
+    const offers: MarketplaceProductOffer[] = [];
+
+    rows.forEach((row: any) => {
+      const store = storeMap.get(row.tenant_id);
+      if (!store) return;
+      const list = Array.isArray(row.config_json?.products) ? row.config_json.products : [];
+      list.forEach((p: any) => {
+        const price = Number(p.sellingPrice ?? p.price ?? 0);
+        if (!p?.name || price <= 0) return;
+        offers.push({
+          id: String(p.id || `${row.tenant_id}_${p.name}`),
+          name: String(p.name),
+          price,
+          originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+          imageUrl: String(p.photoUrl || p.image || p.imageUrl || store.logoUrl || store.bannerImage || ''),
+          category: String(p.category || store.category || ''),
+          storeId: store.storeId || store.id,
+          storeName: store.storeName,
+          shopUrl: store.shopUrl || '',
+          slug: store.slug || store.id,
+          whatsappPhone: store.whatsappPhone || store.phone,
+        });
+      });
+    });
+
+    return offers.slice(0, 60);
+  } catch {
+    return [];
+  }
+}
+

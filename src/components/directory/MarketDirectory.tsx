@@ -52,9 +52,10 @@ import {
   filterDirectoryStores,
   isProStore,
   DirectoryMainTab,
-  subscribeToNanaMarketCards
+  subscribeToNanaMarketCards,
+  fetchApprovedMarketplaceProducts,
+  MarketplaceProductOffer
 } from '../../services/marketDirectoryService';
-import { CreateMarketCardModal } from './CreateMarketCardModal';
 
 export interface MarketDirectoryProps {
   onNavigateHome?: () => void;
@@ -223,7 +224,8 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
   const [stores, setStores] = useState<MarketDirectoryStore[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isCreateCardModalOpen, setIsCreateCardModalOpen] = useState<boolean>(false);
+  const [marketViewMode, setMarketViewMode] = useState<'STORES' | 'PRODUCTS'>('STORES');
+  const [marketProducts, setMarketProducts] = useState<MarketplaceProductOffer[]>([]);
 
   // --------------------------------------------------------------------------
   // 2. ÉTATS DES FILTRES & RECHERCHE
@@ -233,6 +235,31 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('Toutes les Catégories');
   const [selectedCity, setSelectedCity] = useState<string>('Toutes les Villes');
   const [onlyPro, setOnlyPro] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!stores || stores.length === 0) {
+      setMarketProducts([]);
+      return;
+    }
+    let cancelled = false;
+    fetchApprovedMarketplaceProducts(stores).then((list) => {
+      if (!cancelled) setMarketProducts(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stores]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return marketProducts.filter((p) => {
+      if (selectedCategory !== 'Toutes les Catégories' && p.category !== selectedCategory) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !p.storeName.toLowerCase().includes(q) && !(p.category || '').toLowerCase().includes(q)) {
+        return false;
+      }
+      return true;
+    });
+  }, [marketProducts, searchQuery, selectedCategory]);
 
   // Dépliants Mega-Menu
   const [isProductsMenuOpen, setIsProductsMenuOpen] = useState<boolean>(false);
@@ -1242,8 +1269,34 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
               {selectedCategory === 'Toutes les Catégories' ? 'Vitrines & Univers Recommandés' : selectedCategory}
             </h3>
             <span className="text-xs text-gray-500 font-medium">
-              ({filteredStores.length} résultat{filteredStores.length > 1 ? 's' : ''})
+              ({marketViewMode === 'STORES' ? filteredStores.length : filteredProducts.length} résultat{(marketViewMode === 'STORES' ? filteredStores.length : filteredProducts.length) > 1 ? 's' : ''})
             </span>
+
+            {/* Sélecteur Boutiques vs Produits réels */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 ml-1">
+              <button
+                type="button"
+                onClick={() => setMarketViewMode('STORES')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  marketViewMode === 'STORES'
+                    ? 'bg-white text-blue-700 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Boutiques ({filteredStores.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setMarketViewMode('PRODUCTS')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  marketViewMode === 'PRODUCTS'
+                    ? 'bg-white text-emerald-700 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Produits & Offres ({filteredProducts.length})
+              </button>
+            </div>
           </div>
 
           {/* Filtres secondaires : Onglets physiques vs digitaux & Pro */}
@@ -1279,7 +1332,69 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
         </div>
 
         {/* CONTENU DE LA GRILLE */}
-        {isLoading ? (
+        {marketViewMode === 'PRODUCTS' ? (
+          filteredProducts.length === 0 ? (
+            <div className="py-16 text-center max-w-md mx-auto space-y-3">
+              <Package className="w-10 h-10 text-gray-400 mx-auto" />
+              <h3 className="text-base font-black text-gray-900">Aucun produit trouvé</h3>
+              <p className="text-xs text-gray-500">
+                Les produits des boutiques validées sur NaNa Market apparaîtront ici automatiquement.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 pt-5">
+              {filteredProducts.map((prod) => (
+                <div
+                  key={`${prod.storeId}_${prod.id}`}
+                  className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs hover:shadow-md transition flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="aspect-[4/3] bg-gray-100 overflow-hidden relative">
+                      {prod.imageUrl ? (
+                        <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300">
+                          <Package className="w-8 h-8" />
+                        </div>
+                      )}
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-white/90 text-[10px] font-bold text-slate-800 shadow-xs truncate max-w-[85%]">
+                        {prod.storeName}
+                      </span>
+                    </div>
+                    <div className="p-3 space-y-1">
+                      <h4 className="text-xs sm:text-sm font-black text-gray-900 line-clamp-2">{prod.name}</h4>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-black text-blue-700">
+                          {prod.price.toLocaleString('fr-FR')} F
+                        </span>
+                        {prod.originalPrice && prod.originalPrice > prod.price && (
+                          <span className="text-[11px] text-gray-400 line-through">
+                            {prod.originalPrice.toLocaleString('fr-FR')} F
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-3 pb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenStore) {
+                          onOpenStore(prod.storeId);
+                        } else if (prod.shopUrl) {
+                          window.open(prod.shopUrl.startsWith('http') ? prod.shopUrl : `https://${prod.shopUrl}`, '_blank');
+                        }
+                      }}
+                      className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition cursor-pointer"
+                    >
+                      Voir & Commander
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : isLoading ? (
           <div className="py-20 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto animate-pulse shadow-sm">
               <Store className="w-6 h-6" />
