@@ -10,13 +10,13 @@ BEGIN
     SELECT id, email FROM auth.users
     WHERE LOWER(email) IN ('pousbila04@gmail.com', 'contact@nanasore.com')
   LOOP
-    INSERT INTO public.profiles (id, email, full_name, role, kyc_status, subscription_plan)
+    INSERT INTO public.profiles (id, email, full_name, role, kyc_status, pricing_model)
     VALUES (v_admin.id, v_admin.email, 'Konkobo Pousbila', 'super_admin', 'verified', 'elite')
     ON CONFLICT (id) DO UPDATE SET
       full_name = 'Konkobo Pousbila',
       role = 'super_admin',
       kyc_status = 'verified',
-      subscription_plan = 'elite',
+      pricing_model = 'elite',
       updated_at = NOW();
 
     IF EXISTS (
@@ -56,13 +56,13 @@ SET search_path = public
 AS $$
 BEGIN
   IF LOWER(COALESCE(NEW.email, '')) IN ('pousbila04@gmail.com', 'contact@nanasore.com') THEN
-    INSERT INTO public.profiles (id, email, full_name, role, kyc_status, subscription_plan, updated_at)
+    INSERT INTO public.profiles (id, email, full_name, role, kyc_status, pricing_model, updated_at)
     VALUES (NEW.id, NEW.email, 'Konkobo Pousbila', 'super_admin', 'verified', 'elite', NOW())
     ON CONFLICT (id) DO UPDATE SET
       full_name = 'Konkobo Pousbila',
       role = 'super_admin',
       kyc_status = 'verified',
-      subscription_plan = 'elite',
+      pricing_model = 'elite',
       updated_at = NOW();
 
     IF EXISTS (
