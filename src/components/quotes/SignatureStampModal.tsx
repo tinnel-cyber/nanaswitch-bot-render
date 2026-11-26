@@ -207,7 +207,7 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
               </h3>
               <p className="text-[11px] text-slate-300">
                 {mode === 'PROVIDER'
-                  ? 'Apposez votre cachet officiel et votre signature avant envoi au commandeur'
+                  ? 'Apposez votre cachet officiel et votre signature avant envoi au client'
                   : 'Signez pour valider le contrat et télécharger votre exemplaire PDF'}
               </p>
             </div>
@@ -241,9 +241,9 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
                 </span>{' '}
                 (Prestataire) et{' '}
                 <span className="text-slate-900 font-bold">
-                  {contractSummary?.clientName || 'Le Commandeur'}
+                  {contractSummary?.clientName || 'Le Client'}
                 </span>{' '}
-                (Commandeur).
+                (Client).
               </p>
               <p>
                 <strong>Objet :</strong>{' '}
@@ -252,10 +252,10 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
                 {contractSummary?.milestonesCount ? ` (${contractSummary.milestonesCount} jalon(s))` : ''}.
               </p>
               <p>
-                <strong>Protection par Séquestre (de A à Z) :</strong> L’argent réglé par le Commandeur est déposé sur un compte de <strong>Séquestre</strong> neutre géré par Nanasore : il reste protégé et bloqué par le système pendant toute l’exécution du contrat, et n’est libéré au Prestataire (en partiel par jalons ou en totalité à la fin) qu’après exécution conforme et accord mutuel des parties.
+                <strong>Protection par Séquestre (de A à Z) :</strong> L’argent réglé par le Client est déposé sur un compte de <strong>Séquestre</strong> neutre géré par Nanasore : il reste protégé et bloqué par le système pendant toute l’exécution du contrat, et n’est libéré au Prestataire (en partiel par jalons ou en totalité à la fin) qu’après exécution conforme et accord mutuel des parties.
               </p>
               <p>
-                <strong>Règle de paiement &amp; Retards :</strong> Le paiement en totalité (100 %) sous Séquestre est la règle générale. Par exception, si les parties conviennent d’un paiement échelonné par tranches, tout retard de paiement peut entraîner des frais. Réciproquement, tout retard d’exécution du Prestataire peut entraîner des soustractions en faveur de la partie lésée (le Commandeur). En cas de litige, les fonds restent gelés et arbitrés par le Super Admin.
+                <strong>Règle de paiement &amp; Retards :</strong> Le paiement en totalité (100 %) sous Séquestre est la règle générale. Par exception, si les parties conviennent d’un paiement échelonné par tranches, tout retard de paiement peut entraîner des frais. Réciproquement, tout retard d’exécution du Prestataire peut entraîner des soustractions en faveur de la partie lésée (le Client). En cas de litige, les fonds restent gelés et arbitrés par le Super Admin.
               </p>
             </div>
           </div>
@@ -357,7 +357,7 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
             </div>
           )}
 
-          {/* Acceptation Commandeur */}
+          {/* Acceptation Client */}
           {mode === 'CLIENT' && (
             <label className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 cursor-pointer">
               <input

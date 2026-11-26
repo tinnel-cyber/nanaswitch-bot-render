@@ -249,7 +249,7 @@ export async function requestEscrowWithdrawal(
 }
 
 /**
- * Déblocage progressif d'un montant saisi (ou d'un jalon) par le commandeur pour l'activité du projet
+ * Déblocage progressif d'un montant saisi (ou d'un jalon) par le client pour l'activité du projet
  */
 export async function releasePartialEscrowAmount(
   project: EscrowProject,

@@ -1006,7 +1006,7 @@ export interface EscrowProject {
   resolutionNotes?: string;
   resolvedAt?: number;
   resolvedByAdminUid?: string;
-  // Signatures & Preuve de Contrat PDF (Prestataire -> Commandeur -> Super Admin)
+  // Signatures & Preuve de Contrat PDF (Prestataire -> Client -> Super Admin)
   providerSignatureDataUrl?: string;
   providerStampDataUrl?: string;
   providerSignedAt?: number;

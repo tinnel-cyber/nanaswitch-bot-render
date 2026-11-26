@@ -26,7 +26,7 @@ function formatXofForPdf(amount: number): string {
 
 /**
  * Génère un PDF A4 propre et compressé pour un devis / contrat 1-to-1
- * incluant le tampon + signature du prestataire et la signature en ligne du commandeur.
+ * incluant le tampon + signature du prestataire et la signature en ligne du client.
  */
 export function generateSignedQuotePdf(
   project: EscrowProject,
@@ -70,7 +70,7 @@ export function generateSignedQuotePdf(
 
   y = 42;
 
-  // Bloc Parties (Prestataire / Commandeur)
+  // Bloc Parties (Prestataire / Client)
   doc.setDrawColor(203, 213, 225);
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(14, y, 88, 28, 2, 2, 'FD');
@@ -80,7 +80,7 @@ export function generateSignedQuotePdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.text('PRESTATAIRE', 18, y + 6);
-  doc.text('COMMANDEUR (CLIENT)', 112, y + 6);
+  doc.text('CLIENT', 112, y + 6);
 
   doc.setTextColor(15, 23, 42);
   doc.setFontSize(10);
@@ -184,7 +184,7 @@ export function generateSignedQuotePdf(
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
   doc.text('CACHET & SIGNATURE PRESTATAIRE', 18, sigY + 6);
-  doc.text('SIGNATURE COMMANDEUR (LU ET APPROUVÉ)', 112, sigY + 6);
+  doc.text('SIGNATURE CLIENT (LU ET APPROUVÉ)', 112, sigY + 6);
 
   if (project.providerStampDataUrl) {
     try {
@@ -220,7 +220,7 @@ export function generateSignedQuotePdf(
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text('En attente de signature du commandeur', 114, sigY + 28);
+    doc.text('En attente de signature du client', 114, sigY + 28);
   }
 
   // Pied de page preuve (Page 1 : Métadonnées & Devis)
@@ -247,12 +247,12 @@ export function generateSignedQuotePdf(
 
   let cy = 36;
   const providerDisplay = String(project.merchantName || project.storeName || 'Le Prestataire');
-  const clientDisplay = String(project.clientName || 'Le Commandeur');
+  const clientDisplay = String(project.clientName || 'Le Client');
 
   const articles: Array<{ title: string; body: string }> = [
     {
       title: 'Entre les soussignés :',
-      body: `1) LE PRESTATAIRE : ${providerDisplay}${project.merchantPhone ? ` (Tél : ${project.merchantPhone})` : ''}, ci-après désigné « le Prestataire ».\n2) LE COMMANDEUR : ${clientDisplay}${project.clientCompany ? ` — ${project.clientCompany}` : ''}${project.clientPhone ? ` (Tél : ${project.clientPhone})` : ''}, ci-après désigné « le Commandeur ».`,
+      body: `1) LE PRESTATAIRE : ${providerDisplay}${project.merchantPhone ? ` (Tél : ${project.merchantPhone})` : ''}, ci-après désigné « le Prestataire ».\n2) LE CLIENT : ${clientDisplay}${project.clientCompany ? ` — ${project.clientCompany}` : ''}${project.clientPhone ? ` (Tél : ${project.clientPhone})` : ''}, ci-après désigné « le Client ».`,
     },
     {
       title: 'Article 1 — Objet du Contrat',
@@ -260,11 +260,11 @@ export function generateSignedQuotePdf(
     },
     {
       title: 'Article 2 — Prix, Protection par Séquestre & Règle de Paiement',
-      body: `Le montant global net de la prestation est fixé à ${formatXofForPdf(project.totalAmount)}.\n• Fonctionnement du Séquestre (de A à Z) : Pour protéger les deux parties, le Commandeur ne verse pas l'argent directement au Prestataire. Les fonds sont déposés et bloqués sur un compte de Séquestre neutre géré par Nanasore. Ils restent intégralement protégés par le système pendant toute la durée d'exécution du contrat, et ne sont libérés au Prestataire qu'après exécution conforme et validation d'un commun accord par le Commandeur (libération partielle par jalon ou libération totale à la livraison finale).\n• Règle générale & Exception : Le paiement de la totalité (100 %) sous Séquestre à la commande constitue la règle générale. L'exception s'applique uniquement lorsque les parties ont expressément convenu d'un paiement fractionné par tranches : dans ce cas précis uniquement, tout retard de paiement d'une échéance par le Commandeur peut entraîner des frais de retard.`,
+      body: `Le montant global net de la prestation est fixé à ${formatXofForPdf(project.totalAmount)}.\n• Fonctionnement du Séquestre (de A à Z) : Pour protéger les deux parties, le Client ne verse pas l'argent directement au Prestataire. Les fonds sont déposés et bloqués sur un compte de Séquestre neutre géré par Nanasore. Ils restent intégralement protégés par le système pendant toute la durée d'exécution du contrat, et ne sont libérés au Prestataire qu'après exécution conforme et validation d'un commun accord par le Client (libération partielle par jalon ou libération totale à la livraison finale).\n• Règle générale & Exception : Le paiement de la totalité (100 %) sous Séquestre à la commande constitue la règle générale. L'exception s'applique uniquement lorsque les parties ont expressément convenu d'un paiement fractionné par tranches : dans ce cas précis uniquement, tout retard de paiement d'une échéance par le Client peut entraîner des frais de retard.`,
     },
     {
       title: 'Article 3 — Obligations des Parties & Retard d\'Exécution',
-      body: `Le Prestataire s'engage à exécuter la mission avec diligence, selon les règles de l'art et dans les délais convenus. Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Commandeur. De son côté, le Commandeur s'engage à fournir les informations nécessaires et à valider les livrables conformes dans un délai raisonnable.`,
+      body: `Le Prestataire s'engage à exécuter la mission avec diligence, selon les règles de l'art et dans les délais convenus. Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Client. De son côté, le Client s'engage à fournir les informations nécessaires et à valider les livrables conformes dans un délai raisonnable.`,
     },
     {
       title: 'Article 4 — Litiges, Gel Conservatoire & Arbitrage Nanasore',
@@ -296,7 +296,7 @@ export function generateSignedQuotePdf(
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
   doc.text('CACHET & SIGNATURE PRESTATAIRE', 18, cSigY + 6);
-  doc.text('SIGNATURE COMMANDEUR (LU ET APPROUVÉ)', 112, cSigY + 6);
+  doc.text('SIGNATURE CLIENT (LU ET APPROUVÉ)', 112, cSigY + 6);
 
   if (project.providerStampDataUrl) {
     try {
@@ -332,7 +332,7 @@ export function generateSignedQuotePdf(
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text('En attente de signature du commandeur', 114, cSigY + 28);
+    doc.text('En attente de signature du client', 114, cSigY + 28);
   }
 
   doc.setFont('helvetica', 'normal');

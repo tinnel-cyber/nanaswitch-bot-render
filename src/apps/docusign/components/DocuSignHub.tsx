@@ -987,13 +987,13 @@ export default function DocuSignHub({
     playTapBeep();
   };
 
-  // 1b. Ajouter les noms des deux parties cocontractantes (Prestataire & Commandeur)
+  // 1b. Ajouter les noms des deux parties cocontractantes (Prestataire & Client)
   const handleAddContractingParties = () => {
     const viewport = document.getElementById('document-viewport');
     const viewportWidth = viewport ? viewport.clientWidth : 480;
     const viewportHeight = viewport ? viewport.clientHeight : 650;
     const providerLabel = `Prestataire : ${currentUser?.name || currentUser?.storeName || 'Nom du Prestataire'}`;
-    const clientLabel = 'Commandeur : Nom du Commandeur';
+    const clientLabel = 'Client : Nom du Client';
     const baseY = Math.max(20, Math.floor(viewportHeight * 0.52));
 
     const firstId = `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1251,7 +1251,7 @@ export default function DocuSignHub({
       ctx.font = '11px sans-serif';
       ctx.fillText('Les fonds sont protégés sous Séquestre jusqu\'à exécution conforme et accord mutuel de libération (partielle ou totale).', 40, 405);
       ctx.fillText('Règle : paiement total à la commande. Exception : si paiement par tranches convenu, frais en cas de retard client ;', 40, 422);
-      ctx.fillText('tout retard d\'exécution du Prestataire entraîne des soustractions en faveur du Commandeur (partie lésée).', 40, 438);
+      ctx.fillText('tout retard d\'exécution du Prestataire entraîne des soustractions en faveur du Client (partie lésée).', 40, 438);
 
       // 4. Confidentialité & Juridiction
       ctx.fillStyle = '#0f172a';
@@ -2304,7 +2304,7 @@ export default function DocuSignHub({
                     type="button"
                     onClick={handleAddContractingParties}
                     className="px-2.5 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-200 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95 shrink-0"
-                    title="Glisser-déposer et écrire les noms des parties cocontractantes (Prestataire & Commandeur)"
+                    title="Glisser-déposer et écrire les noms des parties cocontractantes (Prestataire & Client)"
                   >
                     <User className="w-3 h-3 text-emerald-400" />
                     <span>+ Cocontractants</span>

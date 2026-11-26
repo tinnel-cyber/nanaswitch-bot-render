@@ -714,11 +714,11 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
         </footer>
       </div>
 
-      {/* Modale de Signature en ligne Commandeur avant téléchargement */}
+      {/* Modale de Signature en ligne Client avant téléchargement */}
       <SignatureStampModal
         isOpen={showClientSignModal}
         mode="CLIENT"
-        title="Signature en ligne du Commandeur"
+        title="Signature en ligne du Client"
         defaultCompanyName={project.merchantName || project.storeName}
         contractSummary={{
           providerName: project.merchantName || project.storeName,
@@ -753,7 +753,7 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
         }}
       />
 
-      {/* Modale Ouverture de Litige Commandeur -> Super Admin & Tableau de Bord Litiges */}
+      {/* Modale Ouverture de Litige Client -> Super Admin & Tableau de Bord Litiges */}
       {showDisputeModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 space-y-4">
@@ -779,7 +779,7 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
                 if (!clientDisputeReason.trim()) return;
                 setIsSubmittingDispute(true);
                 try {
-                  const reason = `[Commandeur] ${clientDisputeReason.trim()}`;
+                  const reason = `[Client] ${clientDisputeReason.trim()}`;
                   await updateEscrowStatus(project.id, project.storeId, 'disputed_paused', {
                     disputeReason: reason,
                     disputedAt: Date.now(),

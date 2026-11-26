@@ -77,7 +77,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
   const [disputeReasonInput, setDisputeReasonInput] = useState('');
   const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
-  // Formulaire Nouveau Devis (Noms des deux parties : Prestataire & Commandeur)
+  // Formulaire Nouveau Devis (Noms des deux parties : Prestataire & Client)
   const [providerName, setProviderName] = useState(currentUser?.name || storeName || '');
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -151,7 +151,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
 
   const totalCalculatedAmount = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
 
-  // Sauvegarde d'un nouveau devis -> ouvre immédiatement la signature & tampon obligatoire avant soumission au commandeur
+  // Sauvegarde d'un nouveau devis -> ouvre immédiatement la signature & tampon obligatoire avant soumission au client
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!providerName.trim() || !clientName.trim() || !projectTitle.trim() || milestones.length === 0 || !acceptedEscrowClauses) return;
@@ -190,7 +190,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
     playValidationBeep();
     setIsCreateModalOpen(false);
 
-    // Ouvrir directement la modale de tampon & signature avant envoi au commandeur
+    // Ouvrir directement la modale de tampon & signature avant envoi au client
     setSigningProject(newProject);
 
     // Réinitialisation
@@ -704,9 +704,9 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateProject} className="space-y-4">
-              {/* Parties (Prestataire & Commandeur) */}
+              {/* Parties (Prestataire & Client) */}
               <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
-                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">1. Identification des Deux Parties (Prestataire & Commandeur)</span>
+                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">1. Identification des Deux Parties (Prestataire & Client)</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">Nom complet du Prestataire *</label>
@@ -720,7 +720,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Nom complet du Commandeur (Client) *</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">Nom complet du Client *</label>
                     <input
                       type="text"
                       value={clientName}

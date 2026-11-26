@@ -2742,30 +2742,30 @@ export function subscribeToCentralPaymentConfig(
 export const ESCROW_USAGE_CLAUSES_TEXT = `# Clauses d'Usage du Service de Séquestre — Nanasore
 
 ## 1. Comment fonctionne le Séquestre (du début à la fin)
-Le **Séquestre Nanasore** est un compte de protection neutre géré par la plateforme entre le **Prestataire** et le **Commandeur (Client)** :
-1. **Dépôt sécurisé** : Lorsque le Commandeur règle le devis, son argent n'est pas versé directement au Prestataire. Les fonds sont bloqués et protégés par le système sous Séquestre.
+Le **Séquestre Nanasore** est un compte de protection neutre géré par la plateforme entre le **Prestataire** et le **Client** :
+1. **Dépôt sécurisé** : Lorsque le Client règle le devis, son argent n'est pas versé directement au Prestataire. Les fonds sont bloqués et protégés par le système sous Séquestre.
 2. **Exécution du contrat** : Le Prestataire réalise la prestation en toute sérénité, sachant que le paiement est déjà garanti dans le système.
 3. **Libération des fonds (partielle ou totale)** : Les fonds ne sont débloqués au Prestataire qu'après exécution conforme du contrat et accord mutuel des parties (validation par jalon pour une libération partielle, ou validation finale pour une libération totale).
 
 ## 2. Règle de Paiement, Paiement Échelonné (Exception) & Retards
 - **Règle générale** : Le paiement de la totalité (100 %) sous Séquestre à la commande est la règle générale.
-- **Exception (paiement par tranches)** : Uniquement si les deux parties ont convenu d'un règlement échelonné par tranches, tout retard de paiement d'une échéance par le Commandeur peut entraîner des frais de retard.
-- **Retard d'exécution du Prestataire** : Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Commandeur.
+- **Exception (paiement par tranches)** : Uniquement si les deux parties ont convenu d'un règlement échelonné par tranches, tout retard de paiement d'une échéance par le Client peut entraîner des frais de retard.
+- **Retard d'exécution du Prestataire** : Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Client.
 - **Traçabilité** : Tous les règlements doivent transiter par le lien de paiement officiel de la plateforme pour bénéficier de la protection du Séquestre et de l'arbitrage Nanasore.
 
 ## 3. Sanctions en cas de Non-Respect ou de Fraude
 Tout manquement grave aux présentes clauses — notamment tentative de contournement du séquestre après mise en relation, fourniture de faux justificatifs, non-livraison délibérée ou abus de contestation — expose son auteur aux sanctions suivantes :
 - **Suspension immédiate** du compte marchand ou client et gel conservatoire des soldes en cours de vérification ;
 - **Perte définitive** du badge « Prestataire Vérifié » et de l'accès au service Escrow ;
-- **Remboursement d'office** des sommes consignées au Commandeur lésé en cas de manquement avéré du Prestataire ;
+- **Remboursement d'office** des sommes consignées au Client lésé en cas de manquement avéré du Prestataire ;
 - **Bannissement définitif** de la plateforme et transmission du dossier aux autorités compétentes en cas d'escroquerie caractérisée.
 
 ## 4. Règlement en cas de Litige & Arbitrage
 En cas de désaccord sur la qualité, les délais ou la conformité d'une prestation :
-1. **Ouverture du Litige** : Chacune des deux parties (Commandeur ou Prestataire) peut ouvrir un litige officiel directement depuis l'espace projet. Le litige est transmis simultanément au **Tableau de Bord Litiges** du prestataire et à la console d'arbitrage **Super Admin**.
+1. **Ouverture du Litige** : Chacune des deux parties (Client ou Prestataire) peut ouvrir un litige officiel directement depuis l'espace projet. Le litige est transmis simultanément au **Tableau de Bord Litiges** du prestataire et à la console d'arbitrage **Super Admin**.
 2. **Gel Conservatoire** : Dès l'ouverture du litige, les déblocages de fonds sont automatiquement suspendus.
 3. **Médiation Tripartite (48h à 72h)** : Le médiateur Super Admin examine le contrat signé et tamponné, les métadonnées horodatées, les échanges dans la messagerie tripartite et les livrables déposés.
-4. **Décision Exécutoire** : À l'issue de l'instruction, le Super Admin prononce soit la libération totale/partielle des fonds au Prestataire, soit le remboursement intégral/partiel au Commandeur.`.trim();
+4. **Décision Exécutoire** : À l'issue de l'instruction, le Super Admin prononce soit la libération totale/partielle des fonds au Prestataire, soit le remboursement intégral/partiel au Client.`.trim();
 
 export const DEFAULT_PLATFORM_LEGAL: PlatformLegalConfig = {
   ticker_text: "© 2026 Nanasore. Tous droits réservés. • Mentions Légales • Politique de Confidentialité • Clauses d'Usage Escrow.",
