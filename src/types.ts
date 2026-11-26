@@ -2066,6 +2066,7 @@ export interface ThemeCustomizationConfig {
   footerEmail?: string;
   copyrightText?: string;
   paymentIconsVisible?: boolean;
+  codOnly?: boolean;
   footerColumns?: { title: string; links: { label: string; href: string }[] }[];
   socialLinks?: {
     facebook?: string;

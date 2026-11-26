@@ -72,6 +72,7 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
   onReset,
   onPublish,
   isPublishing = false,
+  activeThemeId,
   initialOpenAccordion
 }) => {
   // Gestion de l'accordéon ouvert (1 seul à la fois pour un workflow fluide)
@@ -1380,6 +1381,52 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
                     <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
+
+                {(() => {
+                  const normalizedThemeId = String(
+                    activeThemeId ||
+                    (config as any)?.activeThemeId ||
+                    (config as any)?.active_theme_id ||
+                    ''
+                  ).toLowerCase();
+                  const isNonPhysicalTheme =
+                    normalizedThemeId.includes('livestream') ||
+                    normalizedThemeId.includes('live-stream') ||
+                    normalizedThemeId.includes('service-portfolio') ||
+                    normalizedThemeId.includes('services') ||
+                    normalizedThemeId.includes('portfolio') ||
+                    normalizedThemeId.includes('digital');
+
+                  if (isNonPhysicalTheme) {
+                    return (
+                      <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-[11px] font-bold text-indigo-800">
+                        💳 Mobile Money uniquement actif sur ce thème (Live Stream / Prestations / Digital) — le paiement à la livraison est masqué au checkout.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-slate-800 text-xs block">
+                          🚚 Paiement à la livraison uniquement
+                        </span>
+                        <span className="text-[10px] text-slate-600">
+                          Masque Mobile Money au checkout et n'affiche que le paiement à la livraison
+                        </span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={Boolean((config as any)?.codOnly)}
+                          onChange={(e) => updateField('codOnly' as any, e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Liens Réseaux Sociaux */}

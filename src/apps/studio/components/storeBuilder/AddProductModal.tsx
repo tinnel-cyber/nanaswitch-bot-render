@@ -96,6 +96,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [hasLiveDemo, setHasLiveDemo] = useState(false);
   const [linkedToLiveCoaching, setLinkedToLiveCoaching] = useState(true);
+  const [codOnly, setCodOnly] = useState(false);
   const [mediaSlides, setMediaSlides] = useState<Array<{ id: string; type: 'image' | 'video'; url: string; title?: string }>>([]);
   const [slideTypeInput, setSlideTypeInput] = useState<'image' | 'video'>('image');
   const [slideUrlInput, setSlideUrlInput] = useState('');
@@ -192,6 +193,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setPhotoUrl(productToEdit.photoUrl || '');
         setHasLiveDemo(Boolean(productToEdit.hasLiveDemo));
         setLinkedToLiveCoaching((productToEdit as any).linkedToLiveCoaching !== false);
+        setCodOnly(Boolean((productToEdit as any).codOnly));
         setMediaSlides(Array.isArray((productToEdit as any).mediaSlides) ? (productToEdit as any).mediaSlides : []);
         setFaqs(Array.isArray((productToEdit as any).faqs) ? (productToEdit as any).faqs : []);
         setAffiliateEnabled(Boolean((productToEdit as any).affiliateEnabled));
@@ -247,6 +249,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         setPhotoUrl('');
         setHasLiveDemo(false);
         setLinkedToLiveCoaching(true);
+        setCodOnly(false);
         setMediaSlides([]);
         setFaqs([]);
         setLinkedFunnelId(null);
@@ -534,6 +537,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
         badge: badge.trim() || '',
         hasLiveDemo: Boolean(hasLiveDemo),
         linkedToLiveCoaching: Boolean(linkedToLiveCoaching),
+        codOnly: Boolean(codOnly),
         mediaSlides,
         faqs,
         affiliateEnabled: Boolean(affiliateEnabled),
@@ -1111,6 +1115,30 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                   className="sr-only peer"
                 />
                 <div className="w-10 h-5 bg-input border border-theme peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
+              </label>
+            </div>
+
+            {/* Toggle Paiement à la livraison uniquement (Masquer Mobile Money) */}
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                  codOnly ? 'bg-emerald-500/20 text-emerald-600' : 'bg-input text-muted'
+                }`}>
+                  <span className="text-sm">🚚</span>
+                </div>
+                <div>
+                  <div className="font-bold text-body text-xs">Paiement à la livraison uniquement (Masquer Mobile Money)</div>
+                  <p className="text-[10px] text-muted">Affiche seulement le Paiement à la livraison au checkout (produits physiques)</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={codOnly}
+                  onChange={(e) => setCodOnly(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 bg-input border border-theme peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
               </label>
             </div>
 

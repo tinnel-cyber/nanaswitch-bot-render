@@ -388,26 +388,62 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number; discountAmount: number } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
 
-  // Paiement 100% digital obligatoire UNIQUEMENT pour abonnements, recharges et produits numériques (jamais pour produits physiques / Mini-Market)
-  const isCashlessOnly = Boolean(!enablePhysicalPosToken && (isSubscriptionProduct || isDigitalProduct));
+  const rawThemeId = String(
+    (storeConfig as any)?.active_theme_id ||
+    (storeConfig as any)?.activeThemeId ||
+    (storeConfig as any)?.themeId ||
+    (storeConfig as any)?.themeCustomization?.activeThemeId ||
+    ''
+  ).toLowerCase();
+  const currentPathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+  const isNonPhysicalTheme = Boolean(
+    rawThemeId.includes('livestream') ||
+    rawThemeId.includes('live-stream') ||
+    rawThemeId.includes('service-portfolio') ||
+    rawThemeId.includes('services') ||
+    rawThemeId.includes('portfolio') ||
+    rawThemeId.includes('digital') ||
+    (storeConfig as any)?.merchantType === 'digital_creator' ||
+    currentPathname.startsWith('/sp/') ||
+    currentPathname.startsWith('/dp/') ||
+    currentPathname.startsWith('/ls/')
+  );
+
+  // Paiement 100% digital obligatoire pour abonnements, recharges, produits numériques et thèmes Live/Prestations/Digital
+  const isCashlessOnly = Boolean(!enablePhysicalPosToken && (isSubscriptionProduct || isDigitalProduct || isNonPhysicalTheme));
+
+  // Mode Paiement à la livraison uniquement (toggle produit ou paramètres thème physique)
+  const isCodOnly = Boolean(
+    !isCashlessOnly &&
+    !isNonPhysicalTheme &&
+    (
+      (product as any)?.codOnly ||
+      (storeConfig as any)?.codOnly ||
+      (storeConfig as any)?.themeCustomization?.codOnly ||
+      (storeConfig as any)?.themeSettings?.codOnly
+    )
+  );
 
   // Option Caisse Physique STRICTEMENT réservée au Mini-Market (jamais pour abonnements, recharges ou produits numériques)
-  const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isCashlessOnly);
+  const showPhysicalPosOption = Boolean(enablePhysicalPosToken && !isCashlessOnly && !isCodOnly);
   const [copiedPosToken, setCopiedPosToken] = useState(false);
 
   // Le Choix Crucial : Option A (Paiement à la livraison), Option B (Mobile Money), Option C (Ticket Caisse Physique si Mini-Market)
   const [paymentChoice, setPaymentChoice] = useState<'COD' | 'MOMO' | 'POS_TOKEN'>(() => {
     if (isCashlessOnly) return 'MOMO';
+    if (isCodOnly) return 'COD';
     const savedMethod = typeof window !== 'undefined' ? localStorage.getItem('nana_customer_payment_method') : '';
     return savedMethod === 'cod' ? 'COD' : 'MOMO';
   });
 
-  // Verrou sécurité : si abonnement / recharge / digital, on force toujours MOMO
+  // Verrou sécurité : si abonnement / recharge / digital / thème non physique -> MOMO ; si codOnly -> COD
   useEffect(() => {
     if (isCashlessOnly && paymentChoice !== 'MOMO') {
       setPaymentChoice('MOMO');
+    } else if (isCodOnly && paymentChoice !== 'COD') {
+      setPaymentChoice('COD');
     }
-  }, [isCashlessOnly, paymentChoice]);
+  }, [isCashlessOnly, isCodOnly, paymentChoice]);
 
   // Synchronisation automatique si de nouvelles coordonnées sont injectées depuis le mini-checkout du Funnel
   useEffect(() => {
@@ -422,12 +458,14 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     }
     if (isCashlessOnly) {
       setPaymentChoice('MOMO');
+    } else if (isCodOnly) {
+      setPaymentChoice('COD');
     } else if (typeof window !== 'undefined') {
       const savedMethod = localStorage.getItem('nana_customer_payment_method');
       if (savedMethod === 'cod') setPaymentChoice('COD');
       else if (savedMethod) setPaymentChoice('MOMO');
     }
-  }, [defaultCustomerName, defaultPhone, defaultAddress, isOpen, isCashlessOnly]);
+  }, [defaultCustomerName, defaultPhone, defaultAddress, isOpen, isCashlessOnly, isCodOnly]);
 
   // 5. États Étape 2B : L'Expérience Mobile Money Premium
   const [selectedOperator, setSelectedOperator] = useState<OperatorOption>(() => selectedCountry.operators[0]);
@@ -1915,14 +1953,14 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   
-                  {/* OPTION A : Paiement à la livraison (MASQUÉ pour abonnements, recharges et produits numériques) */}
+                  {/* OPTION A : Paiement à la livraison (MASQUÉ pour abonnements, recharges, produits numériques et thèmes Live/Prestations/Digital) */}
                   {!isCashlessOnly && (
                   <div
                     onClick={() => {
                       playTapBeep();
                       setPaymentChoice('COD');
                     }}
-                    className={`p-4.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative hover:scale-[1.01] active:scale-[0.99] ${
+                    className={`${isCodOnly ? 'sm:col-span-2' : ''} p-4.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 relative hover:scale-[1.01] active:scale-[0.99] ${
                       paymentChoice === 'COD'
                         ? 'border-blue-600 bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
                         : 'border-slate-300 hover:border-blue-400 bg-white'
@@ -1965,7 +2003,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                   </div>
                   )}
 
-                  {/* OPTION B : Paiement Cash (Mobile Money) */}
+                  {/* OPTION B : Paiement Cash (Mobile Money) — masqué si le produit/thème physique est en mode COD uniquement */}
+                  {!isCodOnly && (
                   <div
                     onClick={() => {
                       playTapBeep();
@@ -2012,6 +2051,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       <span>Instantané • 0% Frais • Reçu direct</span>
                     </div>
                   </div>
+                  )}
 
                   {/* OPTION C (STRICTEMENT MINI-MARKET) : Ticket Caisse Physique (Payer au Comptoir Boutique) */}
                   {showPhysicalPosOption && (

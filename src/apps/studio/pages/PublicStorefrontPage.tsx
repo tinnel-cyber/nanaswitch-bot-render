@@ -627,8 +627,9 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         imageUrl: p.image || '',
         description: p.shortDescription || p.description || '',
         quantity: q,
+        codOnly: Boolean((p as any).codOnly),
         items: [{ id: p.id, name: p.name, price: p.price, quantity: q, imageUrl: p.image }]
-      };
+      } as any;
     }
     if (cart.length > 0) {
       const total = cart.reduce((sum, i) => sum + (i.product.price * i.quantity), 0);
@@ -640,8 +641,9 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         description: `${cart.length} article(s) dans le panier`,
         imageUrl: cart[0]?.product?.image || '',
         quantity: cart.reduce((sum, i) => sum + i.quantity, 0),
+        codOnly: cart.every((i) => Boolean((i.product as any).codOnly)),
         items: cart.map(i => ({ id: i.product.id, name: i.product.name, price: i.product.price, quantity: i.quantity, imageUrl: i.product.image }))
-      };
+      } as any;
     }
     return undefined;
   }, [checkoutDirectItem, cart, storeConfig.storeName]);

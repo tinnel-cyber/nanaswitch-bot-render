@@ -2341,6 +2341,7 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
             description: `${cart.length} article(s) dans le panier`,
             imageUrl: cart[0]?.product?.image || '',
             quantity: cart.reduce((sum, i) => sum + i.quantity, 0),
+            codOnly: cart.length > 0 && cart.every((i) => Boolean((i.product as any).codOnly)),
             items: cart.map(i => ({
               id: i.product.id,
               name: i.product.name,
@@ -2348,11 +2349,12 @@ export const MobileStorePreview: React.FC<MobileStorePreviewProps> = ({
               quantity: i.quantity,
               imageUrl: i.product.image
             }))
-          }}
+          } as any}
           amount={cartTotalPrice}
           currency="FCFA"
           orderDescription={`Commande Vitrine : ${storeConfig.storeName}`}
           storeName={storeConfig.storeName}
+          storeConfig={storeConfig}
           whatsappPhone={storeConfig.whatsappPhone}
           defaultPhone={orderCustomerPhone}
           defaultCustomerName={orderCustomerName}

@@ -70,6 +70,7 @@ export interface StoreProductItem {
   affiliateEnabled?: boolean;
   affiliateCommissionPercent?: number;
   linkedToLiveCoaching?: boolean;
+  codOnly?: boolean;
   mediaSlides?: Array<{ id?: string; type: 'image' | 'video'; url: string; title?: string }>;
   faqs?: Array<{ id?: string; question: string; answer: string }>;
   reviews?: Array<{
@@ -108,6 +109,7 @@ export interface StoreConfig {
   // Architecture Multi-Thèmes (Layouts structurels e-commerce)
   active_theme_id?: string;
   activeThemeId?: string;
+  codOnly?: boolean;
   // Annuaire Public (NaNa Market)
   isListedInDirectory?: boolean;
   merchantType?: 'physical_store' | 'digital_creator' | 'event_host';
