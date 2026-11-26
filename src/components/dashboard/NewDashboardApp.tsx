@@ -1914,7 +1914,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                 }
               }}
               className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 transition shadow-xs cursor-pointer"
-              title="Ouvrir le Catalogue AppRegistry des 27 Modules (Ctrl+K)"
+              title="Ouvrir le Catalogue AppRegistry des 37+ Modules (Ctrl+K)"
             >
               <Layers className="w-4 h-4 text-indigo-600" />
               <span className="hidden sm:inline">Modules ({activeOmnibarModules.length}/{CANONICAL_APP_REGISTRY.length})</span>

@@ -88,10 +88,10 @@ const CAROUSEL_SLIDES: CarouselSlide[] = [
   {
     badge: 'Étape 2 • Quartier Général',
     badgeIcon: <Layers className="w-3.5 h-3.5 text-blue-300" />,
-    title: 'Tableau de Bord Unifié & 27 Modules',
+    title: 'Tableau de Bord Unifié & 37+ Modules',
     subtitle: 'Explorez librement toutes les fonctionnalités et l’Omnibar de recherche universelle.',
     steps: [
-      { title: '1. Navigation Universelle', desc: 'Recherchez et parcourez les 27 modules via l’Omnibar (Ctrl + K).' },
+      { title: '1. Navigation Universelle', desc: 'Recherchez et parcourez les 37+ modules via l’Omnibar (Ctrl + K).' },
       { title: '2. Mode Démo & Lecture', desc: 'Testez l’ensemble des interfaces métiers en visualisation gratuite.' },
       { title: '3. Activation à la Carte', desc: 'Activez vos outils avancés uniquement quand votre activité le demande.' }
     ],

@@ -2492,7 +2492,7 @@ export const CentralHubOmnibar: React.FC<CentralHubOmnibarProps> = ({
                     🔍
                   </div>
                   <h4 className="text-base font-bold text-slate-200">
-                    Rechercher parmi les 35+ Services, Applications, Modules et Outils Nanasore
+                    Rechercher parmi les 37+ Services, Applications, Modules et Outils Nanasore
                   </h4>
                   <p className="text-xs text-slate-400 mt-2 max-w-md leading-relaxed">
                     Tapez le nom d'un élément pour l'afficher (ex : <strong>Caisse</strong>, <strong>Nanagénérateur</strong>, <strong>WhatsApp</strong>, <strong>Stock</strong>, <strong>Factures</strong>, <strong>Tunnels</strong>)...
