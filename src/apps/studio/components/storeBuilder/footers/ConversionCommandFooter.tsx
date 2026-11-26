@@ -771,7 +771,10 @@ export const ConversionCommandFooter: React.FC<ConversionCommandFooterProps> = (
       {/* COPYRIGHT OFFICIEL */}
       <div className="border-t border-slate-850 py-4 px-4 text-center text-xs text-slate-500 font-medium">
         {config.copyrightText || (
-          <>© {new Date().getFullYear()} <strong className="text-slate-300">{storeName}</strong>. Tous droits réservés • Propulsé avec sécurité par <strong className="text-blue-400 font-black">Nanasore™ OS</strong></>
+          <>© {new Date().getFullYear()} <strong className="text-slate-300">{config.siteSettings?.companyLegalName || storeName}</strong>. Tous droits réservés • Propulsé avec sécurité par <strong className="text-blue-400 font-black">Nanasore™ OS</strong></>
+        )}
+        {config.siteSettings?.rccmOrTaxId && (
+          <span className="ml-2 text-[11px] text-slate-400">({config.siteSettings.rccmOrTaxId})</span>
         )}
       </div>
 

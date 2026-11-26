@@ -2785,7 +2785,23 @@ Toute reproduction, représentation, modification ou extraction sans autorisatio
 Nanasore met tout en œuvre pour assurer l'exactitude des calculs comptables, des stocks et de la transmission des paiements Mobile Money. Toutefois, la vérification physique des espèces et l'encaissement effectif des sommes restent sous la pleine responsabilité du commerçant gestionnaire de la caisse.
 
 ## 5. Clauses d'Usage du Service Escrow (Séquestre)
-Les transactions de prestations de services couvertes par Nanasore Escrow sont soumises au règlement de séquestre, incluant l'archivage probant des contrats signés, les sanctions en cas de fraude ou contournement, et l'arbitrage tripartite Super Admin en cas de litige.`.trim(),
+Les transactions de prestations de services couvertes par Nanasore Escrow sont soumises au règlement de séquestre, incluant l'archivage probant des contrats signés, les sanctions en cas de fraude ou contournement, et l'arbitrage tripartite Super Admin en cas de litige.
+
+## 6. Produits Numériques & Formations en Ligne
+Les vendeurs et formateurs publiant des ressources numériques (e-books, modèles, logiciels, audios, vidéos, formations) s'engagent à proposer des contenus conformes, accessibles et fidèles à la description affichée sur leur vitrine.
+Sont notamment exclus de la commercialisation sur Nanasore :
+- les produits prohibés, illicites ou contraires aux lois en vigueur ;
+- les produits non marque blanche commercialisés sans droit de revente en marque blanche ;
+- les œuvres et produits protégés par le droit d'auteur dont la revente n'est pas autorisée ;
+- les licences logicielles ou d'accès non autorisées à la revente ;
+- tout contenu faisant l'objet d'un droit d'exploitation ou de distribution non autorisé.
+Dans un esprit d'équilibre et de confiance, les créateurs et revendeurs autorisés veillent simplement à garantir la qualité des fichiers délivrés, la disponibilité effective de l'accès après paiement, le respect des droits des créateurs d'origine et une assistance courtoise en cas de difficulté technique d'accès.
+
+## 7. Produits Physiques & Logistique Marchande
+Les marchands proposant des biens matériels s'engagent à présenter des fiches produits sincères (caractéristiques, visuels, prix et frais éventuels transparents) et à expédier des articles conformes dans des délais raisonnables et annoncés à l'avance. Les contrefaçons ainsi que les marchandises prohibées ne sont pas admises. Chaque boutique veille à indiquer clairement ses modalités de livraison, d'échange ou de service après-vente afin d'offrir une expérience sereine aux acheteurs.
+
+## 8. Rappel aux Marchands & Formateurs — Champs Légaux des Thèmes
+Pour assurer la transparence vis-à-vis de votre clientèle, il est vivement recommandé à chaque marchand, prestataire et formateur de renseigner les champs légaux dans les paramètres de son thème (*Paramètres du site → Mentions Légales, CGV & Conformité* : raison sociale, identifiant légal éventuel, texte de copyright, CGV, politique de confidentialité, politique de livraison/retours, adresse et contact). Une fois complétés, ces éléments s'appliquent automatiquement dans le pied de page (footer) et les fenêtres légales de votre boutique.`.trim(),
   privacy_policy_content: `# Politique de Confidentialité & Protection des Données Marchandes
 
 ## 1. Engagement & Transparence

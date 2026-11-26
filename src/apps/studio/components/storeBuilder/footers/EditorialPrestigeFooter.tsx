@@ -599,7 +599,10 @@ export const EditorialPrestigeFooter: React.FC<EditorialPrestigeFooterProps> = (
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium">
           <span>
             {config.copyrightText || (
-              <>© {new Date().getFullYear()} <strong className="text-slate-800 font-bold">{storeName}</strong>. Tous droits réservés.</>
+              <>© {new Date().getFullYear()} <strong className="text-slate-800 font-bold">{config.siteSettings?.companyLegalName || storeName}</strong>. Tous droits réservés.</>
+            )}
+            {config.siteSettings?.rccmOrTaxId && (
+              <span className="ml-2 text-[11px] text-slate-400">({config.siteSettings.rccmOrTaxId})</span>
             )}
           </span>
           <span className="hidden sm:inline text-slate-300">•</span>

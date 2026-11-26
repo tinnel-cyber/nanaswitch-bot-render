@@ -7,6 +7,7 @@ import { BuyerLiveCallButton } from '../../components/live/BuyerLiveCallButton';
 import { ServiceWideDetailView } from './ServiceWideDetailView';
 import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
 import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
+import { openStoreLegalModal } from '../../components/storeBuilder/StoreLegalAndTrackingModals';
 import { supabase } from '@/lib/supabase';
 import {
   Calendar,
@@ -1131,15 +1132,29 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = (props) => {
             <LiveEditable
               label="Copyright Footer"
               field="copyrightText"
-              value={customConfig?.copyrightText || `© ${new Date().getFullYear()} ${brandTitle}. Tous droits réservés.`}
+              value={customConfig?.copyrightText || `© ${new Date().getFullYear()} ${customConfig?.siteSettings?.companyLegalName || brandTitle}. Tous droits réservés.`}
               targetAccordion={4}
               isAdminPreview={isAdminPreview}
               isInline={true}
             >
               <p className="text-[11px] text-slate-500">
-                {customConfig?.copyrightText || `© ${new Date().getFullYear()} ${brandTitle}. Tous droits réservés.`}
+                {customConfig?.copyrightText || `© ${new Date().getFullYear()} ${customConfig?.siteSettings?.companyLegalName || brandTitle}. Tous droits réservés.`}
+                {customConfig?.siteSettings?.rccmOrTaxId ? ` • ${customConfig.siteSettings.rccmOrTaxId}` : ''}
               </p>
             </LiveEditable>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-400">
+            <button type="button" onClick={() => openStoreLegalModal('terms')} className="hover:text-amber-300 transition cursor-pointer">
+              CGV &amp; Mentions
+            </button>
+            <span className="text-slate-700">•</span>
+            <button type="button" onClick={() => openStoreLegalModal('privacy')} className="hover:text-amber-300 transition cursor-pointer">
+              Confidentialité
+            </button>
+            <span className="text-slate-700">•</span>
+            <button type="button" onClick={() => openStoreLegalModal('shipping')} className="hover:text-amber-300 transition cursor-pointer">
+              Livraison &amp; Retours
+            </button>
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

@@ -20,6 +20,7 @@ import {
 } from './liveStreamAssets';
 import { triggerOpenFunnel } from '../themeUtils';
 import { AdminSectionEditTrigger } from '../../components/storeBuilder/AdminSectionEditTrigger';
+import { openStoreLegalModal } from '../../components/storeBuilder/StoreLegalAndTrackingModals';
 import './liveStreamTheme.css';
 
 export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
@@ -282,15 +283,25 @@ export const ThemeLiveStreamPro: React.FC<StoreThemeProps> = (props) => {
           position="top-right"
         />
         <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#FF2A54] live-pulse-dot" />
-            <span className="font-bold text-white">{customConfig?.storeName || storeConfig.name || storeConfig.storeName || 'Studio Broadcast Live'}</span>
+            <span className="font-bold text-white">{customConfig?.siteSettings?.companyLegalName || customConfig?.storeName || storeConfig.name || storeConfig.storeName || 'Studio Broadcast Live'}</span>
+            {customConfig?.siteSettings?.rccmOrTaxId && (
+              <span className="text-slate-500">({customConfig.siteSettings.rccmOrTaxId})</span>
+            )}
             <span className="text-slate-500">• {customConfig?.copyrightText || customConfig?.footerAboutText || 'Propulsé par Nanasore Live Commerce'}</span>
           </div>
 
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>🔴 Multi-Plateformes</span>
-            <span>⚡ Tunnels Dépliables</span>
+          <div className="flex flex-wrap items-center justify-center gap-4 text-slate-400">
+            <button type="button" onClick={() => openStoreLegalModal('terms')} className="hover:text-white transition cursor-pointer">
+              CGV &amp; Mentions
+            </button>
+            <button type="button" onClick={() => openStoreLegalModal('privacy')} className="hover:text-white transition cursor-pointer">
+              Confidentialité
+            </button>
+            <button type="button" onClick={() => openStoreLegalModal('shipping')} className="hover:text-white transition cursor-pointer">
+              Livraison &amp; Retours
+            </button>
             <span>🔒 Paiement Sécurisé</span>
           </div>
         </div>

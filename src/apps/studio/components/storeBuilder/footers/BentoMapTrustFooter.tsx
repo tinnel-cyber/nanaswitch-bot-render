@@ -718,7 +718,10 @@ export const BentoMapTrustFooter: React.FC<BentoMapTrustFooterProps> = ({
         <div className="text-center md:text-right space-y-1">
           <p className="text-xs text-slate-500 font-medium">
             {config.copyrightText || (
-              <>© {new Date().getFullYear()} <strong className="text-slate-800">{storeName}</strong>. Tous droits réservés.</>
+              <>© {new Date().getFullYear()} <strong className="text-slate-800">{config.siteSettings?.companyLegalName || storeName}</strong>. Tous droits réservés.</>
+            )}
+            {config.siteSettings?.rccmOrTaxId && (
+              <span className="ml-2 text-[11px] text-slate-400">({config.siteSettings.rccmOrTaxId})</span>
             )}
           </p>
           <p className="text-[11px] text-slate-400 flex items-center justify-center md:justify-end gap-1.5">

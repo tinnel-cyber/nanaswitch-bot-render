@@ -110,8 +110,24 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
 
   // Variables dynamiques de la boutique
   const effectiveStoreName = useMemo(() => {
-    return customConfig?.storeName || propStoreName || 'Boutique Officielle';
-  }, [customConfig?.storeName, propStoreName]);
+    return customConfig?.siteSettings?.companyLegalName?.trim() || customConfig?.storeName || propStoreName || 'Boutique Officielle';
+  }, [customConfig?.siteSettings?.companyLegalName, customConfig?.storeName, propStoreName]);
+
+  const effectiveTaxId = useMemo(() => {
+    return customConfig?.siteSettings?.rccmOrTaxId?.trim() || '';
+  }, [customConfig?.siteSettings?.rccmOrTaxId]);
+
+  const customTermsText = useMemo(() => {
+    return customConfig?.siteSettings?.termsText?.trim() || customConfig?.customTermsText?.trim() || '';
+  }, [customConfig?.siteSettings?.termsText, customConfig?.customTermsText]);
+
+  const customShippingText = useMemo(() => {
+    return customConfig?.siteSettings?.shippingReturnPolicyText?.trim() || customConfig?.customShippingText?.trim() || '';
+  }, [customConfig?.siteSettings?.shippingReturnPolicyText, customConfig?.customShippingText]);
+
+  const customPrivacyText = useMemo(() => {
+    return customConfig?.siteSettings?.privacyPolicyText?.trim() || customConfig?.customPrivacyText?.trim() || '';
+  }, [customConfig?.siteSettings?.privacyPolicyText, customConfig?.customPrivacyText]);
 
   const effectiveCity = useMemo(() => {
     return customConfig?.footerAddress || customConfig?.footerMapCity || propFooterAddress || propFooterMapCity || 'notre centre logistique';
@@ -468,9 +484,15 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
               ------------------------------------------------------------------- */}
           {activeTab === 'terms' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              {customConfig?.customTermsText ? (
-                <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 whitespace-pre-line text-xs sm:text-sm text-slate-800">
-                  {customConfig.customTermsText}
+              {customTermsText ? (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex flex-wrap items-center justify-between gap-2">
+                    <span><strong>Éditeur :</strong> {effectiveStoreName}</span>
+                    {effectiveTaxId && <span><strong>Identifiant légal :</strong> {effectiveTaxId}</span>}
+                  </div>
+                  <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 whitespace-pre-line text-xs sm:text-sm text-slate-800">
+                    {customTermsText}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3.5">
@@ -495,7 +517,7 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
                       </h5>
                     </div>
                     <p className="text-slate-600 text-xs pl-8">
-                      Commande opérée par <strong>{effectiveStoreName}</strong>, expédiée depuis <strong>{effectiveCity}</strong>, joignable en direct au <strong>{effectivePhone}</strong>.
+                      Commande opérée par <strong>{effectiveStoreName}</strong>{effectiveTaxId ? ` (${effectiveTaxId})` : ''}, expédiée depuis <strong>{effectiveCity}</strong>, joignable en direct au <strong>{effectivePhone}</strong>.
                     </p>
                   </div>
 
@@ -559,9 +581,9 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
               ------------------------------------------------------------------- */}
           {activeTab === 'shipping' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              {customConfig?.customShippingText ? (
+              {customShippingText ? (
                 <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 whitespace-pre-line text-xs sm:text-sm text-slate-800">
-                  {customConfig.customShippingText}
+                  {customShippingText}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -628,9 +650,15 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
               ------------------------------------------------------------------- */}
           {activeTab === 'privacy' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              {customConfig?.customPrivacyText ? (
-                <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 whitespace-pre-line text-xs sm:text-sm text-slate-800">
-                  {customConfig.customPrivacyText}
+              {customPrivacyText ? (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex flex-wrap items-center justify-between gap-2">
+                    <span><strong>Responsable du traitement :</strong> {effectiveStoreName}</span>
+                    {effectiveTaxId && <span><strong>Identifiant légal :</strong> {effectiveTaxId}</span>}
+                  </div>
+                  <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 whitespace-pre-line text-xs sm:text-sm text-slate-800">
+                    {customPrivacyText}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
