@@ -8,6 +8,8 @@ import {
   getPublicProjectUrl
 } from '../../../services/escrowService';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
+import { SignatureStampModal } from '../../../components/quotes/SignatureStampModal';
+import { generateSignedQuotePdf, saveContractProofToAdmin } from '../../../services/contractProofService';
 import UltimateCheckout, { PaymentSuccessDetails } from '../../../components/payment/UltimateCheckout';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
 import { 
@@ -20,6 +22,7 @@ import {
   User, 
   Phone, 
   Printer, 
+  Download,
   Share2, 
   MessageSquare, 
   Copy, 
@@ -56,6 +59,8 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
   const [isValidatingDelivery, setIsValidatingDelivery] = useState(false);
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false);
   const [isCopiedLink, setIsCopiedLink] = useState(false);
+  const [showClientSignModal, setShowClientSignModal] = useState(false);
+  const [contractProofSent, setContractProofSent] = useState(false);
 
   // Chargement et écoute en temps réel du projet
   useEffect(() => {
@@ -213,7 +218,24 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
               </p>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-center">
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  playTapBeep();
+                  if (!project.clientSignatureDataUrl) {
+                    setShowClientSignModal(true);
+                  } else {
+                    generateSignedQuotePdf(project, { autoSave: true });
+                  }
+                }}
+                className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 shadow-lg shadow-emerald-950/30 transition cursor-pointer"
+                title="Signer en ligne et télécharger le contrat PDF"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{project.clientSignatureDataUrl ? 'Télécharger Contrat PDF' : 'Signer & Télécharger PDF'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -520,12 +542,49 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
           </div>
         </section>
 
+        {contractProofSent && (
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold text-center">
+            ✓ Contrat signé et téléchargé — Une copie certifiée a été archivée auprès du Super Admin comme preuve de contrat.
+          </div>
+        )}
+
         {/* Footer */}
         <footer className="text-center py-4 text-xs text-slate-500 space-y-1">
           <p>© Nanasore Guarantee • Système de Tiers de Confiance et Séquestre Financier</p>
           <p className="text-[10px]">Toutes les transactions sont chiffrées et protégées.</p>
         </footer>
       </div>
+
+      {/* Modale de Signature en ligne Commandeur avant téléchargement */}
+      <SignatureStampModal
+        isOpen={showClientSignModal}
+        mode="CLIENT"
+        title="Signature en ligne du Commandeur"
+        onClose={() => setShowClientSignModal(false)}
+        onConfirm={async ({ signatureDataUrl }) => {
+          const signedAt = Date.now();
+          const signedProject = {
+            ...project,
+            clientSignatureDataUrl: signatureDataUrl,
+            clientSignedAt: signedAt,
+            updatedAt: signedAt,
+          };
+          setProject(signedProject);
+          setShowClientSignModal(false);
+
+          const pdfResult = generateSignedQuotePdf(signedProject, { autoSave: false });
+          const proof = await saveContractProofToAdmin(signedProject, pdfResult.dataUrl);
+          const certifiedProject = {
+            ...signedProject,
+            contractProofHash: proof.contractProofHash,
+            contractProofSubmittedAt: proof.createdAt,
+          };
+          setProject(certifiedProject);
+          generateSignedQuotePdf(certifiedProject, { autoSave: true });
+          playValidationBeep();
+          setContractProofSent(true);
+        }}
+      />
     </div>
   );
 };

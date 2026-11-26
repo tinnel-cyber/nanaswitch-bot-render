@@ -17,6 +17,8 @@ import {
   sendEscrowChatMessage
 } from '../../../services/escrowService';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
+import { SignatureStampModal } from '../../../components/quotes/SignatureStampModal';
+import { generateSignedQuotePdf } from '../../../services/contractProofService';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
 import { 
   ShieldCheck, 
@@ -68,6 +70,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
   const [projectToWithdraw, setProjectToWithdraw] = useState<EscrowProject | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [chatProject, setChatProject] = useState<EscrowProject | null>(null);
+  const [signingProject, setSigningProject] = useState<EscrowProject | null>(null);
 
   // Formulaire Nouveau Devis
   const [clientName, setClientName] = useState('');
@@ -512,6 +515,24 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                         <span>WhatsApp</span>
                       </a>
 
+                      {/* Tamponner, Signer & Télécharger Devis PDF */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playTapBeep();
+                          if (project.providerSignatureDataUrl) {
+                            generateSignedQuotePdf(project, { autoSave: true });
+                          } else {
+                            setSigningProject(project);
+                          }
+                        }}
+                        className="py-1.5 px-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                        title="Tamponner, signer et télécharger le devis PDF"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>{project.providerSignatureDataUrl ? 'PDF Signé' : 'Tamponner & Signer PDF'}</span>
+                      </button>
+
                       {/* Ouvrir la page publique client dans un nouvel onglet */}
                       <a
                         href={getPublicProjectUrl(project.id)}
@@ -943,6 +964,28 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
           </div>
         </div>
       )}
+      {/* Modale Tampon & Signature Prestataire */}
+      <SignatureStampModal
+        isOpen={Boolean(signingProject)}
+        mode="PROVIDER"
+        defaultCompanyName={storeName}
+        onClose={() => setSigningProject(null)}
+        onConfirm={async ({ signatureDataUrl, stampDataUrl }) => {
+          if (!signingProject) return;
+          const updated: EscrowProject = {
+            ...signingProject,
+            providerSignatureDataUrl: signatureDataUrl,
+            providerStampDataUrl: stampDataUrl,
+            providerSignedAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await saveEscrowProject(updated);
+          setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+          generateSignedQuotePdf(updated, { autoSave: true });
+          playValidationBeep();
+          setSigningProject(null);
+        }}
+      />
     </div>
   );
 };

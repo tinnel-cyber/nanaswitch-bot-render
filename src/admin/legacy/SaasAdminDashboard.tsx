@@ -77,6 +77,7 @@ import {
   resolveEscrowDispute
 } from '../../services/escrowService';
 import { EscrowTripartiteChat } from '../../components/quotes/EscrowTripartiteChat';
+import { generateSignedQuotePdf } from '../../services/contractProofService';
 import { UpsellOpportunitiesWidget } from '../../components/quotas';
 import { LandingCmsTab } from './LandingCmsTab';
 import { publishLandingPricingToSupabase } from '../../services/landingPricingService';
@@ -5683,6 +5684,19 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
                               <AlertTriangle className="w-3 h-3 text-rose-400" />
                               LITIGE / PROJET SUSPENDU
                             </span>
+                          )}
+                          {(project.clientSignatureDataUrl || project.providerSignatureDataUrl) && (
+                            <button
+                              type="button"
+                              onClick={() => generateSignedQuotePdf(project, { autoSave: true })}
+                              className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 cursor-pointer transition"
+                              title={project.contractProofHash ? `SHA-256: ${project.contractProofHash}` : 'Télécharger la preuve de contrat PDF'}
+                            >
+                              <FileText className="w-3 h-3 text-emerald-400" />
+                              <span>
+                                {project.clientSignatureDataUrl ? 'Preuve Contrat Signé (PDF)' : 'Devis Signé Prestataire (PDF)'}
+                              </span>
+                            </button>
                           )}
                         </div>
                         <h3 className="text-base font-black text-white mt-1">{project.projectTitle}</h3>
