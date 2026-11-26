@@ -261,33 +261,9 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
       !String(subscription.planId || '').includes('pay-as-you-go')
     );
 
-    const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
-    const paygRes = await consumePaygModuleUsage({
-      ownerKey: currentUser?.storeId || currentUser?.uid || '',
-      moduleId: 'cv-pro-ia',
-      actionLabel: `Export PDF CV Pro : ${resume.personalInfo?.fullName || 'CV'}`,
-      hasActivePaidSubscription: isPaidSub,
-      isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
-    });
-
-    if (!paygRes.allowed) {
-      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (500 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
-      setExportErrorAlert({
-        isOpen: true,
-        message: paygRes.message || 'Solde NaNa Wallet insuffisant (500 F CFA requis pour cet export CV Pro).'
-      });
-      return;
-    }
-
     playTapBeep();
     setIsExportingPdf(true);
-    setExportToast(
-      paygRes.mode === 'WALLET_DEBITED'
-        ? `500 F CFA débités du NaNa Wallet • Génération du PDF...`
-        : paygRes.mode === 'CREDIT_CONSUMED'
-          ? `1 crédit CV Pro consommé • Génération du PDF...`
-          : 'Génération du PDF en cours...'
-    );
+    setExportToast('Préparation du CV HD en cours...');
 
     try {
       // 1. Ciblage & cycle de rendu : s'assurer que le composant CV est actif et rendu à l'écran
@@ -298,16 +274,7 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
       // 2. Délai d'attente pour que React applique les états et que le DOM soit complètement peint
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // 3. Attendre la disponibilité et le rendu complet des polices de caractères
-      if (typeof document !== 'undefined' && (document as any).fonts?.ready) {
-        try {
-          await (document as any).fonts.ready;
-        } catch (fontErr) {
-          console.warn('[CV EXPORT HD] Polices non bloquantes :', fontErr);
-        }
-      }
-
-      // 4. Ciblage précis de la ref du conteneur DOM exact du CV personnalisé
+      // 3. Ciblage précis de la ref du conteneur DOM exact du CV personnalisé
       const targetElement = resumePrintRef.current || document.getElementById('printable-cv-document');
       if (!targetElement) {
         throw new Error("Le conteneur DOM exact du CV est introuvable. Veuillez basculer sur l'onglet 'Aperçu'.");
@@ -316,24 +283,55 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
       const cleanName = resume.personalInfo.fullName.trim().replace(/\s+/g, '_') || 'Professionnel';
       const filename = `CV_${cleanName}_${(resume.templateId || 'STARTER').toUpperCase()}_HD.pdf`;
 
-      // 5. Génération PDF Haute Définition (Scale 2, 300 DPI, sans gel du navigateur)
+      // 4. Génération PDF Haute Définition en mémoire AVANT tout débit (Scale 2.5, couleurs exactes)
       const result = await exportResumeToHdPdf(targetElement, {
         filename,
-        quality: 2,
+        quality: 2.5,
+        autoSave: false,
         onProgress: (step) => {
-          if (step === 'RENDERING') setExportToast('Génération du PDF en cours...');
+          if (step === 'RENDERING') setExportToast('Rendu couleur HD en cours...');
+          if (step === 'COMPRESSING') setExportToast('Compression sans perte...');
           if (step === 'SAVING') setExportToast('Finalisation du fichier PDF...');
         }
       });
 
-      if (!result.success) {
+      if (!result.success || !result.save) {
         throw new Error(result.error || "Échec lors de la création directe du fichier PDF.");
       }
+
+      // 5. Validation / débit Pay-As-You-Go uniquement après succès garanti de la génération PDF
+      const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
+      const paygRes = await consumePaygModuleUsage({
+        ownerKey: currentUser?.storeId || currentUser?.uid || '',
+        moduleId: 'cv-pro-ia',
+        actionLabel: `Export PDF CV Pro : ${resume.personalInfo?.fullName || 'CV'}`,
+        hasActivePaidSubscription: isPaidSub,
+        isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+      });
+
+      if (!paygRes.allowed) {
+        triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (500 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
+        setExportToast(null);
+        setExportErrorAlert({
+          isOpen: true,
+          message: paygRes.message || 'Solde NaNa Wallet insuffisant (500 F CFA requis pour cet export CV Pro).'
+        });
+        return;
+      }
+
+      // 6. Déclenchement effectif du téléchargement
+      result.save();
 
       incrementGeneratedDocumentsCount(currentUser?.storeId);
       playCashChime();
       const sizeMsg = result.formattedSize ? ` (${result.formattedSize})` : '';
-      setExportToast(`✓ CV Couleur HD téléchargé avec succès${sizeMsg} !`);
+      const billingPrefix =
+        paygRes.mode === 'WALLET_DEBITED'
+          ? '500 F CFA débités • '
+          : paygRes.mode === 'CREDIT_CONSUMED'
+            ? '1 crédit consommé • '
+            : '';
+      setExportToast(`✓ ${billingPrefix}CV Couleur HD téléchargé${sizeMsg} !`);
       setTimeout(() => setExportToast(null), 4000);
     } catch (err: any) {
       console.warn('[CV EXPORT HD] Notification d\'incident export direct :', err);

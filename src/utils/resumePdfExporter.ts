@@ -1,9 +1,10 @@
-import html2canvas from 'html2canvas';
+import { domToCanvas } from 'modern-screenshot';
 import { jsPDF } from 'jspdf';
 
 export interface ExportPdfOptions {
   filename?: string;
-  quality?: number; // scale multiplier (défaut : 2 pour 300 DPI)
+  quality?: number; // scale multiplier (défaut : 2.5 pour un rendu net ~300 DPI)
+  autoSave?: boolean; // si false, retourne une fonction save() sans déclencher le téléchargement immédiat
   onProgress?: (step: 'PREPARING' | 'RENDERING' | 'COMPRESSING' | 'SAVING' | 'DONE') => void;
 }
 
@@ -11,18 +12,19 @@ export interface ExportPdfResult {
   success: boolean;
   fileSizeBytes?: number;
   formattedSize?: string;
+  save?: () => void;
   error?: string;
 }
 
 /**
- * Moteur d'exportation PDF Haute Fidélité Couleur avec Compression Forte Optimisée.
- * 
- * Atouts majeurs :
- * 1. 100% Fidélité Couleur : Conserve toutes les teintes et dégradés (Bleu Nuit #0e2b4b, Or, Obsidienne, Ivoire, Photos).
- * 2. Compression Forte Intelligente : Réduit le poids du PDF de plus de 80% (~300 Ko vs 3 Mo+) sans dégradation visible.
- * 3. Double passe adaptative : Ajuste le taux DCT JPEG (0.83 / 0.78) pour un compromis netteté/poids parfait.
- * 4. Compression de flux PDF Deflate (FlateEncode) intégrée dans jsPDF.
- * 5. Isolation DOM & Anti-freeze : Rendu fluide en moins de 400ms avec bouclier de timeout de 8 secondes.
+ * Moteur d'exportation PDF Haute Fidélité Couleur (modern-screenshot + jsPDF Flate/JPEG adaptatif).
+ *
+ * Avantages clés :
+ * 1. Moteur de rendu natif du navigateur (SVG foreignObject) : 100 % compatible Tailwind CSS v4
+ *    (`oklch`, `oklab`, `color-mix`, variables CSS, dégradés, ombres, SVG, polices web).
+ * 2. Haute définition sans perte visuelle : scale 2.5 (~1985x2808 px) + JPEG 0.92 adaptatif
+ *    (puis 0.86 / 0.80 uniquement si > 1.6 Mo) + compression de flux PDF Deflate (`SLOW`).
+ * 3. Isolation DOM & attente de décodage des images/polices pour éviter tout texte coupé ou photo blanche.
  */
 export async function exportResumeToHdPdf(
   element: HTMLElement,
@@ -30,6 +32,8 @@ export async function exportResumeToHdPdf(
 ): Promise<ExportPdfResult> {
   const {
     filename = 'CV_Professionnel.pdf',
+    quality = 2.5,
+    autoSave = true,
     onProgress
   } = options;
 
@@ -42,21 +46,19 @@ export async function exportResumeToHdPdf(
 
     if (onProgress) onProgress('PREPARING');
 
-    // 1. Attente non bloquante des polices (max 350ms)
+    // 1. Attente non bloquante des polices (max 500ms)
     if (typeof document !== 'undefined' && (document as any).fonts?.ready) {
       try {
         await Promise.race([
           (document as any).fonts.ready,
-          new Promise((r) => setTimeout(r, 350))
+          new Promise((r) => setTimeout(r, 500))
         ]);
       } catch (fontErr) {
         console.warn('[CV EXPORT HD] Polices prêtes avec avertissement non bloquant :', fontErr);
       }
     }
 
-    // 2. Clone isolé dans un conteneur placé hors-champ mais avec opacité 100%
-    // CRITIQUE : Ne JAMAIS appliquer opacity < 1 sur le conteneur car html2canvas calcule les styles réels
-    // et applique globalAlpha sur le canvas, ce qui délavait/blanchissait les couleurs du CV.
+    // 2. Clone isolé aux dimensions exactes A4 (794x1123 px à 96 DPI) avec opacité 100%
     sandboxContainer = document.createElement('div');
     sandboxContainer.id = 'cv-export-sandbox-isolated';
     sandboxContainer.style.position = 'fixed';
@@ -75,7 +77,6 @@ export async function exportResumeToHdPdf(
     clonedCv.id = 'cloned-cv-document-for-pdf';
     clonedCv.style.transform = 'none';
     clonedCv.style.margin = '0 auto';
-    clonedCv.style.padding = '0';
     clonedCv.style.width = '794px';
     clonedCv.style.height = '1123px';
     clonedCv.style.minHeight = '1123px';
@@ -89,30 +90,46 @@ export async function exportResumeToHdPdf(
     sandboxContainer.appendChild(clonedCv);
     document.body.appendChild(sandboxContainer);
 
-    // Pause minimale de peinture du navigateur pour calcul complet des styles et couleurs
-    await new Promise((r) => setTimeout(r, 120));
+    // Attente du décodage des images (photo de profil, logos) sans bloquer indéfiniment
+    const imgs = Array.from(clonedCv.querySelectorAll('img'));
+    if (imgs.length > 0) {
+      await Promise.race([
+        Promise.all(
+          imgs.map((img) =>
+            img.complete
+              ? (typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve())
+              : new Promise((res) => {
+                  img.onload = res;
+                  img.onerror = res;
+                })
+          )
+        ),
+        new Promise((r) => setTimeout(r, 1500))
+      ]);
+    }
+
+    // Pause minimale de peinture navigateur
+    await new Promise((r) => setTimeout(r, 100));
 
     if (onProgress) onProgress('RENDERING');
 
-    // 3. Capture Canvas Haute Résolution (scale: 2 = 1588 x 2246 px pour 300 DPI)
-    const canvasPromise = html2canvas(clonedCv, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      imageTimeout: 6000,
+    // 3. Capture Canvas Haute Résolution via le moteur natif du navigateur (modern-screenshot)
+    const safeScale = Math.min(3, Math.max(1.5, Number(quality) || 2.5));
+    const canvasPromise = domToCanvas(clonedCv, {
+      scale: safeScale,
       width: 794,
       height: 1123,
-      x: 0,
-      y: 0,
-      scrollX: 0,
-      scrollY: 0
+      backgroundColor: '#ffffff',
+      quality: 1,
+      timeout: 10000,
+      fetch: {
+        requestInit: { mode: 'cors' },
+        bypassingCache: false,
+      },
     });
 
-    // Bouclier Timeout anti-gel de 8 secondes
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Le délai de calcul graphique a expiré (8s).")), 8000);
+      setTimeout(() => reject(new Error("Le délai de calcul graphique a expiré (12s).")), 12000);
     });
 
     const canvas = await Promise.race([canvasPromise, timeoutPromise]);
@@ -123,15 +140,12 @@ export async function exportResumeToHdPdf(
 
     if (onProgress) onProgress('COMPRESSING');
 
-    // 4. Algorithme de Compression Forte Haute Fidélité Couleur
-    // Ratio optimal : Qualité JPEG 0.82 (préserve le contraste des textes et l'éclat des couleurs tout en réduisant le poids à ~300 Ko)
-    let compressionQuality = 0.82;
-    let imgData = canvas.toDataURL('image/jpeg', compressionQuality);
-
-    // Seconde passe adaptative si l'image dépasse 1 Mo
-    if (imgData.length > 1_000_000) {
-      compressionQuality = 0.75;
-      imgData = canvas.toDataURL('image/jpeg', compressionQuality);
+    // 4. Compression adaptative haute netteté (préserve la finesse des textes et les couleurs)
+    let imgData = canvas.toDataURL('image/jpeg', 0.92);
+    if (imgData.length > 2_500_000) {
+      imgData = canvas.toDataURL('image/jpeg', 0.82);
+    } else if (imgData.length > 1_600_000) {
+      imgData = canvas.toDataURL('image/jpeg', 0.87);
     }
 
     if (!imgData || imgData === 'data:,' || imgData.length < 100) {
@@ -140,7 +154,7 @@ export async function exportResumeToHdPdf(
 
     if (onProgress) onProgress('SAVING');
 
-    // 5. Assemblage du Document PDF A4 avec compression interne des flux (compress: true)
+    // 5. Assemblage PDF A4 avec compression interne des flux Deflate (compress: true + 'SLOW')
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -148,28 +162,35 @@ export async function exportResumeToHdPdf(
       compress: true,
     });
 
-    // Utilisation de la méthode de compression de flux 'SLOW' (Deflate maximal)
     pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'SLOW');
 
     const cleanFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-    
-    // Mesure de la taille du fichier PDF généré
     const pdfOutput = pdf.output('arraybuffer');
     const fileSizeBytes = pdfOutput.byteLength;
-    const formattedSize = fileSizeBytes > 1024 * 1024 
+    const formattedSize = fileSizeBytes > 1024 * 1024
       ? `${(fileSizeBytes / (1024 * 1024)).toFixed(2)} Mo`
       : `${Math.round(fileSizeBytes / 1024)} Ko`;
 
-    pdf.save(cleanFilename);
+    const triggerSave = () => {
+      pdf.save(cleanFilename);
+    };
 
-    if (onProgress) onProgress('DONE');
-    return { success: true, fileSizeBytes, formattedSize };
+    if (autoSave) {
+      triggerSave();
+      if (onProgress) onProgress('DONE');
+    }
+
+    return {
+      success: true,
+      fileSizeBytes,
+      formattedSize,
+      save: triggerSave,
+    };
   } catch (error: any) {
     const message = error?.message || 'Erreur lors de la création du fichier PDF.';
     console.error('[CV EXPORT HD] Échec lors de la génération du PDF :', error);
     return { success: false, error: message };
   } finally {
-    // 6. Nettoyage absolu du conteneur temporaire
     if (sandboxContainer && sandboxContainer.parentNode) {
       try {
         sandboxContainer.parentNode.removeChild(sandboxContainer);

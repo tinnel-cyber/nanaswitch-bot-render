@@ -58,6 +58,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "mediabunny": "^1.61.6",
+    "modern-screenshot": "^4.7.0",
     "motion": "^12.23.24",
     "next": "^15.5.29",
     "pdfjs-dist": "^5.4.624",
