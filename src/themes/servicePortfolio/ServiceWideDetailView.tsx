@@ -630,7 +630,7 @@ export const ServiceWideDetailView: React.FC<ServiceWideDetailViewProps> = ({
                 <ShieldCheck className="w-4 h-4" /> Paiement Sécurisé (Séquestre)
               </div>
               <p className="text-[11px] text-slate-300 leading-snug">
-                Aucun paiement ne doit être effectué en dehors du site.
+                Vos fonds restent protégés sous séquestre Nanasore jusqu’à validation finale.
               </p>
             </div>
 

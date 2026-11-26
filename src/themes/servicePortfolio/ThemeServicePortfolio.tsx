@@ -660,16 +660,6 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = (props) => {
         </div>
       </section>
 
-      {/* CLAUSE DE SÉCURITÉ ESCROW (NON MODIFIABLE — ANTI-PAIEMENT HORS SITE) */}
-      <div className="bg-emerald-950/40 border-b border-emerald-500/25 py-2.5 px-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-xs sm:text-sm font-bold text-emerald-300 text-center">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>
-            Sécurité Escrow : Aucun paiement ne doit être effectué en dehors du site. Vos fonds restent protégés sous séquestre jusqu’à la validation finale de votre prestation.
-          </span>
-        </div>
-      </div>
-
       {/* CONTENU PRINCIPAL */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
         {activeTab === 'SERVICES' ? (
@@ -880,7 +870,7 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = (props) => {
                             </button>
                           <p className="text-[11px] text-emerald-400/90 font-semibold flex items-center gap-1.5">
                             <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                            <span>Aucun paiement hors site • Le prestataire envoie votre devis & accès directement dans le chat après échange.</span>
+                            <span>Protection Séquestre Nanasore • Votre devis & contrat signé vous sont transmis directement dans le chat.</span>
                           </p>
                         </div>
                       </div>
@@ -1248,7 +1238,7 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = (props) => {
 
                 <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300 font-semibold flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span>Aucun paiement hors site : votre devis sécurisé Escrow vous sera envoyé dans le chat.</span>
+                  <span>Votre devis & contrat protégé sous séquestre Escrow vous sera envoyé dans le chat.</span>
                 </div>
 
                 <button

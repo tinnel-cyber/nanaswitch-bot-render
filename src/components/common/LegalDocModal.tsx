@@ -1,19 +1,19 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { PlatformLegalConfig } from '../../types';
+import { ESCROW_USAGE_CLAUSES_TEXT } from '../../utils/firestoreService';
 import { playTapBeep } from '../../utils/audio';
 import { 
   FileText, 
   ShieldCheck, 
   X, 
   Printer, 
-  CheckCircle2, 
-  Calendar, 
-  ExternalLink 
+  Calendar,
+  Scale
 } from 'lucide-react';
 
 interface LegalDocModalProps {
   isOpen: boolean;
-  initialDoc?: 'LEGAL_MENTIONS' | 'PRIVACY_POLICY';
+  initialDoc?: 'LEGAL_MENTIONS' | 'PRIVACY_POLICY' | 'ESCROW_CLAUSES';
   onClose: () => void;
   legalConfig?: PlatformLegalConfig | null;
 }
@@ -24,7 +24,7 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
   onClose,
   legalConfig,
 }) => {
-  const [activeTab, setActiveTab] = useState<'LEGAL_MENTIONS' | 'PRIVACY_POLICY'>(initialDoc);
+  const [activeTab, setActiveTab] = useState<'LEGAL_MENTIONS' | 'PRIVACY_POLICY' | 'ESCROW_CLAUSES'>(initialDoc);
 
   // Synchronise avec la demande d'ouverture
   React.useEffect(() => {
@@ -38,11 +38,15 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
   const contentToDisplay =
     activeTab === 'LEGAL_MENTIONS'
       ? legalConfig?.legal_mentions_content || 'Mentions Légales en cours de chargement...'
+      : activeTab === 'ESCROW_CLAUSES'
+      ? ESCROW_USAGE_CLAUSES_TEXT
       : legalConfig?.privacy_policy_content || 'Politique de Confidentialité en cours de chargement...';
 
   const docTitle =
     activeTab === 'LEGAL_MENTIONS'
       ? 'Mentions Légales & Identification Éditeur'
+      : activeTab === 'ESCROW_CLAUSES'
+      ? 'Clauses d’Usage Escrow, Sanctions & Litiges'
       : 'Politique de Confidentialité & Données Marchandes';
 
   const handlePrint = () => {
@@ -63,6 +67,8 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
               <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
                 {activeTab === 'LEGAL_MENTIONS' ? (
                   <FileText className="w-5 h-5" />
+                ) : activeTab === 'ESCROW_CLAUSES' ? (
+                  <Scale className="w-5 h-5 text-amber-400" />
                 ) : (
                   <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 )}
@@ -96,7 +102,7 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
           </div>
 
           {/* Onglets de sélection */}
-          <div className="flex items-center gap-2 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80">
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80">
             <button
               type="button"
               onClick={() => {
@@ -126,7 +132,23 @@ export const LegalDocModal: React.FC<LegalDocModalProps> = ({
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Confidentialité & Données</span>
+              <span>Confidentialité</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setActiveTab('ESCROW_CLAUSES');
+              }}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === 'ESCROW_CLAUSES'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>Clauses Escrow</span>
             </button>
           </div>
         </div>

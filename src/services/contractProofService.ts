@@ -223,12 +223,122 @@ export function generateSignedQuotePdf(
     doc.text('En attente de signature du commandeur', 114, sigY + 28);
   }
 
-  // Pied de page preuve
+  // Pied de page preuve (Page 1 : Métadonnées & Devis)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
   const hashLabel = project.contractProofHash ? ` • Empreinte SHA-256 : ${project.contractProofHash.slice(0, 16)}...` : '';
-  doc.text(`Document certifié Nanasore Escrow${hashLabel}`, pageWidth / 2, 288, { align: 'center' });
+  doc.text(`Document 1/2 : Devis & Métadonnées certifiées Nanasore Escrow${hashLabel}`, pageWidth / 2, 288, { align: 'center' });
+
+  // =========================================================================
+  // PAGE 2 — DOCUMENT 2 : CONTRAT DE PRESTATION DE SERVICE OFFICIEL
+  // =========================================================================
+  doc.addPage();
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, pageWidth, 26, 'F');
+  doc.setTextColor(251, 191, 36);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('CONTRAT DE PRESTATION DE SERVICE', 14, 13);
+  doc.setTextColor(226, 232, 240);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text(`Réf. Devis lié : ${project.id} • Établi le ${new Date(project.createdAt || Date.now()).toLocaleDateString('fr-FR')}`, 14, 20);
+
+  let cy = 36;
+  const providerDisplay = String(project.merchantName || project.storeName || 'Le Prestataire');
+  const clientDisplay = String(project.clientName || 'Le Commandeur');
+
+  const articles: Array<{ title: string; body: string }> = [
+    {
+      title: 'Entre les soussignés :',
+      body: `1) LE PRESTATAIRE : ${providerDisplay}${project.merchantPhone ? ` (Tél : ${project.merchantPhone})` : ''}, ci-après désigné « le Prestataire ».\n2) LE COMMANDEUR : ${clientDisplay}${project.clientCompany ? ` — ${project.clientCompany}` : ''}${project.clientPhone ? ` (Tél : ${project.clientPhone})` : ''}, ci-après désigné « le Commandeur ».`,
+    },
+    {
+      title: 'Article 1 — Objet du Contrat',
+      body: `Le présent contrat a pour objet la réalisation de la prestation intitulée « ${project.projectTitle} », telle que détaillée dans le Devis & Métadonnées (Document 1/2) comprenant ${milestones.length} jalon(s) de livraison.`,
+    },
+    {
+      title: 'Article 2 — Prix, Séquestre (Escrow) & Modalités de Règlement',
+      body: `Le montant global net de la prestation est fixé à ${formatXofForPdf(project.totalAmount)}. Conformément aux Clauses d'Usage Escrow Nanasore, les fonds consignés par le Commandeur sont protégés sous séquestre et ne sont libérés au Prestataire qu'après livraison conforme et validation finale.`,
+    },
+    {
+      title: 'Article 3 — Obligations des Parties',
+      body: `Le Prestataire s'engage à exécuter la mission avec diligence, selon les règles de l'art et dans les délais convenus. Le Commandeur s'engage à fournir les informations nécessaires à la bonne exécution et à procéder à la validation des livrables conformes dans un délai raisonnable.`,
+    },
+    {
+      title: 'Article 4 — Litiges, Sanctions & Arbitrage Nanasore',
+      body: `En cas de différend, chacune des parties peut saisir le service de médiation depuis l'espace projet. Les fonds sont gelés à titre conservatoire et arbitrés sous 48h à 72h par le Super Admin sur la base du présent contrat signé, des métadonnées et des échanges enregistrés.`,
+    },
+  ];
+
+  articles.forEach((art) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(art.title, 14, cy);
+    cy += 4.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(51, 65, 85);
+    const lines = doc.splitTextToSize(art.body, 182);
+    doc.text(lines, 14, cy);
+    cy += lines.length * 4.2 + 4;
+  });
+
+  // Bloc Signatures & Tampon sur le Contrat (Page 2)
+  const cSigY = Math.max(cy + 4, 212);
+  doc.setDrawColor(148, 163, 184);
+  doc.roundedRect(14, cSigY, 88, 52, 2, 2, 'D');
+  doc.roundedRect(108, cSigY, 88, 52, 2, 2, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text('CACHET & SIGNATURE PRESTATAIRE', 18, cSigY + 6);
+  doc.text('SIGNATURE COMMANDEUR (LU ET APPROUVÉ)', 112, cSigY + 6);
+
+  if (project.providerStampDataUrl) {
+    try {
+      doc.addImage(project.providerStampDataUrl, 'PNG', 18, cSigY + 9, 36, 22);
+    } catch {}
+  }
+  if (project.providerSignatureDataUrl) {
+    try {
+      doc.addImage(project.providerSignatureDataUrl, 'PNG', 56, cSigY + 12, 42, 20);
+    } catch {}
+  }
+  if (project.providerSignedAt) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Signé le ${new Date(project.providerSignedAt).toLocaleString('fr-FR')}`, 18, cSigY + 47);
+  }
+
+  if (project.clientSignatureDataUrl) {
+    try {
+      doc.addImage(project.clientSignatureDataUrl, 'PNG', 114, cSigY + 12, 64, 24);
+    } catch {}
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(22, 163, 74);
+    doc.text('LU ET APPROUVÉ — SIGNÉ EN LIGNE', 112, cSigY + 41);
+    if (project.clientSignedAt) {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Le ${new Date(project.clientSignedAt).toLocaleString('fr-FR')}`, 112, cSigY + 47);
+    }
+  } else {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('En attente de signature du commandeur', 114, cSigY + 28);
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Document 2/2 : Contrat de Prestation de Service Nanasore Escrow${hashLabel}`, pageWidth / 2, 288, { align: 'center' });
 
   const safeTitle = String(project.projectTitle || 'Devis').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
   const filename = options?.filename || `Contrat_${safeTitle}_${project.id.slice(-6)}.pdf`;

@@ -2739,8 +2739,30 @@ export function subscribeToCentralPaymentConfig(
 // CONFIGURATION JURIDIQUE & TEXTES LÉGAUX DE LA PLATEFORME (platform_settings/legal)
 // ============================================================================
 
+export const ESCROW_USAGE_CLAUSES_TEXT = `# Clauses d'Usage du Service Escrow (Séquestre) — Nanasore
+
+## 1. Objet & Fonctionnement du Séquestre (Escrow)
+Le service **Nanasore Escrow** agit en qualité de Tiers de Confiance neutre entre le **Prestataire** et le **Commandeur (Client)**. Lorsqu'un devis et un contrat de prestation sont validés, les fonds consignés par le Commandeur restent bloqués sous séquestre jusqu'à la livraison conforme des jalons convenus.
+
+## 2. Traçabilité & Paiements via la Plateforme
+Pour bénéficier pleinement de la garantie Escrow, de l'archivage probant des contrats et de l'arbitrage en cas de différend, tous les règlements relatifs à un devis généré sur Nanasore doivent transiter exclusivement par le lien de paiement officiel de la plateforme. Tout règlement effectué en dehors de la plateforme se fait aux risques exclusifs des parties et ne peut être couvert par le séquestre ni par la médiation Nanasore.
+
+## 3. Sanctions en cas de Non-Respect ou de Fraude
+Tout manquement grave aux présentes clauses — notamment tentative de contournement du séquestre après mise en relation, fourniture de faux justificatifs, non-livraison délibérée ou abus de contestation — expose son auteur aux sanctions suivantes :
+- **Suspension immédiate** du compte marchand ou client et gel conservatoire des soldes en cours de vérification ;
+- **Perte définitive** du badge « Prestataire Vérifié » et de l'accès au service Escrow ;
+- **Remboursement d'office** des sommes consignées au Commandeur lésé en cas de manquement avéré du Prestataire ;
+- **Bannissement définitif** de la plateforme et transmission du dossier aux autorités compétentes en cas d'escroquerie caractérisée.
+
+## 4. Règlement en cas de Litige & Arbitrage
+En cas de désaccord sur la qualité, les délais ou la conformité d'une prestation :
+1. **Ouverture du Litige** : Chacune des deux parties (Commandeur ou Prestataire) peut ouvrir un litige officiel directement depuis l'espace projet. Le litige est transmis simultanément au **Tableau de Bord Litiges** du prestataire et à la console d'arbitrage **Super Admin**.
+2. **Gel Conservatoire** : Dès l'ouverture du litige, les déblocages de fonds sont automatiquement suspendus.
+3. **Médiation Tripartite (48h à 72h)** : Le médiateur Super Admin examine le contrat signé et tamponné, les métadonnées horodatées, les échanges dans la messagerie tripartite et les livrables déposés.
+4. **Décision Exécutoire** : À l'issue de l'instruction, le Super Admin prononce soit la libération totale/partielle des fonds au Prestataire, soit le remboursement intégral/partiel au Commandeur.`.trim();
+
 export const DEFAULT_PLATFORM_LEGAL: PlatformLegalConfig = {
-  ticker_text: "© 2026 Nanasore. Tous droits réservés. • Mentions Légales • Politique de Confidentialité • Sécurité & protection des données marchandes.",
+  ticker_text: "© 2026 Nanasore. Tous droits réservés. • Mentions Légales • Politique de Confidentialité • Clauses d'Usage Escrow.",
   legal_mentions_content: `# Mentions Légales — Nanasore
 
 ## 1. Éditeur de l'Application
@@ -2760,7 +2782,10 @@ L'ensemble des marques, logos, algorithmes de recommandation, modèles de calcul
 Toute reproduction, représentation, modification ou extraction sans autorisation préalable expresse est strictement prohibée.
 
 ## 4. Limitation de Responsabilité
-Nanasore met tout en œuvre pour assurer l'exactitude des calculs comptables, des stocks et de la transmission des paiements Mobile Money. Toutefois, la vérification physique des espèces et l'encaissement effectif des sommes restent sous la pleine responsabilité du commerçant gestionnaire de la caisse.`.trim(),
+Nanasore met tout en œuvre pour assurer l'exactitude des calculs comptables, des stocks et de la transmission des paiements Mobile Money. Toutefois, la vérification physique des espèces et l'encaissement effectif des sommes restent sous la pleine responsabilité du commerçant gestionnaire de la caisse.
+
+## 5. Clauses d'Usage du Service Escrow (Séquestre)
+Les transactions de prestations de services couvertes par Nanasore Escrow sont soumises au règlement de séquestre, incluant l'archivage probant des contrats signés, les sanctions en cas de fraude ou contournement, et l'arbitrage tripartite Super Admin en cas de litige.`.trim(),
   privacy_policy_content: `# Politique de Confidentialité & Protection des Données Marchandes
 
 ## 1. Engagement & Transparence

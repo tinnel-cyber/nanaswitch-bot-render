@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { PenTool, Stamp, Trash2, CheckCircle2, X, ShieldCheck } from 'lucide-react';
+import { PenTool, Stamp, Trash2, CheckCircle2, X, FileText } from 'lucide-react';
 
 export interface SignatureStampResult {
   signatureDataUrl: string;
@@ -12,6 +12,13 @@ interface SignatureStampModalProps {
   title?: string;
   defaultCompanyName?: string;
   defaultCity?: string;
+  contractSummary?: {
+    providerName?: string;
+    clientName?: string;
+    projectTitle?: string;
+    totalAmount?: number;
+    milestonesCount?: number;
+  };
   onClose: () => void;
   onConfirm: (result: SignatureStampResult) => void;
 }
@@ -87,6 +94,7 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
   title,
   defaultCompanyName = 'Mon Entreprise',
   defaultCity = 'Abidjan',
+  contractSummary,
   onClose,
   onConfirm,
 }) => {
@@ -214,6 +222,41 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
         </div>
 
         <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* Exemplaire bien visible du Contrat de Prestation de Service (Documents 1 & 2) */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 space-y-2 text-[11px] text-slate-700">
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200">
+              <span className="font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                Exemplaire : Devis (Métadonnées) & Contrat de Prestation
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold text-[10px]">
+                2 Documents PDF
+              </span>
+            </div>
+            <div className="max-h-32 overflow-y-auto pr-1 space-y-1.5 leading-relaxed">
+              <p>
+                <strong>Entre les parties :</strong>{' '}
+                <span className="text-slate-900 font-bold">
+                  {contractSummary?.providerName || defaultCompanyName || 'Le Prestataire'}
+                </span>{' '}
+                (Prestataire) et{' '}
+                <span className="text-slate-900 font-bold">
+                  {contractSummary?.clientName || 'Le Commandeur'}
+                </span>{' '}
+                (Commandeur).
+              </p>
+              <p>
+                <strong>Objet :</strong>{' '}
+                {contractSummary?.projectTitle || 'Prestation de service sur-mesure'}
+                {contractSummary?.totalAmount ? ` — Montant garanti : ${Number(contractSummary.totalAmount).toLocaleString('fr-FR')} FCFA` : ''}
+                {contractSummary?.milestonesCount ? ` (${contractSummary.milestonesCount} jalon(s))` : ''}.
+              </p>
+              <p>
+                <strong>Engagement & Escrow :</strong> Le Prestataire s’engage à livrer les travaux conformes aux jalons définis. Les fonds consignés sous séquestre Nanasore sont protégés jusqu’à validation finale. En cas de différend, les parties peuvent ouvrir un litige officiel arbitré par le Super Admin sur la base du présent contrat signé et tamponné.
+              </p>
+            </div>
+          </div>
+
           {/* Zone de signature manuscrite */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

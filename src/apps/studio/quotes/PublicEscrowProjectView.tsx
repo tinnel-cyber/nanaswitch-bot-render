@@ -6,8 +6,10 @@ import {
   recordClientEscrowPayment, 
   confirmProjectDelivery,
   releasePartialEscrowAmount,
+  updateEscrowStatus,
   getPublicProjectUrl
 } from '../../../services/escrowService';
+import { supabase } from '../../../lib/supabase';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
 import { SignatureStampModal } from '../../../components/quotes/SignatureStampModal';
 import { generateSignedQuotePdf, saveContractProofToAdmin } from '../../../services/contractProofService';
@@ -33,7 +35,8 @@ import {
   ExternalLink,
   Sparkles,
   Zap,
-  FolderKanban
+  FolderKanban,
+  X
 } from 'lucide-react';
 
 interface PublicEscrowProjectViewProps {
@@ -63,6 +66,9 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
   const [showClientSignModal, setShowClientSignModal] = useState(false);
   const [contractProofSent, setContractProofSent] = useState(false);
   const [partialReleaseInput, setPartialReleaseInput] = useState('');
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [clientDisputeReason, setClientDisputeReason] = useState('');
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
   const [partialReleaseNote, setPartialReleaseNote] = useState('');
   const [isReleasingPartial, setIsReleasingPartial] = useState(false);
   const [partialReleaseMsg, setPartialReleaseMsg] = useState<string | null>(null);
@@ -260,6 +266,21 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
                 {isCopiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{isCopiedLink ? 'Copié !' : 'Partager'}</span>
               </button>
+
+              {(isFundsLocked || isDelivered) && !isDisputed && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    setShowDisputeModal(true);
+                  }}
+                  className="py-2 px-3 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Ouvrir un litige officiel (gel conservatoire & arbitrage Super Admin)"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Signaler un litige</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -698,6 +719,14 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
         isOpen={showClientSignModal}
         mode="CLIENT"
         title="Signature en ligne du Commandeur"
+        defaultCompanyName={project.merchantName || project.storeName}
+        contractSummary={{
+          providerName: project.merchantName || project.storeName,
+          clientName: project.clientName,
+          projectTitle: project.projectTitle,
+          totalAmount: project.totalAmount,
+          milestonesCount: project.milestones?.length || 1,
+        }}
         onClose={() => setShowClientSignModal(false)}
         onConfirm={async ({ signatureDataUrl }) => {
           const signedAt = Date.now();
@@ -723,6 +752,97 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
           setContractProofSent(true);
         }}
       />
+
+      {/* Modale Ouverture de Litige Commandeur -> Super Admin & Tableau de Bord Litiges */}
+      {showDisputeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-sm font-black text-white">Signaler un Litige Officiel</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDisputeModal(false)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Votre litige sera transmis immédiatement au <strong>Super Admin</strong> et au <strong>Tableau de Bord Litiges</strong>. Les fonds ({formatCFA(project.totalAmount)}) seront gelés à titre conservatoire pendant l'arbitrage.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!clientDisputeReason.trim()) return;
+                setIsSubmittingDispute(true);
+                try {
+                  const reason = `[Commandeur] ${clientDisputeReason.trim()}`;
+                  await updateEscrowStatus(project.id, project.storeId, 'disputed_paused', {
+                    disputeReason: reason,
+                    disputedAt: Date.now(),
+                  });
+                  await fetch('/api/merchant/disputes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      tenantId: project.storeId,
+                      orderId: project.id,
+                      customerName: project.clientName,
+                      amount: project.totalAmount,
+                      reason,
+                    }),
+                  }).catch(() => {});
+                  await supabase.from('merchant_disputes').insert({
+                    id: `DSP-${Date.now().toString(36).toUpperCase()}`,
+                    tenant_id: project.storeId,
+                    order_id: project.id,
+                    customer_name: project.clientName,
+                    amount: project.totalAmount,
+                    reason,
+                    status: 'OPEN',
+                    created_at: new Date().toISOString(),
+                  }).then(null, () => {});
+                  setProject((prev) => prev ? { ...prev, status: 'disputed_paused', disputeReason: reason, disputedAt: Date.now() } : prev);
+                  playValidationBeep();
+                  setShowDisputeModal(false);
+                  setClientDisputeReason('');
+                } finally {
+                  setIsSubmittingDispute(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <textarea
+                rows={3}
+                required
+                value={clientDisputeReason}
+                onChange={(e) => setClientDisputeReason(e.target.value)}
+                placeholder="Décrivez le motif de votre réclamation (retard, non-conformité, etc.)..."
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 text-xs text-white focus:border-rose-500 focus:outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDisputeModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingDispute || !clientDisputeReason.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-black cursor-pointer"
+                >
+                  {isSubmittingDispute ? 'Envoi...' : 'Soumettre le Litige'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

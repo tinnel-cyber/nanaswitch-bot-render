@@ -19,6 +19,8 @@ import {
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
 import { SignatureStampModal } from '../../../components/quotes/SignatureStampModal';
 import { generateSignedQuotePdf } from '../../../services/contractProofService';
+import { LegalDocModal } from '../../../components/common/LegalDocModal';
+import { supabase } from '../../../lib/supabase';
 import { formatCFA, playTapBeep, playValidationBeep, playCashChime } from '../../../utils/audio';
 import { 
   ShieldCheck, 
@@ -71,14 +73,20 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [chatProject, setChatProject] = useState<EscrowProject | null>(null);
   const [signingProject, setSigningProject] = useState<EscrowProject | null>(null);
+  const [disputeProject, setDisputeProject] = useState<EscrowProject | null>(null);
+  const [disputeReasonInput, setDisputeReasonInput] = useState('');
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
-  // Formulaire Nouveau Devis
+  // Formulaire Nouveau Devis (Noms des deux parties : Prestataire & Commandeur)
+  const [providerName, setProviderName] = useState(currentUser?.name || storeName || '');
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientCompany, setClientCompany] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
+  const [acceptedEscrowClauses, setAcceptedEscrowClauses] = useState(false);
+  const [isEscrowClausesOpen, setIsEscrowClausesOpen] = useState(false);
   const [termsAndConditions, setTermsAndConditions] = useState(
     'Acompte sécurisé sous séquestre tiers de confiance Nana Guarantee. Les fonds sont garantis et débloqués à la livraison et validation finale du client.'
   );
@@ -143,10 +151,10 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
 
   const totalCalculatedAmount = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
 
-  // Sauvegarde d'un nouveau devis
+  // Sauvegarde d'un nouveau devis -> ouvre immédiatement la signature & tampon obligatoire avant soumission au commandeur
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName.trim() || !projectTitle.trim() || milestones.length === 0) return;
+    if (!providerName.trim() || !clientName.trim() || !projectTitle.trim() || milestones.length === 0 || !acceptedEscrowClauses) return;
 
     playTapBeep();
     const projectId = `proj-${Date.now().toString(36)}-${Math.floor(Math.random() * 899 + 100)}`;
@@ -154,7 +162,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
       id: projectId,
       storeId,
       storeName,
-      merchantName: currentUser?.name || 'Prestataire',
+      merchantName: providerName.trim(),
       merchantPhone: currentUser?.phone || '',
       merchantEmail: currentUser?.email || '',
       clientName: clientName.trim(),
@@ -182,6 +190,9 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
     playValidationBeep();
     setIsCreateModalOpen(false);
 
+    // Ouvrir directement la modale de tampon & signature avant envoi au commandeur
+    setSigningProject(newProject);
+
     // Réinitialisation
     setClientName('');
     setClientEmail('');
@@ -189,6 +200,47 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
     setClientCompany('');
     setProjectTitle('');
     setProjectDescription('');
+    setAcceptedEscrowClauses(false);
+  };
+
+  // Soumission d'un litige (synchronisé Super Admin + Dashboard Litiges)
+  const handleSubmitDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeProject || !disputeReasonInput.trim()) return;
+    setIsSubmittingDispute(true);
+    try {
+      const reason = `[Prestataire] ${disputeReasonInput.trim()}`;
+      await updateEscrowStatus(disputeProject.id, disputeProject.storeId, 'disputed_paused', {
+        disputeReason: reason,
+        disputedAt: Date.now(),
+      });
+      await fetch('/api/merchant/disputes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: disputeProject.storeId,
+          orderId: disputeProject.id,
+          customerName: disputeProject.clientName,
+          amount: disputeProject.totalAmount,
+          reason,
+        }),
+      }).catch(() => {});
+      await supabase.from('merchant_disputes').insert({
+        id: `DSP-${Date.now().toString(36).toUpperCase()}`,
+        tenant_id: disputeProject.storeId,
+        order_id: disputeProject.id,
+        customer_name: disputeProject.clientName,
+        amount: disputeProject.totalAmount,
+        reason,
+        status: 'OPEN',
+        created_at: new Date().toISOString(),
+      }).then(null, () => {});
+      playValidationBeep();
+      setDisputeProject(null);
+      setDisputeReasonInput('');
+    } finally {
+      setIsSubmittingDispute(false);
+    }
   };
 
   // Copier le lien public
@@ -485,32 +537,44 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                       <button
                         type="button"
                         onClick={async () => {
+                          if (!project.providerSignatureDataUrl) {
+                            playTapBeep();
+                            setSigningProject(project);
+                            return;
+                          }
                           playValidationBeep();
                           const publicUrl = getPublicProjectUrl(project.id);
                           const accessMsg = [
-                            `📄 DEVIS & ACCÈS SÉQUESTRE — ${project.projectTitle}`,
+                            `📄 DEVIS & CONTRAT SIGNÉ — ${project.projectTitle}`,
                             `💰 Montant total protégé : ${formatCFA(project.totalAmount)} (${project.milestones.length} jalon(s))`,
-                            `🔗 Votre espace client & paiement sécurisé : ${publicUrl}`,
-                            `🛡️ Rappel : Aucun paiement ne doit être effectué en dehors de ce lien officiel pour garantir la protection Séquestre.`,
+                            `🔗 Votre espace client, signature en ligne & paiement sécurisé : ${publicUrl}`,
+                            `🛡️ Paiement protégé sous séquestre Nanasore Escrow jusqu'à validation finale.`,
                           ].join('\n');
                           await sendEscrowChatMessage(project.id, project.storeId, {
                             senderRole: 'merchant',
-                            senderName: project.storeName || storeUser?.businessName || 'Prestataire',
+                            senderName: project.merchantName || project.storeName || storeUser?.businessName || 'Prestataire',
                             text: accessMsg,
                           });
                           setChatProject(project);
                         }}
                         className="py-1.5 px-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer"
-                        title="Générer et envoyer le devis et le lien d'accès dans le chat"
+                        title={project.providerSignatureDataUrl ? "Envoyer le devis et le lien d'accès dans le chat" : "Tamponnez et signez d'abord le contrat avant envoi"}
                       >
                         <Lock className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Envoyer Devis & Accès</span>
+                        <span>{project.providerSignatureDataUrl ? 'Envoyer Devis & Accès' : 'Signer avant envoi'}</span>
                       </button>
 
                       {/* Copier lien public */}
                       <button
                         type="button"
-                        onClick={() => handleCopyLink(project.id)}
+                        onClick={() => {
+                          if (!project.providerSignatureDataUrl) {
+                            playTapBeep();
+                            setSigningProject(project);
+                            return;
+                          }
+                          handleCopyLink(project.id);
+                        }}
                         className="py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
                         title="Copier le lien public pour le client"
                       >
@@ -520,9 +584,16 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
 
                       {/* Partager WhatsApp */}
                       <a
-                        href={getQuoteWhatsAppUrl(project)}
-                        target="_blank"
+                        href={project.providerSignatureDataUrl ? getQuoteWhatsAppUrl(project) : '#'}
+                        target={project.providerSignatureDataUrl ? '_blank' : undefined}
                         rel="noopener noreferrer"
+                        onClick={(e) => {
+                          if (!project.providerSignatureDataUrl) {
+                            e.preventDefault();
+                            playTapBeep();
+                            setSigningProject(project);
+                          }
+                        }}
                         className="py-1.5 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
                         title="Envoyer le devis sur WhatsApp"
                       >
@@ -542,11 +613,27 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                           }
                         }}
                         className="py-1.5 px-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                        title="Tamponner, signer et télécharger le devis PDF"
+                        title="Tamponner, signer et télécharger le devis & contrat PDF"
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>{project.providerSignatureDataUrl ? 'PDF Signé' : 'Tamponner & Signer PDF'}</span>
+                        <span>{project.providerSignatureDataUrl ? 'PDF Signé (2 docs)' : 'Tamponner & Signer'}</span>
                       </button>
+
+                      {/* Ouvrir un litige (synchronisé Super Admin + Tableau de Bord Litiges) */}
+                      {(project.status === 'funds_locked' || project.status === 'work_in_progress' || project.status === 'delivered') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playTapBeep();
+                            setDisputeProject(project);
+                          }}
+                          className="py-1.5 px-2.5 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                          title="Ouvrir un litige officiel vers le Super Admin"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Ouvrir un litige</span>
+                        </button>
+                      )}
 
                       {/* Ouvrir la page publique client dans un nouvel onglet */}
                       <a
@@ -617,12 +704,23 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateProject} className="space-y-4">
-              {/* Client Info */}
+              {/* Parties (Prestataire & Commandeur) */}
               <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
-                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">1. Coordonnées du Client</span>
+                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block">1. Identification des Deux Parties (Prestataire & Commandeur)</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Nom complet du client *</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">Nom complet du Prestataire *</label>
+                    <input
+                      type="text"
+                      value={providerName}
+                      onChange={(e) => setProviderName(e.target.value)}
+                      placeholder="Ex: Moussa Ouédraogo • Studio"
+                      required
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Nom complet du Commandeur (Client) *</label>
                     <input
                       type="text"
                       value={clientName}
@@ -633,7 +731,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Entreprise / Société</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">Entreprise / Société du Client</label>
                     <input
                       type="text"
                       value={clientCompany}
@@ -643,7 +741,7 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Numéro WhatsApp / Téléphone</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">Numéro WhatsApp / Téléphone Client</label>
                     <input
                       type="tel"
                       value={clientPhone}
@@ -652,8 +750,8 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Email</label>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] text-slate-400 mb-1">Email du Client</label>
                     <input
                       type="email"
                       value={clientEmail}
@@ -781,12 +879,41 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                 />
               </div>
 
+              {/* Case à cocher + lien cliquable Clauses d'usage Escrow */}
+              <div className="p-3 rounded-2xl bg-slate-950/90 border border-amber-500/30 space-y-1.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedEscrowClauses}
+                    onChange={(e) => setAcceptedEscrowClauses(e.target.checked)}
+                    required
+                    className="mt-0.5 w-4 h-4 accent-amber-500 cursor-pointer shrink-0"
+                  />
+                  <span className="text-[11px] text-slate-300 leading-relaxed">
+                    J'ai lu et j'accepte les{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        playTapBeep();
+                        setIsEscrowClausesOpen(true);
+                      }}
+                      className="text-amber-400 hover:text-amber-300 underline font-bold cursor-pointer"
+                    >
+                      Clauses d'usage du service Escrow (sanctions & règlement en cas de litiges)
+                    </button>
+                    .
+                  </span>
+                </label>
+              </div>
+
               <button
                 type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/50 transition cursor-pointer"
+                disabled={!acceptedEscrowClauses}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-950/50 transition cursor-pointer"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Générer le Devis & le Lien Séquestre Client</span>
+                <span>Générer le Devis, Signer & Tamponner</span>
               </button>
             </form>
           </div>
@@ -983,7 +1110,14 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
       <SignatureStampModal
         isOpen={Boolean(signingProject)}
         mode="PROVIDER"
-        defaultCompanyName={storeName}
+        defaultCompanyName={signingProject?.merchantName || storeName}
+        contractSummary={signingProject ? {
+          providerName: signingProject.merchantName || signingProject.storeName || storeName,
+          clientName: signingProject.clientName,
+          projectTitle: signingProject.projectTitle,
+          totalAmount: signingProject.totalAmount,
+          milestonesCount: signingProject.milestones?.length || 1,
+        } : undefined}
         onClose={() => setSigningProject(null)}
         onConfirm={async ({ signatureDataUrl, stampDataUrl }) => {
           if (!signingProject) return;
@@ -1001,6 +1135,63 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
           setSigningProject(null);
         }}
       />
+
+      {/* Modale Clauses d'usage Escrow */}
+      <LegalDocModal
+        isOpen={isEscrowClausesOpen}
+        initialDoc="ESCROW_CLAUSES"
+        onClose={() => setIsEscrowClausesOpen(false)}
+      />
+
+      {/* Modale Ouverture de Litige (Prestataire -> Super Admin & Tableau de Bord Litiges) */}
+      {disputeProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-sm font-black text-white">Ouvrir un Litige Officiel</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisputeProject(null)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Ce litige sera transmis immédiatement au <strong>Super Admin</strong> et au <strong>Tableau de Bord Litiges</strong> pour médiation tripartite et gel conservatoire des fonds ({formatCFA(disputeProject.totalAmount)}).
+            </p>
+            <form onSubmit={handleSubmitDispute} className="space-y-3">
+              <textarea
+                rows={3}
+                required
+                value={disputeReasonInput}
+                onChange={(e) => setDisputeReasonInput(e.target.value)}
+                placeholder="Expliquez précisément le motif du litige..."
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 text-xs text-white focus:border-rose-500 focus:outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDisputeProject(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingDispute || !disputeReasonInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-black cursor-pointer"
+                >
+                  {isSubmittingDispute ? 'Envoi...' : 'Soumettre le Litige'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
