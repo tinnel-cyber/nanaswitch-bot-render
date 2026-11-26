@@ -320,6 +320,9 @@ export async function exportTimelineToVideoBlob(
   // Mixage audio propre via AudioContext (clips + Voix Off + Musique de fond)
   const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
   const audioCtx = AudioCtx ? new AudioCtx() : null;
+  if (audioCtx && audioCtx.state === 'suspended') {
+    await audioCtx.resume().catch(() => {});
+  }
   const audioDest = audioCtx ? audioCtx.createMediaStreamDestination() : null;
 
   const extraAudioEls: HTMLAudioElement[] = [];
@@ -349,24 +352,22 @@ export async function exportTimelineToVideoBlob(
   }
   const combinedStream = new MediaStream(combinedTracks);
 
-  // Choix honnête du conteneur supporté nativement (vrai MP4 si supporté, sinon WebM réel)
+  // Choix honnête du conteneur supporté nativement (vrai MP4 si supporté, sinon WebM réel, sinon défaut navigateur)
   const mp4Candidates = ['video/mp4;codecs=avc1,mp4a', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const webmCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
   const supportedMp4 = options.preferMp4 !== false
     ? mp4Candidates.find((m) => MediaRecorder.isTypeSupported(m))
     : undefined;
+  const supportedWebm = webmCandidates.find((m) => MediaRecorder.isTypeSupported(m));
+  const preferredMime = supportedMp4 || supportedWebm;
 
-  const mimeType = supportedMp4
-    || (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-      ? 'video/webm;codecs=vp9,opus'
-      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-        ? 'video/webm;codecs=vp8,opus'
-        : 'video/webm');
-  const extension: 'mp4' | 'webm' = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+  const videoBitsPerSecond = width >= 1080 ? 3_500_000 : width >= 720 ? 2_000_000 : 1_100_000;
+  const recorder = preferredMime
+    ? new MediaRecorder(combinedStream, { mimeType: preferredMime, videoBitsPerSecond })
+    : new MediaRecorder(combinedStream, { videoBitsPerSecond });
 
-  const recorder = new MediaRecorder(combinedStream, {
-    mimeType,
-    videoBitsPerSecond: width >= 1080 ? 3_500_000 : width >= 720 ? 2_000_000 : 1_100_000
-  });
+  const mimeType = recorder.mimeType || preferredMime || 'video/mp4';
+  const extension: 'mp4' | 'webm' = mimeType.toLowerCase().includes('webm') ? 'webm' : 'mp4';
 
   const chunks: Blob[] = [];
   recorder.ondataavailable = (ev) => {

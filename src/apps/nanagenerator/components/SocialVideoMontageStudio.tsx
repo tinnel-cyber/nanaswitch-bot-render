@@ -1718,10 +1718,16 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         } catch {}
 
         const combinedStream = new MediaStream(tracks);
-        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-          ? 'video/webm;codecs=vp9,opus'
-          : 'video/webm';
-        const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 1_800_000 });
+        const mp4Chroma = exportContainer === 'mp4'
+          ? ['video/mp4;codecs=avc1,mp4a', 'video/mp4;codecs=avc1', 'video/mp4'].find((m) => MediaRecorder.isTypeSupported(m))
+          : undefined;
+        const webmChroma = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m));
+        const preferredChromaMime = mp4Chroma || webmChroma;
+        const recorder = preferredChromaMime
+          ? new MediaRecorder(combinedStream, { mimeType: preferredChromaMime, videoBitsPerSecond: 1_800_000 })
+          : new MediaRecorder(combinedStream, { videoBitsPerSecond: 1_800_000 });
+        const mimeType = recorder.mimeType || preferredChromaMime || 'video/mp4';
+        const chromaExt = mimeType.toLowerCase().includes('webm') ? 'webm' : 'mp4';
         const chunks: Blob[] = [];
         recorder.ondataavailable = (ev) => {
           if (ev.data.size > 0) chunks.push(ev.data);
@@ -1747,7 +1753,7 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           }, 150);
         });
 
-        const outFile = new File([recordedBlob], `nana-chroma-${socialFormat.replace(':', 'x')}-${Date.now()}.webm`, { type: mimeType });
+        const outFile = new File([recordedBlob], `nana-chroma-${socialFormat.replace(':', 'x')}-${Date.now()}.${chromaExt}`, { type: mimeType });
         setEncodeProgress(100);
         setEncodeResult({
           file: outFile,
