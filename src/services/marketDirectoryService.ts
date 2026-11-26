@@ -462,12 +462,12 @@ export async function publishNanaMarketCard(
     city: data.city || 'Abidjan',
     quarter: data.quarter || '',
     country: data.country || "Côte d'Ivoire",
-    isListedInDirectory: true,
-    isPublic: true,
-    status: 'published',
+    isListedInDirectory: false,
+    isPublic: false,
+    status: 'pending_approval' as any,
     plan: 'pro',
     subscriptionPlan: 'pro',
-    verified: true,
+    verified: false,
     whatsappPhone: data.whatsappPhone || cleanPhone,
     phone: cleanPhone,
     wameetHandle: cleanWameet ? `@${cleanWameet}` : '',
@@ -476,54 +476,25 @@ export async function publishNanaMarketCard(
     slug: cleanShop || cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     rating: 5.0,
     reviewsCount: 1,
-    salesCount: 10,
+    salesCount: 0,
     description: (data.description || 'Boutique vérifiée sur NanaMarket. Découvrez nos produits et contactez-nous directement.').trim(),
     createdAt: now,
     updatedAt: now
   };
 
-  // 1. Écriture immédiate dans Supabase app_registry (module_key: 'market_cards')
-  try {
-    const { error: upsertErr } = await supabase.from('app_registry').upsert({
-      key: `market_card_${cardId}`,
-      name: cleanName || cardId,
-      module_key: 'market_cards',
-      config_json: publishedCard,
-      updated_at: new Date().toISOString()
-    });
-    if (upsertErr) {
-      console.warn(`[NANA-MARKET] Note upsert app_registry:`, upsertErr.message);
-    } else {
-      console.log(`[NANA-MARKET] Carte publiée avec succès sur Supabase app_registry/market_card_${cardId}`);
-    }
-  } catch (err) {
-    console.error(`[NANA-MARKET] Erreur enregistrement Supabase market_card_${cardId} :`, err);
-    throw err;
+  // 1. Écriture dans Supabase app_registry (module_key: 'market_cards') en attente de validation Super Admin
+  const { error: upsertErr } = await supabase.from('app_registry').upsert({
+    key: `market_card_${cardId}`,
+    name: cleanName || cardId,
+    tenant_id: data.storeId || cardId,
+    module_key: 'market_cards',
+    config_json: publishedCard,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'key' });
+  if (upsertErr) {
+    console.error(`[NANA-MARKET] Erreur enregistrement Supabase market_card_${cardId} :`, upsertErr.message);
+    throw new Error(upsertErr.message);
   }
-
-  // 2. Synchronisation en miroir pour interopérabilité globale
-  try {
-    await supabase.from('app_registry').upsert({
-      key: `store_${cardId}`,
-      name: cleanName || cardId,
-      module_key: 'stores',
-      config_json: publishedCard,
-      updated_at: new Date().toISOString()
-    });
-  } catch (e) {
-    console.warn('[NANA-MARKET] Note sync stores :', e);
-  }
-
-  // 3. Mise à jour immédiate du cache local
-  try {
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem(CACHE_KEY);
-      let list: MarketDirectoryStore[] = cached ? JSON.parse(cached) : [];
-      list = [publishedCard, ...list.filter(s => s.id !== cardId)];
-      localStorage.setItem(CACHE_KEY, JSON.stringify(sortStoresWithProFirst(list)));
-      window.dispatchEvent(new CustomEvent('nanamarket_cards_updated', { detail: publishedCard }));
-    }
-  } catch {}
 
   return publishedCard;
 }
@@ -550,7 +521,7 @@ export function subscribeToNanaMarketCards(
         const realTimeCards: MarketDirectoryStore[] = [];
         (rows || []).forEach(row => {
           const cData = (row.config_json as any) || {};
-          if (cData.isPublic !== false && cData.status !== 'draft') {
+          if (cData.isPublic === true && cData.status === 'published') {
             const cardId = cData.id || row.key.replace(/^market_card_/, '');
             realTimeCards.push({
               id: cardId,
@@ -766,3 +737,156 @@ export function filterDirectoryStores(
 
   return sortStoresWithProFirst(filtered);
 }
+
+/**
+ * Récupère toutes les cartes NaNa Market (en attente, validées, refusées) pour le Dashboard Super Admin
+ */
+export function subscribeAllMarketCardsForAdmin(
+  onUpdate: (cards: Array<MarketDirectoryStore & { status?: string; rejectionReason?: string }>) => void
+): () => void {
+  let isCancelled = false;
+
+  const fetchAll = async () => {
+    try {
+      const { data: rows, error } = await supabase
+        .from('app_registry')
+        .select('*')
+        .eq('module_key', 'market_cards');
+      if (error || isCancelled) return;
+      const list = (rows || []).map((row) => {
+        const cData = (row.config_json as any) || {};
+        const cardId = cData.id || row.key.replace(/^market_card_/, '');
+        return {
+          ...cData,
+          id: cardId,
+          storeId: cData.storeId || cardId,
+          storeName: cData.storeName || row.name || 'Entreprise',
+          status: cData.status || (cData.isPublic ? 'published' : 'pending_approval'),
+          createdAt: cData.createdAt || Date.now(),
+        };
+      });
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      onUpdate(list);
+    } catch {}
+  };
+
+  fetchAll();
+
+  const channel = supabase
+    .channel(`admin_market_cards_${Math.random().toString(36).slice(2, 7)}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'app_registry', filter: 'module_key=eq.market_cards' },
+      () => fetchAll()
+    )
+    .subscribe();
+
+  return () => {
+    isCancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Validation Super Admin : rend la carte visible publiquement sur NaNa Market
+ */
+export async function approveMarketCard(cardId: string): Promise<void> {
+  const key = cardId.startsWith('market_card_') ? cardId : `market_card_${cardId}`;
+  const cleanId = key.replace(/^market_card_/, '');
+  const { data: row } = await supabase
+    .from('app_registry')
+    .select('*')
+    .eq('key', key)
+    .maybeSingle();
+
+  const existing = (row?.config_json as any) || {};
+  const approvedCard = {
+    ...existing,
+    id: cleanId,
+    isListedInDirectory: true,
+    isPublic: true,
+    verified: true,
+    status: 'published',
+    approvedAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const { error } = await supabase
+    .from('app_registry')
+    .upsert({
+      key,
+      name: approvedCard.storeName || cleanId,
+      tenant_id: approvedCard.storeId || cleanId,
+      module_key: 'market_cards',
+      config_json: approvedCard,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+
+  if (error) throw new Error(error.message);
+
+  // Sync miroir stores
+  await supabase.from('app_registry').upsert({
+    key: `store_${cleanId}`,
+    name: approvedCard.storeName || cleanId,
+    module_key: 'stores',
+    config_json: approvedCard,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'key' }).catch(() => {});
+}
+
+/**
+ * Refus / Masquage Super Admin d'une carte NaNa Market
+ */
+export async function rejectMarketCard(cardId: string, reason?: string): Promise<void> {
+  const key = cardId.startsWith('market_card_') ? cardId : `market_card_${cardId}`;
+  const cleanId = key.replace(/^market_card_/, '');
+  const { data: row } = await supabase
+    .from('app_registry')
+    .select('*')
+    .eq('key', key)
+    .maybeSingle();
+
+  const existing = (row?.config_json as any) || {};
+  const rejectedCard = {
+    ...existing,
+    id: cleanId,
+    isListedInDirectory: false,
+    isPublic: false,
+    verified: false,
+    status: 'rejected',
+    rejectionReason: reason || 'Non conforme aux critères NaNa Market',
+    updatedAt: Date.now(),
+  };
+
+  const { error } = await supabase
+    .from('app_registry')
+    .upsert({
+      key,
+      name: rejectedCard.storeName || cleanId,
+      tenant_id: rejectedCard.storeId || cleanId,
+      module_key: 'market_cards',
+      config_json: rejectedCard,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Récupère le statut de la carte NaNa Market soumise par un marchand
+ */
+export async function getStoreMarketCard(storeId: string): Promise<(MarketDirectoryStore & { status?: string; rejectionReason?: string }) | null> {
+  try {
+    const { data: rows } = await supabase
+      .from('app_registry')
+      .select('*')
+      .eq('module_key', 'market_cards')
+      .eq('tenant_id', storeId)
+      .limit(1);
+    if (rows && rows.length > 0 && rows[0].config_json) {
+      return rows[0].config_json as any;
+    }
+  } catch {}
+  return null;
+}
+

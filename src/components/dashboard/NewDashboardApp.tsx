@@ -27,6 +27,7 @@ import {
   Boxes, FileSpreadsheet, Tag, Palette, GraduationCap, QrCode, BookMarked, Award, UploadCloud, Store, Bot, Power, Rocket, Trash2, Menu, X
 } from 'lucide-react';
 import { DeveloperTab } from './DeveloperTab';
+import { PublishMarketCardTab } from '../directory/PublishMarketCardTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
 import { CentralHubOmnibar } from '../CentralHubOmnibar';
 import UltimateCheckout from '../payment/UltimateCheckout';
@@ -2192,6 +2193,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                       { id: 'transactions', label: 'Transactions', icon: CreditCard },
                       { id: 'links', label: 'Liens de paiement', icon: Link2 },
                       { id: 'checkout', label: 'Services et Applications', icon: LayoutGrid },
+                      { id: 'publish_card', label: 'Publier ma carte', icon: Store },
                       { id: 'customers', label: 'Base Clients', icon: Users },
                       { id: 'analytics', label: 'Statistiques & Ventes', icon: BarChart3 },
                       { id: 'payouts', label: 'Retraits & Reversements', icon: ArrowUpRight },
@@ -2322,6 +2324,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
                   { id: 'transactions', label: 'Transactions', icon: CreditCard },
                   { id: 'links', label: 'Liens de paiement', icon: Link2 },
                   { id: 'checkout', label: 'Services et Applications', icon: LayoutGrid },
+                  { id: 'publish_card', label: 'Publier ma carte', icon: Store },
                   { id: 'customers', label: 'Base Clients', icon: Users },
                   { id: 'analytics', label: 'Statistiques & Ventes', icon: BarChart3 },
                   { id: 'payouts', label: 'Retraits & Reversements', icon: ArrowUpRight },
@@ -2446,6 +2449,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             {activeTab === 'transactions' && <TabTransactions app={selectedApp} showToast={showToast} />}
             {activeTab === 'links' && <TabPaymentLinks app={selectedApp} showToast={showToast} />}
             {activeTab === 'checkout' && <TabServicesAndApps app={selectedApp} showToast={showToast} setActiveTab={setActiveTab} onOpenModule={handleOpenRegistryModule} />}
+            {activeTab === 'publish_card' && <PublishMarketCardTab app={selectedApp} showToast={showToast} />}
             {activeTab === 'customers' && <TabCustomers app={selectedApp} />}
             {activeTab === 'analytics' && <TabAnalytics app={selectedApp} />}
             {activeTab === 'payouts' && <TabPayouts app={selectedApp} showToast={showToast} />}

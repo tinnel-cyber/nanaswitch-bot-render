@@ -533,18 +533,6 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
               <span>Wave & Orange Money acceptés</span>
             </span>
 
-            {/* Bouton Publier ma carte NanaMarket (1-Click Instant Publish) */}
-            <button
-              type="button"
-              onClick={() => setIsCreateCardModalOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-2.5 sm:px-3.5 py-2 rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
-              title="Publier gratuitement une carte sur NanaMarket"
-            >
-              <PlusCircle className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden xs:inline sm:inline">Publier ma carte</span>
-              <span className="xs:hidden sm:hidden">Publier</span>
-            </button>
-
             <button
               type="button"
               onClick={() => loadStores(true)}
@@ -1287,17 +1275,6 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Sponsorisés Pro ({proCount})</span>
             </button>
-
-            {/* Bouton Créer / Publier ma carte */}
-            <button
-              type="button"
-              onClick={() => setIsCreateCardModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-              title="Ajouter une fiche ou carte d'entreprise"
-            >
-              <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Publier</span>
-            </button>
           </div>
         </div>
 
@@ -1319,7 +1296,7 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
             <div>
               <h3 className="text-base font-black text-gray-900">Aucune boutique ne correspond à votre recherche</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Essayez un autre mot-clé, sélectionnez une autre catégorie ou publiez votre propre carte sur NanaMarket.
+                Essayez un autre mot-clé ou sélectionnez une autre catégorie.
               </p>
             </div>
             <div className="flex items-center justify-center gap-2.5 flex-wrap">
@@ -1335,14 +1312,6 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
               >
                 Réinitialiser les critères
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCreateCardModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Publier une carte</span>
               </button>
             </div>
           </div>
@@ -1582,15 +1551,6 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
           </div>
         )}
       </main>
-
-      {/* Modal de Publication de Carte NanaMarket (1-Click Instant Publish) */}
-      <CreateMarketCardModal
-        isOpen={isCreateCardModalOpen}
-        onClose={() => setIsCreateCardModalOpen(false)}
-        onCardPublished={(newCard) => {
-          setStores(prev => [newCard, ...prev.filter(s => s.id !== newCard.id)]);
-        }}
-      />
 
       {/* ==================================================================== */}
       {/* PIED DE PAGE DISCRET DU CENTRE COMMERCIAL                           */}

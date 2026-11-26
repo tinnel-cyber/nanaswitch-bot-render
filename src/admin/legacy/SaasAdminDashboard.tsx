@@ -78,6 +78,11 @@ import {
 } from '../../services/escrowService';
 import { EscrowTripartiteChat } from '../../components/quotes/EscrowTripartiteChat';
 import { generateSignedQuotePdf } from '../../services/contractProofService';
+import {
+  subscribeAllMarketCardsForAdmin,
+  approveMarketCard,
+  rejectMarketCard
+} from '../../services/marketDirectoryService';
 import { UpsellOpportunitiesWidget } from '../../components/quotas';
 import { LandingCmsTab } from './LandingCmsTab';
 import { publishLandingPricingToSupabase } from '../../services/landingPricingService';
@@ -211,8 +216,9 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
   // Navigation Tabs for SaaS Admin
   const [adminActiveTab, setAdminActiveTab] = useState<
-    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS' | 'NFC_FACTORY'
+    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'MARKET_CARDS' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS' | 'NFC_FACTORY'
   >('NETWORK');
+  const [marketCards, setMarketCards] = useState<any[]>([]);
 
   // Médiation Projets & Escrow State
   const [escrowProjects, setEscrowProjects] = useState<EscrowProject[]>([]);
@@ -789,6 +795,14 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
   useEffect(() => {
     const unsub = subscribeAllProjectsForAdmin((list) => {
       setEscrowProjects(list);
+    });
+    return () => unsub();
+  }, []);
+
+  // Écouteur temps réel des cartes NaNa Market soumises pour validation Super-Admin
+  useEffect(() => {
+    const unsub = subscribeAllMarketCardsForAdmin((list) => {
+      setMarketCards(list);
     });
     return () => unsub();
   }, []);
@@ -2257,6 +2271,27 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             {escrowProjects.filter((p) => p.status === 'disputed_paused').length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9.5px] font-black animate-pulse">
                 {escrowProjects.filter((p) => p.status === 'disputed_paused').length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              setAdminActiveTab('MARKET_CARDS');
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shrink-0 ${
+              adminActiveTab === 'MARKET_CARDS'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Cartes NaNa Market</span>
+            {marketCards.filter((c) => c.status === 'pending_approval').length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[9.5px] font-black animate-pulse">
+                {marketCards.filter((c) => c.status === 'pending_approval').length}
               </span>
             )}
           </button>
@@ -5927,6 +5962,106 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
         {/* ========================================================================= */}
         {/* ONGLET 9 : GESTION & PERSONNALISATION DE LA PAGE D'ACCUEIL (CMS LANDING)   */}
         {/* ========================================================================= */}
+        {/* ================================================================= */}
+        {/* ONGLET : VALIDATION DES CARTES NANA MARKET                        */}
+        {/* ================================================================= */}
+        {adminActiveTab === 'MARKET_CARDS' && (
+          <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                  <Store className="w-5 h-5 text-emerald-400" />
+                  <span>Validation des Cartes NaNa Market</span>
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Validez les cartes soumises par les marchands depuis leur tableau de bord pour les rendre visibles sur NaNa Market.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black">
+                {marketCards.filter((c) => c.status === 'pending_approval').length} en attente
+              </span>
+            </div>
+
+            {marketCards.length === 0 ? (
+              <div className="p-10 rounded-3xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-400">
+                Aucune carte soumise pour le moment.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {marketCards.map((card) => {
+                  const isPending = card.status === 'pending_approval';
+                  const isApproved = card.status === 'published' && card.isPublic;
+                  return (
+                    <div
+                      key={card.id}
+                      className={`p-4 rounded-2xl bg-slate-900 border space-y-3 ${
+                        isPending ? 'border-amber-500/60' : isApproved ? 'border-emerald-500/40' : 'border-rose-500/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {card.logoUrl && (
+                            <img src={card.logoUrl} alt={card.storeName} className="w-12 h-12 rounded-xl object-cover border border-slate-700 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black text-white truncate">{card.storeName}</h3>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {card.category} • {card.city}, {card.country}
+                            </p>
+                            <p className="text-[11px] text-slate-300 font-mono">{card.phone || card.whatsappPhone}</p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                          isPending
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : isApproved
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                        }`}>
+                          {isPending ? 'En attente' : isApproved ? 'Publiée' : 'Refusée'}
+                        </span>
+                      </div>
+
+                      {card.description && (
+                        <p className="text-xs text-slate-300 line-clamp-2">{card.description}</p>
+                      )}
+
+                      {card.shopUrl && (
+                        <p className="text-[11px] text-blue-400 truncate">{card.shopUrl}</p>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                        {!isApproved && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              playValidationBeep();
+                              await approveMarketCard(card.id);
+                            }}
+                            className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer transition"
+                          >
+                            ✓ Valider & Publier sur NaNa Market
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            playTapBeep();
+                            await rejectMarketCard(card.id, 'Refusé par le Super Admin');
+                          }}
+                          className="py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-bold cursor-pointer transition"
+                        >
+                          {isApproved ? 'Masquer / Retirer' : 'Refuser'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {adminActiveTab === 'LANDING_CMS' && (
           <LandingCmsTab
             landingConfig={landingConfig}
