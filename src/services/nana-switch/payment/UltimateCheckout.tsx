@@ -28,7 +28,8 @@ import {
   FileText,
   Store,
   Receipt,
-  Video
+  Video,
+  Zap
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCashChime, playCancelSound, formatCFA } from '../../../utils/audio';
 import { supabase } from '@/lib/supabase';
@@ -66,6 +67,7 @@ export interface CheckoutProductSummary {
   originalPrice?: number;
   imageUrl?: string;
   description?: string;
+  itemType?: 'subscription' | 'recharge' | string;
   quantity?: number;
   items?: Array<{
     id?: string;
@@ -307,9 +309,47 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     };
   }, [product, items, amount, orderDescription]);
 
+  // Détection de recharge de crédits / wallet (sans produit physique)
+  const isCreditRecharge = useMemo(() => {
+    if (enablePhysicalPosToken) return false;
+    const id = (resolvedProduct.id || '').toLowerCase().trim();
+    const name = (resolvedProduct.name || '').toLowerCase().trim();
+    const desc = (resolvedProduct.description || '').toLowerCase().trim();
+    const itemType = String((resolvedProduct as any).itemType || '').toLowerCase().trim();
+    return (
+      itemType === 'recharge' ||
+      id === 'pay_as_you_go_recharge' ||
+      id.includes('recharge') ||
+      id.includes('credit') ||
+      id.includes('nana_wallet') ||
+      name.includes('recharge') ||
+      name.includes('crédit') ||
+      name.includes('nana wallet') ||
+      desc.includes('recharge') ||
+      desc.includes('crédit') ||
+      desc.includes('nana wallet')
+    );
+  }, [resolvedProduct, enablePhysicalPosToken]);
+
+  const isAnnualPlan = useMemo(() => {
+    const id = (resolvedProduct.id || '').toLowerCase().trim();
+    const name = (resolvedProduct.name || '').toLowerCase().trim();
+    const desc = (resolvedProduct.description || '').toLowerCase().trim();
+    return (
+      id.includes('annual') ||
+      name.includes('annuel') ||
+      name.includes('/ an') ||
+      name.includes('annual') ||
+      desc.includes('annuel') ||
+      desc.includes('/ an') ||
+      desc.includes('annual')
+    );
+  }, [resolvedProduct]);
+
   // Détection stricte d'abonnement / licence SaaS / recharge Pay-as-you-go (zéro faux positif sur prod_*, caisse_* ou articles physiques)
   const isSubscriptionProduct = useMemo(() => {
     if (enablePhysicalPosToken) return false;
+    if (isCreditRecharge) return true;
     const id = (resolvedProduct.id || '').toLowerCase().trim();
     const name = (resolvedProduct.name || '').toLowerCase().trim();
     const desc = (resolvedProduct.description || '').toLowerCase().trim();
@@ -321,16 +361,22 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
       id.startsWith('nanasore_') ||
       name.includes('abonnement') ||
       name.includes('licence') ||
+      name.includes('renouvellement') ||
+      name.includes('formule modulaire') ||
+      name.includes('pack tout-en-un') ||
       name.includes('pay-as-you-go') ||
       name.startsWith('plan ') ||
       name.startsWith('recharge pay-as-you-go') ||
       desc.includes('abonnement saas') ||
       desc.includes('licence') ||
+      desc.includes('renouvellement') ||
+      desc.includes('formule modulaire') ||
+      desc.includes('pack tout-en-un') ||
       desc.includes('crédit pay-as-you-go') ||
       (resolvedProduct as any).itemType === 'subscription' ||
       (resolvedProduct as any).itemType === 'recharge'
     );
-  }, [resolvedProduct, enablePhysicalPosToken]);
+  }, [resolvedProduct, enablePhysicalPosToken, isCreditRecharge]);
 
   // Détection si l'article commandé est un produit numérique (déclaré AVANT isCashlessOnly pour éviter toute TDZ)
   const isDigitalProduct = Boolean(
@@ -1649,6 +1695,42 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                       alt={resolvedProduct.name}
                       className="w-full h-full object-cover"
                     />
+                  ) : isCreditRecharge ? (
+                    <div className="w-full h-full p-3.5 flex flex-col justify-between text-center bg-gradient-to-br from-slate-900 via-amber-950/90 to-slate-950 text-white relative overflow-hidden select-none">
+                      {/* Halos d'ambiance */}
+                      <div className="absolute -top-10 -right-10 w-24 h-24 bg-amber-500/25 rounded-full blur-xl pointer-events-none" />
+                      <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-orange-500/20 rounded-full blur-xl pointer-events-none" />
+
+                      {/* Badge Officiel Sécurisé */}
+                      <div className="flex items-center justify-center gap-1.5 z-10 pt-0.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-400" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                          Recharge Officielle
+                        </span>
+                      </div>
+
+                      {/* Titre & Prix au centre */}
+                      <div className="my-auto py-1 z-10 space-y-1">
+                        <div className="inline-flex p-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 mb-0.5 shadow-inner">
+                          <Zap className="w-6 h-6 text-amber-400" />
+                        </div>
+                        <div className="text-[11px] font-black text-slate-200 uppercase tracking-tight line-clamp-1">
+                          {resolvedProduct.name.replace(/•.*/, '').replace(/Recharge /i, '')}
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono tracking-tight leading-none drop-shadow-sm">
+                          {formatCFA(subtotal)}
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-300 tracking-wide">
+                          Crédit Instantané • Sans expiration
+                        </div>
+                      </div>
+
+                      {/* Sceau de réassurance en bas */}
+                      <div className="pt-2 border-t border-white/10 flex items-center justify-center gap-1.5 text-[9px] font-bold text-slate-200 z-10">
+                        <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span>Crédit Immédiat • TLS 256-bit</span>
+                      </div>
+                    </div>
                   ) : isSubscriptionProduct ? (
                     <div className="w-full h-full p-3.5 flex flex-col justify-between text-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white relative overflow-hidden select-none">
                       {/* Halos d'ambiance */}
@@ -1675,7 +1757,9 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                           {formatCFA(subtotal)}
                         </div>
                         <div className="text-[9px] font-bold text-slate-300 tracking-wide">
-                          {subtotal >= 100000 ? '/ an • 2 mois offerts' : '/ mois • 0% commission'}
+                          {isAnnualPlan
+                            ? ((resolvedProduct.id || '').toLowerCase().trim() === 'custom_modular' ? '/ an • -20% appliqué' : '/ an • 2 mois offerts')
+                            : '/ mois • 0% commission'}
                         </div>
                       </div>
 
@@ -1698,7 +1782,11 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               <div className="space-y-1.5 text-left">
                 <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-blue-600">
                   <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Commande Express 1-Clic</span>
+                  <span>
+                    {isCashlessOnly
+                      ? (isCreditRecharge ? 'Recharge Express 1-Clic' : isSubscriptionProduct ? 'Souscription Licence 1-Clic' : 'Accès Numérique 1-Clic')
+                      : 'Commande Express 1-Clic'}
+                  </span>
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-slate-950 leading-snug">
                   {resolvedProduct.name}
@@ -1718,8 +1806,8 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 </div>
 
                 <div className="flex justify-between text-slate-700 font-semibold">
-                  <span>Frais de livraison</span>
-                  <span className="font-black text-emerald-600">Gratuit (Inclus)</span>
+                  <span>{isCashlessOnly ? 'Activation / Accès' : 'Frais de livraison'}</span>
+                  <span className="font-black text-emerald-600">{isCashlessOnly ? 'Instantané (Inclus)' : 'Gratuit (Inclus)'}</span>
                 </div>
 
                 <div className="flex justify-between text-slate-700 font-semibold">
@@ -1751,7 +1839,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                 <div className="h-7 w-px bg-slate-200" />
                 <div className="flex flex-col items-center gap-1">
                   <Truck className="w-4.5 h-4.5 text-blue-600" />
-                  <span>Livraison Rapide</span>
+                  <span>{isCashlessOnly ? 'Activation Instantanée' : 'Livraison Rapide'}</span>
                 </div>
                 <div className="h-7 w-px bg-slate-200" />
                 <div className="flex flex-col items-center gap-1">
@@ -1769,7 +1857,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-1 border-b border-slate-200">
                 <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-950">
-                  Coordonnées de Livraison
+                  {isCashlessOnly ? 'Coordonnées du Compte' : 'Coordonnées de Livraison'}
                 </span>
                 <span className="text-xs font-black text-blue-600">
                   Étape 1 sur 2
@@ -1867,6 +1955,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
               </div>
 
               {/* Adresse de livraison */}
+              {!isCashlessOnly && (
               <div className="space-y-1">
                 <label className="text-sm font-black text-slate-950 block">
                   Adresse de livraison / Quartier <span className="text-rose-600">*</span>
@@ -1892,6 +1981,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
                   <p className="text-xs text-rose-600 font-bold pl-1">{formErrors.address}</p>
                 )}
               </div>
+              )}
 
               {/* Email (marqué comme optionnel) */}
               <div className="space-y-1">
@@ -2950,9 +3040,11 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
             </div>
 
             <div className="flex justify-between items-start text-slate-700 font-semibold">
-              <span>Livraison :</span>
+              <span>{isCashlessOnly ? 'Activation :' : 'Livraison :'}</span>
               <span className="font-bold text-slate-900 text-right max-w-[220px]">
-                {city.trim()}, {deliveryAddress.trim()}
+                {isCashlessOnly
+                  ? (isCreditRecharge ? 'Crédit ajouté instantanément' : 'Licence activée instantanément')
+                  : `${city.trim()}, ${deliveryAddress.trim()}`}
               </span>
             </div>
           </div>

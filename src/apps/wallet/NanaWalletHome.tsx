@@ -1493,8 +1493,16 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         <UltimateCheckout
           isModal={true}
           isOpen={isUltimateCheckoutOpen}
+          enablePhysicalPosToken={false}
           onClose={() => setIsUltimateCheckoutOpen(false)}
           onCancel={() => setIsUltimateCheckoutOpen(false)}
+          product={{
+            id: 'nana_wallet_recharge',
+            name: `Recharge NaNa Wallet (${formatCFA(rechargeAmount)})`,
+            price: rechargeAmount,
+            description: `Crédit instantané sur le portefeuille ${activeUniverse?.name || 'NaNa Wallet Marchand'} • Sans expiration`,
+            itemType: 'recharge',
+          }}
           amount={rechargeAmount}
           currency="FCFA"
           orderId={activeRechargeOrderId}

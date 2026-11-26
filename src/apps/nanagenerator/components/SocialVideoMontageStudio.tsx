@@ -110,6 +110,10 @@ export interface SocialVideoMontageStudioProps {
   storeName?: string;
   whatsappPhone?: string;
   publicLink?: string;
+  credits?: number;
+  isPaidPlan?: boolean;
+  onConsumeCredits?: (amount: number, reason?: string) => Promise<boolean> | boolean | Promise<void> | void;
+  onOpenRecharge?: () => void;
 }
 
 type SocialFormatId = '9:16' | '1:1' | '16:9';
@@ -249,12 +253,12 @@ const TEXT_COLORS = [
 ];
 
 const PRO_AUDIO_LIBRARY = [
-  { id: 'pub_1', title: 'Rythme Pub Dynamique', category: 'Pub & Reels', duration: '2:15', url: 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3' },
-  { id: 'afro_1', title: 'Énergie & Lancement Viral', category: 'Afro / Énergie', duration: '2:05', url: 'https://assets.mixkit.co/music/preview/mixkit-happy-times-158.mp3' },
-  { id: 'corp_1', title: 'Fond Corporate & Formation', category: 'Cours & Webinaire', duration: '1:48', url: 'https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3' },
-  { id: 'urg_1', title: 'Suspense Vente Flash', category: 'Offre Limitée', duration: '1:30', url: 'https://assets.mixkit.co/music/preview/mixkit-game-level-music-689.mp3' },
-  { id: 'sfx_whoosh', title: 'SFX Transition Whoosh', category: 'Transitions', duration: '0:02', url: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3' },
-  { id: 'sfx_cash', title: 'SFX Encaissement / Succès', category: 'SFX Promo', duration: '0:02', url: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3' }
+  { id: 'pub_1', title: 'Rythme Pub Dynamique', category: 'Pub & Reels', duration: '2:15', url: '/api/studio/audio-proxy?trackId=pub_1' },
+  { id: 'afro_1', title: 'Énergie & Lancement Viral', category: 'Afro / Énergie', duration: '2:05', url: '/api/studio/audio-proxy?trackId=afro_1' },
+  { id: 'corp_1', title: 'Fond Corporate & Formation', category: 'Cours & Webinaire', duration: '1:48', url: '/api/studio/audio-proxy?trackId=corp_1' },
+  { id: 'urg_1', title: 'Suspense Vente Flash', category: 'Offre Limitée', duration: '1:30', url: '/api/studio/audio-proxy?trackId=urg_1' },
+  { id: 'sfx_whoosh', title: 'SFX Transition Whoosh', category: 'Transitions', duration: '0:02', url: '/api/studio/audio-proxy?trackId=sfx_whoosh' },
+  { id: 'sfx_cash', title: 'SFX Encaissement / Succès', category: 'SFX Promo', duration: '0:02', url: '/api/studio/audio-proxy?trackId=sfx_cash' }
 ];
 
 const PARTNER_EDITORS = [
@@ -291,8 +295,13 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
   initialHeadline = '',
   storeName = 'Ma Boutique',
   whatsappPhone = '',
-  publicLink = ''
+  publicLink = '',
+  credits,
+  isPaidPlan = false,
+  onConsumeCredits,
+  onOpenRecharge
 }) => {
+  const isFreeTier = !isPaidPlan;
   const [studioSettings, setStudioSettings] = useState<VideoStudioSettings>(() => loadVideoStudioSettings());
   const [activePanel, setActivePanel] = useState<StudioPanelTab>('EDIT');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -1513,6 +1522,10 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     img.onload = () => {
       bgImageObjRef.current = img;
     };
+    img.onerror = () => {
+      bgImageObjRef.current = null;
+      setBackdropStatusMsg('⚠️ Image de décor bloquée par CORS ou inaccessible. Importez une image locale ou choisissez un décor dégradé.');
+    };
     img.src = activeBackdropUrl;
   }, [activeBackdropUrl]);
 
@@ -1565,6 +1578,12 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       setEncodeError('Décrivez le décor d\'arrière-plan souhaité (ex: Studio YouTube néon bleu).');
       return;
     }
+    if (typeof credits === 'number' && credits < 2) {
+      playCancelSound();
+      setEncodeError('Crédits insuffisants : 2 crédits requis pour générer un Décor IA Gemini.');
+      onOpenRecharge?.();
+      return;
+    }
     setIsGeneratingBackdrop(true);
     setEncodeError(null);
     setBackdropStatusMsg('Gemini IA prépare le décor Studio photoréaliste...');
@@ -1580,6 +1599,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success || !json.imageUrl) {
         throw new Error(json?.error || 'Impossible de générer le décor IA.');
+      }
+      if (onConsumeCredits) {
+        await onConsumeCredits(2, 'Décor IA Gemini (Studio Vidéo)');
       }
       setCustomBackdropUrl(json.imageUrl);
       if (chromaConfig.mode === 'none') {
@@ -1675,6 +1697,16 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
     setEncodeError(null);
     setEncodeResult(null);
 
+    const needsHdExportCredits = isFreeTier && exportResolution === '1080p';
+    if (needsHdExportCredits && typeof credits === 'number' && credits < 2) {
+      playCancelSound();
+      setEncodeError(
+        'Crédits insuffisants : 2 crédits requis pour l\'Export HD 1080p sur Plan Gratuit (480p/720p gratuits ou passez à un plan payant).'
+      );
+      onOpenRecharge?.();
+      return;
+    }
+
     let inputBlob: File | Blob | null = sourceFile;
     if (!inputBlob && previewUrl) {
       try {
@@ -1697,25 +1729,65 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
       return;
     }
 
-    const fmt = SOCIAL_FORMATS[socialFormat];
     setIsEncoding(true);
     setEncodeProgress(10);
 
-    // Si incrustation Fond Vert / Décor IA active : enregistrer le Canvas composé (YCbCr + Anti-Spill + Décor + Audio)
-    if (chromaConfig.mode !== 'none' && videoPreviewRef.current && chromaCanvasRef.current && typeof MediaRecorder !== 'undefined') {
+    // Si incrustation Fond Vert / Décor IA active sans clips timeline : enregistrer le Canvas composé (YCbCr + Anti-Spill + Décor + AudioContext mix)
+    if (chromaConfig.mode !== 'none' && timelineClips.length === 0 && videoPreviewRef.current && chromaCanvasRef.current && typeof MediaRecorder !== 'undefined') {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = AudioCtx ? new AudioCtx() : null;
+      const extraAudioEls: HTMLAudioElement[] = [];
       try {
         const videoEl = videoPreviewRef.current;
         const canvasEl = chromaCanvasRef.current;
         const targetSec = Math.min(maxDurationSec, Math.max(2, Math.round(videoEl.duration || maxDurationSec)));
 
+        if (audioCtx && audioCtx.state === 'suspended') {
+          await audioCtx.resume().catch(() => {});
+        }
+        const audioDest = audioCtx ? audioCtx.createMediaStreamDestination() : null;
+
         const canvasStream = canvasEl.captureStream(24);
         const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
-        try {
-          const vStream = (videoEl as any).captureStream?.() || (videoEl as any).mozCaptureStream?.();
-          if (vStream) {
-            vStream.getAudioTracks().forEach((t: MediaStreamTrack) => tracks.push(t));
-          }
-        } catch {}
+
+        if (audioCtx && audioDest) {
+          try {
+            const vStream = (videoEl as any).captureStream?.() || (videoEl as any).mozCaptureStream?.();
+            if (vStream && vStream.getAudioTracks().length > 0) {
+              const vSrc = audioCtx.createMediaStreamSource(new MediaStream(vStream.getAudioTracks()));
+              vSrc.connect(audioDest);
+            }
+          } catch {}
+
+          const attachExtraAudio = (url: string | undefined, vol: number, loop: boolean) => {
+            if (!url) return;
+            try {
+              const aEl = document.createElement('audio');
+              aEl.crossOrigin = 'anonymous';
+              aEl.src = url;
+              aEl.loop = loop;
+              const src = audioCtx.createMediaElementSource(aEl);
+              const gain = audioCtx.createGain();
+              gain.gain.value = vol;
+              src.connect(gain);
+              gain.connect(audioDest);
+              extraAudioEls.push(aEl);
+            } catch {}
+          };
+
+          const selectedMusicUrl = PRO_AUDIO_LIBRARY.find((t) => t.id === playingTrackId)?.url;
+          attachExtraAudio(enhancedVoiceUrl || rawVoiceUrl || undefined, 1, false);
+          attachExtraAudio(selectedMusicUrl || undefined, 0.35, true);
+
+          tracks.push(...audioDest.stream.getAudioTracks());
+        } else {
+          try {
+            const vStream = (videoEl as any).captureStream?.() || (videoEl as any).mozCaptureStream?.();
+            if (vStream) {
+              vStream.getAudioTracks().forEach((t: MediaStreamTrack) => tracks.push(t));
+            }
+          } catch {}
+        }
 
         const combinedStream = new MediaStream(tracks);
         const mp4Chroma = exportContainer === 'mp4'
@@ -1740,6 +1812,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           videoEl.currentTime = 0;
           recorder.start(250);
           videoEl.play().catch(() => {});
+          for (const extraEl of extraAudioEls) {
+            extraEl.play().catch(() => {});
+          }
 
           const startTime = Date.now();
           const tick = setInterval(() => {
@@ -1754,6 +1829,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         });
 
         const outFile = new File([recordedBlob], `nana-chroma-${socialFormat.replace(':', 'x')}-${Date.now()}.${chromaExt}`, { type: mimeType });
+        if (needsHdExportCredits && onConsumeCredits) {
+          await onConsumeCredits(2, 'Export HD 1080p (Plan Gratuit)');
+        }
         setEncodeProgress(100);
         setEncodeResult({
           file: outFile,
@@ -1783,6 +1861,16 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         setEncodeError(chromaErr?.message || 'Erreur lors de la compilation Fond Vert.');
         setIsEncoding(false);
         return;
+      } finally {
+        for (const extraEl of extraAudioEls) {
+          try {
+            extraEl.pause();
+            extraEl.src = '';
+          } catch {}
+        }
+        if (audioCtx) {
+          audioCtx.close().catch(() => {});
+        }
       }
     }
 
@@ -1829,7 +1917,11 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           subtitles: subtitleCues,
           subtitleColor: resolvedSubtitleColor,
           visualLayers,
-          chromaKey: chromaConfig,
+          chromaKey: {
+            ...chromaConfig,
+            backdropImageUrl: activeBackdropUrl || undefined,
+            backdropGradient: activeBackdropGradient || undefined,
+          },
           voiceOverUrl: enhancedVoiceUrl || rawVoiceUrl || undefined,
           bgMusicUrl: selectedMusicUrl || undefined,
           preferMp4: exportContainer === 'mp4',
@@ -1842,6 +1934,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
           `nana-timeline-${socialFormat.replace(':', 'x')}-${exportResolution}-${Date.now()}.${ext}`,
           { type: assembled.mimeType }
         );
+        if (needsHdExportCredits && onConsumeCredits) {
+          await onConsumeCredits(2, 'Export HD 1080p (Plan Gratuit)');
+        }
         setEncodeProgress(100);
         setEncodeResult({
           file: outFile,
@@ -1895,6 +1990,9 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         onProgress: (pct) => setEncodeProgress(Math.min(99, Math.max(10, Math.round(pct))))
       });
 
+      if (needsHdExportCredits && onConsumeCredits) {
+        await onConsumeCredits(2, 'Export HD 1080p (Plan Gratuit)');
+      }
       setEncodeProgress(100);
       setEncodeResult(result);
       playValidationBeep();
@@ -2082,6 +2180,24 @@ export const SocialVideoMontageStudio: React.FC<SocialVideoMontageStudioProps> =
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {typeof credits === 'number' && (
+            <div className="flex items-center gap-1 bg-amber-500/15 border border-amber-500/40 rounded-xl px-2.5 py-1 text-xs font-black text-amber-300">
+              <span>⚡ {credits} crédits</span>
+              {onOpenRecharge && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playTapBeep();
+                    onOpenRecharge();
+                  }}
+                  className="ml-1 px-1.5 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px] cursor-pointer transition"
+                  title="Recharger mes crédits Studio"
+                >
+                  +
+                </button>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {

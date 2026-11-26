@@ -8634,6 +8634,41 @@ async function startServer() {
     }
   });
 
+  // Proxy audio CORS-safe pour les pistes PRO_AUDIO_LIBRARY du Studio Montage Vidéo
+  const STUDIO_AUDIO_PROXY_WHITELIST: Record<string, string> = {
+    pub_1: 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3',
+    afro_1: 'https://assets.mixkit.co/music/preview/mixkit-happy-times-158.mp3',
+    corp_1: 'https://assets.mixkit.co/music/preview/mixkit-serene-view-443.mp3',
+    urg_1: 'https://assets.mixkit.co/music/preview/mixkit-game-level-music-689.mp3',
+    sfx_whoosh: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+    sfx_cash: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3',
+  };
+
+  app.get('/api/studio/audio-proxy', async (req, res) => {
+    try {
+      const trackId = String(req.query.trackId || '').trim();
+      const targetUrl = STUDIO_AUDIO_PROXY_WHITELIST[trackId];
+      if (!targetUrl) {
+        return res.status(400).json({ success: false, error: 'trackId audio invalide ou non autorisé.' });
+      }
+
+      const upstreamRes = await fetch(targetUrl);
+      if (!upstreamRes.ok) {
+        return res.status(502).json({ success: false, error: `Impossible de récupérer la piste audio (${upstreamRes.status}).` });
+      }
+
+      const arrayBuf = await upstreamRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(buffer);
+    } catch (err: any) {
+      console.error('[STUDIO AUDIO PROXY ERROR]', err?.message || err);
+      return res.status(500).json({ success: false, error: 'Erreur serveur lors du proxy audio.' });
+    }
+  });
+
   // 3. Validation ou Rejet par le Super Admin
   app.post('/api/admin/kyc/validate', requireAdminOrInternal, async (req, res) => {
     try {
