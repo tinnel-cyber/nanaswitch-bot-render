@@ -1051,9 +1051,10 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 storeName="NaNaSwitch Cloud"
                 product={{
                   id: currentPlan.id,
-                  name: currentPlan.name,
+                  name: `${currentPlan.name} (${isAllPillarsSelected ? 'Pack Complet' : `${selectedPillars.length} volet${selectedPillars.length > 1 ? 's' : ''}`})`,
                   price: montantTotal,
-                  description: `Abonnement SaaS Nanasore - ${currentPlan.name}`
+                  description: `Abonnement SaaS Nanasore - ${currentPlan.name}${selectedAddonIds.length > 0 ? ` • + ${selectedAddonIds.length} option(s)` : ''}${downsellAccepted ? ' • Remise -2 000 F' : ''}`,
+                  itemType: 'subscription',
                 }}
                 amount={montantTotal}
                 currency="FCFA"

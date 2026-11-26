@@ -439,7 +439,17 @@ export async function exportTimelineToVideoBlob(
           }
 
           if (isChromaActive && options.chromaKey && chromaOffscreenCtx) {
-            renderChromaKeyFrame(ctx, chromaOffscreenCtx, videoEl, width, height, options.chromaKey, chromaBgImg);
+            renderChromaKeyFrame(
+              ctx,
+              chromaOffscreenCtx,
+              videoEl,
+              width,
+              height,
+              options.chromaKey,
+              chromaBgImg,
+              options.chromaKey.backdropGradient,
+              options.filterCss
+            );
           } else {
             ctx.save();
             ctx.fillStyle = '#000000';

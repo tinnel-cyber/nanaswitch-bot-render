@@ -218,17 +218,42 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
   };
 
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [rechargeOrderId, setRechargeOrderId] = useState<string>('');
 
   const RECHARGE_PACKS = [
-    { credits: 5000, amountXof: 100, price: '100 XOF', label: 'Starter' },
-    { credits: 50000, amountXof: 1000, price: '1 000 XOF', label: 'Pro Business (Recommandé)', popular: true },
-    { credits: 500000, amountXof: 10000, price: '10 000 XOF', label: 'Scale Enterprise' }
+    { id: 'starter', credits: 5000, amountXof: 100, price: '100 XOF', label: 'Starter' },
+    { id: 'pro_business', credits: 50000, amountXof: 1000, price: '1 000 XOF', label: 'Pro Business (Recommandé)', popular: true },
+    { id: 'scale_enterprise', credits: 500000, amountXof: 10000, price: '10 000 XOF', label: 'Scale Enterprise' }
   ];
   const selectedPackObj = RECHARGE_PACKS.find(p => p.credits === rechargePack) || RECHARGE_PACKS[1];
 
   // Ouvre le vrai tunnel de paiement UltimateCheckout avant tout crédit API (zéro crédit gratuit)
-  const handleStartPaidRecharge = () => {
-    setShowCheckoutModal(true);
+  const handleStartPaidRecharge = async () => {
+    setIsRecharging(true);
+    try {
+      const token = await getBearerToken();
+      const res = await fetch('/api/merchant/wallet/recharge/intent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          universeId: app?.id || '',
+          amount: selectedPackObj.amountXof
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json?.orderId) {
+        throw new Error(json?.error || 'Impossible d\'initialiser la recharge sécurisée.');
+      }
+      setRechargeOrderId(json.orderId);
+      setShowCheckoutModal(true);
+    } catch (err: any) {
+      showToast(err?.message || 'Erreur lors de l\'initialisation de la recharge.', 'error');
+    } finally {
+      setIsRecharging(false);
+    }
   };
 
   // Crédit effectif UNIQUEMENT après confirmation de paiement réelle (onSuccess)
@@ -773,13 +798,9 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
             <div className="space-y-3">
               <label className="text-xs font-bold text-slate-700 block">Choisissez un pack de requêtes :</label>
 
-              {[
-                { credits: 5000, price: '100 XOF', label: 'Starter' },
-                { credits: 50000, price: '1 000 XOF', label: 'Pro Business (Recommandé)', popular: true },
-                { credits: 500000, price: '10 000 XOF', label: 'Scale Enterprise' }
-              ].map((pack) => (
+              {RECHARGE_PACKS.map((pack) => (
                 <button
-                  key={pack.credits}
+                  key={pack.id}
                   type="button"
                   onClick={() => setRechargePack(pack.credits)}
                   className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
@@ -849,8 +870,17 @@ export const DeveloperTab: React.FC<DeveloperTabProps> = ({
           <UltimateCheckout
             isModal={true}
             isOpen={showCheckoutModal}
+            enablePhysicalPosToken={false}
+            orderId={rechargeOrderId}
             onClose={() => setShowCheckoutModal(false)}
             onCancel={() => setShowCheckoutModal(false)}
+            product={{
+              id: `api_credits_${selectedPackObj.id || 'pack'}`,
+              name: `Recharge ${selectedPackObj.credits.toLocaleString()} Crédits API (${selectedPackObj.label})`,
+              price: selectedPackObj.amountXof,
+              description: `Pack ${selectedPackObj.label} • Crédit instantané pour requêtes API Nanasore`,
+              itemType: 'recharge',
+            }}
             amount={selectedPackObj.amountXof}
             currency="FCFA"
             orderDescription={`Recharge ${selectedPackObj.credits.toLocaleString()} crédits API (${selectedPackObj.label})`}

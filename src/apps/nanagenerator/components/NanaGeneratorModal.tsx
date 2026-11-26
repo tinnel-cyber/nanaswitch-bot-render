@@ -2481,7 +2481,7 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span>• Studio Flow Assisté :</span>
-                      <strong className="text-emerald-400 font-bold">3 crédits (50 gratuits/jour)</strong>
+                      <strong className="text-emerald-400 font-bold">3 crédits (Script Flow prêt à coller)</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>• Animation Vidéo Directe :</span>
@@ -2545,6 +2545,14 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
                     <UltimateCheckout
                       isModal={false}
                       isOpen={true}
+                      enablePhysicalPosToken={false}
+                      product={{
+                        id: `studio_credits_${selectedPack.id || 'pack'}`,
+                        name: `Recharge ${selectedPack.credits} Crédits Studio (${selectedPack.name})`,
+                        price: selectedPack.price,
+                        description: `Pack ${selectedPack.name} • Crédit instantané Studio Créatif NaNa`,
+                        itemType: 'recharge',
+                      }}
                       amount={selectedPack.price}
                       currency="FCFA"
                       orderDescription={`Recharge ${selectedPack.credits} Crédits Studio (${selectedPack.name})`}
@@ -2729,6 +2737,31 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
             storeName={storeName || 'Ma Boutique'}
             whatsappPhone={currentUser?.phone || ''}
             publicLink={typeof window !== 'undefined' ? window.location.origin : ''}
+            credits={credits}
+            isPaidPlan={(() => {
+              const rawPlan = String(
+                (currentUser as any)?.plan ||
+                (currentUser as any)?.subscriptionPlan ||
+                (currentUser as any)?.subscription?.plan ||
+                (typeof window !== 'undefined' ? (localStorage.getItem('nana_user_plan') || localStorage.getItem('nana_store_plan') || '') : '')
+              ).toLowerCase().trim();
+              return Boolean(rawPlan && !['free', 'free_trial', 'trial', 'freemium'].includes(rawPlan));
+            })()}
+            onConsumeCredits={async (amount: number, reason?: string) => {
+              const res = await deductUserCredits(effectiveUid, amount, {
+                type: 'video_flow',
+                description: reason || 'Studio Montage Vidéo Pro'
+              });
+              if (res.success) {
+                setCredits(res.newBalance);
+                return true;
+              }
+              return false;
+            }}
+            onOpenRecharge={() => {
+              setIsMontageStudioOpen(false);
+              setIsRechargeModalOpen(true);
+            }}
           />
         </React.Suspense>
       )}

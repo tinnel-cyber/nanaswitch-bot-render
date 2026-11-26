@@ -6691,11 +6691,12 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
     return total;
   }, [selectedModularParts]);
 
-  // Prix calculé selon la partition de durée choisie (Mensuel ou Annuel -20%)
+  // Prix calculé selon la partition de durée choisie (Mensuel ou Annuel : 150 000 F pour Pack Tout-en-Un, -20% pour 1 ou 2 briques)
   const modularCurrentPrice = useMemo(() => {
     if (billingPartition === 'MONTHLY') return modularMonthlyBase;
-    return Math.round(modularMonthlyBase * 12 * 0.8); // Annuel : -20% (soit 2.4 mois offerts)
-  }, [modularMonthlyBase, billingPartition]);
+    if (isAllModularSelected) return 150000;
+    return Math.round(modularMonthlyBase * 12 * 0.8); // Annuel : -20% pour 1 ou 2 briques
+  }, [modularMonthlyBase, billingPartition, isAllModularSelected]);
 
   const modularMonthlyEquivalent = useMemo(() => {
     if (billingPartition === 'ANNUAL') return Math.round(modularCurrentPrice / 12);
@@ -6723,7 +6724,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
       subtitle: activeNames.join(' • '),
       badge: isAllModularSelected ? 'Pack Tout-en-Un • Économie 5 000 F/m' : 'Partition Modulaire',
       monthlyPrice: modularMonthlyBase,
-      annualPrice: Math.round(modularMonthlyBase * 12 * 0.8),
+      annualPrice: isAllModularSelected ? 150000 : Math.round(modularMonthlyBase * 12 * 0.8),
       features: activeNames,
       ctaText: 'Valider mon abonnement à la carte'
     };
@@ -7332,7 +7333,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
                   <span className="text-[10px] text-slate-500 line-through">20 000 F</span>
                 </div>
                 <p className="text-[10px] text-amber-300 font-semibold mt-0.5">
-                  {billingPartition === 'ANNUAL' ? 'Soit 12 000 F/m (-20% / 2 mois offerts)' : 'Économie immédiate de 5 000 F CFA'}
+                  {billingPartition === 'ANNUAL' ? 'Soit 12 500 F/m (2 mois offerts)' : 'Économie immédiate de 5 000 F CFA'}
                 </p>
               </div>
             </div>
@@ -7560,33 +7561,10 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
               </div>
             </div>
 
-            {/* Choix du moyen de paiement */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-extrabold uppercase text-slate-500">Moyen de paiement :</label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {[
-                  { id: 'orange_money', label: 'Orange Money' },
-                  { id: 'wave', label: 'Wave Direct' },
-                  { id: 'mtn_momo', label: 'MTN Mobile Money' },
-                  { id: 'moov_money', label: 'Moov Money' },
-                  { id: 'card', label: 'Carte Visa / Mastercard' },
-                  { id: 'bank_transfer', label: 'Virement Bancaire' },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedPaymentMethod(m.id)}
-                    className={`p-2.5 rounded-xl border font-bold text-left transition flex items-center justify-between cursor-pointer ${
-                      selectedPaymentMethod === m.id
-                        ? 'border-[#1E40AF] bg-blue-50/50 text-[#1E40AF]'
-                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{m.label}</span>
-                    {selectedPaymentMethod === m.id && <Check className="w-3.5 h-3.5" />}
-                  </button>
-                ))}
-              </div>
+            {/* Notice Paiement 100% digital */}
+            <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-center gap-2.5 text-xs text-blue-900 font-semibold">
+              <ShieldCheck className="w-4 h-4 text-[#1E40AF] shrink-0" />
+              <span>Paiement 100% digital à l'étape suivante (Mobile Money / Carte)</span>
             </div>
 
             <button
@@ -7632,7 +7610,11 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500">Partition choisie :</span>
                 <span className="font-extrabold text-slate-900 uppercase">
-                  {billingPartition === 'MONTHLY' ? 'Mensuelle' : billingPartition === 'QUARTERLY' ? 'Trimestrielle (-10%)' : 'Annuelle (-20% / 2 mois offerts)'}
+                  {billingPartition === 'MONTHLY'
+                    ? 'Mensuelle'
+                    : selectedPlanForModal.id === 'custom_modular' && !isAllModularSelected
+                    ? 'Annuelle (-20%)'
+                    : 'Annuelle (2 mois offerts)'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
@@ -7640,41 +7622,16 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
                 <span className="text-base font-black text-[#1E40AF]">
                   {(billingPartition === 'MONTHLY'
                     ? selectedPlanForModal.monthlyPrice
-                    : billingPartition === 'QUARTERLY'
-                    ? selectedPlanForModal.quarterlyPrice
                     : selectedPlanForModal.annualPrice
                   ).toLocaleString('fr-FR')} F CFA
                 </span>
               </div>
             </div>
 
-            {/* Choix du moyen de paiement */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-extrabold uppercase text-slate-500">Moyen de règlement sécurisé :</label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {[
-                  { id: 'orange_money', label: 'Orange Money' },
-                  { id: 'wave', label: 'Wave Direct' },
-                  { id: 'mtn_momo', label: 'MTN Mobile Money' },
-                  { id: 'moov_money', label: 'Moov Money' },
-                  { id: 'card', label: 'Carte Visa / Mastercard' },
-                  { id: 'bank_transfer', label: 'Virement Bancaire' },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedPaymentMethod(m.id)}
-                    className={`p-2.5 rounded-xl border font-bold text-left transition flex items-center justify-between cursor-pointer ${
-                      selectedPaymentMethod === m.id
-                        ? 'border-[#1E40AF] bg-blue-50/50 text-[#1E40AF]'
-                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{m.label}</span>
-                    {selectedPaymentMethod === m.id && <Check className="w-3.5 h-3.5" />}
-                  </button>
-                ))}
-              </div>
+            {/* Notice Paiement 100% digital */}
+            <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-center gap-2.5 text-xs text-blue-900 font-semibold">
+              <ShieldCheck className="w-4 h-4 text-[#1E40AF] shrink-0" />
+              <span>Paiement 100% digital à l'étape suivante (Mobile Money / Carte)</span>
             </div>
 
             <button
@@ -7712,7 +7669,10 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
             id: pendingCheckout.planId || 'pay_as_you_go_recharge',
             name: pendingCheckout.title,
             price: pendingCheckout.amount,
-            description: pendingCheckout.kind === 'PLAN' ? 'Abonnement SaaS NaNaSwitch Cloud' : 'Recharge crédit Pay-as-you-go',
+            description: pendingCheckout.kind === 'PLAN'
+              ? `Abonnement SaaS NaNaSwitch Cloud (${pendingCheckout.billingCycle === 'ANNUAL' ? 'Annuel' : 'Mensuel'})`
+              : 'Recharge crédit Pay-as-you-go • Sans expiration',
+            itemType: pendingCheckout.kind === 'PLAN' ? 'subscription' : 'recharge',
           }}
           onSuccess={async (details) => {
             const current = pendingCheckout;

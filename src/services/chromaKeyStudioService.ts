@@ -13,6 +13,8 @@ export interface ChromaKeyConfig {
   smoothness: number;        // 0.02 - 0.30 (lissage doux des contours / cheveux)
   spillSuppression: number;  // 0 - 1 (suppression du reflet vert/bleu sur la peau)
   bgBlurPx: number;          // 0 - 12 px (flou bokeh naturel du décor de remplacement)
+  backdropImageUrl?: string;
+  backdropGradient?: string;
 }
 
 export const DEFAULT_CHROMA_CONFIG: ChromaKeyConfig = {
