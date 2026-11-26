@@ -33,229 +33,7 @@ export type DirectoryCategory = typeof DIRECTORY_CATEGORIES[number];
 // ============================================================================
 // 2. SEED DATA : BOUTIQUES PILOTES DU CENTRE COMMERCIAL (FALLBACK HAUTE FIDÉLITÉ)
 // ============================================================================
-export const SEED_DIRECTORY_STORES: MarketDirectoryStore[] = [
-  {
-    id: 'store-abidjan-tech-pro',
-    storeId: 'store-abidjan-tech-pro',
-    storeName: 'TechZone Pro Abidjan',
-    merchantType: 'physical_store',
-    logoUrl: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=1000&auto=format&fit=crop&q=80',
-    category: 'Électronique & High-Tech',
-    searchTags: ['smartphones', 'iphone', 'samsung', 'ordinateurs', 'macbook', 'écouteurs', 'câbles', 'tablettes'],
-    city: 'Abidjan',
-    quarter: 'Plateau & Cocody',
-    country: "Côte d'Ivoire",
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+2250700112233',
-    phone: '+2250700112233',
-    slug: 'techzone-abidjan',
-    rating: 4.9,
-    reviewsCount: 312,
-    salesCount: 1450,
-    description: 'Le distributeur leader en téléphones reconditionnés certifiés et PC portables gaming avec garantie 12 mois et livraison rapide en 2h chrono.',
-    createdAt: Date.now() - 30 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-nana-academy-pro',
-    storeId: 'store-nana-academy-pro',
-    storeName: 'NaNa Fintech & E-Commerce Academy',
-    merchantType: 'digital_creator',
-    logoUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1000&auto=format&fit=crop&q=80',
-    category: 'Formations & E-learning',
-    searchTags: ['formation', 'video', 'fintech', 'masterclass', 'ecommerce', 'certificat', 'cours', 'diplome'],
-    city: '100% En Ligne',
-    quarter: 'Afrique & Diaspora',
-    country: 'International',
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+22670001122',
-    phone: '+22670001122',
-    slug: 'telecom-fintech-masterclass',
-    rating: 4.98,
-    reviewsCount: 540,
-    salesCount: 1820,
-    description: 'Académie d\'excellence formant les entrepreneurs africains aux paiements mobiles (Wave, Orange Money), e-commerce et automatisation IA avec délivrance de certificats vérifiés.',
-    createdAt: Date.now() - 25 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-live-ecommerce-summit',
-    storeId: 'store-live-ecommerce-summit',
-    storeName: 'Sommet E-Commerce Afrique 2026',
-    merchantType: 'event_host',
-    logoUrl: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=1000&auto=format&fit=crop&q=80',
-    category: 'Webinaires & Lives',
-    searchTags: ['live', 'webinaire', 'direct', 'conference', 'streaming', 'reservation', 'billetterie'],
-    city: 'Live Streaming HD',
-    quarter: 'Webinaire Interactif',
-    country: 'En direct',
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+22501020304',
-    phone: '+22501020304',
-    slug: 'sommet-live-ecommerce',
-    rating: 4.92,
-    reviewsCount: 290,
-    salesCount: 850,
-    description: 'Grand webinaire interactif en direct avec 5 leaders du digital africain. Démonstrations en direct, session questions/réponses et ressources téléchargeables offertes.',
-    createdAt: Date.now() - 10 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-coaching-business-tremplin',
-    storeId: 'store-coaching-business-tremplin',
-    storeName: 'Tremplin Business & Coaching',
-    merchantType: 'digital_creator',
-    category: 'Coaching & Consulting',
-    logoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=1000&auto=format&fit=crop&q=80',
-    searchTags: ['coaching', 'ebook', 'mentorat', 'strategie', 'audit', 'conseil', 'business'],
-    city: '100% En Ligne',
-    quarter: 'Visio 1-sur-1 & E-books',
-    country: 'Afrique de l\'Ouest',
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+221781234567',
-    phone: '+221781234567',
-    slug: 'tremplin-coaching',
-    rating: 4.95,
-    reviewsCount: 160,
-    salesCount: 420,
-    description: 'Coaching stratégique pour TPE/PME et créateurs. Débloquez votre croissance, accédez à des guides e-books exclusifs et planifiez vos sessions de mentorat individuel.',
-    createdAt: Date.now() - 18 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-ouaga-luxe-couture',
-    storeId: 'store-ouaga-luxe-couture',
-    storeName: 'NaNa Élégance & Mode Africaine',
-    merchantType: 'physical_store',
-    logoUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=1000&auto=format&fit=crop&q=80',
-    category: 'Mode & Prêt-à-Porter',
-    searchTags: ['robes', 'bazin', 'koko dunda', 'pagnes', 'costumes', 'chaussures', 'bijoux', 'mode'],
-    city: 'Ouagadougou',
-    quarter: 'Ouaga 2000',
-    country: 'Burkina Faso',
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+22670123456',
-    phone: '+22670123456',
-    slug: 'nana-elegance-mode',
-    rating: 4.95,
-    reviewsCount: 420,
-    salesCount: 2310,
-    description: 'Haute couture afro-contemporaine, pièces uniques en Faso Dan Fani tissé main et robes de cérémonie sur mesure. Expédition internationale.',
-    createdAt: Date.now() - 45 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-dakar-saveurs-bio',
-    storeId: 'store-dakar-saveurs-bio',
-    storeName: 'Teranga Épicerie Fine & Bio',
-    logoUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=1000&auto=format&fit=crop&q=80',
-    category: 'Alimentation & Épicerie',
-    searchTags: ['épicerie', 'bio', 'jus naturels', 'miel', 'épices', 'thiéboudienne', 'riz', 'café'],
-    city: 'Dakar',
-    quarter: 'Almadies & Ngor',
-    country: 'Sénégal',
-    isListedInDirectory: true,
-    plan: 'pro',
-    subscriptionPlan: 'pro',
-    verified: true,
-    whatsappPhone: '+221770002244',
-    phone: '+221770002244',
-    slug: 'teranga-saveurs-dakar',
-    rating: 4.88,
-    reviewsCount: 184,
-    salesCount: 980,
-    description: 'Produits du terroir d\'Afrique de l\'Ouest 100% naturels, condiments d\'exception, miels sauvages et paniers de fruits frais livrés à domicile.',
-    createdAt: Date.now() - 20 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-lome-cosmetics-glow',
-    storeId: 'store-lome-cosmetics-glow',
-    storeName: 'Glow Botanic Beauty',
-    logoUrl: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=1000&auto=format&fit=crop&q=80',
-    category: 'Santé, Beauté & Cosmétiques',
-    searchTags: ['karité', 'savon noir', 'huiles essentielles', 'soins visage', 'crèmes', 'beauté'],
-    city: 'Lomé',
-    quarter: 'Baguida & Nyékonakpoé',
-    country: 'Togo',
-    isListedInDirectory: true,
-    plan: 'starter',
-    subscriptionPlan: 'starter',
-    verified: false,
-    whatsappPhone: '+22890112233',
-    phone: '+22890112233',
-    slug: 'glow-botanic-lome',
-    rating: 4.75,
-    reviewsCount: 96,
-    salesCount: 420,
-    description: 'Formules dermatologiques naturelles enrichies au beurre de karité bio du Nord et huiles précieuses de baobab pour peaux noires et métissées.',
-    createdAt: Date.now() - 15 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-cotonou-deco-maison',
-    storeId: 'store-cotonou-deco-maison',
-    storeName: 'Atelier Racine Déco & Design',
-    logoUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=1000&auto=format&fit=crop&q=80',
-    category: 'Maison, Meubles & Déco',
-    searchTags: ['meubles', 'luminaires', 'tableaux', 'décoration', 'chaises', 'bois massif', 'salon'],
-    city: 'Cotonou',
-    quarter: 'Haie Vive & Cadjehoun',
-    country: 'Bénin',
-    isListedInDirectory: true,
-    plan: 'starter',
-    subscriptionPlan: 'starter',
-    verified: false,
-    whatsappPhone: '+22997003344',
-    phone: '+22997003344',
-    slug: 'atelier-racine-cotonou',
-    rating: 4.82,
-    reviewsCount: 78,
-    salesCount: 290,
-    description: 'Mobilier contemporain fabriqué artisanalement en bois noble africain (iroko, teck) et objets d\'art pour sublimer salons et bureaux.',
-    createdAt: Date.now() - 10 * 24 * 3600 * 1000
-  },
-  {
-    id: 'store-bamako-bijoux-or',
-    storeId: 'store-bamako-bijoux-or',
-    storeName: 'Orfèvrerie Djoliba Prestige',
-    logoUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&auto=format&fit=crop&q=80',
-    bannerImage: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=1000&auto=format&fit=crop&q=80',
-    category: 'Bijouterie & Luxe',
-    searchTags: ['or 18k', 'argent 925', 'colliers', 'bagues', 'bracelets', 'mariage', 'alliances'],
-    city: 'Bamako',
-    quarter: 'Hamdallaye ACI 2000',
-    country: 'Mali',
-    isListedInDirectory: true,
-    plan: 'free',
-    subscriptionPlan: 'free',
-    verified: false,
-    whatsappPhone: '+22366112233',
-    phone: '+22366112233',
-    slug: 'bijouterie-djoliba-bamako',
-    rating: 4.7,
-    reviewsCount: 45,
-    salesCount: 175,
-    description: 'Bijoux traditionnels et parures de mariage façonnés par des maîtres orfèvres maliens avec certificat d\'authenticité.',
-    createdAt: Date.now() - 5 * 24 * 3600 * 1000
-  }
-];
+export const SEED_DIRECTORY_STORES: MarketDirectoryStore[] = [];
 
 // ============================================================================
 // 3. LOGIQUE DE MONÉTISATION (PLAN PRO) : VÉRIFICATION ET PRIORITISATION
@@ -322,59 +100,19 @@ export async function getDirectoryStores(): Promise<MarketDirectoryStore[]> {
     console.warn('[NANA-MARKET] Erreur lecture cache local :', err);
   }
 
-  // 3. Récupération temps réel depuis Supabase SQL
+  // 2. Récupération temps réel depuis Supabase SQL (uniquement les cartes approuvées par le Super Admin)
   try {
-    // A. Interrogation des tenants depuis Supabase
-    try {
-      const { data: supaTenants } = await supabase
-        .from('tenants')
-        .select('*')
-        .limit(50);
+    const { data: regCards } = await supabase
+      .from('app_registry')
+      .select('config_json, key')
+      .eq('module_key', 'market_cards')
+      .limit(100);
 
-      if (supaTenants && supaTenants.length > 0) {
-        supaTenants.forEach((tData: any) => {
-          const storeId = tData.id || tData.slug;
-          mergedStoresMap.set(storeId, {
-            id: storeId,
-            storeId,
-            storeName: tData.name || 'Boutique Partenaire',
-            logoUrl: '',
-            bannerImage: '',
-            category: 'Commerce Général',
-            searchTags: [],
-            city: 'Abidjan',
-            quarter: '',
-            country: "Côte d'Ivoire",
-            isListedInDirectory: true,
-            plan: 'pro',
-            subscriptionPlan: 'pro',
-            verified: true,
-            whatsappPhone: '',
-            phone: '',
-            customDomain: tData.custom_domain,
-            slug: tData.slug || storeId,
-            rating: 4.8,
-            salesCount: 120,
-            description: 'Bienvenue sur notre boutique officielle.'
-          });
-        });
-      }
-    } catch (e) {
-      console.warn('[NANA-MARKET] Notice requete tenants Supabase :', e);
-    }
-
-    // B. Interrogation des cartes nanamarket_cards depuis app_registry
-    try {
-      const { data: regCards } = await supabase
-        .from('app_registry')
-        .select('config_json, key')
-        .eq('module_key', 'market_cards')
-        .limit(100);
-
-      if (regCards && regCards.length > 0) {
-        regCards.forEach((row: any) => {
-          if (row.config_json) {
-            const cData = row.config_json as any;
+    if (regCards && regCards.length > 0) {
+      regCards.forEach((row: any) => {
+        if (row.config_json) {
+          const cData = row.config_json as any;
+          if (cData.isPublic === true && cData.status === 'published') {
             const cardId = cData.id || row.key.replace(/^market_card_/, '');
             mergedStoresMap.set(cardId, {
               ...cData,
@@ -382,16 +120,16 @@ export async function getDirectoryStores(): Promise<MarketDirectoryStore[]> {
               storeId: cData.storeId || cardId
             });
           }
-        });
-      }
-    } catch (e) {
-      console.warn('[NANA-MARKET] Notice requete app_registry market_cards :', e);
+        }
+      });
     }
   } catch (err) {
     console.error('[NANA-MARKET] Erreur globale récupération boutiques :', err);
   }
 
-  const allStores = Array.from(mergedStoresMap.values()).filter(s => s.isListedInDirectory !== false);
+  const allStores = Array.from(mergedStoresMap.values()).filter(
+    (s) => s.isPublic === true && (s as any).status === 'published'
+  );
   const sorted = sortStoresWithProFirst(allStores);
 
   // Mise en cache
@@ -547,18 +285,16 @@ export function subscribeToNanaMarketCards(
               wameetUrl: cData.wameetUrl || '',
               shopUrl: cData.shopUrl || '',
               slug: cData.slug || cardId,
-              rating: Number(cData.rating) || 4.95,
-              reviewsCount: Number(cData.reviewsCount) || 12,
-              salesCount: Number(cData.salesCount) || 45,
+              rating: Number(cData.rating) || 0,
+              reviewsCount: Number(cData.reviewsCount) || 0,
+              salesCount: Number(cData.salesCount) || 0,
               description: cData.description || '',
               createdAt: cData.createdAt || Date.now()
             });
           }
         });
 
-        if (realTimeCards.length > 0) {
-          onUpdate(realTimeCards);
-        }
+        onUpdate(realTimeCards);
       } catch (err: any) {
         console.warn('[NANA-MARKET LISTENER WARNING]', err?.message);
       }
