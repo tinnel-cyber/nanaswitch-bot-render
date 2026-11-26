@@ -22,7 +22,6 @@ import {
   X,
   ExternalLink,
   Share2,
-  Sparkles,
   Store
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -173,13 +172,20 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || (window.navigator as any)?.standalone === true;
     if (isStandalone) setIsPwaInstalled(true);
 
+    const globalPrompt = (window as any).__nanaDeferredInstallPrompt;
+    if (globalPrompt) {
+      setDeferredPrompt(globalPrompt);
+    }
+
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
+      (window as any).__nanaDeferredInstallPrompt = e;
       setDeferredPrompt(e);
     };
     const handleAppInstalled = () => {
       setIsPwaInstalled(true);
       setDeferredPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
       showToast('NaNa Wallet Marchand installé sur votre écran d\'accueil !', 'success');
     };
 
@@ -197,15 +203,23 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
 
   const handleInstallPwa = async () => {
     playTapBeep();
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice.catch(() => null);
-      if (choice?.outcome === 'accepted') {
-        setIsPwaInstalled(true);
+    const promptEvent = deferredPrompt || (window as any).__nanaDeferredInstallPrompt;
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice.catch(() => null);
+        if (choice?.outcome === 'accepted') {
+          setIsPwaInstalled(true);
+        }
+      } catch {
+        setShowIosInstallHint(true);
+        showToast('Ouvrez le menu du navigateur (⋮ ou Partager) → « Ajouter à l\'écran d\'accueil ».', 'info');
       }
       setDeferredPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
     } else {
-      setShowIosInstallHint(prev => !prev);
+      setShowIosInstallHint(true);
+      showToast('Ouvrez le menu du navigateur (⋮ sur Chrome ou Partager sur Safari) → « Ajouter à l\'écran d\'accueil ».', 'info');
     }
   };
 
@@ -444,6 +458,16 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }
   };
 
+  const getWalletAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const base: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      if (token) base.Authorization = `Bearer ${token}`;
+    } catch {}
+    return base;
+  }, []);
+
   // 5. Lancement du VRAI UltimateCheckout pour la Recharge (Intention créée côté serveur)
   const handleLaunchUltimateCheckout = async () => {
     if (rechargeAmount < 100) {
@@ -452,9 +476,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }
     playTapBeep();
     try {
+      const headers = await getWalletAuthHeaders();
       const intentRes = await fetch('/api/merchant/wallet/recharge/intent', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           universeId: selectedUniverseId,
           userId: resolvedUserId,
@@ -476,9 +501,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
   const handleUltimateCheckoutSuccess = async (details: any) => {
     setIsUltimateCheckoutOpen(false);
     try {
+      const headers = await getWalletAuthHeaders();
       const res = await fetch('/api/merchant/wallet/recharge/confirm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           universeId: selectedUniverseId,
           userId: resolvedUserId,
@@ -534,9 +560,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
 
     setIsPayingPayg(true);
     try {
+      const headers = await getWalletAuthHeaders();
       const res = await fetch('/api/merchant/wallet/pay-as-you-go', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           universeId: selectedUniverseId,
           userId: resolvedUserId,
@@ -590,10 +617,11 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
 
     setIsSubmittingWithdraw(true);
     try {
+      const headers = await getWalletAuthHeaders();
       if (hasMasterPin) {
         const pinRes = await fetch('/api/merchant/wallet/pin/verify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             universeId: selectedUniverseId,
             userId: resolvedUserId,
@@ -614,7 +642,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       };
       const res = await fetch('/api/payouts/request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           universeId: selectedUniverseId,
           userId: resolvedUserId || null,
@@ -665,9 +693,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }
     setIsSavingPin(true);
     try {
+      const headers = await getWalletAuthHeaders();
       const res = await fetch('/api/merchant/wallet/pin/set', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           universeId: selectedUniverseId,
           userId: resolvedUserId,
@@ -726,8 +755,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       <header className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/90 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#1E3A8A] to-blue-600 text-white flex items-center justify-center font-black shadow-lg shrink-0">
-              <Wallet className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-2xl bg-white border border-blue-200/40 flex items-center justify-center shadow-lg shrink-0 p-1.5">
+              <img src="/wallet-icon.svg?v=wallet_v1" alt="NaNa Wallet" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
@@ -980,7 +1009,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           <section className="space-y-4">
             <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Layers className="w-4 h-4 text-amber-400" />
                 <h2 className="text-sm font-black text-white">Modules soumis au Pay-As-You-Go</h2>
               </div>
               <p className="text-xs text-slate-400">

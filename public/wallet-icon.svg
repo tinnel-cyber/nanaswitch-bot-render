@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" fill="none">
+  <defs>
+    <linearGradient id="wLeft" x1="70" y1="120" x2="210" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#0F256E"/>
+    </linearGradient>
+    <linearGradient id="wMid" x1="210" y1="180" x2="310" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <linearGradient id="wRight" x1="310" y1="120" x2="440" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1D4ED8"/>
+      <stop offset="100%" stop-color="#0F256E"/>
+    </linearGradient>
+  </defs>
+  <!-- Left outer stroke -->
+  <path d="M86 134 C82 122 90 112 102 112 L138 112 C148 112 156 118 160 128 L212 316 L174 396 C168 404 154 402 148 392 L86 134 Z" fill="url(#wLeft)"/>
+  <!-- Left-center ascending 3D ribbon -->
+  <path d="M174 396 L232 204 C236 192 246 186 256 186 L256 262 L212 396 C206 406 182 406 174 396 Z" fill="url(#wMid)"/>
+  <!-- Right-center descending 3D ribbon -->
+  <path d="M256 186 C266 186 276 192 280 204 L338 396 C330 406 306 406 300 396 L256 262 L256 186 Z" fill="#1E40AF"/>
+  <!-- Right outer ascending stroke -->
+  <path d="M300 396 L352 128 C356 118 364 112 374 112 L410 112 C422 112 430 122 426 134 L364 392 C358 402 344 404 338 396 Z" fill="url(#wRight)"/>
+  <!-- Subtle 3D top highlight facet -->
+  <path d="M256 186 L278 206 L256 248 L234 206 Z" fill="#3B82F6" opacity="0.85"/>
+</svg>

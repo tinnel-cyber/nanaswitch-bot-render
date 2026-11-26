@@ -1769,8 +1769,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               onClick={handleBackToUniverses}
               title="Revenir à la sélection des Univers"
             >
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-[#1E40AF] to-[#2563EB] flex items-center justify-center text-white shadow-lg shadow-blue-600/20 font-black text-lg sm:text-xl transition group-hover:scale-105 shrink-0">
-                N
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm transition group-hover:scale-105 shrink-0 p-1.5">
+                <img src="/nanasore-icon.svg?v=nanasore_v5" alt="Nanasore" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -2114,14 +2114,6 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>Wallet</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-[#1E40AF] border border-blue-200 text-xs font-bold shrink-0 cursor-pointer"
-              >
-                <Menu className="w-3.5 h-3.5" />
-                <span>Navigation</span>
               </button>
             </div>
           </div>
