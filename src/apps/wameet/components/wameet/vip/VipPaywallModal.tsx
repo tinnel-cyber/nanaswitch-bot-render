@@ -21,6 +21,7 @@ import {
 import { VipBusinessLounge, VipCourseRoom } from './types';
 import { useVipSubscription, VipSubscriptionPlan, VIP_DEFAULT_PLANS } from '../../../../../hooks/useVipSubscription';
 import { playTapBeep } from '../../../../../utils/audio';
+import { UltimateCheckout } from '../../../../../components/payment/UltimateCheckout';
 
 export interface VipPaywallModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export const VipPaywallModal: React.FC<VipPaywallModalProps> = ({
   const [selectedPlanId, setSelectedPlanId] = useState<'monthly' | 'lifetime'>('monthly');
   const [customerPhone, setCustomerPhone] = useState(initialPhone);
   const [selectedOperator, setSelectedOperator] = useState<'ORANGE' | 'WAVE' | 'MTN' | 'MOOV'>('ORANGE');
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   // Hook d'abonnement VIP
   const {
@@ -96,18 +98,7 @@ export const VipPaywallModal: React.FC<VipPaywallModalProps> = ({
   const handleSubscribeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     playTapBeep();
-
-    const amount = selectedPlanId === 'lifetime' ? 50000 : 10000;
-
-    await subscribe({
-      loungeId: lounge?.id || course?.id || 'vip-room-default',
-      loungeTitle: itemTitle,
-      planId: selectedPlanId,
-      amount,
-      customerPhone,
-      customerName: userName,
-      paymentMethod: `S_${selectedOperator}_MONEY`
-    });
+    setIsCheckoutOpen(true);
   };
 
   const handleClose = () => {
@@ -449,6 +440,41 @@ export const VipPaywallModal: React.FC<VipPaywallModalProps> = ({
             <Unlock className="w-5 h-5 text-slate-950" />
             <span>Péage VIP Franchi ! Bienvenue dans le Salon VIP.</span>
           </div>
+        </div>
+      )}
+
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-[10000] pointer-events-auto">
+          <UltimateCheckout
+            isModal={true}
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            onCancel={() => setIsCheckoutOpen(false)}
+            merchantId="nanasore_platform"
+            storeName="Wameet Salon VIP"
+            product={{
+              id: lounge?.id || course?.id || 'vip-room-default',
+              name: `${itemTitle} — ${selectedPlanId === 'lifetime' ? 'Accès à vie' : 'Pass Mensuel'}`,
+              price: selectedPlanId === 'lifetime' ? 50000 : 10000,
+              quantity: 1,
+            }}
+            amount={selectedPlanId === 'lifetime' ? 50000 : 10000}
+            defaultPhone={customerPhone}
+            defaultCustomerName={userName}
+            onSuccess={async (details) => {
+              setIsCheckoutOpen(false);
+              await subscribe({
+                loungeId: lounge?.id || course?.id || 'vip-room-default',
+                loungeTitle: itemTitle,
+                planId: selectedPlanId,
+                amount: details.amount || (selectedPlanId === 'lifetime' ? 50000 : 10000),
+                customerPhone: details.phoneNumber || customerPhone,
+                customerName: details.customerName || userName,
+                paymentMethod: details.paymentMethod || `S_${selectedOperator}_MONEY`,
+                transactionId: details.transactionId,
+              });
+            }}
+          />
         </div>
       )}
     </div>

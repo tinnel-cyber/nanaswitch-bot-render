@@ -59,14 +59,14 @@ export const DEFAULT_VIP_ROOMS: VipRoom[] = [
     rating: 4.95,
     studentsCount: 342,
     isLiveNow: true,
-    liveStreamUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    liveStreamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     tags: ['Télécoms', 'USSD', 'Mobile Money', 'Fintech', 'Afrique de l’Ouest'],
     lessons: [
       {
         id: 'lesson-1-telecom-intro',
         title: 'Session 1 : Les protocoles SS7 et USSD dans les paiements mobiles',
         duration: '42 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         description: 'Plongée au cœur des protocoles de signalisation mobile et de la couche applicative USSD pour les transactions financières.',
         isFreePreview: true
       },
@@ -74,7 +74,7 @@ export const DEFAULT_VIP_ROOMS: VipRoom[] = [
         id: 'lesson-2-mobile-money-switch',
         title: 'Session 2 : Conception d’un Switch de paiement souverain et redondance multi-opérateurs',
         duration: '58 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         description: 'Comment interconnecter en haute disponibilité Orange Money, Wave et MTN via webhooks et files de messages RabbitMQ / Redis.',
         isFreePreview: false
       },
@@ -82,82 +82,8 @@ export const DEFAULT_VIP_ROOMS: VipRoom[] = [
         id: 'lesson-3-compliance-pci-dss',
         title: 'Session 3 : Conformité BCEAO, sécurité PCI-DSS et gestion des litiges',
         duration: '51 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
         description: 'Les règles réglementaires fondamentales pour opérer légalement et protéger les fonds des commerçants.',
-        isFreePreview: false
-      }
-    ]
-  },
-  {
-    id: 'agro-export-masterclass',
-    title: 'Stratégie Agro-Business & Export International',
-    subtitle: 'De la production locale aux marchés européens et asiatiques à forte valeur ajoutée',
-    description: 'Transformez vos produits locaux (karité, sésame, cajou, mangues séchées) en marques d’export premium conformes aux normes HACCP et ISO 22000. Stratégies de négociation avec les acheteurs internationaux et financement d’exportation.',
-    expertName: 'Mariam Konaté',
-    expertRole: 'Directrice Export & Négociatrice Internationale Agro-Industrie',
-    expertAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
-    category: 'Agro-Business & Export',
-    bannerUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80',
-    badge: 'Direct Disponible',
-    accessType: 'VIP',
-    priceLabel: 'Inclus Abonnement VIP',
-    rating: 4.88,
-    studentsCount: 218,
-    isLiveNow: false,
-    liveStreamUrl: '',
-    tags: ['Agrobusiness', 'Export', 'Certification Bio', 'Commerce International'],
-    lessons: [
-      {
-        id: 'agro-lesson-1',
-        title: 'Session 1 : Trouver des acheteurs solvables en Europe et au Moyen-Orient',
-        duration: '35 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        description: 'Techniques de prospection B2B, salons professionnels et plateformes de mise en relation.',
-        isFreePreview: true
-      },
-      {
-        id: 'agro-lesson-2',
-        title: 'Session 2 : Emballages, conservation et logistique maritime / aérienne',
-        duration: '49 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        description: 'Optimisation de la chaîne du froid, conteneurs ventilés et négociation avec les transitaires.',
-        isFreePreview: false
-      }
-    ]
-  },
-  {
-    id: 'ai-ecommerce-masterclass',
-    title: 'Intelligence Artificielle & Automatisation du Commerce Digital',
-    subtitle: 'Vendre 24h/24 avec des agents WhatsApp conversationnels et des vidéos générées par IA',
-    description: 'Automatisez 100% de votre relation client et de vos relances de paniers abandonnés sur WhatsApp avec des agents intelligents. Générez des visuels et vidéos de déballage produit ultra-réalistes grâce aux modèles d’IA générative.',
-    expertName: 'Jean-Luc Amany',
-    expertRole: 'Ingénieur IA & Consultant E-Commerce Growth',
-    expertAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
-    category: 'Intelligence Artificielle & Marketing',
-    bannerUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
-    badge: 'Nouveau',
-    accessType: 'VIP',
-    priceLabel: 'Inclus Abonnement VIP',
-    rating: 4.98,
-    studentsCount: 512,
-    isLiveNow: false,
-    liveStreamUrl: '',
-    tags: ['IA', 'WhatsApp Bot', 'Automatisation', 'Live Shopping'],
-    lessons: [
-      {
-        id: 'ai-lesson-1',
-        title: 'Session 1 : Créer son agent de vente autonome sur WhatsApp Cloud API',
-        duration: '45 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        description: 'Configuration pas-à-pas des webhooks, de l’arbre de décision et des relances automatiques.',
-        isFreePreview: true
-      },
-      {
-        id: 'ai-lesson-2',
-        title: 'Session 2 : Scripts de closing à fort taux de conversion pour le marché africain',
-        duration: '38 min',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        description: 'Comment lever les objections sur les frais de livraison et rassurer les clients sur le paiement Mobile Money.',
         isFreePreview: false
       }
     ]

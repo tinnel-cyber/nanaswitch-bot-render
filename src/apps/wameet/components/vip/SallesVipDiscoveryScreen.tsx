@@ -56,7 +56,7 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
   const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Abonnement en temps réel aux salles VIP Firestore
+  // 1. Abonnement en temps réel aux salles VIP Supabase
   useEffect(() => {
     setIsLoading(true);
     const unsubscribe = subscribeToVipRooms((data) => {
@@ -99,6 +99,37 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newDescription.trim()) return;
+
+    let storedUser: any = currentUser || null;
+    let storedSub: any = null;
+    try {
+      if (!storedUser) storedUser = JSON.parse(localStorage.getItem('nana_store_auth_user') || 'null');
+      storedSub = storedUser?.subscription || JSON.parse(localStorage.getItem('nana_store_sub') || 'null');
+    } catch {}
+    const isSuperAdmin = storedUser?.role === 'super_admin' || storedUser?.role === 'SUPER_ADMIN';
+    const isPaidSub = Boolean(
+      isSuperAdmin ||
+      (storedSub &&
+        String(storedSub.status || '').toUpperCase() === 'ACTIVE' &&
+        !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('free') &&
+        !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('zero') &&
+        !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('pay-as-you-go'))
+    );
+
+    if (!isPaidSub) {
+      const { consumePaygModuleUsage } = await import('../../../../services/paygBillingService');
+      const paygRes = await consumePaygModuleUsage({
+        ownerKey: storedUser?.storeId || storedUser?.uid || storedUser?.id || '',
+        moduleId: 'salles-vip-live',
+        actionLabel: `Création Salle VIP : ${newTitle.trim()}`,
+        hasActivePaidSubscription: false,
+        isSuperAdmin: false,
+      });
+      if (!paygRes.allowed) {
+        alert(paygRes.message || 'Solde NaNa Wallet insuffisant (2 500 F CFA requis pour créer une Salle VIP).');
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     playValidationBeep();

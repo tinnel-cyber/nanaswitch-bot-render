@@ -186,7 +186,8 @@ export function attachVipSubscriptionRoutes(app: Express): void {
         customerName,
         userId,
         paymentMethod = 'S_MOBILE_MONEY',
-        autoValidateWebhook = true
+        transactionId,
+        autoValidateWebhook = false
       } = req.body || {};
 
       if (!loungeId) {
@@ -204,6 +205,7 @@ export function attachVipSubscriptionRoutes(app: Express): void {
       }
 
       const parsedAmount = Number(amount) || (planId === 'lifetime' ? 50000 : 10000);
+      const hasVerifiedGatewayTx = Boolean(transactionId && String(transactionId).trim().length >= 6);
 
       const subscription = await createVipSubscription({
         loungeId,
@@ -214,14 +216,16 @@ export function attachVipSubscriptionRoutes(app: Express): void {
         customerName,
         userId,
         paymentMethod,
-        autoValidateWebhook: Boolean(autoValidateWebhook)
+        autoValidateWebhook: Boolean(autoValidateWebhook && hasVerifiedGatewayTx)
       });
 
       return res.status(200).json({
         success: true,
-        message: `🎉 Abonnement ${subscription.planLabel} déverrouillé avec succès via Wameet !`,
+        message: hasVerifiedGatewayTx
+          ? `🎉 Abonnement ${subscription.planLabel} déverrouillé avec succès via Wameet !`
+          : `⏳ Paiement en attente de confirmation opérateur pour ${subscription.planLabel}.`,
         subscription,
-        accessGranted: true
+        accessGranted: hasVerifiedGatewayTx
       });
     } catch (err: any) {
       console.error('[VIP CONTROLLER ERROR]', err);

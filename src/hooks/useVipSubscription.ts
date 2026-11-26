@@ -29,6 +29,7 @@ export interface SubscribeParams {
   customerName?: string;
   userId?: string;
   paymentMethod?: string;
+  transactionId?: string;
 }
 
 export interface UseVipSubscriptionReturn {
@@ -148,14 +149,15 @@ export function useVipSubscription(onSuccessCallback?: (data: any) => void): Use
             customerName: params.customerName || 'Membre VIP Wameet',
             userId: params.userId,
             paymentMethod: params.paymentMethod || 'S_MOBILE_MONEY',
-            autoValidateWebhook: true
+            transactionId: params.transactionId,
+            autoValidateWebhook: Boolean(params.transactionId)
           })
         });
 
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || 'Échec du paiement Mobile Money sécurisé.');
+        if (!response.ok || !data.success || !data.accessGranted) {
+          throw new Error(data.message || 'Échec de vérification du paiement Mobile Money sécurisé.');
         }
 
         // Étape 2 : Simulation de validation Webhook instantanée
