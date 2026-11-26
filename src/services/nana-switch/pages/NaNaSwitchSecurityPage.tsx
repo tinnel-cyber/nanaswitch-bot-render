@@ -36,7 +36,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebase';
+import { db } from '../../../lib/supabaseBridge';
 import { 
   doc, 
   getDoc, 
@@ -44,7 +44,7 @@ import {
   collection, 
   getDocs, 
   deleteDoc 
-} from 'firebase/firestore';
+} from '../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { useSwitchAccount } from '../../../components/nanaSwitch/NaNaSwitchAuthGuard';
 import { isPinSessionUnlocked } from '../../../utils/nanaSwitchPinCrypto';

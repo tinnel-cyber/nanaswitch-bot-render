@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db } from '../lib/supabaseBridge';
 import { 
   doc, 
   setDoc, 
@@ -8,7 +8,7 @@ import {
   query, 
   orderBy,
   updateDoc 
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import { 
   EscrowProject, 

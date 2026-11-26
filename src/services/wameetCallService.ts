@@ -22,8 +22,8 @@ import {
   query,
   where,
   serverTimestamp
-} from 'firebase/firestore';
-import { db } from '../firebase';
+} from '../lib/supabaseBridge';
+import { db } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import { normalizeChatUserHandle } from './wameetChatService';
 

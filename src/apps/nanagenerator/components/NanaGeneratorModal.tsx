@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep, playCancelSound, playCashChime, formatCFA } from '../../../utils/audio';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
-import { auth } from '../../../firebase';
+import { auth } from '../../../lib/supabaseBridge';
 import { StoreUser } from '../../../types';
 import { 
   subscribeToUserCredits, 

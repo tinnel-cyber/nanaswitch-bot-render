@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../../firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from '../../../../lib/supabaseBridge';
+import { db } from '../../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface WameetActionButtonProps {

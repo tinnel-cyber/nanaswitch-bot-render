@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../../firebase';
+import { collection, addDoc, serverTimestamp } from '../../../../lib/supabaseBridge';
+import { db } from '../../../../lib/supabaseBridge';
 import { X, Upload, Check, Sparkles } from 'lucide-react';
 import { playValidationBeep } from '../../../../utils/audio';
 

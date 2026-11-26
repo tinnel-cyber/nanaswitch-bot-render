@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import confetti from 'canvas-confetti';
-import { db } from '../../../../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../../../lib/supabaseBridge';
+import { collection, addDoc, serverTimestamp } from '../../../../lib/supabaseBridge';
 import { initiateSPayment } from '../../../../services/paymentApiService';
 
 export interface CheckoutProductInfo {

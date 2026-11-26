@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   collection, query, orderBy, getDocs, addDoc, 
   doc, updateDoc, increment, serverTimestamp 
-} from 'firebase/firestore';
+} from '../../../../lib/supabaseBridge';
 import { supabase } from '@/lib/supabase';
-import { db } from '../../../../firebase';
+import { db } from '../../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { MessageCircle, Share2, Send, X, Check, Copy } from 'lucide-react';
 

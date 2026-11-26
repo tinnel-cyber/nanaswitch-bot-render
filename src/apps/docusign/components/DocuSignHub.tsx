@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { StoreUser, StoreSubscription } from '../../../types';
-import { db, auth } from '../../../firebase';
+import { db, auth } from '../../../lib/supabaseBridge';
 import { supabase } from '@/lib/supabase';
 import { playValidationBeep, playTapBeep } from '../../../utils/audio';
 import { LegalAiAdvisorWidget } from '../../../components/LegalAiAdvisorWidget';

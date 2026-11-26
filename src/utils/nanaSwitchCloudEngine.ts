@@ -15,7 +15,7 @@
  * - Traçabilité & Audit temps réel dans switch_logs
  */
 
-import { db } from '../firebase';
+import { db } from '../lib/supabaseBridge';
 import { 
   doc, 
   getDoc, 
@@ -25,7 +25,7 @@ import {
   addDoc, 
   increment, 
   serverTimestamp 
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 
 // ============================================================================
 // 1. TYPES & INTERFACES DU ROUTEUR CLOUD NANASWITCH

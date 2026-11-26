@@ -1,4 +1,4 @@
-import { db } from '../firebaseConfig';
+import { db } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import {
   collection,
@@ -8,7 +8,7 @@ import {
   doc,
   getDocs,
   serverTimestamp
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 import { MarketplaceCourse } from '../components/lms/marketplace/types';
 import { DEFAULT_MASTERCLASS_COURSE } from '../components/lms/mockCourses';
 import { isLimitReached, triggerLimitReachedUpsell, normalizePlanId, isUnlimitedCourses } from '../utils/planFeatures';

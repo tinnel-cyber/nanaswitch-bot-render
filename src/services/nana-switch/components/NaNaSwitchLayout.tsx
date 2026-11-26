@@ -32,8 +32,8 @@ import {
 } from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { useSwitchAccount } from './NaNaSwitchAuthGuard';
-import { db } from '../../../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../../lib/supabaseBridge';
+import { doc, setDoc } from '../../../lib/supabaseBridge';
 import { supabase } from '@/lib/supabase';
 import { isPinSessionUnlocked, lockPinSession, grantPinSession } from '../../../utils/nanaSwitchPinCrypto';
 import { NaNaSwitchPinModal } from './NaNaSwitchPinModal';

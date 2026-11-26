@@ -31,7 +31,7 @@ import {
   ShoppingBag
 , Plus} from 'lucide-react';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
-import { auth } from '../../../firebase';
+import { auth } from '../../../lib/supabaseBridge';
 import { NaNaSwitchLogo } from '../components/NaNaSwitchLogo';
 
 export interface NaNaSwitchLandingPageProps {

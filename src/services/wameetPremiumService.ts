@@ -9,8 +9,8 @@
  *   receiverId, amount, et wameetId.
  */
 
-import { db } from '../firebase';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/supabaseBridge';
+import { collection, doc, setDoc } from '../lib/supabaseBridge';
 
 export interface InitiateConsultationPayload {
   expertId: string;

@@ -4,8 +4,8 @@
  * injection dynamique dans le learning_path Firestore et déblocage de progression.
  */
 
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { doc, setDoc, getDoc, updateDoc } from '../lib/supabaseBridge';
+import { db } from '../lib/supabaseBridge';
 import { Course, CourseLesson, CourseModule, LearningPathItem, RemediationModule, StudentEnrollment } from '../types';
 import { awardReputationPoints } from './communityService';
 

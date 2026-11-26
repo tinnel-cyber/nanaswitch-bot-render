@@ -1,5 +1,5 @@
-import { db } from '../firebaseConfig';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../lib/supabaseBridge';
+import { doc, getDoc, setDoc, updateDoc } from '../lib/supabaseBridge';
 import { 
   IntegrationProvider, 
   InstructorIntegrationConfig, 

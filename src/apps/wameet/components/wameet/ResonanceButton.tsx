@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { doc, updateDoc, increment, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, increment, setDoc, getDoc, serverTimestamp } from '../../../../lib/supabaseBridge';
 import { Radio } from 'lucide-react';
-import { db } from '../../../../firebase';
+import { db } from '../../../../lib/supabaseBridge';
 import { playValidationBeep } from '../../../../utils/audio';
 function createSynergyMatchRoom(reelId: string, userId: string, _creatorName?: string): { url: string; name: string } {
   const roomName = `synergy-${reelId.slice(0, 12)}-${userId.slice(0, 8)}`;

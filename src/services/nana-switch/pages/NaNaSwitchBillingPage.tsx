@@ -30,8 +30,8 @@ import {
   Activity
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../../../lib/supabaseBridge';
+import { doc, getDoc, setDoc } from '../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
 export interface NaNaSwitchBillingPageProps {

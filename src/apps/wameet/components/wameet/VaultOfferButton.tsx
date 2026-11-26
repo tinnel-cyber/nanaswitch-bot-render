@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from '../../../../lib/supabaseBridge';
 import { ShoppingBag } from 'lucide-react';
-import { db } from '../../../../firebase';
+import { db } from '../../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import { VaultBottomSheet } from './VaultBottomSheet';
 

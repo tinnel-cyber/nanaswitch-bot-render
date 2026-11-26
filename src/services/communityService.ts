@@ -20,8 +20,8 @@ import {
   increment,
   DocumentSnapshot,
   QueryDocumentSnapshot
-} from 'firebase/firestore';
-import { db, auth } from '../firebase';
+} from '../lib/supabaseBridge';
+import { db, auth } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import { 
   CommunityPost, 

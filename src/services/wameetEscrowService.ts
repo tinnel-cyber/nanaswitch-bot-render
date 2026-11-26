@@ -1,6 +1,6 @@
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
-import { db } from '../firebase';
+import { db } from '../lib/supabaseBridge';
 import { EscrowStatus } from '../components/wameet/EscrowMessageBubble';
 
 // ============================================================================

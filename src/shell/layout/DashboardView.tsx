@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import * as LucideIcons from 'lucide-react';
-import { db, auth } from '../../firebase';
+import { db, auth } from '../../lib/supabaseBridge';
 import { 
   doc, getDoc, setDoc, collection, getDocs, updateDoc, serverTimestamp 
-} from 'firebase/firestore';
+} from '../../lib/supabaseBridge';
 import { useTheme } from '../../context/ThemeContext';
 import { getSafeStoreSlug, ensureMandatoryStoreSlug } from '../../utils/slugEngine';
 import { 

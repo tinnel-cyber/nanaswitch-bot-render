@@ -52,8 +52,8 @@ import { WameetFeed } from './WameetFeed';
 import { LiveShowcases, DEFAULT_SHOWCASES, ShowcaseItem, ShowcaseStatusType } from './LiveShowcases';
 import { WameetUpcomingAppointmentBanner } from './WameetUpcomingAppointmentBanner';
 import { WameetAppointment } from '../../../../services/wameetAppointmentService';
-import { db } from '../../../../firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../../../lib/supabaseBridge';
+import { collection, query, orderBy, limit, getDocs } from '../../../../lib/supabaseBridge';
 import { supabase } from '@/lib/supabase';
 
 export interface SocialFeedScreenProps {

@@ -14,8 +14,8 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { auth, db, SafeAuthUser } from '../../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, SafeAuthUser } from '../../../lib/supabaseBridge';
+import { doc, getDoc } from '../../../lib/supabaseBridge';
 import { Zap, ShieldCheck, Lock, Loader2, ArrowRight } from 'lucide-react';
 import { playTapBeep } from '../../../utils/audio';
 import { NaNaSwitchLogo } from './NaNaSwitchLogo';

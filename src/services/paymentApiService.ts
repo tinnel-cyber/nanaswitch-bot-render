@@ -350,8 +350,8 @@ export async function initiateSPayment(params: SCollectionRequest): Promise<SCol
 
   // 1. Initialisation persistante de l'intention dans Firestore (Flux 100% Production Réel)
   try {
-    const { doc, setDoc } = await import('firebase/firestore');
-    const { db } = await import('../firebase');
+    const { doc, setDoc } = await import('../lib/supabaseBridge');
+    const { db } = await import('../lib/supabaseBridge');
     const intentPayload = {
       id: orderId,
       orderId,
@@ -411,8 +411,8 @@ export async function initiateSPayment(params: SCollectionRequest): Promise<SCol
     if (res.ok && data && data.success !== false) {
       // Met à jour l'intention avec le vrai transactionId et la passerelle résolue
       try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const { db } = await import('../firebase');
+        const { doc, setDoc } = await import('../lib/supabaseBridge');
+        const { db } = await import('../lib/supabaseBridge');
         const updateData: any = {
           gateway: data.gateway || 'saspay',
           provider: (data.gateway || 'saspay').toUpperCase(),
@@ -486,8 +486,8 @@ export async function verifySPayment(externalReference: string): Promise<{
 
   // 2. Vérification directe dans Firestore (Webhook officiel temps réel)
   try {
-    const { doc, getDoc } = await import('firebase/firestore');
-    const { db } = await import('../firebase');
+    const { doc, getDoc } = await import('../lib/supabaseBridge');
+    const { db } = await import('../lib/supabaseBridge');
     const snap = await getDoc(doc(db, 'payment_intents', externalReference));
     if (snap.exists()) {
       const d = snap.data();

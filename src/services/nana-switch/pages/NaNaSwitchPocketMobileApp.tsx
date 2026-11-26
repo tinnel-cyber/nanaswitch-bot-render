@@ -50,8 +50,8 @@ import {
   Delete
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../lib/supabaseBridge';
+import { doc, getDoc, setDoc, updateDoc } from '../../../lib/supabaseBridge';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 import { executeCloudSwitchRoute, SwitchConnectorType } from '../../../utils/nanaSwitchCloudEngine';
 import { useSwitchAccount } from '../../../components/nanaSwitch/NaNaSwitchAuthGuard';

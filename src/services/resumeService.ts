@@ -1,5 +1,5 @@
-import { db } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/supabaseBridge';
+import { doc, getDoc, setDoc } from '../lib/supabaseBridge';
 import { ResumeData } from '../types';
 
 export const DEFAULT_RESUME_DATA: ResumeData = {

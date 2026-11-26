@@ -2,8 +2,8 @@
 // SERVICE FRONTEND WAMEET : SYNCHRONISATION PROGRESSION LMS (TUTOR LMS / FIRESTORE)
 // ============================================================================
 
-import { db } from '../firebaseConfig';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/supabaseBridge';
+import { doc, setDoc, getDoc } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 
 export interface CourseProgressPayload {

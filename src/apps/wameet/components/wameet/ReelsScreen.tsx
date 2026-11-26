@@ -38,8 +38,8 @@ import { ResonanceButton } from './ResonanceButton';
 import { SocialInteractions } from './SocialInteractions';
 import { ImmersiveVideoSearch } from '../../../../components/wameet/search';
 import { MediaDispatcher } from './media/MediaDispatcher';
-import { db } from '../../../../firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../../../lib/supabaseBridge';
+import { collection, query, orderBy, limit, getDocs } from '../../../../lib/supabaseBridge';
 
 export interface ReelsScreenProps {
   currentUserProfile: {

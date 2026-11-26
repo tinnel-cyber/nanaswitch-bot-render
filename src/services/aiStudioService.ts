@@ -1,4 +1,4 @@
-import { httpsCallable } from 'firebase/functions';
+import { httpsCallable } from '../lib/supabaseBridge';
 import { 
   collection, 
   doc, 
@@ -10,9 +10,9 @@ import {
   serverTimestamp,
   getDocs,
   limit
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
-import { db, functions, auth } from '../firebase';
+import { db, functions, auth } from '../lib/supabaseBridge';
 import { StoreSubscription } from '../types';
 import { normalizePlanId } from '../utils/planFeatures';
 

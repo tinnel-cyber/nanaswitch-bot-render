@@ -50,7 +50,7 @@ import { PinKeypadModal } from './components/PinKeypadModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { isCashierSession } from './utils/managerSecurityService';
 import { logoutUser, onSupabaseAuthStateChange } from './services/supabaseAuthService';
-import { auth } from './firebase';
+import { auth } from './lib/supabaseBridge';
 import { GoogleFlowToast } from './components/GoogleFlowToast';
 import { ClassroomErrorBoundary } from './components/lms/ClassroomErrorBoundary';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';

@@ -10,7 +10,7 @@ import { buildPublicShopUrl } from '../../config/domains';
 import { getThemeRoutePrefix } from '../../utils/themeRoutePrefix';
 import { ensureAndPersistTenantSlug } from '../../utils/slugService';
 import { supabase } from '@/lib/supabase';
-import { auth } from '../../firebase';
+import { auth } from '../../lib/supabaseBridge';
 
 interface ThemeSelectorModalProps {
   isOpen: boolean;

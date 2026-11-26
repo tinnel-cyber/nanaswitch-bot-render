@@ -14,10 +14,10 @@ import {
   writeBatch,
   DocumentData,
   QuerySnapshot
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 export type Unsubscribe = () => void;
-import { db, auth, rtdb } from './firebase';
+import { db, auth, rtdb } from '../lib/supabaseBridge';
 import {
   saveProductOffline,
   saveOrderOffline,
@@ -788,7 +788,7 @@ export async function deleteStoreDocument(
     deleteDoc(doc(db, 'tenants', tenantId, 'products', docId)).catch(() => {});
     deleteDoc(doc(db, 'stores', tenantId, 'products', docId)).catch(() => {});
     if (auth.currentUser) {
-      import('firebase/database').then(({ ref: rtdbRef, remove: rtdbRemove }) => {
+      import('../lib/supabaseBridge').then(({ ref: rtdbRef, remove: rtdbRemove }) => {
         rtdbRemove(rtdbRef(rtdb, `tenants/${tenantId}/products/${docId}`)).catch(() => {});
       }).catch(() => {});
     }
@@ -986,7 +986,7 @@ export async function persistInventoryProduct(
     // 4. Miroir Realtime Database /tenants/$tenantId/products/$productId
     if (auth.currentUser) {
       try {
-        const { ref: rtdbRef, set: rtdbSet } = await import('firebase/database');
+        const { ref: rtdbRef, set: rtdbSet } = await import('../lib/supabaseBridge');
         const prodRef = rtdbRef(rtdb, `tenants/${tenantId}/products/${safeProduct.id}`);
         await rtdbSet(prodRef, cleaned);
       } catch {

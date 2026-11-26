@@ -1,5 +1,5 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { doc, getDoc, setDoc } from '../lib/supabaseBridge';
+import { db } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 
 export type Unsubscribe = () => void;

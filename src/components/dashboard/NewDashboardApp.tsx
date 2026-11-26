@@ -46,7 +46,7 @@ import {
   MODULE_TOGGLED_EVENT 
 } from '../../services/moduleActivationService';
 import { ProFeaturesModal, ProFeatureTab } from '../../shell/modals/ProFeaturesModal';
-import { db, auth } from '../../firebase';
+import { db, auth } from '../../lib/supabaseBridge';
 import { supabase } from '../../lib/supabase';
 import { logoutUser } from '../../services/supabaseAuthService';
 import { submitKycSubmission, fileToDataUrl } from '../../utils/kycService';
@@ -65,7 +65,7 @@ import {
   orderBy, 
   limit, 
   serverTimestamp 
-} from 'firebase/firestore';
+} from '../../lib/supabaseBridge';
 
 const FunnelBuilder = React.lazy(() => import('../storeBuilder/FunnelBuilder'));
 const UltimateFunnelBuilder = React.lazy(() => import('../storeBuilder/UltimateFunnelBuilder'));

@@ -20,8 +20,8 @@ import {
   orderBy, 
   updateDoc, 
   serverTimestamp 
-} from 'firebase/firestore';
-import { db } from '../firebase';
+} from '../lib/supabaseBridge';
+import { db } from '../lib/supabaseBridge';
 
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 

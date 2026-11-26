@@ -61,8 +61,8 @@ import {
   WameetAppointment 
 } from '../../../services/wameetAppointmentService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
-import { db } from '../../../firebase';
-import { collection, doc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { db } from '../../../lib/supabaseBridge';
+import { collection, doc, setDoc, getDocs, query, orderBy, limit } from '../../../lib/supabaseBridge';
 
 export type WameetTabId = 'WALL_PROFILE' | 'REELS' | 'W_CHAT' | 'SHOP' | 'VIP_HUB';
 

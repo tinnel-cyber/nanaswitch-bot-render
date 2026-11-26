@@ -12,11 +12,11 @@ import {
   limitToLast,
   serverTimestamp,
   Timestamp
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import { uploadImageToImgbb } from './imgbbService';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from '../lib/supabaseBridge';
+import { db, storage } from '../lib/supabaseBridge';
 import { compressImageFile } from '../utils/imageCompressor';
 import { compressAndTrimVideo } from '../utils/videoCompressor';
 import { sendTransactionalSms } from './smsSenderService';

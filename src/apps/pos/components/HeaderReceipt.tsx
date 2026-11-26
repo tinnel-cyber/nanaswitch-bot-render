@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { CartItem, StoreUser, SellerUser, StoreSubscription } from '../../../types';
 import { formatCFA, playValidationBeep, playTapBeep } from '../../../utils/audio';
-import { auth } from '../../../firebase';
+import { auth } from '../../../lib/supabaseBridge';
 import { NetworkStatusBadge } from '../../../components/NetworkStatusBadge';
 import { PWAInstallBanner } from '../../../components/PWAInstallBanner';
 import { 

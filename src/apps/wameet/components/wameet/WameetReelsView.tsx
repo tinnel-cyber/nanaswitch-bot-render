@@ -55,8 +55,8 @@ import { ReelVideoPreloader } from './ReelVideoPreloader';
 import { ReelErrorBoundary } from '../../../../components/ReelErrorBoundary';
 import { FeatureErrorBoundary } from '../../../../components/FeatureErrorBoundary';
 import { MediaDispatcher } from './media/MediaDispatcher';
-import { db } from '../../../../firebase';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../../../lib/supabaseBridge';
+import { collection, query, orderBy, limit, getDocs } from '../../../../lib/supabaseBridge';
 
 export type WameetReelCategory = 'FOR_YOU' | 'IDEAS_BUSINESS' | 'SHOPPING_LIVE';
 

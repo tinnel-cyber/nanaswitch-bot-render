@@ -22,8 +22,8 @@ import {
   PlusCircle,
   X
 } from 'lucide-react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { doc, updateDoc, serverTimestamp } from '../../lib/supabaseBridge';
+import { db } from '../../lib/supabaseBridge';
 import { supabase } from '../../lib/supabase';
 import type { NanaMerchantApp } from '../nanaSwitch/NanaSwitchApp';
 

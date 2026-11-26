@@ -8,8 +8,8 @@ import {
   BusinessKycData,
   IdentificationStepStatus
 } from '../types';
-import { db } from './firebase';
-import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where } from 'firebase/firestore';
+import { db } from '../lib/supabaseBridge';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc, query, where } from '../lib/supabaseBridge';
 import { isDemoAccount, showDemoBlockedToast, DEMO_BLOCKED_MESSAGE } from './demoSecurityGuard';
 import { isSuperAdminLocally } from '../services/superAdminService';
 

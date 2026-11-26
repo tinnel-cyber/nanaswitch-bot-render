@@ -20,13 +20,6 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(__dirname, '.'),
-        'firebase/firestore': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase/app': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase/auth': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase/storage': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase/database': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase/functions': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
-        'firebase': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
         '@daily-co/daily-js': path.resolve(__dirname, 'src/lib/supabaseBridge.ts'),
       },
     },

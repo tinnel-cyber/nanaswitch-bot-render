@@ -60,7 +60,7 @@ import {
   subscribeToLandingPageConfig,
   addUserCredits
 } from '../../utils/firestoreService';
-import { auth } from '../../firebase';
+import { auth } from '../../lib/supabaseBridge';
 import { ThemeSwitcher } from '../../shell/layout/ThemeSwitcher';
 import { LegalTickerFooter } from '../../components/LegalTickerFooter';
 import {

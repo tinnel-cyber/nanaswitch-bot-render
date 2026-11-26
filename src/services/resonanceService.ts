@@ -10,7 +10,7 @@
  * - Zéro marque tierce
  */
 
-import { db } from '../firebase';
+import { db } from '../lib/supabaseBridge';
 import {
   collection,
   addDoc,
@@ -19,7 +19,7 @@ import {
   where,
   setDoc,
   doc
-} from 'firebase/firestore';
+} from '../lib/supabaseBridge';
 
 export interface Resonance {
   id: string;

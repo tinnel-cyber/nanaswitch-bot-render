@@ -1,12 +1,12 @@
-import { db } from '../firebaseConfig';
+import { db } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
 import { PromoCampaign, CampaignBonusItem } from '../types/campaign';
 
 // On-demand dynamic Firestore loader for sub-zero initial bundle weight
-let firestorePromise: Promise<typeof import('firebase/firestore')> | null = null;
+let firestorePromise: Promise<typeof import('../lib/supabaseBridge')> | null = null;
 function loadFirestore() {
   if (!firestorePromise) {
-    firestorePromise = import('firebase/firestore');
+    firestorePromise = import('../lib/supabaseBridge');
   }
   return firestorePromise;
 }
