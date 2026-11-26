@@ -157,18 +157,38 @@ export const SocialProofToast: React.FC<SocialProofToastProps> = ({
       const realOrders: SocialProofNotification[] = [];
 
       try {
-        const { data } = await supabase
+        let query = supabase
           .from('sales')
-          .select('*')
+          .select('id, product_name, customer_name, payment_method, metadata, created_at')
           .order('created_at', { ascending: false })
-          .limit(3);
+          .limit(5);
 
-        if (data && data.length > 0) {
-          data.forEach((row: any) => {
-            const custName = 'Client vérifié';
-            const city = 'Ouagadougou';
-            const prodName = productNameFallback;
-            const pay = row.payment_method || 'Mobile Money';
+        if (storeId) {
+          query = query.eq('store_id', storeId);
+        }
+
+        const { data, error } = await query;
+        const rows = (!error && data && data.length > 0)
+          ? data
+          : (await supabase
+              .from('sales')
+              .select('id, product_name, customer_name, payment_method, metadata, created_at')
+              .order('created_at', { ascending: false })
+              .limit(3)).data;
+
+        if (rows && rows.length > 0) {
+          rows.slice(0, 3).forEach((row: any) => {
+            const rawName = String(row.customer_name || '').trim();
+            const nameParts = rawName.split(/\s+/).filter(Boolean);
+            const custName = nameParts.length >= 2
+              ? `${nameParts[0]} ${nameParts[1][0].toUpperCase()}.`
+              : (nameParts[0] || 'Client vérifié');
+            const meta = (row.metadata && typeof row.metadata === 'object') ? row.metadata : {};
+            const city = String(
+              meta.city || meta.customerCity || meta.customer_city || row.customer_city || 'En ligne'
+            ).trim();
+            const prodName = String(row.product_name || productNameFallback || 'cet article').trim();
+            const pay = String(row.payment_method || 'Mobile Money').trim();
             const time = computeTimeAgo(row.created_at || Date.now());
 
             realOrders.push({
