@@ -200,6 +200,9 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     });
   };
 
+  const [subscriptionIntentOrderId, setSubscriptionIntentOrderId] = useState<string>('');
+  const [intentError, setIntentError] = useState<string | null>(null);
+
   // Réinitialiser strictement le tunnel à chaque ouverture
   useEffect(() => {
     if (isOpen) {
@@ -214,6 +217,8 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
       setIsProcessing(false);
       setSelectedAddonIds([]);
       setDownsellAccepted(false);
+      setSubscriptionIntentOrderId('');
+      setIntentError(null);
     }
   }, [isOpen, initialPlanId]);
 
@@ -225,6 +230,8 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     setIsProcessing(false);
     setSelectedAddonIds([]);
     setDownsellAccepted(false);
+    setSubscriptionIntentOrderId('');
+    setIntentError(null);
 
     if (typeof window !== 'undefined') {
       try {
@@ -381,10 +388,42 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     setIsProcessing(false);
   };
 
-  // Callback de succès du composant SPaymentGateway
+  // Callback de succès du composant UltimateCheckout (vérification serveur + activation Supabase)
   const handleGatewaySuccess = async (details: PaymentSuccessDetails) => {
     playCashChime();
     setIsProcessing(true);
+    setIntentError(null);
+
+    const billingCycle = currentPlan.period === 'an' ? 'ANNUAL' : 'MONTHLY';
+    const targetOrderId = subscriptionIntentOrderId || details.transactionId;
+
+    try {
+      const res = await fetch('/api/merchant/subscription/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          universeId: effectiveStoreId,
+          orderId: targetOrderId,
+          planId: currentPlan.id,
+          planName: currentPlan.name,
+          billingCycle,
+          amount: details.amount || montantTotal,
+          transactionId: details.transactionId,
+          paymentMethod: details.operator?.name || details.paymentMethod || 'MOBILE_MONEY',
+          customerPhone: details.phoneNumber || safeUser.phone || '',
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        setIntentError(json?.error || 'Impossible de vérifier et activer cet abonnement sur le serveur.');
+        setIsProcessing(false);
+        return;
+      }
+    } catch (err: any) {
+      setIntentError(err?.message || 'Erreur réseau lors de l\'activation de l\'abonnement.');
+      setIsProcessing(false);
+      return;
+    }
 
     const durationDays = currentPlan.period === 'an' ? 365 : currentPlan.period === 'trimestre' ? 90 : 30;
     const durationMs = durationDays * 24 * 60 * 60 * 1000;
@@ -400,7 +439,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
       startedAt: Date.now(),
       lastPaymentMethod: paymentMethodName as any,
       lastAmountPaid: details.amount || montantTotal,
-      transactionRef: details.transactionId,
+      transactionRef: targetOrderId || details.transactionId,
       // Piliers modulaires sélectionnés (Caisse, Vitrine, Formateur)
       selectedPillars: selectedPillars as any,
       isAllInclusive: isAllPillarsSelected,
@@ -408,13 +447,13 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     };
 
     setPaymentResult({
-      transactionId: details.transactionId,
+      transactionId: targetOrderId || details.transactionId,
       amount: details.amount || montantTotal,
       method: paymentMethodName,
     });
 
     try {
-      await updateStoreSubscription(effectiveStoreId, newSub, safeUser.id, details.transactionId);
+      updateStoreSubscription(effectiveStoreId, newSub, safeUser.id, targetOrderId || details.transactionId).catch(() => {});
       if (typeof window !== 'undefined') {
         localStorage.setItem('nana_user_plan', currentPlan.id);
         localStorage.setItem('nana_store_plan', currentPlan.id);
@@ -1043,32 +1082,77 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
             </div>
 
             {/* Passerelle de paiement 100% automatique UltimateCheckout */}
+            {intentError && (
+              <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200 font-semibold">
+                {intentError}
+              </div>
+            )}
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-1 sm:p-3 overflow-hidden">
-              <UltimateCheckout
-                isModal={false}
-                enablePhysicalPosToken={false}
-                merchantId="nanasore_platform"
-                storeName="NaNaSwitch Cloud"
-                product={{
-                  id: currentPlan.id,
-                  name: `${currentPlan.name} (${isAllPillarsSelected ? 'Pack Complet' : `${selectedPillars.length} volet${selectedPillars.length > 1 ? 's' : ''}`})`,
-                  price: montantTotal,
-                  description: `Abonnement SaaS Nanasore - ${currentPlan.name}${selectedAddonIds.length > 0 ? ` • + ${selectedAddonIds.length} option(s)` : ''}${downsellAccepted ? ' • Remise -2 000 F' : ''}`,
-                  itemType: 'subscription',
-                }}
-                amount={montantTotal}
-                currency="FCFA"
-                orderDescription={`Abonnement SaaS Nanasore - ${currentPlan.name}`}
-                orderId={`SUB-${effectiveStoreId}-${Date.now().toString(36).toUpperCase()}`}
-                defaultPhone={safeUser.phone || ''}
-                defaultCustomerName={safeUser.name || ''}
-                defaultEmail={safeUser.email || ''}
-                onSuccess={handleGatewaySuccess}
-                onCancel={() => {
-                  playTapBeep();
-                  setFunnelStep('PLAN_SELECTION');
-                }}
-              />
+              {!subscriptionIntentOrderId ? (
+                <div className="p-6 text-center space-y-3">
+                  <p className="text-xs text-slate-300">
+                    Initialisation sécurisée de votre intention d&apos;abonnement ({currentPlan.name} • {formatCFA(montantTotal)})...
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIntentError(null);
+                      try {
+                        const res = await fetch('/api/merchant/subscription/intent', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            universeId: effectiveStoreId,
+                            planId: currentPlan.id,
+                            planName: currentPlan.name,
+                            billingCycle: currentPlan.period === 'an' ? 'ANNUAL' : 'MONTHLY',
+                            amount: montantTotal,
+                            customerEmail: safeUser.email || '',
+                          }),
+                        });
+                        const json = await res.json().catch(() => null);
+                        if (!res.ok || !json?.success || !json?.orderId) {
+                          setIntentError(json?.error || "Impossible d'initialiser l'abonnement sécurisé.");
+                          return;
+                        }
+                        setSubscriptionIntentOrderId(json.orderId);
+                      } catch (err: any) {
+                        setIntentError(err?.message || "Erreur réseau lors de l'initialisation.");
+                      }
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer"
+                  >
+                    Lancer le paiement sécurisé ({formatCFA(montantTotal)})
+                  </button>
+                </div>
+              ) : (
+                <UltimateCheckout
+                  isModal={false}
+                  enablePhysicalPosToken={false}
+                  merchantId="nanasore_platform"
+                  storeName="NaNaSwitch Cloud"
+                  product={{
+                    id: currentPlan.id,
+                    name: `${currentPlan.name} (${isAllPillarsSelected ? 'Pack Complet' : `${selectedPillars.length} volet${selectedPillars.length > 1 ? 's' : ''}`})`,
+                    price: montantTotal,
+                    description: `Abonnement SaaS Nanasore - ${currentPlan.name}${selectedAddonIds.length > 0 ? ` • + ${selectedAddonIds.length} option(s)` : ''}${downsellAccepted ? ' • Remise -2 000 F' : ''}`,
+                    itemType: 'subscription',
+                  }}
+                  amount={montantTotal}
+                  currency="FCFA"
+                  orderDescription={`Abonnement SaaS Nanasore - ${currentPlan.name}`}
+                  orderId={subscriptionIntentOrderId}
+                  defaultPhone={safeUser.phone || ''}
+                  defaultCustomerName={safeUser.name || ''}
+                  defaultEmail={safeUser.email || ''}
+                  onSuccess={handleGatewaySuccess}
+                  onCancel={() => {
+                    playTapBeep();
+                    setSubscriptionIntentOrderId('');
+                    setFunnelStep('PLAN_SELECTION');
+                  }}
+                />
+              )}
             </div>
           </div>
         )}
