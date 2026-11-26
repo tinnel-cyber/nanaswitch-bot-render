@@ -3938,19 +3938,19 @@ async function startServer() {
       });
     }
 
-    // Crédit automatique du Wallet Marchand unifié (0% physique, 14% commission/formation/numérique)
+    // Crédit automatique du Wallet Marchand unifié UNIQUEMENT si le paiement est confirmé par le routeur
     let walletCredit: any = null;
-    if ((finalStatus === 'confirmed' || isPosCounterToken) && confirmedAmount > 0 && orderRecord.tenantId) {
+    if (finalStatus === 'confirmed' && confirmedAmount > 0 && orderRecord.tenantId) {
       try {
         walletCredit = await creditMerchantSaleToWallet({
           orderId,
           universeId: orderRecord.tenantId,
           grossAmount: confirmedAmount,
-          productType: String(body.product_type || (isPosCounterToken ? 'PHYSICAL' : '')),
+          productType: String(body.product_type || ''),
           productName: body.deal?.title || body.product_name || 'Commande Boutique',
           customerName: orderRecord.customerName,
           operator,
-          paymentMethod: isPosCounterToken ? 'PHYSICAL_POS_TOKEN' : 'MOBILE_MONEY',
+          paymentMethod: 'MOBILE_MONEY',
         });
       } catch (wErr: any) {
         console.warn('[PAYMENTS/TRIGGER] Wallet credit notice:', wErr?.message || wErr);
@@ -3967,7 +3967,7 @@ async function startServer() {
     });
   });
 
-  // POST /api/payments/confirm-sale — Crédite le Wallet Marchand après validation Checkout (SMS BF, Mobile Money ou Livraison physique)
+  // POST /api/payments/confirm-sale — Crédite le Wallet Marchand après validation Checkout vérifiée côté serveur (SMS BF ou Mobile Money)
   app.post('/api/payments/confirm-sale', async (req, res) => {
     try {
       const body = req.body || {};
@@ -3982,14 +3982,25 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Paramètres de vente incomplets.' });
       }
 
-      const isCodPhysical =
-        productType === 'PHYSICAL' &&
-        (paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'PHYSICAL_POS_TOKEN');
+      const isCodOrPos =
+        paymentMethod === 'CASH_ON_DELIVERY' || paymentMethod === 'PHYSICAL_POS_TOKEN';
 
-      let verified = isCodPhysical;
+      if (isCodOrPos) {
+        return res.json({
+          success: true,
+          credited: false,
+          reason: 'COD_DIRECT_MERCHANT_COLLECTION',
+          grossAmount: requestedAmount,
+          feeAmount: 0,
+          commissionRatePercent: 0,
+          netCreditXof: 0,
+        });
+      }
+
+      let verified = false;
       let confirmedAmount = requestedAmount;
 
-      if (!verified && supabaseAdmin && (transactionId || orderId)) {
+      if (supabaseAdmin && (transactionId || orderId)) {
         const { data: smsRow } = await supabaseAdmin
           .from('bf_sms_payments')
           .select('transaction_id, amount, status, order_id')
@@ -4001,7 +4012,9 @@ async function startServer() {
           .limit(1)
           .maybeSingle();
 
-        if (smsRow && Number(smsRow.amount) >= requestedAmount) {
+        const smsStatus = String(smsRow?.status || '').toUpperCase();
+        const isSmsRejected = ['FAILED', 'REJECTED', 'CANCELLED', 'CANCELED'].includes(smsStatus);
+        if (smsRow && !isSmsRejected && Number(smsRow.amount) >= requestedAmount) {
           verified = true;
           confirmedAmount = Math.round(Number(smsRow.amount));
         }

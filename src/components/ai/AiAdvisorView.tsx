@@ -741,33 +741,6 @@ export const AiAdvisorView: React.FC<AiAdvisorViewProps> = ({
               </div>
               <div className="text-base font-black text-emerald-400">{formatCFA(todaySalesTotal)}</div>
             </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                    <div className="text-slate-400">Sans beurre en rayon :</div>
-                    <div className="font-bold text-slate-200">Panier moyen = 150 F CFA (Pain seul)</div>
-                  </div>
-                  <div className="bg-emerald-950/40 p-2 rounded-lg border border-emerald-600/30">
-                    <div className="text-emerald-400">Avec beurre proposé :</div>
-                    <div className="font-extrabold text-emerald-300">Panier moyen = 450 F CFA (+200% de vente)</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Réinvestissement */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    playTapBeep();
-                    if (onOpenInventory) onOpenInventory();
-                  }}
-                  className="py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-amber-900/30"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>Commander Beurre pour Vendredi</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 

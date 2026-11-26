@@ -133,7 +133,7 @@ async function runTests() {
   assert.strictEqual(responseData.errorCode, '401_INVALID_SECRET_KEY');
 
   // Cas 4c : Clé valide -> passage à next() avec req.merchant attaché
-  const reqGoodKey = { headers: { 'x-nanaswitch-skey': keyPair.secretKey } };
+  const reqGoodKey = { headers: { 'x-nanaswitch-skey': keyPair.secretKey, 'x-merchant-id': 'm_mock_001' } };
   let nextCalled = false;
   await requireNanaSwitchAuth(mockDb)(reqGoodKey, mockRes, () => {
     nextCalled = true;
