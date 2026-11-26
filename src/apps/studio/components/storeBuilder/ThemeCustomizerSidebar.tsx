@@ -381,71 +381,82 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
                 )}
               </div>
 
-              {/* Nom & Slogan de la boutique */}
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Nom de la boutique :
-                  </label>
-                  <input
-                    type="text"
-                    value={config.storeName || ''}
-                    onChange={(e) => updateField('storeName', e.target.value)}
-                    placeholder="Ex: Émeraude Prestige Parfums"
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                </div>
+              {/* Nom & Slogan / Profession (adapté pour thème Portfolio) */}
+              {(() => {
+                const normTheme = String(
+                  activeThemeId || (config as any)?.activeThemeId || (config as any)?.active_theme_id || ''
+                ).toLowerCase();
+                const isPortfolio = normTheme.includes('service-portfolio') || normTheme.includes('portfolio');
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Slogan / Accroche :
-                  </label>
-                  <input
-                    type="text"
-                    value={config.storeTagline || ''}
-                    onChange={(e) => updateField('storeTagline', e.target.value)}
-                    placeholder="Ex: Cosmétiques & Soins Haute Couture"
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
+                return (
+                  <>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          {isPortfolio ? 'Nom complet (ou Nom du Studio) :' : 'Nom de la boutique :'}
+                        </label>
+                        <input
+                          type="text"
+                          value={config.storeName || ''}
+                          onChange={(e) => updateField('storeName', e.target.value)}
+                          placeholder={isPortfolio ? 'Ex: Moussa Ouédraogo • Studio Prestige' : 'Ex: Émeraude Prestige Parfums'}
+                          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
 
-              {/* Logo de la boutique */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Logo de la boutique :
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={config.logoUrl || ''}
-                    onChange={(e) => updateField('logoUrl', e.target.value)}
-                    placeholder="https://... ou téléversez un logo"
-                    className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none truncate"
-                  />
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleLogoUpload}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => logoInputRef.current?.click()}
-                    className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
-                    title="Téléverser un logo"
-                  >
-                    <Upload className="w-4 h-4" />
-                  </button>
-                </div>
-                {config.logoUrl && (
-                  <div className="mt-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200/60 inline-flex items-center gap-2">
-                    <img src={config.logoUrl} alt="Logo" className="w-8 h-8 rounded object-contain bg-white border border-slate-200" />
-                    <span className="text-[10px] text-slate-500">Aperçu logo actif</span>
-                  </div>
-                )}
-              </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          {isPortfolio ? 'Nom professionnel / Ce que vous faites :' : 'Slogan / Accroche :'}
+                        </label>
+                        <input
+                          type="text"
+                          value={config.storeTagline || ''}
+                          onChange={(e) => updateField('storeTagline', e.target.value)}
+                          placeholder={isPortfolio ? 'Ex: Designer UI/UX & Développeur Web Full-Stack' : 'Ex: Cosmétiques & Soins Haute Couture'}
+                          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Logo de la boutique / Petite image profil */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        {isPortfolio ? 'Logo / Photo professionnelle (petite image) :' : 'Logo de la boutique :'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={config.logoUrl || ''}
+                          onChange={(e) => updateField('logoUrl', e.target.value)}
+                          placeholder="https://... ou téléversez un logo"
+                          className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none truncate"
+                        />
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleLogoUpload}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
+                          title="Téléverser un logo"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {config.logoUrl && (
+                        <div className="mt-2 p-1.5 rounded-lg bg-slate-50 border border-slate-200/60 inline-flex items-center gap-2">
+                          <img src={config.logoUrl} alt="Logo" className="w-8 h-8 rounded object-contain bg-white border border-slate-200" />
+                          <span className="text-[10px] text-slate-500">Aperçu logo actif</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Contact WhatsApp & Support */}
               <div className="grid grid-cols-2 gap-2">

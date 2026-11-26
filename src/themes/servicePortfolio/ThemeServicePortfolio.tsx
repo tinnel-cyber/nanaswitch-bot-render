@@ -5,6 +5,8 @@ import { sanitizeRichHtml } from '../../utils/security';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
 import { BuyerLiveCallButton } from '../../components/live/BuyerLiveCallButton';
 import { ServiceWideDetailView } from './ServiceWideDetailView';
+import { LiveEditable } from '../../components/storeBuilder/LiveEditable';
+import { AdminProductQuickBar } from '../../components/storeBuilder/AdminProductQuickBar';
 import { supabase } from '@/lib/supabase';
 import {
   Calendar,
@@ -27,7 +29,8 @@ import {
   ArrowRight,
   Phone,
   User,
-  MessageSquare
+  MessageSquare,
+  Award
 } from 'lucide-react';
 
 interface PortfolioItem {
@@ -98,21 +101,108 @@ function getFigmaEmbedUrl(rawUrl: string): string {
   return `https://www.figma.com/embed?embed_host=nanasore&url=${encodeURIComponent(clean)}`;
 }
 
-export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
-  storeSlug = 'prestataire',
-  storeConfig,
-  customConfig,
-  allProducts,
-  filteredProducts,
-  onBuyNow,
-  onSelectProduct,
-  isStoreAdmin,
-  displayBanners,
-}) => {
+export const ThemeServicePortfolio: React.FC<StoreThemeProps> = (props) => {
+  const {
+    storeSlug = 'prestataire',
+    storeId,
+    storeConfig,
+    customConfig,
+    allProducts,
+    filteredProducts,
+    onBuyNow,
+    onSelectProduct,
+    isStoreAdmin,
+    isPublicView = false,
+    isProductEditor,
+    onOpenEditProduct,
+    onEditProduct,
+    onPreviewFunnel,
+    displayBanners,
+  } = props;
+
+  const isAdminPreview = Boolean(
+    props.isAdminPreview ??
+    (typeof window !== 'undefined' && ((window as any).isAdminPreview || (window as any).__isAdminPreview)) ??
+    false
+  );
+
   const [activeTab, setActiveTab] = useState<'SERVICES' | 'PORTFOLIO'>('SERVICES');
   const [detailService, setDetailService] = useState<StoreProductItem | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [isHeroPaused, setIsHeroPaused] = useState(false);
+
+  // Comptage réel des ventes (Supabase SQL orders + Realtime + cache local)
+  const [ordersSalesTotal, setOrdersSalesTotal] = useState<number>(0);
+  const [salesByServiceId, setSalesByServiceId] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    const targetTenant = storeId || storeSlug || 'prestataire';
+
+    const tallyOrders = (rows: any[]) => {
+      if (!mounted || !Array.isArray(rows)) return;
+      let total = 0;
+      const perProduct: Record<string, number> = {};
+      for (const row of rows) {
+        const st = String(row?.status || '').toUpperCase();
+        if (st === 'CANCELLED' || st === 'FAILED' || st === 'REJECTED') continue;
+        total += 1;
+        const pid = String(row?.product_id || row?.productId || '').trim();
+        if (pid) {
+          perProduct[pid] = (perProduct[pid] || 0) + (Number(row?.quantity) || 1);
+        }
+        if (Array.isArray(row?.items)) {
+          for (const it of row.items) {
+            const ipid = String(it?.id || it?.productId || '').trim();
+            if (ipid) {
+              perProduct[ipid] = (perProduct[ipid] || 0) + (Number(it?.quantity) || 1);
+            }
+          }
+        }
+      }
+      setOrdersSalesTotal(total);
+      setSalesByServiceId(perProduct);
+    };
+
+    const loadSales = async () => {
+      try {
+        const { data } = await supabase
+          .from('orders')
+          .select('id, status, product_id, quantity, items')
+          .or(`store_id.eq.${targetTenant},tenant_id.eq.${targetTenant}`);
+        if (Array.isArray(data) && data.length > 0) {
+          tallyOrders(data);
+          return;
+        }
+      } catch {}
+
+      try {
+        const cached = localStorage.getItem(`nana_orders_cache_${targetTenant}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) tallyOrders(parsed);
+        }
+      } catch {}
+    };
+
+    loadSales();
+
+    const channel = supabase
+      .channel(`portfolio_sales_${targetTenant}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          loadSales();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [storeId, storeSlug]);
 
   // Portfolio items (vidéos, Figma, liens web, diaporama images)
   const portfolioStorageKey = `nana_service_portfolio_${storeSlug}`;
@@ -188,9 +278,20 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
   }, [isHeroPaused, heroSlides.length]);
 
   const servicesList = filteredProducts && filteredProducts.length > 0 ? filteredProducts : allProducts;
-  const brandTitle = customConfig?.storeName || storeConfig?.storeName || 'Studio Prestige';
-  const brandTagline = customConfig?.storeTagline || storeConfig?.welcomeText || 'Expertise & Réalisations Sur-Mesure';
+  const brandTitle = customConfig?.storeName || storeConfig?.storeName || 'Nom Complet • Studio';
+  const brandTagline = customConfig?.storeTagline || storeConfig?.welcomeText || 'Nom professionnel • Expertise & Réalisations Sur-Mesure';
   const whatsappSupport = customConfig?.whatsappNumber || storeConfig?.whatsappPhone || '+22666782920';
+
+  const getServiceSalesCount = (svc: StoreProductItem): number => {
+    const base = Number(svc.salesCount) || 0;
+    const fromOrders = Number(salesByServiceId[svc.id]) || 0;
+    return Math.max(base, fromOrders);
+  };
+
+  const totalSalesCount = useMemo(() => {
+    const sumServices = servicesList.reduce((acc, svc) => acc + getServiceSalesCount(svc), 0);
+    return Math.max(ordersSalesTotal, sumServices);
+  }, [ordersSalesTotal, servicesList, salesByServiceId]);
 
   const persistPortfolio = async (nextList: PortfolioItem[]) => {
     setPortfolioItems(nextList);
@@ -286,25 +387,57 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            {storeConfig?.logoUrl || customConfig?.logoUrl ? (
-              <img
-                src={customConfig?.logoUrl || storeConfig?.logoUrl}
-                alt={brandTitle}
-                className="w-11 h-11 rounded-2xl object-cover border border-amber-400/50 shadow-lg"
-              />
-            ) : (
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-                {brandTitle.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <LiveEditable
+              label="Logo / Photo Profil"
+              field="logoUrl"
+              type="image"
+              value={customConfig?.logoUrl || storeConfig?.logoUrl || ''}
+              targetAccordion={1}
+              isAdminPreview={isAdminPreview}
+              isInline={true}
+            >
+              {storeConfig?.logoUrl || customConfig?.logoUrl ? (
+                <img
+                  src={customConfig?.logoUrl || storeConfig?.logoUrl}
+                  alt={brandTitle}
+                  className="w-11 h-11 rounded-2xl object-cover border border-amber-400/50 shadow-lg"
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  {brandTitle.charAt(0).toUpperCase()}
+                </div>
+              )}
+            </LiveEditable>
             <div>
-              <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>{brandTitle}</span>
+              <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex flex-wrap items-center gap-2">
+                <LiveEditable
+                  label="Nom complet / Studio"
+                  field="storeName"
+                  value={brandTitle}
+                  targetAccordion={1}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <span>{brandTitle}</span>
+                </LiveEditable>
                 <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-widest">
                   Prestataire Vérifié
                 </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">
+                  <Award className="w-3 h-3 text-emerald-400" />
+                  <span>{totalSalesCount} vente{totalSalesCount > 1 ? 's' : ''}</span>
+                </span>
               </h1>
-              <p className="text-xs text-slate-400">{brandTagline}</p>
+              <LiveEditable
+                label="Nom professionnel / Ce que vous faites"
+                field="storeTagline"
+                value={brandTagline}
+                targetAccordion={1}
+                isAdminPreview={isAdminPreview}
+                isInline={true}
+              >
+                <p className="text-xs text-slate-400">{brandTagline}</p>
+              </LiveEditable>
             </div>
           </div>
 
@@ -320,7 +453,16 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
               }`}
             >
               <Briefcase className="w-4 h-4" />
-              <span>Prestations & Affiches</span>
+              <LiveEditable
+                label="Onglet Prestations"
+                field="subBanner2Badge"
+                value={customConfig?.subBanner2Badge || 'Prestations & Affiches'}
+                targetAccordion={3}
+                isAdminPreview={isAdminPreview}
+                isInline={true}
+              >
+                <span>{customConfig?.subBanner2Badge || 'Prestations & Affiches'}</span>
+              </LiveEditable>
             </button>
             <button
               type="button"
@@ -332,7 +474,16 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
               }`}
             >
               <LayersIconFallback />
-              <span>Réalisations & Portfolio</span>
+              <LiveEditable
+                label="Onglet Portfolio"
+                field="subBanner2Title"
+                value={customConfig?.subBanner2Title || 'Réalisations & Portfolio'}
+                targetAccordion={3}
+                isAdminPreview={isAdminPreview}
+                isInline={true}
+              >
+                <span>{customConfig?.subBanner2Title || 'Réalisations & Portfolio'}</span>
+              </LiveEditable>
             </button>
           </nav>
         </div>
@@ -350,46 +501,126 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
         >
           {heroSlides.map((slide, idx) => (
             <div key={idx} className="w-full shrink-0 relative min-h-[360px] sm:min-h-[440px] flex items-center">
-              <img
-                src={slide.image}
-                alt={slide.title || `Annonce ${idx + 1}`}
-                className="absolute inset-0 w-full h-full object-cover opacity-35"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#07090E] via-[#07090E]/85 to-transparent" />
+              {idx === 0 ? (
+                <LiveEditable
+                  label="Image Bannière Hero"
+                  field="heroBannerImageUrl"
+                  type="image"
+                  value={customConfig?.heroBannerImageUrl || slide.image}
+                  targetAccordion={2}
+                  isAdminPreview={isAdminPreview}
+                  className="absolute inset-0 w-full h-full"
+                >
+                  <img
+                    src={slide.image}
+                    alt={slide.title || `Annonce ${idx + 1}`}
+                    className="w-full h-full object-cover opacity-35"
+                  />
+                </LiveEditable>
+              ) : (
+                <img
+                  src={slide.image}
+                  alt={slide.title || `Annonce ${idx + 1}`}
+                  className="absolute inset-0 w-full h-full object-cover opacity-35"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#07090E] via-[#07090E]/85 to-transparent pointer-events-none" />
               <div className="relative z-10 max-w-7xl mx-auto px-5 sm:px-10 py-12 space-y-4">
                 {slide.badge && (
-                  <span className="inline-block px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-black uppercase tracking-widest">
-                    {slide.badge}
-                  </span>
+                  idx === 0 ? (
+                    <LiveEditable
+                      label="Badge Hero"
+                      field="heroSubtitle"
+                      value={customConfig?.heroSubtitle || slide.badge}
+                      targetAccordion={2}
+                      isAdminPreview={isAdminPreview}
+                      isInline={true}
+                    >
+                      <span className="inline-block px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-black uppercase tracking-widest">
+                        {slide.badge}
+                      </span>
+                    </LiveEditable>
+                  ) : (
+                    <span className="inline-block px-3.5 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[11px] font-black uppercase tracking-widest">
+                      {slide.badge}
+                    </span>
+                  )
                 )}
-                <h2 className="text-3xl sm:text-5xl font-black text-white max-w-3xl leading-[1.1] tracking-tight">
-                  {slide.title}
-                </h2>
-                <p className="text-sm sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
-                  {slide.subtitle}
-                </p>
+                {idx === 0 ? (
+                  <LiveEditable
+                    label="Titre Principal Hero"
+                    field="heroTitle"
+                    value={customConfig?.heroTitle || slide.title}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    <h2 className="text-3xl sm:text-5xl font-black text-white max-w-3xl leading-[1.1] tracking-tight">
+                      {slide.title}
+                    </h2>
+                  </LiveEditable>
+                ) : (
+                  <h2 className="text-3xl sm:text-5xl font-black text-white max-w-3xl leading-[1.1] tracking-tight">
+                    {slide.title}
+                  </h2>
+                )}
+                {idx === 0 ? (
+                  <LiveEditable
+                    label="Sous-titre / Description Hero"
+                    field="heroDescription"
+                    type="textarea"
+                    value={customConfig?.heroDescription || slide.subtitle}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                  >
+                    <p className="text-sm sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
+                      {slide.subtitle}
+                    </p>
+                  </LiveEditable>
+                ) : (
+                  <p className="text-sm sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
+                    {slide.subtitle}
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      setActiveTab('SERVICES');
-                    }}
-                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 shadow-xl shadow-amber-500/20 transition cursor-pointer"
+                  <LiveEditable
+                    label="Bouton Principal Hero"
+                    field="heroCtaText"
+                    value={customConfig?.heroCtaText || 'Découvrir les prestations'}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
                   >
-                    <span>Découvrir les prestations</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      setActiveTab('PORTFOLIO');
-                    }}
-                    className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        setActiveTab('SERVICES');
+                      }}
+                      className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-2 shadow-xl shadow-amber-500/20 transition cursor-pointer"
+                    >
+                      <span>{customConfig?.heroCtaText || 'Découvrir les prestations'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </LiveEditable>
+                  <LiveEditable
+                    label="Bouton Secondaire Hero"
+                    field="subBanner2CtaText"
+                    value={customConfig?.subBanner2CtaText || 'Voir le Portfolio'}
+                    targetAccordion={2}
+                    isAdminPreview={isAdminPreview}
+                    isInline={true}
                   >
-                    Voir le Portfolio
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        setActiveTab('PORTFOLIO');
+                      }}
+                      className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
+                    >
+                      {customConfig?.subBanner2CtaText || 'Voir le Portfolio'}
+                    </button>
+                  </LiveEditable>
                 </div>
               </div>
             </div>
@@ -429,7 +660,7 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
         </div>
       </section>
 
-      {/* CLAUSE DE SÉCURITÉ ESCROW (ANTI-PAIEMENT HORS SITE) */}
+      {/* CLAUSE DE SÉCURITÉ ESCROW (NON MODIFIABLE — ANTI-PAIEMENT HORS SITE) */}
       <div className="bg-emerald-950/40 border-b border-emerald-500/25 py-2.5 px-4">
         <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-xs sm:text-sm font-bold text-emerald-300 text-center">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -444,7 +675,10 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
         {activeTab === 'SERVICES' ? (
           detailService ? (
             <ServiceWideDetailView
-              service={detailService}
+              service={{
+                ...detailService,
+                salesCount: getServiceSalesCount(detailService),
+              }}
               storeConfig={storeConfig}
               brandTitle={brandTitle}
               storeSlug={storeSlug}
@@ -457,16 +691,38 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
           <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <span className="text-xs font-black uppercase tracking-widest text-amber-400">
-                  Offres & Prestations
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  Nos Affiches & Services Premium
-                </h3>
+                <LiveEditable
+                  label="Sur-titre Section Prestations"
+                  field="catalogSubtitle"
+                  value={customConfig?.catalogSubtitle || 'Offres & Prestations'}
+                  targetAccordion={3}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-400">
+                    {customConfig?.catalogSubtitle || 'Offres & Prestations'}
+                  </span>
+                </LiveEditable>
+                <LiveEditable
+                  label="Titre Section Prestations"
+                  field="catalogTitle"
+                  value={customConfig?.catalogTitle || 'Nos Affiches & Services Premium'}
+                  targetAccordion={3}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">
+                    {customConfig?.catalogTitle || 'Nos Affiches & Services Premium'}
+                  </h3>
+                </LiveEditable>
               </div>
-              <span className="text-xs text-slate-400 font-semibold">
-                {servicesList.length} prestation(s) disponible(s)
-              </span>
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-300">
+                  {servicesList.length} prestation(s)
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 font-bold">
+                  {totalSalesCount} vente{totalSalesCount > 1 ? 's' : ''} au total
+                </span>
+              </div>
             </div>
 
             {servicesList.length === 0 ? (
@@ -479,12 +735,27 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
                 {servicesList.map((service) => {
                   const isCoachingLinked = (service as any).linkedToLiveCoaching !== false;
                   const cleanHtml = service.description ? sanitizeRichHtml(service.description) : '';
+                  const svcSales = getServiceSalesCount(service);
 
                   return (
                     <article
                       key={service.id}
-                      className="rounded-3xl bg-gradient-to-br from-slate-900/95 via-[#0B0F1A] to-slate-950 border border-amber-500/25 hover:border-amber-400/60 overflow-hidden shadow-2xl transition-all duration-300 grid grid-cols-1 lg:grid-cols-12"
+                      className="rounded-3xl bg-gradient-to-br from-slate-900/95 via-[#0B0F1A] to-slate-950 border border-amber-500/25 hover:border-amber-400/60 overflow-hidden shadow-2xl transition-all duration-300 grid grid-cols-1 lg:grid-cols-12 relative"
                     >
+                      {(isAdminPreview || isStoreAdmin || isProductEditor) && (
+                        <div className="absolute top-3 right-3 z-20">
+                          <AdminProductQuickBar
+                            product={service}
+                            isPublicView={isPublicView}
+                            isAdminPreview={isAdminPreview || isStoreAdmin || isProductEditor}
+                            storeSlug={storeSlug}
+                            storeId={storeId}
+                            onEditProduct={onOpenEditProduct || onEditProduct}
+                            onPreviewFunnel={onPreviewFunnel}
+                          />
+                        </div>
+                      )}
+
                       {/* Grande Photo Affiche / Mini-Bannière */}
                       <div
                         onClick={() => {
@@ -510,9 +781,14 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
                             {service.badge}
                           </span>
                         )}
-                        <span className="absolute bottom-4 left-4 px-3 py-1 rounded-xl bg-black/70 backdrop-blur-md border border-white/15 text-xs font-bold text-slate-200">
-                          {service.category || 'Service Pro'}
-                        </span>
+                        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-2">
+                          <span className="px-3 py-1 rounded-xl bg-black/70 backdrop-blur-md border border-white/15 text-xs font-bold text-slate-200">
+                            {service.category || 'Service Pro'}
+                          </span>
+                          <span className="px-3 py-1 rounded-xl bg-emerald-950/85 backdrop-blur-md border border-emerald-400/40 text-xs font-black text-emerald-300">
+                            {svcSales} vente{svcSales > 1 ? 's' : ''}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Contenu Affiche Large + Boutons RDV, Voir Direct & Escrow */}
@@ -620,15 +896,32 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <span className="text-xs font-black uppercase tracking-widest text-amber-400">
-                  Portfolio & Preuves
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">
-                  Nos Réalisations (Vidéos, Figma, Sites & Diaporamas)
-                </h3>
+                <LiveEditable
+                  label="Sur-titre Section Portfolio"
+                  field="subBanner1Badge"
+                  value={customConfig?.subBanner1Badge || 'Portfolio & Preuves'}
+                  targetAccordion={3}
+                  isAdminPreview={isAdminPreview}
+                  isInline={true}
+                >
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-400">
+                    {customConfig?.subBanner1Badge || 'Portfolio & Preuves'}
+                  </span>
+                </LiveEditable>
+                <LiveEditable
+                  label="Titre Section Portfolio"
+                  field="subBanner1Title"
+                  value={customConfig?.subBanner1Title || 'Nos Réalisations (Vidéos, Figma, Sites & Diaporamas)'}
+                  targetAccordion={3}
+                  isAdminPreview={isAdminPreview}
+                >
+                  <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">
+                    {customConfig?.subBanner1Title || 'Nos Réalisations (Vidéos, Figma, Sites & Diaporamas)'}
+                  </h3>
+                </LiveEditable>
               </div>
 
-              {isStoreAdmin && (
+              {(isStoreAdmin || isAdminPreview) && (
                 <button
                   type="button"
                   onClick={() => { playTapBeep(); setShowAddPortfolio((prev) => !prev); }}
@@ -640,7 +933,7 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
               )}
             </div>
 
-            {isStoreAdmin && showAddPortfolio && (
+            {(isStoreAdmin || isAdminPreview) && showAddPortfolio && (
               <form
                 onSubmit={handleAddPortfolioItem}
                 className="p-5 sm:p-6 rounded-3xl bg-slate-900 border border-amber-400/40 space-y-4"
@@ -792,7 +1085,7 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
                         </div>
                       )}
 
-                      {isStoreAdmin && (
+                      {(isStoreAdmin || isAdminPreview) && (
                         <button
                           type="button"
                           onClick={() => handleDeletePortfolioItem(item.id)}
@@ -828,6 +1121,42 @@ export const ThemeServicePortfolio: React.FC<StoreThemeProps> = ({
           </div>
         )}
       </main>
+
+      {/* FOOTER PERSONNALISABLE */}
+      <footer className="border-t border-amber-500/15 bg-[#05070B] py-8 px-4 sm:px-8 mt-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+          <div className="space-y-1 text-center sm:text-left">
+            <LiveEditable
+              label="À propos Footer"
+              field="footerAboutText"
+              type="textarea"
+              value={customConfig?.footerAboutText || `${brandTitle} — ${brandTagline}`}
+              targetAccordion={4}
+              isAdminPreview={isAdminPreview}
+            >
+              <p className="font-semibold text-slate-300">
+                {customConfig?.footerAboutText || `${brandTitle} — ${brandTagline}`}
+              </p>
+            </LiveEditable>
+            <LiveEditable
+              label="Copyright Footer"
+              field="copyrightText"
+              value={customConfig?.copyrightText || `© ${new Date().getFullYear()} ${brandTitle}. Tous droits réservés.`}
+              targetAccordion={4}
+              isAdminPreview={isAdminPreview}
+              isInline={true}
+            >
+              <p className="text-[11px] text-slate-500">
+                {customConfig?.copyrightText || `© ${new Date().getFullYear()} ${brandTitle}. Tous droits réservés.`}
+              </p>
+            </LiveEditable>
+          </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Paiements protégés Escrow</span>
+          </div>
+        </div>
+      </footer>
 
       {/* MODAL PRISE DE RENDEZ-VOUS 1-TO-1 */}
       {bookingService && (
