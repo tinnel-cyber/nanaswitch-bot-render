@@ -77,6 +77,15 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
 }) => {
   const userId = currentUser?.id || 'usr-default';
   const isPro = checkIsMerchantPro(subscription);
+  const isPaidSubOrAdmin = Boolean(
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    (subscription &&
+      subscription.status === 'active' &&
+      !String(subscription.planId || '').includes('free') &&
+      !String(subscription.planId || '').includes('zero') &&
+      !String(subscription.planId || '').includes('pay-as-you-go'))
+  );
 
   const [resume, setResume] = useState<ResumeData | null>(null);
   const [activeTab, setActiveTab] = useState<'form' | 'preview'>('form');
@@ -91,6 +100,9 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportToast, setExportToast] = useState<string | null>(null);
   const [exportErrorAlert, setExportErrorAlert] = useState<{ isOpen: boolean; message: string } | null>(null);
+  const [exportGateAction, setExportGateAction] = useState<'PDF' | 'PRINT' | null>(null);
+  const [unlockedCleanExport, setUnlockedCleanExport] = useState<boolean>(false);
+  const [isPayingCleanExport, setIsPayingCleanExport] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resumePrintRef = useRef<HTMLDivElement>(null);
@@ -249,41 +261,29 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
     }
   };
 
-  // Exportation Haute Définition via html2canvas & jsPDF avec facturation Pay-As-You-Go réelle côté serveur
-  const handleDownloadPdfHd = async () => {
+  // Exécution réelle de l'export PDF HD (avec ou sans filigrane Nanasore selon déblocage)
+  const executePdfDownload = async (withWatermark: boolean) => {
     if (!resume) return;
-
-    const isPaidSub = Boolean(
-      subscription &&
-      subscription.status === 'active' &&
-      !String(subscription.planId || '').includes('free') &&
-      !String(subscription.planId || '').includes('zero') &&
-      !String(subscription.planId || '').includes('pay-as-you-go')
-    );
 
     playTapBeep();
     setIsExportingPdf(true);
-    setExportToast('Préparation du CV HD en cours...');
+    setExportToast(withWatermark ? 'Préparation du CV (filigrane Nanasore)...' : 'Préparation du CV HD sans filigrane...');
 
     try {
-      // 1. Ciblage & cycle de rendu : s'assurer que le composant CV est actif et rendu à l'écran
       if (activeTab !== 'preview') {
         setActiveTab('preview');
       }
 
-      // 2. Délai d'attente pour que React applique les états et que le DOM soit complètement peint
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // 3. Ciblage précis de la ref du conteneur DOM exact du CV personnalisé
       const targetElement = resumePrintRef.current || document.getElementById('printable-cv-document');
       if (!targetElement) {
         throw new Error("Le conteneur DOM exact du CV est introuvable. Veuillez basculer sur l'onglet 'Aperçu'.");
       }
 
       const cleanName = resume.personalInfo.fullName.trim().replace(/\s+/g, '_') || 'Professionnel';
-      const filename = `CV_${cleanName}_${(resume.templateId || 'STARTER').toUpperCase()}_HD.pdf`;
+      const filename = `CV_${cleanName}_HD.pdf`;
 
-      // 4. Génération PDF Haute Définition en mémoire AVANT tout débit (Scale 2.5, couleurs exactes)
       const result = await exportResumeToHdPdf(targetElement, {
         filename,
         quality: 2.5,
@@ -299,39 +299,15 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
         throw new Error(result.error || "Échec lors de la création directe du fichier PDF.");
       }
 
-      // 5. Validation / débit Pay-As-You-Go uniquement après succès garanti de la génération PDF
-      const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
-      const paygRes = await consumePaygModuleUsage({
-        ownerKey: currentUser?.storeId || currentUser?.uid || '',
-        moduleId: 'cv-pro-ia',
-        actionLabel: `Export PDF CV Pro : ${resume.personalInfo?.fullName || 'CV'}`,
-        hasActivePaidSubscription: isPaidSub,
-        isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
-      });
-
-      if (!paygRes.allowed) {
-        triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (500 F CFA à l\'acte via NaNa Wallet ou Abonnement)');
-        setExportToast(null);
-        setExportErrorAlert({
-          isOpen: true,
-          message: paygRes.message || 'Solde NaNa Wallet insuffisant (500 F CFA requis pour cet export CV Pro).'
-        });
-        return;
-      }
-
-      // 6. Déclenchement effectif du téléchargement
       result.save();
-
       incrementGeneratedDocumentsCount(currentUser?.storeId);
       playCashChime();
       const sizeMsg = result.formattedSize ? ` (${result.formattedSize})` : '';
-      const billingPrefix =
-        paygRes.mode === 'WALLET_DEBITED'
-          ? '500 F CFA débités • '
-          : paygRes.mode === 'CREDIT_CONSUMED'
-            ? '1 crédit consommé • '
-            : '';
-      setExportToast(`✓ ${billingPrefix}CV Couleur HD téléchargé${sizeMsg} !`);
+      setExportToast(
+        withWatermark
+          ? `✓ CV téléchargé avec filigrane Nanasore${sizeMsg} !`
+          : `✓ CV HD sans marque téléchargé${sizeMsg} !`
+      );
       setTimeout(() => setExportToast(null), 4000);
     } catch (err: any) {
       console.warn('[CV EXPORT HD] Notification d\'incident export direct :', err);
@@ -346,36 +322,14 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
     }
   };
 
-  // Impression / Enregistrement Système (Ctrl+P / Impression Vectorielle)
-  const handlePrintSystem = async () => {
-    // Vérification stricte du Plan Zéro & Quotas CV Pro
-    const cvAccess = canAccessCvPro(subscription, (currentUser as any)?.walletBalance || 0);
-    if (!cvAccess.allowed) {
-      triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (Inclus Plan Pro ou 500 F CFA à l\'acte)');
-      setExportErrorAlert({
-        isOpen: true,
-        message: cvAccess.message
-      });
-      return;
-    }
-
-    const currentDocs = getGeneratedDocumentsCount(currentUser?.storeId);
-    if (isLimitReached(subscription, 'DOCUMENTS', currentDocs)) {
-      triggerLimitReachedUpsell('DOCUMENTS', currentDocs, 0, 'CV Pro');
-      return;
-    }
-
+  // Exécution réelle de l'impression système
+  const executePrintSystem = async () => {
     playTapBeep();
-
     try {
-      // S'assurer que le composant est bien affiché dans le DOM (notamment sur mobile)
       if (activeTab !== 'preview') {
         setActiveTab('preview');
       }
-
-      // Temporisation brève pour stabiliser l'affichage
       await new Promise((resolve) => setTimeout(resolve, 250));
-
       incrementGeneratedDocumentsCount(currentUser?.storeId);
       const printed = printResumeDocument();
       if (!printed) {
@@ -388,6 +342,64 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
         message: "L'impression directe n'a pas pu être déclenchée. Veuillez utiliser le raccourci clavier Ctrl+P ou basculer sur l'aperçu."
       });
     }
+  };
+
+  // Paiement 500 F CFA Pay-As-You-Go pour retirer la marque Nanasore
+  const handlePayToRemoveWatermark = async () => {
+    const action = exportGateAction || 'PDF';
+    setIsPayingCleanExport(true);
+    try {
+      const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
+      const paygRes = await consumePaygModuleUsage({
+        ownerKey: currentUser?.storeId || currentUser?.uid || '',
+        moduleId: 'cv-pro-ia',
+        actionLabel: `Export CV Pro sans marque : ${resume?.personalInfo?.fullName || 'CV'}`,
+        hasActivePaidSubscription: isPaidSubOrAdmin,
+        isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+      });
+
+      if (!paygRes.allowed) {
+        setExportGateAction(null);
+        triggerLimitReachedUpsell('DOCUMENTS', 0, 0, 'CV Pro (500 F CFA requis pour retirer le filigrane Nanasore)');
+        setExportErrorAlert({
+          isOpen: true,
+          message: paygRes.message || 'Solde NaNa Wallet insuffisant (500 F CFA requis pour retirer la marque Nanasore).'
+        });
+        return;
+      }
+
+      setUnlockedCleanExport(true);
+      setExportGateAction(null);
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      if (action === 'PRINT') {
+        await executePrintSystem();
+      } else {
+        await executePdfDownload(false);
+      }
+    } finally {
+      setIsPayingCleanExport(false);
+    }
+  };
+
+  // Clic sur Télécharger PDF HD
+  const handleDownloadPdfHd = async () => {
+    if (!resume) return;
+    if (!isPaidSubOrAdmin && !unlockedCleanExport) {
+      playTapBeep();
+      setExportGateAction('PDF');
+      return;
+    }
+    await executePdfDownload(false);
+  };
+
+  // Clic sur Imprimer / Enregistrer en PDF
+  const handlePrintSystem = async () => {
+    if (!isPaidSubOrAdmin && !unlockedCleanExport) {
+      playTapBeep();
+      setExportGateAction('PRINT');
+      return;
+    }
+    await executePrintSystem();
   };
 
   // Ajout / Retrait Expérience
@@ -462,6 +474,28 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
         {/* Template 3 : Elite Executive (Luxe $10K / Obsidienne, Ivoire & Or) */}
         {(resume.templateId === 'elite' || resume.templateId === 'executive') && (
           <EliteExecutiveTemplate resume={resume} isPro={isPro} />
+        )}
+
+        {/* Filigrane obligatoire Nanasore partout sur le CV si non payé (Pay-As-You-Go / Gratuit) */}
+        {!isPaidSubOrAdmin && !unlockedCleanExport && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-40 overflow-hidden select-none grid grid-cols-3 grid-rows-5 gap-6 p-6 items-center justify-items-center"
+          >
+            {Array.from({ length: 15 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="-rotate-30 text-center opacity-25"
+              >
+                <span className="block text-[22px] font-black tracking-[0.22em] text-slate-900 uppercase">
+                  NANASORE
+                </span>
+                <span className="block text-[9px] font-bold tracking-widest text-slate-700 uppercase">
+                  VERSION NON PAYÉE
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -1173,6 +1207,83 @@ export const ResumeBuilderView: React.FC<ResumeBuilderViewProps> = ({
                   <span>Envoyer par Email</span>
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de contrôle Pay-As-You-Go / Retrait de la marque Nanasore avant téléchargement ou impression */}
+      {exportGateAction && (
+        <div className="cv-modal fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-amber-500/40 rounded-3xl p-6 space-y-4 shadow-2xl text-slate-100">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Crown className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    Retirer la marque Nanasore ?
+                  </h3>
+                  <p className="text-[11px] text-amber-300 font-semibold">
+                    Contrôle Pay-As-You-Go • 500 F CFA
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExportGateAction(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-1.5">
+              <p>
+                Votre CV est prêt. Pour le télécharger ou l&apos;imprimer <strong className="text-white">sans la marque Nanasore</strong>, vous devez régler <strong className="text-amber-400">500 F CFA</strong> (via NaNa Wallet ou crédit Pay-As-You-Go).
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Sans paiement, le téléchargement ou l&apos;impression reste possible avec le <strong className="text-slate-200">filigrane obligatoire Nanasore apposé partout</strong> sur le document.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPayingCleanExport}
+                onClick={handlePayToRemoveWatermark}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer transition disabled:opacity-60"
+              >
+                {isPayingCleanExport ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>Payer 500 F CFA pour enlever la marque Nanasore</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isPayingCleanExport}
+                onClick={async () => {
+                  const action = exportGateAction;
+                  setExportGateAction(null);
+                  if (action === 'PRINT') {
+                    await executePrintSystem();
+                  } else {
+                    await executePdfDownload(true);
+                  }
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition"
+              >
+                <Download className="w-4 h-4 text-slate-400" />
+                <span>
+                  {exportGateAction === 'PRINT'
+                    ? 'Imprimer avec filigrane Nanasore'
+                    : 'Télécharger avec filigrane Nanasore'}
+                </span>
+              </button>
             </div>
           </div>
         </div>

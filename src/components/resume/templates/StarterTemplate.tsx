@@ -235,7 +235,7 @@ export const StarterTemplate: React.FC<TemplateProps> = ({ resume, isPro = false
 
           {/* Pied de page du document */}
           <footer className="pt-3 border-t border-slate-200 flex items-center justify-between text-[9px] text-slate-400">
-            <span>Réf: DOC-A4-STARTER-{resume.personalInfo.fullName.replace(/\s+/g, '-').toUpperCase()}</span>
+            <span>Réf: CV-{resume.personalInfo.fullName.replace(/\s+/g, '-').toUpperCase()}</span>
             <span>Édition Professionnelle Haute Définition</span>
           </footer>
         </main>

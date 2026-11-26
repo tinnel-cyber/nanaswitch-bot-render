@@ -4,8 +4,6 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  Crown, 
-  Sparkles, 
   ShieldCheck, 
   Award, 
   Check, 
@@ -54,9 +52,6 @@ export const EliteExecutiveTemplate: React.FC<TemplateProps> = ({ resume, isPro 
                   </div>
                 )}
               </div>
-              <div className="absolute -bottom-2 -right-2 w-6 h-6 rounded-full bg-gradient-to-tr from-amber-600 to-amber-300 text-slate-950 flex items-center justify-center shadow-lg border border-slate-900">
-                <Crown className="w-3.5 h-3.5" />
-              </div>
             </div>
 
             {/* Titre & Identité */}
@@ -64,9 +59,9 @@ export const EliteExecutiveTemplate: React.FC<TemplateProps> = ({ resume, isPro 
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 font-extrabold text-[9.5px] uppercase tracking-widest flex items-center gap-1">
                   <Star className="w-2.5 h-2.5 fill-amber-300" />
-                  Grade Exécutif Élite
+                  Grade Exécutif
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">Standard VIP International</span>
+                <span className="text-[10px] text-slate-400 font-mono">Standard International</span>
               </div>
 
               <h1 className="text-[29px] font-black tracking-tight text-white uppercase font-sans leading-none">
@@ -95,7 +90,7 @@ export const EliteExecutiveTemplate: React.FC<TemplateProps> = ({ resume, isPro 
         {personalInfo.bio && (
           <div className="bg-white rounded-2xl p-4 border border-amber-100 shadow-sm text-[11px] text-slate-700 leading-relaxed font-medium flex items-start gap-3">
             <div className="w-7 h-7 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Award className="w-3.5 h-3.5" />
             </div>
             <div className="flex-1">
               <span className="font-black uppercase tracking-wider text-[9.5px] text-amber-800 block mb-0.5">
@@ -258,10 +253,10 @@ export const EliteExecutiveTemplate: React.FC<TemplateProps> = ({ resume, isPro 
       {/* ── PIED DE PAGE EXÉCUTIF AVEC FILIGRANE LUXE ── */}
       <footer className="pt-3 border-t border-amber-300/40 flex items-center justify-between text-[9px] text-slate-500 relative z-10">
         <div className="flex items-center gap-2">
-          <Crown className="w-3 h-3 text-amber-600" />
+          <ShieldCheck className="w-3 h-3 text-amber-600" />
           <span className="font-black text-slate-800 tracking-wide uppercase">Dossier de Candidature Exécutif • Document Scellé</span>
         </div>
-        <span className="font-mono text-amber-800 font-bold">NaNa Suite Elite VIP</span>
+        <span className="font-mono text-amber-800 font-bold">Dossier Professionnel Certifié</span>
       </footer>
     </div>
   );

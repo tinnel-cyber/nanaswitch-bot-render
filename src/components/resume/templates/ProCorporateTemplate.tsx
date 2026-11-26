@@ -41,7 +41,7 @@ export const ProCorporateTemplate: React.FC<TemplateProps> = ({ resume, isPro = 
                 <span className="px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-black uppercase tracking-wider">
                   Profil Exécutif Certifié
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">ID: PRO-{new Date().getFullYear()}</span>
+                <span className="text-[10px] font-mono text-slate-400">Réf: {new Date().getFullYear()}</span>
               </div>
               <h1 className="text-[28px] font-black tracking-tight text-slate-950 uppercase leading-none font-sans">
                 {personalInfo.fullName}
