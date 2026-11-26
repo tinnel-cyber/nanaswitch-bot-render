@@ -103,14 +103,19 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
     return () => unsubscribe();
   }, [storeId]);
 
-  // Totaux calculés
+  // Totaux calculés (incluant les déblocages partiels en jalons)
   const totalLocked = projects
     .filter(p => p.status === 'funds_locked' || p.status === 'work_in_progress' || p.status === 'delivered')
-    .reduce((sum, p) => sum + p.totalAmount, 0);
+    .reduce((sum, p) => sum + Math.max(0, p.totalAmount - (Number(p.releasedAmount) || 0)), 0);
 
   const totalAvailableForWithdrawal = projects
-    .filter(p => p.status === 'completed_released')
-    .reduce((sum, p) => sum + p.totalAmount, 0);
+    .reduce((sum, p) => {
+      if (p.status === 'completed_released') return sum + p.totalAmount;
+      if (p.status === 'funds_locked' || p.status === 'work_in_progress' || p.status === 'delivered') {
+        return sum + Math.max(0, Number(p.releasedAmount) || 0);
+      }
+      return sum;
+    }, 0);
 
   const totalWithdrawn = projects
     .filter(p => p.status === 'funds_withdrawn')
@@ -447,6 +452,16 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
                             </span>
                           )}
                         </div>
+                        {(project.status === 'funds_locked' || project.status === 'work_in_progress' || project.status === 'delivered' || (Number(project.releasedAmount) || 0) > 0) && (
+                          <div className="pt-1.5 mt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-bold">
+                            <span className="text-emerald-400">
+                              Débloqué : {formatCFA(Number(project.releasedAmount) || 0)}
+                            </span>
+                            <span className="text-amber-300">
+                              Reste séquestre : {formatCFA(Math.max(0, project.totalAmount - (Number(project.releasedAmount) || 0)))}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

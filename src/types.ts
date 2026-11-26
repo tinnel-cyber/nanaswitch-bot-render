@@ -1014,6 +1014,15 @@ export interface EscrowProject {
   clientSignedAt?: number;
   contractProofHash?: string;
   contractProofSubmittedAt?: number;
+  // Déblocage progressif en jalon / montant saisi pour l'activité du projet
+  releasedAmount?: number;
+  partialReleases?: Array<{
+    id: string;
+    amount: number;
+    note?: string;
+    releasedAt: number;
+    releasedBy: 'CLIENT' | 'ADMIN';
+  }>;
 }
 
 // -------------------------------------------------------------

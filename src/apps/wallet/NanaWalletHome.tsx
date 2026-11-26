@@ -29,6 +29,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { playTapBeep, playValidationBeep, playCashChime } from '../../utils/audio';
 import { UltimateCheckout } from '../../services/nana-switch/payment/UltimateCheckout';
+import { subscribeToStoreProjects } from '../../services/escrowService';
 
 export interface NanaWalletHomeProps {
   onBackToHub?: () => void;
@@ -98,6 +99,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
   const [balanceXof, setBalanceXof] = useState<number>(0);
   const [paymentsCount, setPaymentsCount] = useState<number>(0);
   const [totalSalesNetXof, setTotalSalesNetXof] = useState<number>(0);
+  const [escrowLockedXof, setEscrowLockedXof] = useState<number>(0);
+  const [escrowReleasedXof, setEscrowReleasedXof] = useState<number>(0);
   const [transactions, setTransactions] = useState<WalletTxItem[]>([]);
   const [paygCatalog, setPaygCatalog] = useState<PaygModuleItem[]>([]);
   const [entitlements, setEntitlements] = useState<Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }>>({});
@@ -323,6 +326,28 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       supabase.removeChannel(channel);
     };
   }, [selectedUniverseId, resolvedUserId, fetchWalletSummary]);
+
+  // Écoute Temps Réel des soldes Escrow / Séquestre (Bloqué vs Débloqué)
+  useEffect(() => {
+    const storeKey = selectedUniverseId || resolvedUserId;
+    if (!storeKey) return;
+    const unsub = subscribeToStoreProjects(storeKey, (projectsList) => {
+      let locked = 0;
+      let released = 0;
+      for (const p of projectsList) {
+        const rel = Math.max(0, Math.round(Number(p.releasedAmount) || 0));
+        if (p.status === 'funds_locked' || p.status === 'work_in_progress' || p.status === 'delivered') {
+          locked += Math.max(0, Math.round(p.totalAmount) - rel);
+          released += rel;
+        } else if (p.status === 'completed_released') {
+          released += Math.round(p.totalAmount);
+        }
+      }
+      setEscrowLockedXof(locked);
+      setEscrowReleasedXof(released);
+    });
+    return () => unsub();
+  }, [selectedUniverseId, resolvedUserId]);
 
   const broadcastWalletBalanceUpdate = useCallback((nextBalanceXof: number) => {
     if (typeof window !== 'undefined') {
@@ -810,12 +835,18 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
               <div className="text-3xl sm:text-4xl font-black text-white mt-1 font-mono tracking-tight">
                 {isBalanceHidden ? '••••••••' : formatCFA(balanceXof)}
               </div>
-              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-blue-100/90 font-bold">
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-blue-100/90 font-bold">
                 <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
                   Paiements reçus : <strong className="text-amber-300">{paymentsCount}</strong>
                 </span>
                 <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
                   Total encaissé : <strong className="text-emerald-300">{isBalanceHidden ? '••••••' : formatCFA(totalSalesNetXof)}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-400/30">
+                  Escrow bloqué : <strong className="text-amber-200">{isBalanceHidden ? '••••••' : formatCFA(escrowLockedXof)}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-400/30">
+                  Escrow débloqué : <strong className="text-emerald-200">{isBalanceHidden ? '••••••' : formatCFA(escrowReleasedXof)}</strong>
                 </span>
               </div>
             </div>

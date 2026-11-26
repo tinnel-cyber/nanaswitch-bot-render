@@ -5,6 +5,7 @@ import {
   subscribeToPublicProject,
   recordClientEscrowPayment, 
   confirmProjectDelivery,
+  releasePartialEscrowAmount,
   getPublicProjectUrl
 } from '../../../services/escrowService';
 import { EscrowTripartiteChat } from './EscrowTripartiteChat';
@@ -55,12 +56,16 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
-  // Validation de livraison
+  // Validation de livraison & Déblocage progressif par jalon / montant saisi
   const [isValidatingDelivery, setIsValidatingDelivery] = useState(false);
   const [deliveryConfirmed, setDeliveryConfirmed] = useState(false);
   const [isCopiedLink, setIsCopiedLink] = useState(false);
   const [showClientSignModal, setShowClientSignModal] = useState(false);
   const [contractProofSent, setContractProofSent] = useState(false);
+  const [partialReleaseInput, setPartialReleaseInput] = useState('');
+  const [partialReleaseNote, setPartialReleaseNote] = useState('');
+  const [isReleasingPartial, setIsReleasingPartial] = useState(false);
+  const [partialReleaseMsg, setPartialReleaseMsg] = useState<string | null>(null);
 
   // Chargement et écoute en temps réel du projet
   useEffect(() => {
@@ -400,6 +405,139 @@ export const PublicEscrowProjectView: React.FC<PublicEscrowProjectViewProps> = (
             </div>
           )}
         </section>
+
+        {/* DÉBLOCAGE PROGRESSIF EN JALON (BOUTONS + CHAMP DE SAISIE MONTANT) */}
+        {(project.status === 'funds_locked' || project.status === 'work_in_progress' || project.status === 'delivered') && !isDisputed && !isRefunded && (() => {
+          const releasedAmt = Math.max(0, Math.round(Number(project.releasedAmount) || 0));
+          const remainingAmt = Math.max(0, Math.round(project.totalAmount) - releasedAmt);
+          const progressPct = project.totalAmount > 0 ? Math.min(100, Math.round((releasedAmt / project.totalAmount) * 100)) : 0;
+
+          const handlePartialRelease = async (amtToRelease: number, noteLabel?: string) => {
+            if (amtToRelease <= 0 || amtToRelease > remainingAmt) return;
+            setIsReleasingPartial(true);
+            setPartialReleaseMsg(null);
+            try {
+              const updated = await releasePartialEscrowAmount(project, amtToRelease, noteLabel || partialReleaseNote);
+              setProject(updated);
+              setPartialReleaseInput('');
+              setPartialReleaseNote('');
+              playCashChime();
+              setPartialReleaseMsg(`✓ ${formatCFA(amtToRelease)} débloqués avec succès pour le prestataire.`);
+            } catch (err: any) {
+              setPartialReleaseMsg(`⚠️ ${err?.message || 'Erreur lors du déblocage partiel.'}`);
+            } finally {
+              setIsReleasingPartial(false);
+            }
+          };
+
+          return (
+            <section className="bg-slate-900 border border-emerald-500/35 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <Unlock className="w-4 h-4 text-emerald-400" />
+                    <span>Déblocage Progressif des Fonds (Jalons & Activité)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Débloquez un montant précis selon l'avancement du projet sur les fonds consignés.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Reste sous séquestre</span>
+                  <span className="text-base font-black text-amber-300 font-mono">{formatCFA(remainingAmt)}</span>
+                </div>
+              </div>
+
+              {/* Barre de progression */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-bold">
+                  <span className="text-emerald-400">Débloqué : {formatCFA(releasedAmt)} ({progressPct}%)</span>
+                  <span className="text-slate-400">Total : {formatCFA(project.totalAmount)}</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-slate-950 border border-slate-800 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+
+              {remainingAmt > 0 && (
+                <>
+                  {/* Boutons rapides par jalon */}
+                  <div className="flex flex-wrap gap-2">
+                    {project.milestones.map((m, idx) => {
+                      const canClick = m.amount > 0 && m.amount <= remainingAmt;
+                      return (
+                        <button
+                          key={m.id || idx}
+                          type="button"
+                          disabled={!canClick || isReleasingPartial}
+                          onClick={() => handlePartialRelease(m.amount, `Jalon ${idx + 1} : ${m.title}`)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-emerald-950/60 border border-emerald-500/30 disabled:opacity-40 text-emerald-300 text-xs font-bold transition cursor-pointer"
+                        >
+                          Débloquer Jalon {idx + 1} ({formatCFA(m.amount)})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Champ de saisie de montant libre + bouton valider */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <input
+                      type="number"
+                      min={100}
+                      max={remainingAmt}
+                      value={partialReleaseInput}
+                      onChange={(e) => setPartialReleaseInput(e.target.value)}
+                      placeholder={`Montant à débloquer (max ${remainingAmt})`}
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={partialReleaseNote}
+                      onChange={(e) => setPartialReleaseNote(e.target.value)}
+                      placeholder="Motif / étape (ex: Achat matériel, Phase 1)"
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={isReleasingPartial || !partialReleaseInput || Number(partialReleaseInput) <= 0 || Number(partialReleaseInput) > remainingAmt}
+                      onClick={() => handlePartialRelease(Number(partialReleaseInput), partialReleaseNote)}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-lg transition cursor-pointer"
+                    >
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>{isReleasingPartial ? 'Déblocage...' : 'Débloquer ce montant'}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {partialReleaseMsg && (
+                <p className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+                  {partialReleaseMsg}
+                </p>
+              )}
+
+              {Array.isArray(project.partialReleases) && project.partialReleases.length > 0 && (
+                <div className="pt-2 border-t border-slate-800 space-y-1.5">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                    Historique des déblocages ({project.partialReleases.length})
+                  </span>
+                  {project.partialReleases.slice(0, 5).map((rel) => (
+                    <div key={rel.id} className="flex items-center justify-between text-xs bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800/80">
+                      <span className="text-slate-300 truncate">{rel.note || 'Déblocage'}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-black text-emerald-400 font-mono">+{formatCFA(rel.amount)}</span>
+                        <span className="text-[10px] text-slate-500">{new Date(rel.releasedAt).toLocaleDateString('fr-FR')}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* ZONE D'ACTION PRINCIPALE (PAIEMENT OU VALIDATION DE LIVRAISON) */}
         {isPendingPayment && (

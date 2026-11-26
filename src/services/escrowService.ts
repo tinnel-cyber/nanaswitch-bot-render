@@ -249,6 +249,45 @@ export async function requestEscrowWithdrawal(
 }
 
 /**
+ * Déblocage progressif d'un montant saisi (ou d'un jalon) par le commandeur pour l'activité du projet
+ */
+export async function releasePartialEscrowAmount(
+  project: EscrowProject,
+  amount: number,
+  note?: string
+): Promise<EscrowProject> {
+  const cleanAmount = Math.max(0, Math.round(Number(amount) || 0));
+  const alreadyReleased = Math.max(0, Math.round(Number(project.releasedAmount) || 0));
+  const remainingLocked = Math.max(0, Math.round(project.totalAmount) - alreadyReleased);
+
+  if (cleanAmount <= 0 || cleanAmount > remainingLocked) {
+    throw new Error(`Montant invalide (maximum disponible sous séquestre : ${remainingLocked.toLocaleString('fr-FR')} F CFA).`);
+  }
+
+  const nextReleased = alreadyReleased + cleanAmount;
+  const isFullyReleased = nextReleased >= project.totalAmount;
+  const now = Date.now();
+  const entry = {
+    id: `rel_${now}_${Math.random().toString(36).slice(2, 6)}`,
+    amount: cleanAmount,
+    note: note?.trim() || 'Déblocage avancement projet',
+    releasedAt: now,
+    releasedBy: 'CLIENT' as const,
+  };
+
+  const updated: EscrowProject = {
+    ...project,
+    releasedAmount: nextReleased,
+    partialReleases: [entry, ...(project.partialReleases || [])],
+    status: isFullyReleased ? 'completed_released' : 'work_in_progress',
+    updatedAt: now,
+  };
+
+  await saveEscrowProject(updated);
+  return updated;
+}
+
+/**
  * Génère le lien public unique pour le client
  */
 export function getPublicProjectUrl(projectId: string): string {
