@@ -680,15 +680,26 @@ export const ThemeWrapper: React.FC<StoreThemeProps> = (props) => {
         <style dangerouslySetInnerHTML={{ __html: dynamicThemeStyles }} />
       )}
 
-      {/* Barre d'annonce globale configurable dans Paramètres du Site */}
-      {siteSettings?.announcementEnabled && siteSettings?.announcementText && (
-        <div
-          className="w-full px-4 py-2 text-center text-xs sm:text-sm font-bold text-white"
-          style={{ backgroundColor: dynamicAccentColor }}
-        >
-          {siteSettings.announcementText}
-        </div>
-      )}
+      {/* Barre d'annonce globale configurable dans Paramètres du Site ou Studio */}
+      {(() => {
+        const showAnnouncement = Boolean(
+          (siteSettings?.announcementEnabled && siteSettings?.announcementText) ||
+          (effectiveCustomConfig?.announcementBarEnabled && effectiveCustomConfig?.announcementBarText)
+        );
+        const announcementMsg =
+          (siteSettings?.announcementEnabled && siteSettings?.announcementText) ||
+          effectiveCustomConfig?.announcementBarText ||
+          '';
+        if (!showAnnouncement || !announcementMsg) return null;
+        return (
+          <div
+            className="w-full px-4 py-2 text-center text-xs sm:text-sm font-bold text-white"
+            style={{ backgroundColor: dynamicAccentColor }}
+          >
+            {announcementMsg}
+          </div>
+        );
+      })()}
 
       {/* Popup Collecte Emailing / Newsletter */}
       {showEmailCapturePopup && !props.isAdminPreview && (

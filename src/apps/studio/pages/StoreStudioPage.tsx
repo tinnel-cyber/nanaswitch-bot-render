@@ -383,46 +383,47 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
       };
 
       // 1. Publication prioritaire Supabase SQL (table public.app_registry & public.tenants)
-      try {
-        await supabase
-          .from('app_registry')
-          .upsert({
-            key: `theme_config_${targetStoreId}`,
-            name: 'theme_config',
-            tenant_id: targetStoreId,
-            module_key: 'theme_config',
-            theme_key: activeThemeId,
-            config_json: {
-              activeThemeId,
-              active_theme_id: activeThemeId,
-              themePrefix: prefix,
-              publicShopUrl,
-              storeSlug: effectiveStoreSlug,
-              customConfig: draftThemeConfig,
-              colors: {
-                primary: draftThemeConfig.primaryAccentColor || '#2563EB',
-                background: draftThemeConfig.backgroundColor || '#FBF9F5',
-              },
-              updated_at: new Date().toISOString()
+      const { error: regUpsertErr } = await supabase
+        .from('app_registry')
+        .upsert({
+          key: `theme_config_${targetStoreId}`,
+          name: 'theme_config',
+          tenant_id: targetStoreId,
+          module_key: 'theme_config',
+          theme_key: activeThemeId,
+          config_json: {
+            activeThemeId,
+            active_theme_id: activeThemeId,
+            themePrefix: prefix,
+            publicShopUrl,
+            storeSlug: effectiveStoreSlug,
+            customConfig: draftThemeConfig,
+            colors: {
+              primary: draftThemeConfig.primaryAccentColor || '#2563EB',
+              background: draftThemeConfig.backgroundColor || '#FBF9F5',
             },
             updated_at: new Date().toISOString()
-          }, { onConflict: 'key' });
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
 
-        const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetStoreId);
-        if (isStoreUUID) {
-          await supabase
-            .from('tenants')
-            .upsert({
-              id: targetStoreId,
-              name: draftThemeConfig.storeName || storeConfig.storeName,
-              slug: effectiveStoreSlug,
-              logo_url: draftThemeConfig.logoUrl || storeConfig.logoUrl,
-              primary_color: draftThemeConfig.primaryAccentColor || '#2563EB',
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'id' }).catch(() => {});
-        }
-      } catch (sbErr) {
-        console.warn('[Studio] Notice publication Supabase SQL:', sbErr);
+      if (regUpsertErr) {
+        console.error('[Studio] Échec publication Supabase app_registry:', regUpsertErr.message);
+        throw new Error(`Échec de sauvegarde en base (${regUpsertErr.message})`);
+      }
+
+      const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetStoreId);
+      if (isStoreUUID) {
+        await supabase
+          .from('tenants')
+          .upsert({
+            id: targetStoreId,
+            name: draftThemeConfig.storeName || storeConfig.storeName,
+            slug: effectiveStoreSlug,
+            logo_url: draftThemeConfig.logoUrl || storeConfig.logoUrl,
+            primary_color: draftThemeConfig.primaryAccentColor || '#2563EB',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' }).catch(() => {});
       }
 
       // 3. Synchronisation du slug centralisé
@@ -448,9 +449,9 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
       } catch {}
       showToast(`✅ Vitrine publiée sur nsore.shop/${prefix}/${effectiveStoreSlug} !`);
       playValidationBeep();
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Studio] Erreur publication vitrine:', err);
-      showToast('❌ Erreur lors de la publication de la vitrine');
+      showToast(`❌ ${err?.message || 'Erreur lors de la publication de la vitrine'}`);
     } finally {
       setIsPublishing(false);
     }
@@ -783,6 +784,19 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
           }
           if (cfg.customConfig) {
             setSavedThemeConfig(cfg.customConfig);
+            const localDraft = (() => {
+              try {
+                return localStorage.getItem(`nana_studio_${targetStoreId}_theme_customization`);
+              } catch {
+                return null;
+              }
+            })();
+            if (!localDraft) {
+              setDraftThemeConfig(cfg.customConfig);
+              try {
+                localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(cfg.customConfig));
+              } catch {}
+            }
           }
         }
 
@@ -1332,7 +1346,9 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
           setSavedThemeConfig(updatedConfig);
           try {
             localStorage.setItem(`nana_studio_${targetStoreId}_theme_customization`, JSON.stringify(updatedConfig));
-            await supabase.from('app_registry').upsert({
+          } catch {}
+          try {
+            const { error: siteSaveErr } = await supabase.from('app_registry').upsert({
               key: `theme_config_${targetStoreId}`,
               name: 'theme_config',
               tenant_id: targetStoreId,
@@ -1347,7 +1363,14 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
               },
               updated_at: new Date().toISOString()
             }, { onConflict: 'key' });
-          } catch {}
+            if (siteSaveErr) {
+              showToast(`❌ Erreur sauvegarde Supabase : ${siteSaveErr.message}`);
+              return;
+            }
+          } catch (e: any) {
+            showToast(`❌ Erreur sauvegarde Supabase : ${e?.message || 'inconnue'}`);
+            return;
+          }
           showToast('Paramètres du thème enregistrés et appliqués !');
         }}
       />

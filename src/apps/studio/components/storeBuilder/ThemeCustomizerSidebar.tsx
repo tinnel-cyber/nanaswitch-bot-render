@@ -151,29 +151,54 @@ export const ThemeCustomizerSidebar: React.FC<ThemeCustomizerSidebarProps> = ({
     });
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImageToDataUrl = (file: File, maxDim: number, quality = 0.82): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const rawUrl = String(ev.target?.result || '');
+        if (!rawUrl || file.type === 'image/svg+xml') {
+          resolve(rawUrl);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+          const w = Math.max(1, Math.round((img.width || maxDim) * scale));
+          const h = Math.max(1, Math.round((img.height || maxDim) * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          const outMime = file.type === 'image/png' ? 'image/webp' : 'image/jpeg';
+          const compressed = canvas.toDataURL(outMime, quality);
+          resolve(compressed && compressed.length < rawUrl.length ? compressed : rawUrl);
+        };
+        img.onerror = () => resolve(rawUrl);
+        img.src = rawUrl;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          updateField('logoUrl', event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImageToDataUrl(file, 512, 0.84);
+      if (compressed) updateField('logoUrl', compressed);
     }
   };
 
-  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          updateField('heroBannerImageUrl', event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImageToDataUrl(file, 1440, 0.82);
+      if (compressed) updateField('heroBannerImageUrl', compressed);
     }
   };
 

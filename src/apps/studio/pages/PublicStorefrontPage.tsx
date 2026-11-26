@@ -305,10 +305,20 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         if (!isCancelled && appRegData?.config_json) {
           const cfg = appRegData.config_json as any;
           setStoreConfig(prev => {
+            const c = cfg.customConfig || {};
             const nextConfig = {
               ...prev,
-              storeName: cfg.customConfig?.storeName || prev.storeName,
+              storeName: c.storeName || prev.storeName,
               slug: cfg.storeSlug || prev.slug,
+              whatsappPhone: c.whatsappNumber || prev.whatsappPhone,
+              wPhone: c.whatsappNumber || prev.wPhone,
+              logoUrl: c.logoUrl || prev.logoUrl,
+              bannerImage: c.heroBannerImageUrl || prev.bannerImage,
+              primaryColor: c.primaryAccentColor || prev.primaryColor,
+              codOnly: typeof c.codOnly === 'boolean' ? c.codOnly : (prev as any).codOnly,
+              orangeMerchantCode: c.orangeMerchantCode || c.siteSettings?.orangeMerchantCode || (prev as any).orangeMerchantCode,
+              wavePaymentLink: c.wavePaymentLink || c.siteSettings?.wavePaymentLink || (prev as any).wavePaymentLink,
+              merchantCountry: c.merchantCountry || c.siteSettings?.merchantCountry || (prev as any).merchantCountry,
               active_theme_id: activeInitialTheme || cfg.activeThemeId || cfg.active_theme_id || prev.active_theme_id,
               activeThemeId: activeInitialTheme || cfg.activeThemeId || cfg.active_theme_id || prev.activeThemeId,
               themeCustomization: cfg.customConfig || (prev as any).themeCustomization
@@ -335,12 +345,20 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
           if (payload.new && (payload.new as any).module_key === 'theme_config') {
             const cfg = (payload.new as any).config_json;
             const newTheme = cfg?.activeThemeId || cfg?.active_theme_id;
-            if (newTheme) {
+            if (newTheme || cfg?.customConfig) {
               setStoreConfig(prev => {
+                const c = cfg?.customConfig || {};
                 const nextConfig = {
                   ...prev,
-                  active_theme_id: urlPreviewTheme || newTheme,
-                  activeThemeId: urlPreviewTheme || newTheme,
+                  storeName: c.storeName || prev.storeName,
+                  whatsappPhone: c.whatsappNumber || prev.whatsappPhone,
+                  wPhone: c.whatsappNumber || prev.wPhone,
+                  logoUrl: c.logoUrl || prev.logoUrl,
+                  bannerImage: c.heroBannerImageUrl || prev.bannerImage,
+                  primaryColor: c.primaryAccentColor || prev.primaryColor,
+                  codOnly: typeof c.codOnly === 'boolean' ? c.codOnly : (prev as any).codOnly,
+                  active_theme_id: urlPreviewTheme || newTheme || prev.active_theme_id,
+                  activeThemeId: urlPreviewTheme || newTheme || prev.activeThemeId,
                   themeCustomization: cfg?.customConfig || (prev as any).themeCustomization
                 };
                 writeFastStoreCache(resolvedStoreSlug, { storeConfig: nextConfig });
