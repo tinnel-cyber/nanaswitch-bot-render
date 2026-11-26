@@ -987,6 +987,47 @@ export default function DocuSignHub({
     playTapBeep();
   };
 
+  // 1b. Ajouter les noms des deux parties cocontractantes (Prestataire & Commandeur)
+  const handleAddContractingParties = () => {
+    const viewport = document.getElementById('document-viewport');
+    const viewportWidth = viewport ? viewport.clientWidth : 480;
+    const viewportHeight = viewport ? viewport.clientHeight : 650;
+    const providerLabel = `Prestataire : ${currentUser?.name || currentUser?.storeName || 'Nom du Prestataire'}`;
+    const clientLabel = 'Commandeur : Nom du Commandeur';
+    const baseY = Math.max(20, Math.floor(viewportHeight * 0.52));
+
+    const firstId = `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const secondId = `overlay-${Date.now() + 1}-${Math.random().toString(36).slice(2, 6)}`;
+
+    setPageOverlays((prev) => ({
+      ...prev,
+      [currentPageIndex]: [
+        ...(prev[currentPageIndex] || []),
+        {
+          id: firstId,
+          type: 'name',
+          content: providerLabel,
+          x: 20,
+          y: baseY,
+          width: Math.min(220, Math.floor(viewportWidth * 0.44)),
+          height: 36,
+        },
+        {
+          id: secondId,
+          type: 'name',
+          content: clientLabel,
+          x: Math.max(24, Math.floor(viewportWidth * 0.52)),
+          y: baseY,
+          width: Math.min(220, Math.floor(viewportWidth * 0.44)),
+          height: 36,
+        },
+      ],
+    }));
+    setSelectedOverlayId(secondId);
+    setEditingNameId(secondId);
+    playTapBeep();
+  };
+
   // 2. Ajouter un champ déplaçable "Date du jour"
   const handleAddDateField = () => {
     const dateStr = new Date().toLocaleDateString('fr-FR');
@@ -1202,14 +1243,15 @@ export default function DocuSignHub({
       ctx.fillText('Le Prestataire s\'oblige à une obligation de moyens renforcée selon les règles de l\'art. Le Client s\'engage', 40, 330);
       ctx.fillText('à fournir en temps utile toutes les informations et accès nécessaires à la parfaite exécution de la mission.', 40, 347);
 
-      // 3. Règlement
+      // 3. Règlement & Séquestre
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText('ARTICLE 3 - CONDITIONS TARIFAIRES & MODALITÉS DE RÈGLEMENT', 40, 385);
+      ctx.fillText('ARTICLE 3 - SÉQUESTRE, RÈGLE DE PAIEMENT & RETARDS', 40, 385);
       ctx.fillStyle = '#334155';
       ctx.font = '11px sans-serif';
-      ctx.fillText('Les prestations seront réglées aux échéances convenues par Mobile Money (Wave, Orange, MTN), virement ou espèces.', 40, 405);
-      ctx.fillText('Tout retard de paiement entraînera l\'application d\'intérêts légaux de plein droit sans mise en demeure préalable.', 40, 422);
+      ctx.fillText('Les fonds sont protégés sous Séquestre jusqu\'à exécution conforme et accord mutuel de libération (partielle ou totale).', 40, 405);
+      ctx.fillText('Règle : paiement total à la commande. Exception : si paiement par tranches convenu, frais en cas de retard client ;', 40, 422);
+      ctx.fillText('tout retard d\'exécution du Prestataire entraîne des soustractions en faveur du Commandeur (partie lésée).', 40, 438);
 
       // 4. Confidentialité & Juridiction
       ctx.fillStyle = '#0f172a';
@@ -1913,11 +1955,11 @@ export default function DocuSignHub({
         )}
 
         {/* Espace Central : Document & Signature */}
-        <main className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 bg-slate-950 overflow-y-auto relative">
+        <main className="flex-1 min-h-0 flex flex-col items-center justify-start p-4 bg-slate-950 overflow-y-auto relative">
           
           {/* Si aucun document n'est encore chargé */}
           {pages.length === 0 && !isCameraActive && !capturedScanRawImage && (
-            <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="my-auto max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
               <div className="w-16 h-16 bg-indigo-600/20 text-indigo-400 rounded-2xl mx-auto flex items-center justify-center">
                 <ShieldCheck className="w-8 h-8" />
               </div>
@@ -2236,7 +2278,7 @@ export default function DocuSignHub({
 
           {/* Affichage de la page sélectionnée & Déplacement des signatures */}
           {pages.length > 0 && !isCameraActive && (
-            <div className="flex flex-col items-center w-full max-w-lg">
+            <div className="flex flex-col items-center w-full max-w-2xl pb-6">
               {/* Palette d'éléments interactifs à glisser / déposer */}
               <div className="w-full mb-2.5 flex items-center justify-between gap-1.5 bg-slate-900/95 border border-slate-800 rounded-2xl p-2 shadow-lg select-none">
                 <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5 pl-1">
@@ -2256,6 +2298,16 @@ export default function DocuSignHub({
                   >
                     <Scale className="w-3 h-3 text-amber-400" />
                     <span>Avis Juridique</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddContractingParties}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-200 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95 shrink-0"
+                    title="Glisser-déposer et écrire les noms des parties cocontractantes (Prestataire & Commandeur)"
+                  >
+                    <User className="w-3 h-3 text-emerald-400" />
+                    <span>+ Cocontractants</span>
                   </button>
 
                   <button
@@ -2386,7 +2438,14 @@ export default function DocuSignHub({
                               className="bg-slate-950 text-white text-xs font-semibold px-1 py-0.5 rounded border border-blue-400 outline-none w-full"
                             />
                           ) : (
-                            <span className="text-xs font-bold truncate text-slate-100">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingNameId(item.id);
+                              }}
+                              className="text-xs font-bold truncate text-slate-100 cursor-text"
+                              title="Cliquer pour saisir le nom"
+                            >
                               {item.content || 'Nom du signataire'}
                             </span>
                           )}

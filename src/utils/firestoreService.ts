@@ -2739,13 +2739,19 @@ export function subscribeToCentralPaymentConfig(
 // CONFIGURATION JURIDIQUE & TEXTES LÉGAUX DE LA PLATEFORME (platform_settings/legal)
 // ============================================================================
 
-export const ESCROW_USAGE_CLAUSES_TEXT = `# Clauses d'Usage du Service Escrow (Séquestre) — Nanasore
+export const ESCROW_USAGE_CLAUSES_TEXT = `# Clauses d'Usage du Service de Séquestre — Nanasore
 
-## 1. Objet & Fonctionnement du Séquestre (Escrow)
-Le service **Nanasore Escrow** agit en qualité de Tiers de Confiance neutre entre le **Prestataire** et le **Commandeur (Client)**. Lorsqu'un devis et un contrat de prestation sont validés, les fonds consignés par le Commandeur restent bloqués sous séquestre jusqu'à la livraison conforme des jalons convenus.
+## 1. Comment fonctionne le Séquestre (du début à la fin)
+Le **Séquestre Nanasore** est un compte de protection neutre géré par la plateforme entre le **Prestataire** et le **Commandeur (Client)** :
+1. **Dépôt sécurisé** : Lorsque le Commandeur règle le devis, son argent n'est pas versé directement au Prestataire. Les fonds sont bloqués et protégés par le système sous Séquestre.
+2. **Exécution du contrat** : Le Prestataire réalise la prestation en toute sérénité, sachant que le paiement est déjà garanti dans le système.
+3. **Libération des fonds (partielle ou totale)** : Les fonds ne sont débloqués au Prestataire qu'après exécution conforme du contrat et accord mutuel des parties (validation par jalon pour une libération partielle, ou validation finale pour une libération totale).
 
-## 2. Traçabilité & Paiements via la Plateforme
-Pour bénéficier pleinement de la garantie Escrow, de l'archivage probant des contrats et de l'arbitrage en cas de différend, tous les règlements relatifs à un devis généré sur Nanasore doivent transiter exclusivement par le lien de paiement officiel de la plateforme. Tout règlement effectué en dehors de la plateforme se fait aux risques exclusifs des parties et ne peut être couvert par le séquestre ni par la médiation Nanasore.
+## 2. Règle de Paiement, Paiement Échelonné (Exception) & Retards
+- **Règle générale** : Le paiement de la totalité (100 %) sous Séquestre à la commande est la règle générale.
+- **Exception (paiement par tranches)** : Uniquement si les deux parties ont convenu d'un règlement échelonné par tranches, tout retard de paiement d'une échéance par le Commandeur peut entraîner des frais de retard.
+- **Retard d'exécution du Prestataire** : Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Commandeur.
+- **Traçabilité** : Tous les règlements doivent transiter par le lien de paiement officiel de la plateforme pour bénéficier de la protection du Séquestre et de l'arbitrage Nanasore.
 
 ## 3. Sanctions en cas de Non-Respect ou de Fraude
 Tout manquement grave aux présentes clauses — notamment tentative de contournement du séquestre après mise en relation, fourniture de faux justificatifs, non-livraison délibérée ou abus de contestation — expose son auteur aux sanctions suivantes :

@@ -252,7 +252,10 @@ export const SignatureStampModal: React.FC<SignatureStampModalProps> = ({
                 {contractSummary?.milestonesCount ? ` (${contractSummary.milestonesCount} jalon(s))` : ''}.
               </p>
               <p>
-                <strong>Engagement & Escrow :</strong> Le Prestataire s’engage à livrer les travaux conformes aux jalons définis. Les fonds consignés sous séquestre Nanasore sont protégés jusqu’à validation finale. En cas de différend, les parties peuvent ouvrir un litige officiel arbitré par le Super Admin sur la base du présent contrat signé et tamponné.
+                <strong>Protection par Séquestre (de A à Z) :</strong> L’argent réglé par le Commandeur est déposé sur un compte de <strong>Séquestre</strong> neutre géré par Nanasore : il reste protégé et bloqué par le système pendant toute l’exécution du contrat, et n’est libéré au Prestataire (en partiel par jalons ou en totalité à la fin) qu’après exécution conforme et accord mutuel des parties.
+              </p>
+              <p>
+                <strong>Règle de paiement &amp; Retards :</strong> Le paiement en totalité (100 %) sous Séquestre est la règle générale. Par exception, si les parties conviennent d’un paiement échelonné par tranches, tout retard de paiement peut entraîner des frais. Réciproquement, tout retard d’exécution du Prestataire peut entraîner des soustractions en faveur de la partie lésée (le Commandeur). En cas de litige, les fonds restent gelés et arbitrés par le Super Admin.
               </p>
             </div>
           </div>

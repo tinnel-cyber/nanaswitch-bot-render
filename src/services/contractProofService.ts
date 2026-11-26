@@ -259,16 +259,16 @@ export function generateSignedQuotePdf(
       body: `Le présent contrat a pour objet la réalisation de la prestation intitulée « ${project.projectTitle} », telle que détaillée dans le Devis & Métadonnées (Document 1/2) comprenant ${milestones.length} jalon(s) de livraison.`,
     },
     {
-      title: 'Article 2 — Prix, Séquestre (Escrow) & Modalités de Règlement',
-      body: `Le montant global net de la prestation est fixé à ${formatXofForPdf(project.totalAmount)}. Conformément aux Clauses d'Usage Escrow Nanasore, les fonds consignés par le Commandeur sont protégés sous séquestre et ne sont libérés au Prestataire qu'après livraison conforme et validation finale.`,
+      title: 'Article 2 — Prix, Protection par Séquestre & Règle de Paiement',
+      body: `Le montant global net de la prestation est fixé à ${formatXofForPdf(project.totalAmount)}.\n• Fonctionnement du Séquestre (de A à Z) : Pour protéger les deux parties, le Commandeur ne verse pas l'argent directement au Prestataire. Les fonds sont déposés et bloqués sur un compte de Séquestre neutre géré par Nanasore. Ils restent intégralement protégés par le système pendant toute la durée d'exécution du contrat, et ne sont libérés au Prestataire qu'après exécution conforme et validation d'un commun accord par le Commandeur (libération partielle par jalon ou libération totale à la livraison finale).\n• Règle générale & Exception : Le paiement de la totalité (100 %) sous Séquestre à la commande constitue la règle générale. L'exception s'applique uniquement lorsque les parties ont expressément convenu d'un paiement fractionné par tranches : dans ce cas précis uniquement, tout retard de paiement d'une échéance par le Commandeur peut entraîner des frais de retard.`,
     },
     {
-      title: 'Article 3 — Obligations des Parties',
-      body: `Le Prestataire s'engage à exécuter la mission avec diligence, selon les règles de l'art et dans les délais convenus. Le Commandeur s'engage à fournir les informations nécessaires à la bonne exécution et à procéder à la validation des livrables conformes dans un délai raisonnable.`,
+      title: 'Article 3 — Obligations des Parties & Retard d\'Exécution',
+      body: `Le Prestataire s'engage à exécuter la mission avec diligence, selon les règles de l'art et dans les délais convenus. Tout retard d'exécution ou de livraison imputable au Prestataire peut entraîner des soustractions (retenues) sur le montant séquestré en faveur de la partie lésée, à savoir le Commandeur. De son côté, le Commandeur s'engage à fournir les informations nécessaires et à valider les livrables conformes dans un délai raisonnable.`,
     },
     {
-      title: 'Article 4 — Litiges, Sanctions & Arbitrage Nanasore',
-      body: `En cas de différend, chacune des parties peut saisir le service de médiation depuis l'espace projet. Les fonds sont gelés à titre conservatoire et arbitrés sous 48h à 72h par le Super Admin sur la base du présent contrat signé, des métadonnées et des échanges enregistrés.`,
+      title: 'Article 4 — Litiges, Gel Conservatoire & Arbitrage Nanasore',
+      body: `En cas de désaccord sur l'exécution ou la libération des fonds, chacune des parties peut ouvrir un litige depuis l'espace projet. Les fonds demeurent immédiatement gelés sous Séquestre à titre conservatoire et sont arbitrés sous 48h à 72h par le Super Admin sur la base du présent contrat signé, des métadonnées et des échanges enregistrés.`,
     },
   ];
 
