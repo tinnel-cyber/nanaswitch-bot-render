@@ -612,6 +612,38 @@ export const NanaGeneratorModal: React.FC<NanaGeneratorModalProps> = ({
    */
   const handleDirectDownload = async (mediaUrl: string, extension: 'png' | 'mp4' | 'webp') => {
     if (!mediaUrl) return;
+    if (extension === 'mp4') {
+      let storedSub: any = null;
+      let storedUser: any = currentUser || null;
+      try {
+        storedSub = JSON.parse(localStorage.getItem('nana_store_sub') || 'null');
+        if (!storedUser) storedUser = JSON.parse(localStorage.getItem('nana_store_auth_user') || 'null');
+      } catch {}
+      const effectiveSub = storedUser?.subscription || storedSub;
+      const isSuperAdmin = storedUser?.role === 'super_admin' || storedUser?.role === 'SUPER_ADMIN';
+      const isPaidSub = Boolean(
+        isSuperAdmin ||
+        (effectiveSub &&
+          String(effectiveSub.status || '').toUpperCase() === 'ACTIVE' &&
+          !String(effectiveSub.plan || effectiveSub.planId || '').toLowerCase().includes('free') &&
+          !String(effectiveSub.plan || effectiveSub.planId || '').toLowerCase().includes('zero') &&
+          !String(effectiveSub.plan || effectiveSub.planId || '').toLowerCase().includes('pay-as-you-go'))
+      );
+      if (!isPaidSub) {
+        const { consumePaygModuleUsage } = await import('../../../services/paygBillingService');
+        const paygRes = await consumePaygModuleUsage({
+          ownerKey: storedUser?.storeId || storedUser?.uid || storedUser?.id || '',
+          moduleId: 'studio-video-ia',
+          actionLabel: 'Export Vidéo Studio IA',
+          hasActivePaidSubscription: false,
+          isSuperAdmin: false,
+        });
+        if (!paygRes.allowed) {
+          alert(paygRes.message || 'Solde NaNa Wallet insuffisant (1 500 F CFA requis pour exporter une vidéo Studio IA).');
+          return;
+        }
+      }
+    }
     try {
       setIsDownloadingMedia(true);
       playTapBeep();

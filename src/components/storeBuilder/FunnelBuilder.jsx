@@ -2044,6 +2044,35 @@ export const FunnelBuilder = ({
 
   // Sauvegarde
   const handleSave = async () => {
+    if (!isPublicView) {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('nana_store_auth_user') || 'null');
+        const storedSub = storedUser?.subscription || JSON.parse(localStorage.getItem('nana_store_sub') || 'null');
+        const isSuperAdmin = storedUser?.role === 'super_admin' || storedUser?.role === 'SUPER_ADMIN';
+        const isPaidSub = Boolean(
+          isSuperAdmin ||
+          (storedSub &&
+            String(storedSub.status || '').toUpperCase() === 'ACTIVE' &&
+            !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('free') &&
+            !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('zero') &&
+            !String(storedSub.plan || storedSub.planId || '').toLowerCase().includes('pay-as-you-go'))
+        );
+        if (!isPaidSub) {
+          const { consumePaygModuleUsage } = await import('../../services/paygBillingService');
+          const paygRes = await consumePaygModuleUsage({
+            ownerKey: storedUser?.storeId || storedUser?.uid || storedUser?.id || '',
+            moduleId: 'sales-funnel-pro',
+            actionLabel: 'Publication Tunnel de Vente Modulaire',
+            hasActivePaidSubscription: false,
+            isSuperAdmin: false,
+          });
+          if (!paygRes.allowed) {
+            alert(paygRes.message || 'Solde NaNa Wallet insuffisant (5 000 F CFA requis pour publier un tunnel de vente).');
+            return;
+          }
+        }
+      } catch {}
+    }
     try { playCashChime(); } catch (e) {}
     setSaveStatus('saving');
 

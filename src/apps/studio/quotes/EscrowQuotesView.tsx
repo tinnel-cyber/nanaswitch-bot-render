@@ -156,6 +156,31 @@ export const EscrowQuotesView: React.FC<EscrowQuotesViewProps> = ({
     e.preventDefault();
     if (!providerName.trim() || !clientName.trim() || !projectTitle.trim() || milestones.length === 0 || !acceptedEscrowClauses) return;
 
+    const isPaidSubOrAdmin = Boolean(
+      currentUser?.role === 'super_admin' ||
+      currentUser?.role === 'SUPER_ADMIN' ||
+      (subscription &&
+        (subscription.status === 'ACTIVE' || (subscription as any).status === 'active') &&
+        !String(subscription.plan || (subscription as any).planId || '').toLowerCase().includes('free') &&
+        !String(subscription.plan || (subscription as any).planId || '').toLowerCase().includes('zero') &&
+        !String(subscription.plan || (subscription as any).planId || '').toLowerCase().includes('pay-as-you-go'))
+    );
+
+    if (!isPaidSubOrAdmin) {
+      const { consumePaygModuleUsage } = await import('../../../services/paygBillingService');
+      const paygRes = await consumePaygModuleUsage({
+        ownerKey: storeId || currentUser?.id || '',
+        moduleId: 'escrow-devis-pro',
+        actionLabel: `Devis & Contrat Prestation : ${projectTitle.trim()}`,
+        hasActivePaidSubscription: false,
+        isSuperAdmin: false,
+      });
+      if (!paygRes.allowed) {
+        alert(paygRes.message || 'Solde NaNa Wallet insuffisant (300 F CFA requis pour générer un Devis & Contrat Séquestre).');
+        return;
+      }
+    }
+
     playTapBeep();
     const projectId = `proj-${Date.now().toString(36)}-${Math.floor(Math.random() * 899 + 100)}`;
     const newProject: EscrowProject = {

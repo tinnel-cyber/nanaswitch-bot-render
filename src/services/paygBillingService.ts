@@ -48,9 +48,16 @@ export async function consumePaygModuleUsage(
   }
 
   try {
+    const { supabase } = await import('../lib/supabase');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+
     const res = await fetch('/api/merchant/wallet/payg/consume', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      },
       body: JSON.stringify({
         ownerKey,
         moduleId: params.moduleId,

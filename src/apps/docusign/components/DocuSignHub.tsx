@@ -1646,8 +1646,9 @@ export default function DocuSignHub({
     });
   };
 
-  const generateCertifiedDocument = () => {
+  const generateCertifiedDocument = async () => {
     if (!checkDocumentQuota()) return;
+    if (!isPremium && !(await verifyDocuSignPayg('Export Image Document Signé (300 F CFA)'))) return;
     renderCertifiedDocumentCanvas((finalCanvas) => {
       try {
         const resultDataUrl = finalCanvas.toDataURL('image/png', 1.0);
@@ -1662,8 +1663,9 @@ export default function DocuSignHub({
     });
   };
 
-  const printDocument = () => {
+  const printDocument = async () => {
     if (!checkDocumentQuota()) return;
+    if (!isPremium && !(await verifyDocuSignPayg('Impression Document Signé (300 F CFA)'))) return;
     renderCertifiedDocumentCanvas((finalCanvas) => {
       try {
         registerDocumentGenerated();
