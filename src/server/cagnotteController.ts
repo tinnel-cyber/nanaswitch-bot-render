@@ -677,16 +677,26 @@ export function attachCagnotteRoutes(app: Express): void {
     }
   });
 
-  // 5. Webhook S de confirmation Mobile Money (Prompt 21)
+  // 5. Webhook S de confirmation Mobile Money (Prompt 21) — Signature HMAC obligatoire
   app.post('/api/cagnotte/webhook', async (req: Request, res: Response) => {
     try {
-      const signature = (req.headers['x-s-signature'] as string) || (req.headers['x-signature'] as string);
-      const rawPayload = JSON.stringify(req.body);
+      const signature = String(
+        req.headers['x-s-signature'] ||
+          req.headers['x-sebpay-signature'] ||
+          req.headers['x-webhook-signature'] ||
+          req.headers['x-signature'] ||
+          ''
+      )
+        .replace(/^sha256=/i, '')
+        .trim();
+      const rawPayload = (req as any).rawBody
+        ? (req as any).rawBody.toString('utf8')
+        : JSON.stringify(req.body || {});
 
-      // Sécurité : Vérifie la signature cryptographique S (HMAC SHA-256)
-      if (signature && !verifySSignature(rawPayload, signature)) {
-        console.warn('[CAGNOTTE SECURITY] ❌ Signature Webhook invalide');
-        return res.status(403).json({ success: false, error: 'Signature S invalide' });
+      // Sécurité stricte : Signature obligatoire (rejet immédiat si absente ou invalide)
+      if (!signature || !verifySSignature(rawPayload, signature)) {
+        console.warn('[CAGNOTTE SECURITY] ❌ Signature Webhook absente ou invalide');
+        return res.status(401).json({ success: false, error: 'Signature cryptographique S requise et valide.' });
       }
 
       const {

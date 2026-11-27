@@ -41,7 +41,7 @@ for (const gw of gateways) {
 // 3. VÉRIFICATION DU CRITÈRE D'ÉLIGIBILITÉ AU FAILOVER (isEligibleForFailover)
 console.log('\n--- VÉRIFICATION RIGOUREUSE DES CONDITIONS DE FAILOVER ---');
 const testCases = [
-  { err: { status: 400, message: 'The operator declined the payment request.' }, expected: true, label: 'HTTP 400 Rejet opérateur' },
+  { err: { status: 400, message: 'The operator declined the payment request.' }, expected: false, label: 'HTTP 400 Rejet opérateur (M1)' },
   { err: { status: 401, message: 'Unauthorized' }, expected: true, label: 'HTTP 401 Clé invalide' },
   { err: { status: 404, message: 'Not found' }, expected: true, label: 'HTTP 404 Route/Ressource introuvable' },
   { err: { status: 500, message: 'Internal Server Error' }, expected: true, label: 'HTTP 500 Défaillance serveur' },

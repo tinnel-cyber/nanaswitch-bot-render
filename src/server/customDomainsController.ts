@@ -1,5 +1,6 @@
 import { Express, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_bUKrC8_WEvMbKwE5lUAZ2w_LGg2F5Ro';
@@ -21,6 +22,60 @@ function normalizeDomain(domain: string): string {
     .trim();
 }
 
+async function authorizeDomainTenant(req: Request, supabase: any, tenantId: string): Promise<{ ok: boolean; status?: number; error?: string }> {
+  const internalSecret = String(process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '').trim();
+  const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '').trim();
+  if (internalSecret && providedKey) {
+    const a = Buffer.from(providedKey, 'utf8');
+    const b = Buffer.from(internalSecret, 'utf8');
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      return { ok: true };
+    }
+  }
+
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) {
+    return { ok: false, status: 401, error: 'Authentification requise pour enregistrer un nom de domaine personnalisé.' };
+  }
+  const token = authHeader.slice(7).trim();
+  const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !authData?.user?.id) {
+    return { ok: false, status: 401, error: 'Session expirée ou invalide.' };
+  }
+
+  const userId = String(authData.user.id);
+  const appRole = String(authData.user.app_metadata?.role || '').toUpperCase();
+  if (tenantId === userId || appRole === 'SUPER_ADMIN' || appRole === 'ADMIN') {
+    return { ok: true };
+  }
+
+  try {
+    const { data: m } = await supabase.from('merchants').select('*').eq('id', tenantId).maybeSingle();
+    if (m && [m.owner_id, m.user_id, m.owner_uid, m.uid].map((v: any) => String(v || '')).includes(userId)) {
+      return { ok: true };
+    }
+  } catch {}
+  try {
+    const { data: u } = await supabase.from('universes').select('*').eq('id', tenantId).maybeSingle();
+    if (
+      u &&
+      [u.user_id, u.owner_id, u.owner_uid, u.uid, u.settings?.owner_id, u.settings?.user_id]
+        .map((v: any) => String(v || ''))
+        .includes(userId)
+    ) {
+      return { ok: true };
+    }
+  } catch {}
+  try {
+    const { data: t } = await supabase.from('tenants').select('*').eq('id', tenantId).maybeSingle();
+    if (t && [t.owner_id, t.user_id, t.owner_uid, t.uid].map((v: any) => String(v || '')).includes(userId)) {
+      return { ok: true };
+    }
+  } catch {}
+
+  return { ok: false, status: 403, error: 'Accès refusé : cet univers marchand ne vous appartient pas.' };
+}
+
 /**
  * Attache les routes /api/domains/register et /api/domains/verify au serveur Express (Render)
  */
@@ -30,7 +85,7 @@ export function attachCustomDomainsRoutes(app: Express): void {
    */
   app.post('/api/domains/register', async (req: Request, res: Response): Promise<void> => {
     try {
-      const tenantId = req.body?.tenantId || req.body?.tenant_id;
+      const tenantId = String(req.body?.tenantId || req.body?.tenant_id || '').trim();
       const rawDomain = req.body?.domain || req.body?.custom_domain;
 
       if (!tenantId || !rawDomain) {
@@ -40,12 +95,24 @@ export function attachCustomDomainsRoutes(app: Express): void {
 
       const cleanDomain = normalizeDomain(rawDomain);
       const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i;
-      if (!domainRegex.test(cleanDomain) || cleanDomain.includes('localhost')) {
-        res.status(400).json({ error: `Le nom de domaine '${cleanDomain}' n'est pas un domaine valide.` });
+      if (
+        !domainRegex.test(cleanDomain) ||
+        cleanDomain.includes('localhost') ||
+        cleanDomain === 'nanasore.com' ||
+        cleanDomain.endsWith('.nanasore.com') ||
+        cleanDomain === 'nsore.shop' ||
+        cleanDomain.endsWith('.nsore.shop')
+      ) {
+        res.status(400).json({ error: `Le nom de domaine '${cleanDomain}' n'est pas un domaine externe valide.` });
         return;
       }
 
       const supabase = getSupabase();
+      const authCheck = await authorizeDomainTenant(req, supabase, tenantId);
+      if (!authCheck.ok) {
+        res.status(authCheck.status || 403).json({ error: authCheck.error });
+        return;
+      }
 
       // 1. Vérification d'unicité
       const { data: existingDomainTenant } = await supabase

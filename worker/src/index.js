@@ -37,25 +37,30 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 0. Route spéciale de purge de cache à l'Edge
-    if (url.pathname === "/api/purge-cache" || url.searchParams.get("purge") === "1") {
+    // 0. Route spéciale de purge de cache à l'Edge (protégée POST + clé admin — zéro Clear-Site-Data public)
+    if (url.pathname === "/api/purge-cache") {
+      const adminSecret = env && (env.ADMIN_API_KEY || env.INTERNAL_API_SECRET);
+      const provided = request.headers.get("x-admin-api-key") || request.headers.get("x-internal-secret") || "";
+      if (request.method.toUpperCase() !== "POST" || !adminSecret || provided !== adminSecret) {
+        return new Response(JSON.stringify({ success: false, error: "Accès administrateur requis (POST + x-admin-api-key)." }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
       if (typeof caches !== "undefined" && caches.default) {
         try {
-          await caches.default.delete(request);
+          await caches.default.delete(new Request(url.origin + "/"));
         } catch (_) {}
       }
       return new Response(JSON.stringify({
         success: true,
         message: "Cache Cloudflare Worker purgé avec succès",
-        primary: PRIMARY_ORIGIN,
-        secondary: SECONDARY_ORIGIN,
         timestamp: new Date().toISOString()
       }, null, 2), {
         status: 200,
         headers: {
           "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Clear-Site-Data": '"cache", "cookies", "storage"'
+          "Cache-Control": "no-cache, no-store, must-revalidate"
         }
       });
     }
@@ -129,6 +134,9 @@ export default {
     try {
       // 4. Tentative sur le backend principal avec timeout rapide (4.5s sur GET/HEAD, 12s sur POST)
       const primaryTimeout = hasRequestBody ? PRIMARY_MUTATION_TIMEOUT_MS : PRIMARY_FAST_TIMEOUT_MS;
+      const isIdempotentRequest =
+        ["GET", "HEAD", "OPTIONS"].includes(method) ||
+        Boolean(request.headers.get("idempotency-key") || request.headers.get("x-idempotency-key"));
       let activeTargetUrl = null;
       let activeResponse = null;
       let servedTier = "primary";
@@ -138,8 +146,8 @@ export default {
         activeResponse = result.backendResponse;
         activeTargetUrl = result.targetUrl;
 
-        // Si le backend principal retourne 502/503/504, bascule immédiate vers le secondaire
-        if (activeResponse.status >= 502 && fallbackOrigin && fallbackOrigin !== primaryOrigin) {
+        // Si le backend principal retourne 502/503/504, bascule UNIQUEMENT si la requête est idempotente
+        if (isIdempotentRequest && activeResponse.status >= 502 && fallbackOrigin && fallbackOrigin !== primaryOrigin) {
           console.warn(`[FAILOVER_TRIGGER] Statut ${activeResponse.status} sur ${primaryOrigin}, bascule vers ${fallbackOrigin}`);
           try {
             const fallbackResult = await tryProxy(fallbackOrigin, SECONDARY_TIMEOUT_MS);
@@ -153,12 +161,12 @@ export default {
           }
         }
       } catch (errPrimary) {
-        console.warn(`[PRIMARY_TIMEOUT_OR_FAIL] ${errPrimary.message}, bascule immédiate vers ${fallbackOrigin}...`);
+        console.warn(`[PRIMARY_TIMEOUT_OR_FAIL] ${errPrimary.message}`);
         // Réveil silencieux du primaire en arrière-plan sans bloquer l'utilisateur
         if (ctx && typeof ctx.waitUntil === "function") {
           ctx.waitUntil(fetch(`${primaryOrigin}/health`).catch(() => {}));
         }
-        if (fallbackOrigin && fallbackOrigin !== primaryOrigin) {
+        if (isIdempotentRequest && fallbackOrigin && fallbackOrigin !== primaryOrigin) {
           const fallbackResult = await tryProxy(fallbackOrigin, SECONDARY_TIMEOUT_MS);
           activeResponse = fallbackResult.backendResponse;
           activeTargetUrl = fallbackResult.targetUrl;

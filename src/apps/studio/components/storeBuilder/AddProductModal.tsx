@@ -639,7 +639,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               vendor_id: resolvedStoreId,
               slug: finalSlug,
               ...(isStoreUUID ? { tenant_id: resolvedStoreId } : {})
-            }, { onConflict: 'id' }).catch(() => {});
+            }, { onConflict: 'id' });
           }
         } catch (sbErr) {
           console.warn("[Studio Supabase] Erreur persistance produit :", sbErr);

@@ -192,6 +192,9 @@ function formatLocalPhoneNumber(phone) {
   
   // 1. Supprime tous les caractères non numériques (+, espaces, tirets)
   let cleaned = String(phone).replace(/\D/g, '');
+  if (cleaned.startsWith('00') && cleaned.length > 10) {
+    cleaned = cleaned.substring(2);
+  }
   
   // 2. Si le numéro commence par un indicatif régional ou international (ex: 226, 225, 229)
   if (cleaned.startsWith('226') && cleaned.length >= 11) {

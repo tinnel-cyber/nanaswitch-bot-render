@@ -267,8 +267,7 @@ export function CampaignDispatcher({
           city: created.city || null,
           status: newType === 'vip' ? 'vip' : newType === 'buyer' ? 'active' : 'lead',
         })
-        .then(() => {})
-        .catch(() => {});
+        .then(() => {}, () => {});
     }
 
     setContacts(prev => [created, ...prev.filter(c => c.email !== cleanEmail)]);
@@ -319,8 +318,7 @@ export function CampaignDispatcher({
             status: 'lead',
           }))
         )
-        .then(() => {})
-        .catch(() => {});
+        .then(() => {}, () => {});
     }
 
     setContacts(prev => [...newContacts, ...prev]);

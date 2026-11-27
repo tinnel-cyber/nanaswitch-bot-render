@@ -299,7 +299,7 @@ export const AiStudioView: React.FC<AiStudioViewProps> = ({
           setVideoGenStatus('processing');
 
           const videoPrompt = prompt.trim();
-          const LAMBDA_ENDPOINT = "https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/";
+          const LAMBDA_ENDPOINT = "/aws-lambda";
 
           // Fonction de génération d'une variante avec cascade automatique de résolutions
           const generateSingleVideo = async (variantIdx: number): Promise<{ url: string; resUsed: string }> => {

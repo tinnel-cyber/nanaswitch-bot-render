@@ -268,30 +268,73 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
 
   // --------------------------------------------------------------------------
   // ROUTE API 2 : POST /api/chat-finance/webhook
-  // Audit C5 : Vérification HMAC + statut whitelisté + montant >= escrow.amount
+  // Audit C5 : Signature HMAC OBLIGATOIRE + statut whitelisté + montant >= escrow.amount
   // --------------------------------------------------------------------------
   router.post('/webhook', requireSupabase, async (req, res) => {
     try {
       const supabase = req.supabase;
-      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || process.env.SEBPAY_WEBHOOK_SECRET || process.env.SEBPAY_SECRET_KEY || process.env.SASPAY_WEBHOOK_SECRET || '';
+      const candidateSecrets = [
+        process.env.PAYMENT_WEBHOOK_SECRET,
+        process.env.SEBPAY_WEBHOOK_SECRET,
+        process.env.SEBPAY_SECRET_KEY,
+        process.env.SASPAY_WEBHOOK_SECRET,
+        process.env.SASPAY_API_KEY
+      ]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+
+      if (candidateSecrets.length === 0) {
+        return res.status(503).json({
+          success: false,
+          error: 'Configuration webhook serveur incomplète (PAYMENT_WEBHOOK_SECRET manquant).'
+        });
+      }
+
       const receivedSig = String(
         req.headers['x-webhook-signature'] ||
         req.headers['x-sebpay-signature'] ||
         req.headers['x-saspay-signature'] ||
         req.headers['x-signature-sha256'] ||
+        req.headers['x-signature'] ||
         ''
       ).replace(/^sha256=/i, '').trim().toLowerCase();
 
-      if (webhookSecret && receivedSig) {
-        const rawPayload = req.rawBody ? String(req.rawBody) : JSON.stringify(req.body || {});
-        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(rawPayload).digest('hex').toLowerCase();
-        const validSig =
-          receivedSig.length === expectedSig.length &&
-          crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(expectedSig, 'utf8'));
+      if (!receivedSig) {
+        return res.status(401).json({
+          success: false,
+          error: 'Signature cryptographique HMAC obligatoire.'
+        });
+      }
 
-        if (!validSig) {
-          return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+      const rawPayload = req.rawBody
+        ? (Buffer.isBuffer(req.rawBody) ? req.rawBody.toString('utf8') : String(req.rawBody))
+        : JSON.stringify(req.body || {});
+      const webhookTs = String(req.headers['x-webhook-timestamp'] || req.headers['x-saspay-timestamp'] || '').trim();
+
+      let validSig = false;
+      for (const secret of candidateSecrets) {
+        const expectedSig = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex').toLowerCase();
+        if (
+          receivedSig.length === expectedSig.length &&
+          crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(expectedSig, 'utf8'))
+        ) {
+          validSig = true;
+          break;
         }
+        if (webhookTs) {
+          const tsExpected = crypto.createHmac('sha256', secret).update(`${webhookTs}.${rawPayload}`).digest('hex').toLowerCase();
+          if (
+            receivedSig.length === tsExpected.length &&
+            crypto.timingSafeEqual(Buffer.from(receivedSig, 'utf8'), Buffer.from(tsExpected, 'utf8'))
+          ) {
+            validSig = true;
+            break;
+          }
+        }
+      }
+
+      if (!validSig) {
+        return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
       }
 
       const body = req.body || {};
@@ -380,7 +423,8 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
           locked_at: nowServer,
           updated_at: nowServer
         })
-        .eq('id', txData.id);
+        .eq('id', txData.id)
+        .eq('status', TRANSACTION_STATUSES.PENDING);
 
       await safeUpdateWameetMessage(supabase, txData.message_id, {
         status: TRANSACTION_STATUSES.LOCKED
@@ -412,14 +456,34 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
     }
   });
 
+  function isTimingSafeInternalAdmin(req) {
+    const internalKey = String(
+      req.headers['x-internal-admin-key'] ||
+      req.headers['x-admin-api-key'] ||
+      req.headers['x-admin-key'] ||
+      req.headers['x-internal-secret'] ||
+      ''
+    ).trim();
+    const expectedInternalKey = String(
+      process.env.INTERNAL_ADMIN_KEY ||
+      process.env.ADMIN_API_KEY ||
+      process.env.INTERNAL_API_SECRET ||
+      ''
+    ).trim();
+    if (!internalKey || !expectedInternalKey) return false;
+    const bufA = Buffer.from(internalKey, 'utf8');
+    const bufB = Buffer.from(expectedInternalKey, 'utf8');
+    return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+  }
+
   // --------------------------------------------------------------------------
   // ROUTE API 3 : POST /api/chat-finance/release
-  // Audit C5 : Authentification OBLIGATOIRE de l'acheteur
+  // Audit C5 : Authentification JWT OBLIGATOIRE de l'acheteur (jamais body.buyerId seul !)
   // --------------------------------------------------------------------------
   router.post('/release', requireSupabase, async (req, res) => {
     try {
       const supabase = req.supabase;
-      const { transactionId, buyerId, chatId, messageId } = req.body;
+      const { transactionId, chatId, messageId } = req.body;
 
       if (!transactionId) {
         return res.status(400).json({
@@ -429,15 +493,13 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
       }
 
       const authUser = await resolveAuthenticatedUser(supabase, req);
-      const internalKey = req.headers['x-internal-admin-key'] || req.headers['x-admin-api-key'] || req.headers['x-admin-key'];
-      const expectedInternalKey = process.env.INTERNAL_ADMIN_KEY || process.env.ADMIN_API_KEY || process.env.PAYMENT_WEBHOOK_SECRET;
-      const isInternalCall = Boolean(internalKey && expectedInternalKey && internalKey === expectedInternalKey);
+      const isInternalCall = isTimingSafeInternalAdmin(req);
 
-      const effectiveBuyerId = authUser?.id || buyerId;
-      if (!effectiveBuyerId && !isInternalCall) {
+      // SÉCURITÉ CRITIQUE : ne jamais accepter req.body.buyerId sans JWT vérifié !
+      if (!authUser?.id && !isInternalCall) {
         return res.status(401).json({
           success: false,
-          error: 'Authentification requise pour libérer les fonds.'
+          error: 'Authentification JWT valide requise pour libérer les fonds.'
         });
       }
 
@@ -454,10 +516,10 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
         });
       }
 
-      if (!isInternalCall && String(txData.buyer_id) !== String(effectiveBuyerId)) {
+      if (!isInternalCall && String(txData.buyer_id) !== String(authUser.id)) {
         return res.status(403).json({
           success: false,
-          error: 'Action non autorisée. Seul l\'acheteur ayant financé cette transaction peut libérer les fonds.'
+          error: 'Action non autorisée. Seul l\'acheteur authentifié ayant financé cette transaction peut libérer les fonds.'
         });
       }
 
@@ -476,15 +538,16 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
       }
 
       const nowServer = new Date().toISOString();
-      const amount = Number(txData.amount || 0);
+      const amount = Math.round(Number(txData.amount || 0));
       const sellerId = txData.seller_id;
       const effectiveChatId = chatId || txData.chat_id;
       const effectiveMessageId = messageId || txData.message_id;
 
       const commissionPct = Number(process.env.PLATFORM_COMMISSION_PERCENT || 5);
       const platformShare = Math.round(amount * (commissionPct / 100));
-      const sellerShare = amount - platformShare;
+      const sellerShare = Math.max(0, amount - platformShare);
 
+      // Transition d'état atomique CAS (LOCKED -> COMPLETED) garantissant qu'un seul appel gagne
       const { data: updatedTx } = await supabase
         .from('escrow_transactions')
         .update({
@@ -495,6 +558,7 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
         })
         .eq('id', txData.id)
         .eq('status', TRANSACTION_STATUSES.LOCKED)
+        .eq('is_paid', true)
         .select()
         .maybeSingle();
 
@@ -509,26 +573,44 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
         .from('wallets')
         .upsert({ tenant_id: String(sellerId), currency: 'XOF' }, { onConflict: 'tenant_id' });
 
-      const { data: sellerWallet } = await supabase
-        .from('wallets')
-        .select('id, cash_balance')
-        .eq('tenant_id', String(sellerId))
-        .single();
+      // Crédit avec verrou optimiste CAS sur cash_balance (anti-race condition)
+      let creditedWalletId = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data: sellerWallet } = await supabase
+          .from('wallets')
+          .select('id, cash_balance')
+          .eq('tenant_id', String(sellerId))
+          .single();
 
-      if (sellerWallet) {
-        await supabase
+        if (!sellerWallet) break;
+        const currentBal = Number(sellerWallet.cash_balance || 0);
+        const { data: casUpdated } = await supabase
           .from('wallets')
           .update({
-            cash_balance: Number(sellerWallet.cash_balance || 0) + sellerShare,
+            cash_balance: currentBal + sellerShare,
             updated_at: nowServer
           })
-          .eq('id', sellerWallet.id);
+          .eq('id', sellerWallet.id)
+          .eq('cash_balance', currentBal)
+          .select('id')
+          .maybeSingle();
 
+        if (casUpdated?.id) {
+          creditedWalletId = casUpdated.id;
+          break;
+        }
+      }
+
+      if (creditedWalletId) {
         await supabase.from('wallet_transactions').insert({
-          wallet_id: sellerWallet.id,
+          id: `escrow_rel_${txData.id}`,
+          wallet_id: creditedWalletId,
           transaction_type: 'ESCROW_RELEASE',
+          type: 'CREDIT',
           amount: sellerShare,
           reference_id: txData.id,
+          payment_reference: `ESCROW_REL_${txData.id}`,
+          status: 'COMPLETED',
           description: `Libération séquestre #${txData.id} (Net après commission ${commissionPct}%)`
         });
       }
@@ -568,12 +650,22 @@ function createChatFinanceRouter({ broadcastToChat } = {}) {
   });
 
   // --------------------------------------------------------------------------
-  // ROUTE COMPLÉMENTAIRE : GET /api/chat-finance/wallet/:userId
+  // ROUTE COMPLÉMENTAIRE : GET /api/chat-finance/wallet/:userId (Authentifié propriétaire uniquement)
   // --------------------------------------------------------------------------
   router.get('/wallet/:userId', requireSupabase, async (req, res) => {
     try {
       const supabase = req.supabase;
       const { userId } = req.params;
+      const authUser = await resolveAuthenticatedUser(supabase, req);
+      const isInternalCall = isTimingSafeInternalAdmin(req);
+
+      if (!authUser?.id && !isInternalCall) {
+        return res.status(401).json({ success: false, error: 'Authentification requise.' });
+      }
+      if (!isInternalCall && String(authUser.id) !== String(userId)) {
+        return res.status(403).json({ success: false, error: 'Accès refusé au portefeuille d\'un tiers.' });
+      }
+
       const { data } = await supabase
         .from('wallets')
         .select('*')

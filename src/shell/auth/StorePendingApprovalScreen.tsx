@@ -82,8 +82,7 @@ export const StorePendingApprovalScreen: React.FC<StorePendingApprovalScreenProp
           playValidationBeep();
           triggerApproved();
         }
-      })
-      .catch(console.warn);
+      }, console.warn);
 
     // 2. Supabase Realtime Channel
     const channelName = `kyc_approval_${safeStoreId}_${Math.random().toString(36).substring(7)}`;

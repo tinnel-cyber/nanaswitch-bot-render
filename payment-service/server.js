@@ -945,64 +945,110 @@ app.get(['/api/payment/verify/:txId', '/api/payment/status/:txId'], async (req, 
       return res.status(400).json({ error: 'Identifiant de transaction (txId) requis.' });
     }
 
-    if (db) {
-      // 1. Recherche dans transactions
-      const txDoc = await db.collection('transactions').doc(txId).get();
-      if (txDoc.exists) {
-        const data = txDoc.data();
-        const isDone = ['completed', 'success', 'paid', 'validated'].includes(String(data.status || '').toLowerCase());
-        if (isDone) {
-          return res.json({
-            success: true,
-            status: data.status,
-            txId,
-            data
-          });
-        }
+    const supa = getSupabaseAdmin();
+    if (supa) {
+      const cleanTx = String(txId).trim();
+      const parts = cleanTx.split('___');
+      const resolvedOrderId = parts.length > 1 ? parts[1] : cleanTx;
+
+      for (const col of ['order_id', 'transaction_id', 'external_reference']) {
+        try {
+          const { data: txRow } = await supa
+            .from('nanaswitch_transactions')
+            .select('*')
+            .eq(col, col === 'order_id' ? resolvedOrderId : cleanTx)
+            .maybeSingle();
+          if (txRow) {
+            const st = String(txRow.status || '').toUpperCase();
+            if (['COMPLETED', 'SUCCESS', 'PAID', 'VALIDATED'].includes(st)) {
+              return res.json({
+                success: true,
+                status: 'PAID',
+                txId: txRow.transaction_id || cleanTx,
+                amount: Number(txRow.amount || 0),
+                currency: txRow.currency || 'XOF',
+                data: txRow
+              });
+            }
+          }
+        } catch {}
       }
 
-      // 2. Recherche dans payment_intents
-      const intentDoc = await db.collection('payment_intents').doc(txId).get();
-      if (intentDoc.exists) {
-        const data = intentDoc.data();
-        const isDone = ['COMPLETED', 'SUCCESS', 'VALIDATED', 'PAID'].includes(String(data.status || '').toUpperCase()) ||
-          ['COMPLETED', 'PAID'].includes(String(data.paymentStatus || '').toUpperCase()) ||
-          data.isPaid === true;
-        if (isDone) {
-          return res.json({
-            success: true,
-            status: data.status || 'COMPLETED',
-            txId,
-            data
-          });
+      try {
+        const { data: vaultIntent } = await supa
+          .from('server_security_vault')
+          .select('secret_json')
+          .eq('key', `payment_intent_${resolvedOrderId}`)
+          .maybeSingle();
+        const intentData = vaultIntent?.secret_json;
+        if (intentData) {
+          const isDone =
+            ['COMPLETED', 'SUCCESS', 'VALIDATED', 'PAID'].includes(String(intentData.status || '').toUpperCase()) ||
+            ['COMPLETED', 'PAID'].includes(String(intentData.paymentStatus || '').toUpperCase()) ||
+            intentData.isPaid === true;
+          if (isDone) {
+            return res.json({
+              success: true,
+              status: intentData.status || 'PAID',
+              txId: intentData.transactionId || cleanTx,
+              amount: Number(intentData.amount || 0),
+              currency: intentData.currency || 'XOF',
+              data: intentData
+            });
+          }
         }
-      }
+      } catch {}
     }
+
+    // 2. Vérification universelle multi-passerelle (SasPay + Sebpay) via NaNaSwitch
+    try {
+      const gwStatus = await switchManager.checkPaymentStatus(txId);
+      if (gwStatus && (gwStatus.isPaid || ['PAID', 'COMPLETED', 'SUCCESS'].includes(String(gwStatus.status || '').toUpperCase()))) {
+        if (supa) {
+          const nowIso = new Date().toISOString();
+          const parts = String(txId).split('___');
+          const resolvedOrderId = parts.length > 1 ? parts[1] : String(txId);
+          try {
+            await supa
+              .from('nanaswitch_transactions')
+              .update({ status: 'PAID', updated_at: nowIso })
+              .eq('order_id', resolvedOrderId);
+          } catch {}
+        }
+        return res.json({
+          success: true,
+          status: 'PAID',
+          txId,
+          amount: Number(gwStatus.amount || gwStatus.data?.amount || 0),
+          currency: gwStatus.currency || gwStatus.data?.currency || 'XOF',
+          data: gwStatus.data || gwStatus,
+          message: 'Paiement validé avec succès par la passerelle.'
+        });
+      }
+    } catch {}
 
     // 3. Fallback direct vers Sebpay si configuré
     if (process.env.SEBPAY_PUBLIC_KEY && process.env.SEBPAY_SECRET_KEY) {
       try {
         const sebpayStatus = await getSebpayCollection(txId);
         if (sebpayStatus.isPaid) {
-          if (db) {
-            const nowServer = admin.firestore.FieldValue.serverTimestamp();
-            const parts = txId.split('___');
-            const resolvedOrderId = parts.length > 1 ? parts[1] : txId;
-            const updatePayload = {
-              status: 'COMPLETED',
-              paymentStatus: 'PAID',
-              isPaid: true,
-              paid: true,
-              validatedAt: nowServer,
-              updatedAt: nowServer
-            };
-            await db.collection('payment_intents').doc(resolvedOrderId).set(updatePayload, { merge: true });
-            await db.collection('payment_intents').doc(txId).set(updatePayload, { merge: true });
+          if (supa) {
+            const nowIso = new Date().toISOString();
+            const parts = String(txId).split('___');
+            const resolvedOrderId = parts.length > 1 ? parts[1] : String(txId);
+            try {
+              await supa
+                .from('nanaswitch_transactions')
+                .update({ status: 'PAID', updated_at: nowIso })
+                .eq('order_id', resolvedOrderId);
+            } catch {}
           }
           return res.json({
             success: true,
             status: 'COMPLETED',
             txId,
+            amount: Number(sebpayStatus.data?.amount || 0),
+            currency: sebpayStatus.data?.currency || 'XOF',
             data: sebpayStatus.data,
             message: 'Paiement validé avec succès par Sebpay.'
           });
@@ -1026,7 +1072,7 @@ app.get(['/api/payment/verify/:txId', '/api/payment/status/:txId'], async (req, 
 // ============================================================================
 // ROUTE 3b-2 : Vérification de Session Hébergée Sebpay (Hosted Checkout Return)
 // Appelé au retour client sur /checkout/return?checkout_session_id=...
-// Interroge GET /api/v1/checkout/sessions/{id} et valide Firestore UNIQUEMENT si approved
+// Interroge GET /api/v1/checkout/sessions/{id} et valide Supabase UNIQUEMENT si approved
 // ============================================================================
 app.get(['/api/payment/verify-session', '/api/payments/verify-session', '/api/payment/checkout/verify-session'], async (req, res) => {
   try {
@@ -1051,12 +1097,11 @@ app.get(['/api/payment/verify-session', '/api/payments/verify-session', '/api/pa
 
     console.log(`[VERIFY SESSION RESULT] Session: ${sessionId} | Statut: ${transactionStatus} | Approved: ${isApproved} | Commande: ${orderId}`);
 
-    // RÈGLE STRICTE : Valider la commande dans Firestore ("PAID") UNIQUEMENT si transaction_status === "approved"
-    if (isApproved && db && orderId) {
+    // RÈGLE STRICTE : Valider la commande dans Supabase ("PAID") UNIQUEMENT si transaction_status === "approved"
+    const supa = getSupabaseAdmin();
+    if (isApproved && supa && orderId) {
       try {
-        const nowServer = admin.firestore.FieldValue.serverTimestamp();
-        const batch = db.batch();
-
+        const nowIso = new Date().toISOString();
         const updatePayload = {
           status: 'PAID',
           paymentStatus: 'PAID',
@@ -1065,56 +1110,42 @@ app.get(['/api/payment/verify-session', '/api/payments/verify-session', '/api/pa
           provider: 'SEBPAY_HOSTED_CHECKOUT',
           checkoutSessionId: sessionId,
           transactionId: sessionId,
-          paidAt: nowServer,
-          updatedAt: nowServer,
+          paidAt: nowIso,
+          updatedAt: nowIso,
           amount: sessionRes.amount,
           currency: sessionRes.currency || 'XOF'
         };
 
-        // 1. payment_intents
-        const intentRef = db.collection('payment_intents').doc(orderId);
-        batch.set(intentRef, updatePayload, { merge: true });
+        await supa.from('server_security_vault').upsert({
+          key: `payment_intent_${orderId}`,
+          category: 'payment_intents',
+          tenant_id: String(storeId || ''),
+          secret_json: updatePayload,
+          updated_at: nowIso
+        });
 
-        // 2. orders
-        const orderRef = db.collection('orders').doc(orderId);
-        batch.set(orderRef, {
-          status: 'PAID',
-          paymentStatus: 'PAID',
-          isPaid: true,
-          deliveryStatus: 'PENDING_DISPATCH', // Déclenchement de la livraison
-          paidAt: nowServer,
-          updatedAt: nowServer
-        }, { merge: true });
-
-        // 3. customer_orders
-        const custOrderRef = db.collection('customer_orders').doc(orderId);
-        batch.set(custOrderRef, {
-          status: 'PAID',
-          paymentStatus: 'PAID',
-          isPaid: true,
-          deliveryStatus: 'PENDING_DISPATCH',
-          paidAt: nowServer,
-          updatedAt: nowServer
-        }, { merge: true });
-
-        // 4. processed_transactions (protection idempotence)
-        const processedRef = db.collection('processed_transactions').doc(sessionId);
-        batch.set(processedRef, {
-          transactionId: sessionId,
-          orderId,
-          storeId,
-          status: 'PAID',
-          processed: true,
+        await supa.from('nanaswitch_transactions').upsert({
+          order_id: String(orderId),
+          external_reference: `${storeId}___${orderId}`,
+          store_id: String(storeId),
+          tenant_id: String(storeId),
+          amount: Number(sessionRes.amount || 0),
+          currency: String(sessionRes.currency || 'XOF').toUpperCase(),
           gateway: 'sebpay',
-          amount: sessionRes.amount,
-          currency: sessionRes.currency,
-          createdAt: nowServer
-        }, { merge: true });
+          provider: 'SEBPAY_HOSTED_CHECKOUT',
+          status: 'PAID',
+          transaction_id: String(sessionId),
+          updated_at: nowIso
+        });
 
-        await batch.commit();
-        console.log(`[VERIFY SESSION FIRESTORE] Commande #${orderId} validée en "PAID" et livraison déclenchée avec succès.`);
+        await supa
+          .from('orders')
+          .update({ status: 'paid', payment_status: 'paid', updated_at: nowIso })
+          .eq('id', String(orderId));
+
+        console.log(`[VERIFY SESSION SUPABASE] Commande #${orderId} validée en "PAID" avec succès.`);
       } catch (dbErr) {
-        console.error('[VERIFY SESSION FIRESTORE ERROR]', dbErr.message);
+        console.error('[VERIFY SESSION SUPABASE ERROR]', dbErr.message);
       }
     }
 
@@ -2079,13 +2110,14 @@ app.post(['/api/payments/initiate', '/api/switch/initiate', '/api/payment/switch
 
     const finalGateway = initResult.gateway || gateway;
 
-    if (db) {
+    const supabaseAdmin = getSupabaseAdmin();
+    if (supabaseAdmin) {
       try {
-        const nowServer = admin.firestore.FieldValue.serverTimestamp();
+        const nowIso = new Date().toISOString();
         const intentPayload = {
           id: orderId,
           orderId,
-          storeId,
+          storeId: resolvedMerchantId,
           amount: Number(amount),
           currency,
           gateway: finalGateway,
@@ -2102,30 +2134,33 @@ app.post(['/api/payments/initiate', '/api/switch/initiate', '/api/payment/switch
           customerEmail: customerEmail || null,
           customerName: customerName || null,
           description,
-          createdAt: nowServer,
-          updatedAt: nowServer
+          createdAt: nowIso,
+          updatedAt: nowIso
         };
 
-        await db.collection('payment_intents').doc(orderId).set(intentPayload, { merge: true });
-        console.log(`[FIRESTORE TRANSACTION] Document payment_intents/${orderId} persisté avec gateway="${finalGateway}"`);
-      } catch (fbErr) {
-        console.warn('[FIRESTORE INTENT WARNING]', fbErr.message);
+        await supabaseAdmin.from('server_security_vault').upsert({
+          key: `payment_intent_${orderId}`,
+          category: 'payment_intents',
+          tenant_id: String(resolvedMerchantId || ''),
+          secret_json: intentPayload,
+          updated_at: nowIso
+        });
+      } catch (supaErr) {
+        console.warn('[SUPABASE INTENT WARNING]', supaErr.message);
       }
     }
 
-    // 4. Déduction atomique de 0.02 XOF (1 crédit) et traçabilité dans api_usage & switch_logs
-    if (db) {
-      merchantService.recordApiUsageAndDebit(db, {
-        merchantId: resolvedMerchantId,
-        orderId,
-        amount: Number(amount),
-        currency,
-        country: country || countryCode || 'BF',
-        gateway: finalGateway,
-        status: initResult.failedOver ? 'FAILOVER_SUCCESS' : 'SUCCESS',
-        latencyMs: Math.max(10, Date.now() - startTs)
-      }).catch(err => console.warn('[API METERING NOTICE]', err.message));
-    }
+    // 4. Déduction atomique de 0.02 XOF (1 crédit) et traçabilité dans Supabase
+    merchantService.recordApiUsageAndDebit(db, {
+      merchantId: resolvedMerchantId,
+      orderId,
+      amount: Number(amount),
+      currency,
+      country: country || countryCode || 'BF',
+      gateway: finalGateway,
+      status: initResult.failedOver ? 'FAILOVER_SUCCESS' : 'SUCCESS',
+      latencyMs: Math.max(10, Date.now() - startTs)
+    }).catch(err => console.warn('[API METERING NOTICE]', err.message));
 
     return res.status(200).json({
       success: true,
@@ -2296,39 +2331,34 @@ app.post(['/api/escrow/initiate', '/api/payments/escrow/initiate'], async (req, 
 
     const paymentUrl = sebpayResult.paymentUrl || sebpayResult.checkout_url || sebpayResult.provider_link || sebpayResult.redirectUrl;
 
-    if (db) {
-      const nowServer = admin.firestore.FieldValue.serverTimestamp();
-      const escrowRef = db.collection('wameet_escrow_transactions').doc(transactionId);
-
-      await escrowRef.set({
-        id: transactionId,
-        transactionId,
-        externalReference,
-        chatId: chatId || null,
-        messageId: messageId || null,
-        itemTitle: itemTitle || 'Article Wameet',
-        amount: Number(amount),
-        currency,
-        buyerPhone: buyerPhone || '',
-        buyerName,
-        buyerId: buyerId || '',
-        sellerId: sellerId || '',
-        escrowStatus: 'pending',
-        paymentUrl,
-        operator,
-        createdAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      if (chatId && messageId) {
-        const msgRef = db.collection('wameet_chats').doc(chatId).collection('messages').doc(messageId);
-        await msgRef.set({
+    const escrowSupa = getSupabaseAdmin();
+    if (escrowSupa) {
+      const nowIso = new Date().toISOString();
+      await escrowSupa.from('server_security_vault').upsert({
+        key: `wameet_escrow_${transactionId}`,
+        category: 'escrow',
+        tenant_id: String(sellerId || buyerId || ''),
+        secret_json: {
+          id: transactionId,
           transactionId,
+          externalReference,
+          chatId: chatId || null,
+          messageId: messageId || null,
+          itemTitle: itemTitle || 'Article Wameet',
+          amount: Number(amount),
+          currency,
+          buyerPhone: buyerPhone || '',
+          buyerName,
+          buyerId: buyerId || '',
+          sellerId: sellerId || '',
           escrowStatus: 'pending',
           paymentUrl,
-          updatedAt: nowServer
-        }, { merge: true }).catch(() => {});
-      }
+          operator,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        },
+        updated_at: nowIso
+      }).catch(() => {});
     }
 
     return res.json({
@@ -2351,30 +2381,37 @@ app.post(['/api/escrow/initiate', '/api/payments/escrow/initiate'], async (req, 
  */
 app.post(['/api/escrow/release', '/api/payments/escrow/release'], requireInternalAdminAuth, async (req, res) => {
   try {
-    const { transactionId, chatId, messageId, buyerId } = req.body;
-    const authenticatedActorId = req.authUser?.id || buyerId || '';
+    const { transactionId, chatId, messageId } = req.body;
+    const authenticatedActorId = req.authUser?.id ? String(req.authUser.id) : '';
 
     if (!transactionId) {
       return res.status(400).json({ success: false, error: 'transactionId obligatoire.' });
     }
+    if (!req.isInternalAdmin && !authenticatedActorId) {
+      return res.status(401).json({ success: false, error: 'Authentification requise.' });
+    }
 
     console.log(`[SMART ESCROW RELEASE] Transaction: ${transactionId} demandée par: ${authenticatedActorId || 'internal-admin'}`);
 
-    if (!db) {
+    const escrowSupa = getSupabaseAdmin();
+    if (!escrowSupa) {
       return res.status(503).json({ success: false, error: 'Base de données séquestre indisponible.' });
     }
 
-    const escrowRef = db.collection('wameet_escrow_transactions').doc(transactionId);
-    const escrowSnap = await escrowRef.get();
+    const { data: vaultRow, error: fetchErr } = await escrowSupa
+      .from('server_security_vault')
+      .select('*')
+      .eq('key', `wameet_escrow_${transactionId}`)
+      .maybeSingle();
 
-    if (!escrowSnap.exists) {
+    if (fetchErr || !vaultRow?.secret_json) {
       return res.status(404).json({ success: false, error: 'Transaction séquestre introuvable.' });
     }
 
-    const escrowData = escrowSnap.data();
+    const escrowData = vaultRow.secret_json;
 
-    // Vérification stricte de propriété (jamais contournée si buyerId est omis)
-    if (!req.isInternalAdmin && escrowData.buyerId && escrowData.buyerId !== authenticatedActorId) {
+    // Vérification stricte de propriété (jamais contournée via req.body.buyerId)
+    if (!req.isInternalAdmin && escrowData.buyerId && String(escrowData.buyerId) !== authenticatedActorId) {
       return res.status(403).json({ success: false, error: 'Seul l\'acheteur enregistré peut confirmer la réception.' });
     }
 
@@ -2393,58 +2430,64 @@ app.post(['/api/escrow/release', '/api/payments/escrow/release'], requireInterna
       });
     }
 
-    const nowServer = admin.firestore.FieldValue.serverTimestamp();
-    const batch = db.batch();
-
-    // 1. Marquer le séquestre comme libéré
-    batch.set(escrowRef, {
+    const nowIso = new Date().toISOString();
+    const updatedEscrow = {
+      ...escrowData,
       escrowStatus: 'released',
       status: 'released',
-      releasedAt: nowServer,
-      releasedBy: buyerId || 'buyer',
-      updatedAt: nowServer
-    }, { merge: true });
+      releasedAt: nowIso,
+      releasedBy: authenticatedActorId || 'internal-admin',
+      updatedAt: nowIso
+    };
 
-    // 2. Mettre à jour le message dans le chat Wameet
+    const { error: updateErr } = await escrowSupa
+      .from('server_security_vault')
+      .update({ secret_json: updatedEscrow, updated_at: nowIso })
+      .eq('key', `wameet_escrow_${transactionId}`);
+
+    if (updateErr) {
+      return res.status(500).json({ success: false, error: 'Erreur mise à jour séquestre.' });
+    }
+
     const effectiveChatId = chatId || escrowData.chatId;
     const effectiveMessageId = messageId || escrowData.messageId;
-
     if (effectiveChatId && effectiveMessageId) {
-      const msgRef = db.collection('wameet_chats').doc(effectiveChatId).collection('messages').doc(effectiveMessageId);
-      batch.set(msgRef, {
-        escrowStatus: 'released',
-        status: 'released',
-        releasedAt: nowServer,
-        updatedAt: nowServer
-      }, { merge: true });
-
-      // Diffuse l'événement WebSocket transaction_updated aux clients connectés
       broadcastToChat(effectiveChatId, 'transaction_updated', {
         transactionId,
         messageId: effectiveMessageId,
         chatId: effectiveChatId,
         status: 'released',
         escrowStatus: 'released',
-        updatedAt: nowServer
+        updatedAt: nowIso
       });
     }
 
-    // 3. Créditer le wallet du vendeur (Split : 95% vendeur / 5% Nanasore)
-    const sellerId = escrowData.sellerId || 'seller';
+    // Créditer le wallet du vendeur dans Supabase (Split : 95% vendeur / 5% Nanasore) avec verrou optimiste CAS
+    const sellerId = String(escrowData.sellerId || '');
     const amount = Number(escrowData.amount || 0);
     const sellerShare = Math.round(amount * 0.95);
     const platformShare = amount - sellerShare;
 
-    const sellerWalletRef = db.collection('wallets').doc(sellerId);
-    batch.set(sellerWalletRef, {
-      tenantId: sellerId,
-      balance: admin.firestore.FieldValue.increment(sellerShare),
-      totalEarnings: admin.firestore.FieldValue.increment(sellerShare),
-      escrowReleasedCount: admin.firestore.FieldValue.increment(1),
-      updatedAt: nowServer
-    }, { merge: true });
+    if (sellerId && sellerShare > 0) {
+      const { data: walletRow } = await escrowSupa
+        .from('wallets')
+        .select('id, cash_balance')
+        .eq('tenant_id', sellerId)
+        .maybeSingle();
 
-    await batch.commit();
+      if (walletRow) {
+        const currentBal = Number(walletRow.cash_balance || 0);
+        await escrowSupa
+          .from('wallets')
+          .update({ cash_balance: currentBal + sellerShare, updated_at: nowIso })
+          .eq('id', walletRow.id)
+          .eq('cash_balance', walletRow.cash_balance);
+      } else {
+        await escrowSupa
+          .from('wallets')
+          .insert({ tenant_id: sellerId, cash_balance: sellerShare, updated_at: nowIso });
+      }
+    }
 
     console.log(`[SMART ESCROW RELEASE SUCCESS] ${amount} FCFA : ${sellerShare} FCFA au vendeur (${sellerId}) et ${platformShare} FCFA commission.`);
 
@@ -3394,23 +3437,38 @@ app.post(['/v1/switch/merchant/credits/recharge', '/api/switch/merchant/credits/
     if (!merchantId) {
       return res.status(400).json({ success: false, error: 'merchantId requis' });
     }
-    const creditsToAdd = Number(creditsAmount) || 5000;
+    const creditsToAdd = Math.max(1, Number(creditsAmount) || 5000);
     let newBalance = creditsToAdd;
 
-    if (db) {
-      const merchantRef = db.collection('merchants').doc(merchantId);
-      await db.runTransaction(async (transaction) => {
-        const snap = await transaction.get(merchantRef);
-        const currentData = snap.exists ? snap.data() : {};
-        const currentCredits = currentData.api_pricing_config?.api_credits_balance ?? currentData.api_credits_balance ?? 0;
-        newBalance = currentCredits + creditsToAdd;
+    const supa = getSupabaseAdmin();
+    if (supa) {
+      const nowIso = new Date().toISOString();
+      const { data: nmRow } = await supa
+        .from('nanaswitch_merchants')
+        .select('merchant_id, api_credits_balance')
+        .eq('merchant_id', String(merchantId))
+        .maybeSingle();
 
-        transaction.set(merchantRef, {
-          'api_pricing_config.api_credits_balance': newBalance,
-          api_credits_balance: newBalance,
-          updated_at: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-      });
+      if (nmRow) {
+        newBalance = Number(nmRow.api_credits_balance || 0) + creditsToAdd;
+        await supa
+          .from('nanaswitch_merchants')
+          .update({ api_credits_balance: newBalance, updated_at: nowIso })
+          .eq('merchant_id', String(merchantId));
+      } else {
+        const { data: mRow } = await supa
+          .from('merchants')
+          .select('id, api_credits_balance')
+          .eq('id', String(merchantId))
+          .maybeSingle();
+        if (mRow) {
+          newBalance = Number(mRow.api_credits_balance || 0) + creditsToAdd;
+          await supa
+            .from('merchants')
+            .update({ api_credits_balance: newBalance, updated_at: nowIso })
+            .eq('id', String(merchantId));
+        }
+      }
     }
 
     return res.json({
@@ -3585,31 +3643,20 @@ app.post(['/v1/switch/route', '/api/switch/route'], express.json(), async (req, 
   // ÉTAPE D : DÉBIT DE CRÉDIT & JOURNALISATION D'AUDIT
   // --------------------------------------------------------------------------
   let newCredits = credits;
-  if (db && tenantId) {
+  if (tenantId) {
     if (isLive && credits > 0) {
       newCredits = Math.max(0, credits - 1);
-      db.collection('switch_wallets').doc(tenantId).set({
-        credits: admin.firestore.FieldValue.increment(-1),
-        totalDispatches: admin.firestore.FieldValue.increment(1),
-        lastDispatchAt: new Date().toISOString()
-      }, { merge: true }).catch(e => console.warn('[NANASWITCH ROUTE] Update wallet :', e.message));
+      merchantService.recordApiUsageAndDebit(db, {
+        merchantId: tenantId,
+        orderId: txId,
+        amount: Number(amount || 0),
+        currency,
+        country: countryUpper,
+        gateway: chosen,
+        status: failover ? 'FAILOVER_SUCCESS' : 'SUCCESS_200',
+        latencyMs: switchLatency
+      }).catch(e => console.warn('[NANASWITCH ROUTE] Metering Supabase :', e.message));
     }
-
-    db.collection('switch_logs').add({
-      txId,
-      tenantId,
-      country: countryUpper,
-      amount,
-      currency,
-      connector: chosen,
-      status: failover ? 'FAILOVER_SUCCESS' : 'SUCCESS_200',
-      latencyMs: switchLatency,
-      isLive,
-      failover,
-      fallbackConnector: failover ? fallback : null,
-      timestamp: new Date().toISOString(),
-      nodeRegion: 'eu-west-1 (Static IP 194.163.148.22)'
-    }).catch(e => console.warn('[NANASWITCH ROUTE] Add log :', e.message));
   }
 
   return res.json({

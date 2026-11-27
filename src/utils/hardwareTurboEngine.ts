@@ -318,7 +318,7 @@ function fallbackCanvasDraw(
  * 3. PRÉ-CHARGEMENT ADAPTATIF SANS SURCHARGE MÉMOIRE
  * Ne pré-alloue aucun gros tampon RAM sur les appareils à 4Go ou moins
  */
-export function prewarmStudioTurbo(endpointUrl = 'https://lvl7sz2hihrrp6jdui35hm7qnq0zxbkl.lambda-url.eu-north-1.on.aws/') {
+export function prewarmStudioTurbo(endpointUrl = '/aws-lambda') {
   if (typeof window === 'undefined') return;
 
   const profile = getHardwareProfile();

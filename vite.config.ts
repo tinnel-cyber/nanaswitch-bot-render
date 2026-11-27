@@ -6,8 +6,8 @@ import { defineConfig } from 'vite';
 export default defineConfig(() => {
   return {
     define: {
-      'process.env.LAMBDA_URL': JSON.stringify(process.env.LAMBDA_URL || process.env.AWS_LAMBDA_URL || process.env.VITE_AWS_LAMBDA_URL || ''),
-      'process.env.AWS_LAMBDA_URL': JSON.stringify(process.env.AWS_LAMBDA_URL || process.env.LAMBDA_URL || process.env.VITE_AWS_LAMBDA_URL || ''),
+      'process.env.LAMBDA_URL': JSON.stringify('/aws-lambda'),
+      'process.env.AWS_LAMBDA_URL': JSON.stringify('/aws-lambda'),
       'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'),
       'process.env.VITE_PAYMENT_API_URL': JSON.stringify(process.env.VITE_PAYMENT_API_URL || process.env.VITE_API_URL || 'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run'),
       'process.env.VITE_LIVE_WHIP_URL': JSON.stringify(process.env.VITE_LIVE_WHIP_URL || 'https://p01--nanasore-live--p8yx28yyjhbx.code.run'),

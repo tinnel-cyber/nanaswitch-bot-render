@@ -2,9 +2,9 @@ name: Production CI — Build & Security Checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, emplacement_theme_prestation]
   pull_request:
-    branches: [main]
+    branches: [main, emplacement_theme_prestation]
 
 jobs:
   build-and-verify:
@@ -26,7 +26,7 @@ jobs:
         working-directory: payment-service
         run: npm install
 
-      - name: Verify payment-service syntax
+      - name: Verify payment-service syntax & security/failover tests
         working-directory: payment-service
         run: |
           node --check server.js
@@ -34,6 +34,17 @@ jobs:
           node --check nana-switch/split-engine.js
           node --check nana-switch/validateNanaSwitchKey.js
           node --check chat-finance-controller.js
+          node test-payment-security-audit.js
+          node test-proxy-failover.js
+          node test-switch-real.js
+          node test-sebpay.js
+          node test-sebpay-guard.js
+          node test-sebpay-webhook.js
+          node test-webhook-signatures.js
+          node test-integration-mode-byok.js
+          node test-nanaswitch-auth-pricing.js
+          node test-check-transaction-limit.js
+          node test-407-resilience.js
 
       - name: Build frontend & server bundle
         env:

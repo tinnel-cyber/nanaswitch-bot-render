@@ -433,13 +433,39 @@ export function attachFarotageRoutes(app: Express): void {
         });
       }
 
-      const signature = (req.headers['x-s-signature'] as string) || (req.headers['x-signature'] as string);
-      const rawPayload = JSON.stringify(req.body);
+      const signature = String(
+        req.headers['x-s-signature'] ||
+          req.headers['x-sebpay-signature'] ||
+          req.headers['x-webhook-signature'] ||
+          req.headers['x-signature'] ||
+          ''
+      )
+        .replace(/^sha256=/i, '')
+        .trim();
+      const rawPayload = (req as any).rawBody
+        ? (req as any).rawBody.toString('utf8')
+        : JSON.stringify(req.body || {});
+
+      if (!signature || !verifySSignature(rawPayload, signature)) {
+        return res.status(401).json({
+          success: false,
+          code: 'INVALID_WEBHOOK_SIGNATURE',
+          message: 'Signature cryptographique HMAC requise et valide.'
+        });
+      }
+
+      if (!req.body?.status) {
+        return res.status(400).json({
+          success: false,
+          code: 'MISSING_STATUS',
+          message: 'Statut de transaction requis.'
+        });
+      }
 
       const result = await handleFarotageWebhook({
         transactionId,
         receiptNumber: req.body?.receiptNumber,
-        status: req.body?.status || 'SUCCESS',
+        status: String(req.body.status),
         rawPayload,
         signature
       });

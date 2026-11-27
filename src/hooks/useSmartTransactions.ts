@@ -464,7 +464,7 @@ export function useSmartTransactions(
             createdAtServer: new Date().toISOString()
           },
           updated_at: new Date().toISOString()
-        }).catch((err: any) => {
+        }).then(undefined, (err: any) => {
           console.warn('[SMART HOOK] Notice sauvegarde Supabase :', err?.message);
         });
 
@@ -490,7 +490,7 @@ export function useSmartTransactions(
               createdAtServer: new Date().toISOString()
             },
             updated_at: new Date().toISOString()
-          }).catch(() => {});
+          }).then(undefined, () => {});
         }
       } catch (e) {
         console.warn('[SMART HOOK] Notice Supabase non-bloquante :', e);

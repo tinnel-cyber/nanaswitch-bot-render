@@ -191,7 +191,17 @@ class NaNaSwitchManager {
     if (!err) return false;
 
     // 1. Erreurs réseau pré-connexion explicites (avant création de charge)
-    const preConnectionCodes = ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH', 'EAI_AGAIN'];
+    const preConnectionCodes = [
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EHOSTUNREACH',
+      'EAI_AGAIN',
+      'ETIMEDOUT',
+      'ECONNRESET',
+      'ESOCKETTIMEDOUT',
+      'ECONNABORTED',
+      'UND_ERR_CONNECT_TIMEOUT'
+    ];
     if (preConnectionCodes.includes(String(err.code || '').toUpperCase())) {
       return true;
     }
@@ -255,7 +265,7 @@ class NaNaSwitchManager {
 
     // 4. Statuts HTTP d'infrastructure passerelle
     const status = Number(err.status || err.statusCode || err.response?.status || 0);
-    if ([401, 403, 429, 502, 503, 504].includes(status)) {
+    if ([401, 403, 404, 429, 500, 502, 503, 504].includes(status)) {
       return true;
     }
     if (status === 400 || status === 402 || status === 422) {
@@ -267,6 +277,12 @@ class NaNaSwitchManager {
       'enotfound',
       'ehostunreach',
       'eai_again',
+      'etimedout',
+      'econnreset',
+      'fetch failed',
+      'network error',
+      'socket hang up',
+      'timeout',
       'ip_not_whitelisted',
       'ip not whitelisted',
       'rate limit',
@@ -420,12 +436,33 @@ class NaNaSwitchManager {
    * en garantissant la traçabilité complète de la passerelle (SasPay / SebPay) et du failover.
    */
   async persistTransactionIntent(_legacyDb, initResult, originalParams = {}) {
+    const orderId = originalParams.orderId || initResult.orderId || `ORD_${Date.now()}`;
+    const chosenGateway = initResult.gateway || this.getPrimaryGateway();
+    const nowServer = new Date().toISOString();
+
+    if (_legacyDb && typeof _legacyDb.collection === 'function') {
+      try {
+        await _legacyDb.collection('transactions').doc(String(orderId)).set({
+          orderId,
+          storeId: originalParams.storeId || 'nanasore_central_hub',
+          amount: Number(originalParams.amount || initResult.amount || 0),
+          currency: (originalParams.currency || initResult.currency || 'XOF').toUpperCase(),
+          gateway: chosenGateway,
+          provider: chosenGateway.toUpperCase(),
+          failedOver: Boolean(initResult.failedOver),
+          originalGateway: initResult.originalGateway || null,
+          failoverReason: initResult.failoverReason || null,
+          status: 'PENDING',
+          paymentUrl: initResult.paymentUrl || initResult.checkout_url || null,
+          updatedAt: nowServer
+        }, { merge: true });
+      } catch {}
+    }
+
     try {
       const { getSupabaseAdmin } = require('../supabase-admin');
       const supabase = getSupabaseAdmin();
       if (!supabase) return;
-
-      const orderId = originalParams.orderId || initResult.orderId || `ORD_${Date.now()}`;
 
       // Protection anti-squat (Audit C4) : Ne JAMAIS écraser une transaction déjà payée vers PENDING
       const { data: existingTx } = await supabase
@@ -443,8 +480,6 @@ class NaNaSwitchManager {
         originalParams.externalReference ||
         initResult.reference ||
         `${originalParams.storeId || 'nanasore'}___${orderId}`;
-      const chosenGateway = initResult.gateway || this.getPrimaryGateway();
-      const nowServer = new Date().toISOString();
 
       await supabase.from('nanaswitch_transactions').upsert({
         order_id: orderId,

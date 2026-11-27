@@ -90,11 +90,11 @@ console.log('  70123456          ->', testBfPhone4);
 console.log('  +226 76-54-32-10  ->', testBfPhone5);
 
 const isBfPhoneFormatOk =
-  testBfPhone1 === '70123456' &&
-  testBfPhone2 === '70123456' &&
-  testBfPhone3 === '70123456' &&
-  testBfPhone4 === '70123456' &&
-  testBfPhone5 === '76543210';
+  testBfPhone1 === '+22670123456' &&
+  testBfPhone2 === '+22670123456' &&
+  testBfPhone3 === '+22670123456' &&
+  testBfPhone4 === '+22670123456' &&
+  testBfPhone5 === '+22676543210';
 
 console.log('\n=== TEST CONFORMITÉ OPÉRATEUR ORANGE BF ===');
 const { normalizeSebpayOperator } = require('./sebpay-client');

@@ -17,7 +17,7 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache ffmpeg
-ENV NODE_OPTIONS="--max-old-space-size=768"
+ENV NODE_OPTIONS="--max-old-space-size=220"
 
 COPY package*.json ./
 RUN npm install --legacy-peer-deps --omit=dev
@@ -40,7 +40,7 @@ ENV PAYMENT_API_URL=http://127.0.0.1:10001
 EXPOSE 10000
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:10000/health || wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD (wget --no-verbose --tries=1 --spider http://127.0.0.1:10000/health || wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health) && wget --no-verbose --tries=1 --spider http://127.0.0.1:10001/health || exit 1
 
-CMD ["sh", "-c", "PORT=10001 node /app/payment-service/server.js & exec node --max-old-space-size=768 dist/server.cjs"]
+CMD ["sh", "-c", "(while true; do PORT=10001 node --max-old-space-size=160 /app/payment-service/server.js; echo '[SUPERVISOR] payment-service exited, restarting in 2s...'; sleep 2; done) & exec node --max-old-space-size=256 dist/server.cjs"]

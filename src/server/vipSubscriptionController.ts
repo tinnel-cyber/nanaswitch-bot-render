@@ -236,11 +236,60 @@ export function attachVipSubscriptionRoutes(app: Express): void {
     }
   });
 
-  // 2. POST /api/vip/webhook : Réception du Webhook de confirmation S-Pay
+  // 2. POST /api/vip/webhook : Réception du Webhook de confirmation S-Pay (HMAC obligatoire)
   app.post('/api/vip/webhook', (req: Request, res: Response) => {
     try {
+      const candidateSecrets = [
+        process.env.S_WEBHOOK_SECRET,
+        process.env.SEBPAY_WEBHOOK_SECRET,
+        process.env.SEBPAY_SECRET_KEY,
+        process.env.PAYMENT_WEBHOOK_SECRET,
+      ]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+
+      if (candidateSecrets.length === 0) {
+        return res.status(503).json({ success: false, error: 'Configuration webhook VIP incomplète.' });
+      }
+
+      const providedSig = String(
+        req.headers['x-s-signature'] ||
+          req.headers['x-sebpay-signature'] ||
+          req.headers['x-webhook-signature'] ||
+          req.headers['x-signature'] ||
+          ''
+      )
+        .replace(/^sha256=/i, '')
+        .trim()
+        .toLowerCase();
+
+      if (!providedSig) {
+        return res.status(401).json({ success: false, error: 'Signature cryptographique HMAC requise.' });
+      }
+
+      const rawPayload = (req as any).rawBody
+        ? (req as any).rawBody.toString('utf8')
+        : JSON.stringify(req.body || {});
+
+      let sigValid = false;
+      for (const secret of candidateSecrets) {
+        const expected = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex').toLowerCase();
+        const bufA = Buffer.from(providedSig, 'utf8');
+        const bufB = Buffer.from(expected, 'utf8');
+        if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+          sigValid = true;
+          break;
+        }
+      }
+      if (!sigValid) {
+        return res.status(401).json({ success: false, error: 'Signature webhook VIP invalide.' });
+      }
+
       const { transactionId, status, receiptNumber } = req.body || {};
-      console.log(`[VIP WEBHOOK] Webhook de paiement reçu pour Tx: ${transactionId} (Status: ${status})`);
+      if (!transactionId || !status) {
+        return res.status(400).json({ success: false, error: 'transactionId et status requis.' });
+      }
+      console.log(`[VIP WEBHOOK] Webhook signé reçu pour Tx: ${transactionId} (Status: ${status})`);
 
       for (const sub of VIP_SUBSCRIPTIONS.values()) {
         if (sub.transactionId === transactionId) {

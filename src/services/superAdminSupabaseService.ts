@@ -579,8 +579,7 @@ export async function savePlatformPricingToSupabase(
               features: p.features || [],
               is_active: true,
               updated_at: now
-            }, { onConflict: 'code' })
-            .catch(() => {});
+            }, { onConflict: 'code' });
         }
       }
     }

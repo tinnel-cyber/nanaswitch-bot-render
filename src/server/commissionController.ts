@@ -8,21 +8,25 @@ import type { Express, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-const supabaseUrl =
-  process.env.SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  process.env.VITE_SUPABASE_URL ||
-  'https://wsxnznobeefrsoicjqte.supabase.co';
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SECRET_KEY ||
-  '';
+let cachedCommissionSupabase: any = null;
 
-const supabaseAdmin = supabaseKey
-  ? createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  : null;
+function getCommissionSupabase() {
+  if (cachedCommissionSupabase) return cachedCommissionSupabase;
+  const url =
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://wsxnznobeefrsoicjqte.supabase.co';
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    '';
+  if (!key) return null;
+  cachedCommissionSupabase = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return cachedCommissionSupabase;
+}
 
 const DEFAULT_COMMISSION_RATE_PERCENT = 14;
 
@@ -39,10 +43,11 @@ export async function recordCommissionSaleInternal(params: {
   netMerchantXof?: number;
   txId?: string;
 }> {
+  const supabaseAdmin = getCommissionSupabase();
   if (!supabaseAdmin) {
     throw new Error('Supabase non configuré côté serveur.');
   }
-  const cleanUniverseId = String(params.universeId || '').trim();
+  const cleanUniverseId = String(params.universeId || '').trim().replace(/[^a-zA-Z0-9_.:-]/g, '');
   const gross = Math.round(Number(params.grossAmountXof) || 0);
   if (!cleanUniverseId || !params.orderRef || gross <= 0) {
     throw new Error('universeId, orderRef et grossAmountXof (> 0) requis.');
@@ -120,31 +125,102 @@ export async function recordCommissionSaleInternal(params: {
   };
 }
 
+const KNOWN_COMMISSION_ADMIN_EMAILS = new Set([
+  'pousbila04@gmail.com',
+  'pousbila36@gmail.com',
+  'contact@nanasore.com',
+  ...(process.env.SUPER_ADMIN_EMAILS
+    ? process.env.SUPER_ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+    : []),
+]);
+
+function isInternalAdminHeader(req: Request): boolean {
+  const internalSecret = String(process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '').trim();
+  const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '').trim();
+  if (!internalSecret || !providedKey) return false;
+  const bufA = Buffer.from(providedKey, 'utf8');
+  const bufB = Buffer.from(internalSecret, 'utf8');
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+async function resolveCommissionCaller(req: Request): Promise<{ user: any | null; isSuperAdmin: boolean; isInternal: boolean }> {
+  if (isInternalAdminHeader(req)) {
+    return { user: null, isSuperAdmin: true, isInternal: true };
+  }
+  const supabaseAdmin = getCommissionSupabase();
+  if (!supabaseAdmin) return { user: null, isSuperAdmin: false, isInternal: false };
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) return { user: null, isSuperAdmin: false, isInternal: false };
+  const token = authHeader.slice(7).trim();
+  if (!token) return { user: null, isSuperAdmin: false, isInternal: false };
+  const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+  if (authErr || !authData?.user) return { user: null, isSuperAdmin: false, isInternal: false };
+
+  const user = authData.user;
+  const email = String(user.email || '').toLowerCase();
+  // SÉCURITÉ : Ne jamais lire user_metadata.role (modifiable par le client) — uniquement app_metadata ou table super_admins
+  const appRole = String(user.app_metadata?.role || '').toUpperCase();
+  if (KNOWN_COMMISSION_ADMIN_EMAILS.has(email) || appRole === 'SUPER_ADMIN' || appRole === 'ADMIN') {
+    return { user, isSuperAdmin: true, isInternal: false };
+  }
+  try {
+    const { data: sa } = await supabaseAdmin
+      .from('super_admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (sa?.user_id) {
+      return { user, isSuperAdmin: true, isInternal: false };
+    }
+  } catch {}
+  return { user, isSuperAdmin: false, isInternal: false };
+}
+
 export function attachCommissionRoutes(app: Express): void {
   // 1. GET /api/merchant/commission/status — Vérifie si le marchand est dans commission_accounts + retourne ses transactions
   app.get('/api/merchant/commission/status', async (req: Request, res: Response) => {
-    const userId = String(req.query.userId || '').trim();
-    const universeId = String(req.query.universeId || '').trim();
+    const cleanId = (v: any) => String(v || '').trim().replace(/[^a-zA-Z0-9_.:-]/g, '');
+    const userId = cleanId(req.query.userId);
+    const universeId = cleanId(req.query.universeId);
     if (!userId && !universeId) {
       return res.status(400).json({ success: false, error: 'userId ou universeId requis.' });
     }
+    const caller = await resolveCommissionCaller(req);
+    if (!caller.isInternal && !caller.user) {
+      return res.status(401).json({ success: false, error: 'Authentification requise.' });
+    }
+    const supabaseAdmin = getCommissionSupabase();
     if (!supabaseAdmin) {
       return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
     }
+    if (!caller.isSuperAdmin && userId && caller.user && userId !== caller.user.id) {
+      return res.status(403).json({ success: false, error: 'Accès refusé à ce compte commission.' });
+    }
 
-    const filters: string[] = [];
-    if (userId) filters.push(`user_id.eq.${userId}`);
-    if (universeId) filters.push(`universe_id.eq.${universeId}`);
+    let account: any = null;
+    if (universeId) {
+      const { data, error } = await supabaseAdmin
+        .from('commission_accounts')
+        .select('*')
+        .eq('universe_id', universeId)
+        .limit(1)
+        .maybeSingle();
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      account = data;
+    }
+    if (!account && userId) {
+      const { data, error } = await supabaseAdmin
+        .from('commission_accounts')
+        .select('*')
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+      if (error) return res.status(500).json({ success: false, error: error.message });
+      account = data;
+    }
 
-    const { data: account, error } = await supabaseAdmin
-      .from('commission_accounts')
-      .select('*')
-      .or(filters.join(','))
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+    if (account && !caller.isSuperAdmin && caller.user && String(account.user_id || '') !== caller.user.id) {
+      return res.status(403).json({ success: false, error: 'Accès refusé : ce contrat commission appartient à un autre compte.' });
     }
 
     let transactions: any[] = [];
@@ -169,12 +245,13 @@ export function attachCommissionRoutes(app: Express): void {
   // 2. POST /api/merchant/commission/enroll — Inscrit officiellement un marchand avec contrat signé + copie Super Admin
   app.post('/api/merchant/commission/enroll', async (req: Request, res: Response) => {
     try {
-      if (!supabaseAdmin) {
-        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
-      }
+      const supabaseAdmin = getCommissionSupabase();
       const authHeader = String(req.headers.authorization || '');
       if (!authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ success: false, error: 'Authentification requise.' });
+      }
+      if (!supabaseAdmin) {
+        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
       }
       const token = authHeader.slice(7).trim();
       const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
@@ -218,6 +295,16 @@ export function attachCommissionRoutes(app: Express): void {
       const rate = Math.max(1, Math.min(30, Number(commissionRatePercent) || DEFAULT_COMMISSION_RATE_PERCENT));
       const nowIso = new Date().toISOString();
       const finalContractNumber = String(contractNumber || `CTR-COM-${Date.now().toString(36).toUpperCase()}`).trim();
+
+      // Vérifier qu'on n'écrase pas le contrat existant d'un autre utilisateur
+      const { data: existingAcc } = await supabaseAdmin
+        .from('commission_accounts')
+        .select('user_id')
+        .eq('id', accountId)
+        .maybeSingle();
+      if (existingAcc?.user_id && String(existingAcc.user_id) !== userId) {
+        return res.status(403).json({ success: false, error: 'Cet univers appartient à un autre compte marchand.' });
+      }
 
       const { data: upserted, error } = await supabaseAdmin
         .from('commission_accounts')
@@ -285,9 +372,13 @@ export function attachCommissionRoutes(app: Express): void {
     }
   });
 
-  // 3. POST /api/merchant/commission/record-sale — Enregistre une vente et sa commission dans commission_transactions
+  // 3. POST /api/merchant/commission/record-sale — Enregistre une vente et sa commission (interne ou authentifié uniquement)
   app.post('/api/merchant/commission/record-sale', async (req: Request, res: Response) => {
     try {
+      const caller = await resolveCommissionCaller(req);
+      if (!caller.isInternal && !caller.user) {
+        return res.status(401).json({ success: false, error: 'Authentification requise.' });
+      }
       const { universeId = '', orderRef = '', grossAmountXof = 0, channel = 'DIGITAL_SALE' } = req.body || {};
       const result = await recordCommissionSaleInternal({
         universeId,
@@ -306,17 +397,16 @@ export function attachCommissionRoutes(app: Express): void {
   // 4. GET /api/admin/commission/accounts — Liste tous les comptes & contrats commission pour le Super Admin Dashboard
   app.get('/api/admin/commission/accounts', async (req: Request, res: Response) => {
     try {
-      if (!supabaseAdmin) {
-        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
-      }
-      const authHeader = String(req.headers.authorization || '');
-      if (!authHeader.startsWith('Bearer ')) {
+      const caller = await resolveCommissionCaller(req);
+      if (!caller.isInternal && !caller.user) {
         return res.status(401).json({ success: false, error: 'Authentification Super Admin requise.' });
       }
-      const token = authHeader.slice(7).trim();
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
-      if (authErr || !authData?.user) {
-        return res.status(401).json({ success: false, error: 'Session expirée ou invalide.' });
+      if (!caller.isSuperAdmin) {
+        return res.status(403).json({ success: false, error: 'Accès refusé : privilèges Super-Administrateur requis.' });
+      }
+      const supabaseAdmin = getCommissionSupabase();
+      if (!supabaseAdmin) {
+        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
       }
 
       const { data: accounts, error } = await supabaseAdmin
@@ -359,17 +449,16 @@ export function attachCommissionRoutes(app: Express): void {
   // 5. PATCH /api/admin/commission/accounts/:id/review — Validation / changement de statut par le Super Admin
   app.patch('/api/admin/commission/accounts/:id/review', async (req: Request, res: Response) => {
     try {
-      if (!supabaseAdmin) {
-        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
-      }
-      const authHeader = String(req.headers.authorization || '');
-      if (!authHeader.startsWith('Bearer ')) {
+      const caller = await resolveCommissionCaller(req);
+      if (!caller.isInternal && !caller.user) {
         return res.status(401).json({ success: false, error: 'Authentification Super Admin requise.' });
       }
-      const token = authHeader.slice(7).trim();
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
-      if (authErr || !authData?.user) {
-        return res.status(401).json({ success: false, error: 'Session expirée ou invalide.' });
+      if (!caller.isSuperAdmin) {
+        return res.status(403).json({ success: false, error: 'Accès refusé : privilèges Super-Administrateur requis.' });
+      }
+      const supabaseAdmin = getCommissionSupabase();
+      if (!supabaseAdmin) {
+        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
       }
 
       const accountId = String(req.params.id || '').trim();

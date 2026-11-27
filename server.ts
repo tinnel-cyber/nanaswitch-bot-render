@@ -138,6 +138,38 @@ async function requireAuthenticatedUser(req: express.Request, res: express.Respo
   return res.status(401).json({ success: false, error: 'Authentification requise (Bearer JWT valide).' });
 }
 
+const superAdminCache = new Map<string, { isAdmin: boolean; expiresAt: number }>();
+
+async function isVerifiedSuperAdminUser(user: any): Promise<boolean> {
+  if (!user?.id) return false;
+  const email = String(user.email || '').toLowerCase();
+  // SÉCURITÉ CRITIQUE : Ne JAMAIS faire confiance à user.user_metadata.role (modifiable par le client Supabase Auth)
+  const appRole = String(user.app_metadata?.role || '').toUpperCase();
+  if (KNOWN_ADMIN_EMAILS.has(email) || appRole === 'SUPER_ADMIN' || appRole === 'ADMIN') {
+    return true;
+  }
+  const uid = String(user.id);
+  const cached = superAdminCache.get(uid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.isAdmin;
+  }
+  let dbIsAdmin = false;
+  try {
+    const { supabase } = await import('./app/utils/supabase.server');
+    if (supabase) {
+      const { data: sa } = await supabase
+        .from('super_admins')
+        .select('user_id')
+        .eq('user_id', uid)
+        .maybeSingle();
+      dbIsAdmin = Boolean(sa?.user_id);
+    }
+  } catch {}
+  if (superAdminCache.size > 2000) superAdminCache.clear();
+  superAdminCache.set(uid, { isAdmin: dbIsAdmin, expiresAt: Date.now() + 60_000 });
+  return dbIsAdmin;
+}
+
 async function requireAdminOrInternal(req: express.Request, res: express.Response, next: express.NextFunction) {
   const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
   const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
@@ -146,9 +178,7 @@ async function requireAdminOrInternal(req: express.Request, res: express.Respons
     return next();
   }
   const user = await resolveSupabaseUserFromRequest(req);
-  const email = String(user?.email || '').toLowerCase();
-  const role = String(user?.app_metadata?.role || user?.user_metadata?.role || '').toUpperCase();
-  if (user && (KNOWN_ADMIN_EMAILS.has(email) || role === 'SUPER_ADMIN' || role === 'ADMIN')) {
+  if (user && (await isVerifiedSuperAdminUser(user))) {
     (req as any).authUser = user;
     return next();
   }
@@ -482,7 +512,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/products', async (req, res) => {
+  app.post('/api/products', requireAuthenticatedUser, async (req, res) => {
     try {
       const { supabase } = await import('./app/utils/supabase.server');
       const { intent, name, price, stock, category, id } = req.body || {};
@@ -528,8 +558,8 @@ async function startServer() {
     }
   });
 
-  // API Omnibar Modules & Blocs Multi-Tenant (Supabase RPC)
-  app.post('/api/modules', async (req, res) => {
+  // API Omnibar Modules & Blocs Multi-Tenant (Supabase RPC — Authentifié & clés réservées protégées)
+  app.post('/api/modules', requireAuthenticatedUser, async (req, res) => {
     try {
       const { supabase } = await import('./app/utils/supabase.server');
       let { blockKey, block_key, isActive, is_active, organizationId, organization_id, settings } = req.body || {};
@@ -541,6 +571,9 @@ async function startServer() {
 
       if (!key) {
         return res.status(400).json({ success: false, error: 'blockKey requis' });
+      }
+      if (/^(webhook_import_secrets_|wallet_pin_|payment_intent_|payg_module_|universe_)/i.test(key)) {
+        return res.status(403).json({ success: false, error: 'Clé système protégée non modifiable via /api/modules.' });
       }
 
       // 1. Assurer la mise à jour dans app_registry (nom, description, catégorie)
@@ -634,9 +667,22 @@ async function startServer() {
     }
   });
 
+  const salesCreateBuckets = new Map<string, { count: number; resetAt: number }>();
   // API Ventes & Caisse POS / Storefront (Supabase process_sale_transaction RPC)
   app.post('/api/sales', async (req, res) => {
     try {
+      const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+      const nowMs = Date.now();
+      const bucket = salesCreateBuckets.get(clientIp);
+      if (!bucket || nowMs > bucket.resetAt) {
+        salesCreateBuckets.set(clientIp, { count: 1, resetAt: nowMs + 60_000 });
+      } else {
+        bucket.count += 1;
+        if (bucket.count > 30) {
+          return res.status(429).json({ success: false, error: 'Trop de requêtes de vente. Veuillez patienter.' });
+        }
+      }
+
       const { supabase } = await import('./app/utils/supabase.server');
       const {
         productId,
@@ -665,8 +711,8 @@ async function startServer() {
       if (!prodId) {
         return res.status(400).json({ success: false, error: 'productId requis' });
       }
-      if (isNaN(qty) || qty <= 0) {
-        return res.status(400).json({ success: false, error: 'La quantité doit être supérieure à 0' });
+      if (isNaN(qty) || qty <= 0 || qty > 500) {
+        return res.status(400).json({ success: false, error: 'La quantité doit être comprise entre 1 et 500' });
       }
 
       const { data, error } = await supabase.rpc('process_sale_transaction', {
@@ -737,8 +783,8 @@ async function startServer() {
     }
   });
 
-  // API Déclenchement d'alerte Live Shopping aux abonnés d'une boutique
-  app.post('/api/push/send-live-alert', async (req, res) => {
+  // API Déclenchement d'alerte Live Shopping aux abonnés d'une boutique (Authentifié marchand requis)
+  app.post('/api/push/send-live-alert', requireAuthenticatedUser, async (req, res) => {
     try {
       const { storeSlug, storeName, customTitle, customBody } = req.body || {};
       if (!storeSlug) {
@@ -759,11 +805,16 @@ async function startServer() {
     }
   });
 
-  app.get('/api/sales', async (req, res) => {
+  app.get('/api/sales', requireAuthenticatedUser, async (req, res) => {
     try {
       const { supabase } = await import('./app/utils/supabase.server');
-      const orgId = req.query.organizationId as string;
-      const limit = parseInt(String(req.query.limit || '50'), 10);
+      const orgId = String(req.query.organizationId || '').trim();
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+      const isAdmin = Boolean((req as any).isInternalAdmin || (await isVerifiedSuperAdminUser((req as any).authUser)));
+
+      if (!isAdmin && !orgId) {
+        return res.status(400).json({ success: false, error: 'organizationId requis', sales: [] });
+      }
 
       let query = supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(limit);
       if (orgId) {
@@ -793,11 +844,7 @@ async function startServer() {
     dataDir: DATA_DIR,
     getSupabaseAdmin: () => supabaseAdmin,
     resolveUser: resolveSupabaseUserFromRequest,
-    isAdminUser: (u: any) => {
-      const email = String(u?.email || '').toLowerCase();
-      const role = String(u?.app_metadata?.role || u?.user_metadata?.role || '').toUpperCase();
-      return Boolean(u && (KNOWN_ADMIN_EMAILS.has(email) || role === 'SUPER_ADMIN' || role === 'ADMIN'));
-    },
+    isAdminUser: isVerifiedSuperAdminUser,
   });
   const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
   const UNIVERSES_DATA_FILE = path.join(KYC_DATA_DIR, 'universes.json');
@@ -1406,22 +1453,33 @@ async function startServer() {
           .from('merchants')
           .select('*')
           .eq('id', cleanId)
-          .eq('owner_id', ownerUserId)
           .maybeSingle();
-        if (m) return m;
+        if (m) {
+          const mOwners = [m.owner_id, m.user_id, m.owner_uid, m.uid].map((v: any) => String(v || ''));
+          if (mOwners.includes(ownerUserId)) return m;
+        }
 
         const { data: u } = await supabase
           .from('universes')
           .select('*')
           .eq('id', cleanId)
-          .eq('user_id', ownerUserId)
           .maybeSingle();
         if (u) {
-          return {
-            ...u,
-            owner_id: u.user_id,
-            sector: u.sector || u.appellation || 'E-commerce & Services'
-          };
+          const uOwners = [
+            u.user_id,
+            u.owner_id,
+            u.owner_uid,
+            u.uid,
+            u.settings?.owner_id,
+            u.settings?.user_id
+          ].map((v: any) => String(v || ''));
+          if (uOwners.includes(ownerUserId)) {
+            return {
+              ...u,
+              owner_id: ownerUserId,
+              sector: u.sector || u.appellation || 'E-commerce & Services'
+            };
+          }
         }
       }
     } catch {}
@@ -1745,22 +1803,59 @@ async function startServer() {
     } catch {}
   };
 
-  const isPublicHttpUrl = (rawUrl: string): URL | null => {
+  const isPrivateOrReservedIp = (ip: string): boolean => {
+    const clean = String(ip || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+    if (!clean) return true;
+    if (
+      clean === '::1' ||
+      clean === '::' ||
+      clean.startsWith('fe80:') ||
+      clean.startsWith('fc') ||
+      clean.startsWith('fd')
+    ) {
+      return true;
+    }
+    const v4Mapped = clean.startsWith('::ffff:') ? clean.slice(7) : clean;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v4Mapped)) {
+      const parts = v4Mapped.split('.').map(Number);
+      const [a, b] = parts;
+      if (
+        a === 0 ||
+        a === 10 ||
+        a === 127 ||
+        (a === 100 && b >= 64 && b <= 127) ||
+        (a === 169 && b === 254) ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        a >= 224
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const resolveSafePublicUrl = async (rawUrl: string): Promise<URL | null> => {
     try {
       const u = new URL(rawUrl);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-      const host = u.hostname.toLowerCase();
+      const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
       if (
+        !host ||
         host === 'localhost' ||
-        host === '127.0.0.1' ||
-        host === '::1' ||
         host.endsWith('.local') ||
-        /^10\./.test(host) ||
-        /^192\.168\./.test(host) ||
-        /^169\.254\./.test(host) ||
-        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+        host.endsWith('.internal') ||
+        isPrivateOrReservedIp(host)
       ) {
         return null;
+      }
+      const dns = await import('dns');
+      const records = await dns.promises.lookup(host, { all: true });
+      if (!Array.isArray(records) || records.length === 0) return null;
+      for (const rec of records) {
+        if (isPrivateOrReservedIp(rec.address)) {
+          return null;
+        }
       }
       return u;
     } catch {
@@ -1802,9 +1897,9 @@ async function startServer() {
         return res.status(401).json({ success: false, error: 'Authentification requise pour importer depuis une URL.' });
       }
       const { url = '', currencyRateToXof = 0, marginPercent = 20, defaultCategory = 'Import Web' } = req.body || {};
-      const parsedUrl = isPublicHttpUrl(String(url || '').trim());
+      const parsedUrl = await resolveSafePublicUrl(String(url || '').trim());
       if (!parsedUrl) {
-        return res.status(400).json({ success: false, error: 'URL publique invalide (http:// ou https:// requis).' });
+        return res.status(400).json({ success: false, error: 'URL publique invalide ou adresse réseau interne refusée.' });
       }
 
       const fetchHeaders = {
@@ -1827,7 +1922,7 @@ async function startServer() {
 
       for (const candidateUrl of shopifyCandidates) {
         try {
-          const r = await fetch(candidateUrl, { headers: fetchHeaders, signal: AbortSignal.timeout(8000) });
+          const r = await fetch(candidateUrl, { headers: fetchHeaders, redirect: 'error', signal: AbortSignal.timeout(8000) });
           if (r.ok) {
             const ct = r.headers.get('content-type') || '';
             if (ct.includes('json')) {
@@ -1861,7 +1956,7 @@ async function startServer() {
 
       // 2. Extraction universelle HTML (JSON-LD Product + Open Graph)
       if (extracted.length === 0) {
-        const pageRes = await fetch(parsedUrl.toString(), { headers: fetchHeaders, signal: AbortSignal.timeout(9000) });
+        const pageRes = await fetch(parsedUrl.toString(), { headers: fetchHeaders, redirect: 'error', signal: AbortSignal.timeout(9000) });
         if (!pageRes.ok) {
           return res.status(400).json({
             success: false,
@@ -2017,6 +2112,16 @@ async function startServer() {
     try {
       const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
       if (supaClient) {
+        try {
+          const { data: vaultRow } = await supaClient
+            .from('server_security_vault')
+            .select('secret_json')
+            .eq('key', `webhook_import_secrets_${cleanStore}`)
+            .maybeSingle();
+          if (vaultRow?.secret_json && typeof vaultRow.secret_json === 'object') {
+            return { ...localEntry, ...vaultRow.secret_json };
+          }
+        } catch {}
         const { data } = await supaClient
           .from('app_registry')
           .select('config_json')
@@ -2051,36 +2156,58 @@ async function startServer() {
     try {
       const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
       if (supaClient) {
-        await supaClient.from('app_registry').upsert(
+        const { error: vaultErr } = await supaClient.from('server_security_vault').upsert(
           {
             key: `webhook_import_secrets_${cleanStore}`,
-            name: `Webhook Secrets ${cleanStore}`,
+            category: 'webhook_secrets',
             tenant_id: cleanStore,
-            module_key: 'webhook_import',
-            config_json: merged,
+            secret_json: merged,
             updated_at: nowIso,
           },
           { onConflict: 'key' }
         );
+        if (vaultErr) {
+          await supaClient.from('app_registry').upsert(
+            {
+              key: `webhook_import_secrets_${cleanStore}`,
+              name: `Webhook Secrets ${cleanStore}`,
+              tenant_id: cleanStore,
+              module_key: 'webhook_import',
+              is_public: false,
+              config_json: merged,
+              updated_at: nowIso,
+            },
+            { onConflict: 'key' }
+          );
+        }
       }
     } catch {}
     return merged;
   };
 
-  // POST /api/webhooks/shopify/products/:storeId — Récepteur Webhook Shopify (products/create, products/update)
+  // POST /api/webhooks/shopify/products/:storeId — Récepteur Webhook Shopify (HMAC-SHA256 obligatoire & temps constant)
   app.post('/api/webhooks/shopify/products/:storeId', async (req, res) => {
     try {
       const storeId = String(req.params.storeId || '').trim();
       if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
 
       const storeSecrets = await getWebhookSecretsForStore(storeId);
-      const storeSecret = storeSecrets.shopifySecret || process.env.SHOPIFY_WEBHOOK_SECRET || '';
-      const hmacHeader = String(req.headers['x-shopify-hmac-sha256'] || '');
-      if (storeSecret && hmacHeader && (req as any).rawBody) {
-        const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
-        if (digest !== hmacHeader) {
-          return res.status(401).json({ success: false, error: 'Signature HMAC Shopify invalide' });
-        }
+      const storeSecret = String(storeSecrets.shopifySecret || process.env.SHOPIFY_WEBHOOK_SECRET || '').trim();
+      if (!storeSecret) {
+        return res.status(503).json({ success: false, error: 'Secret Webhook Shopify non configuré pour cette boutique.' });
+      }
+      const hmacHeader = String(req.headers['x-shopify-hmac-sha256'] || '').trim();
+      const rawBodyBuf = (req as any).rawBody
+        ? Buffer.isBuffer((req as any).rawBody)
+          ? (req as any).rawBody
+          : Buffer.from(String((req as any).rawBody), 'utf8')
+        : null;
+      if (!hmacHeader || !rawBodyBuf) {
+        return res.status(401).json({ success: false, error: 'Signature HMAC Shopify absente.' });
+      }
+      const digest = crypto.createHmac('sha256', storeSecret).update(rawBodyBuf).digest('base64');
+      if (!timingSafeEqualsServer(digest, hmacHeader)) {
+        return res.status(401).json({ success: false, error: 'Signature HMAC Shopify invalide' });
       }
 
       const p = req.body || {};
@@ -2107,27 +2234,37 @@ async function startServer() {
     }
   });
 
-  // POST /api/webhooks/woocommerce/products/:storeId — Récepteur Webhook WooCommerce (product.created, product.updated)
+  // POST /api/webhooks/woocommerce/products/:storeId — Récepteur Webhook WooCommerce (HMAC-SHA256 obligatoire & temps constant)
   app.post('/api/webhooks/woocommerce/products/:storeId', async (req, res) => {
     try {
       const storeId = String(req.params.storeId || '').trim();
       if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
 
-      const storeSecrets = await getWebhookSecretsForStore(storeId);
-      const storeSecret = storeSecrets.wooSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || '';
-      const sigHeader = String(req.headers['x-wc-webhook-signature'] || '');
-      if (storeSecret && sigHeader && (req as any).rawBody) {
-        const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
-        if (digest !== sigHeader) {
-          return res.status(401).json({ success: false, error: 'Signature HMAC WooCommerce invalide' });
-        }
-      }
-
       const p = req.body || {};
-      // WooCommerce envoie un ping vide lors de la création du webhook
+      // WooCommerce envoie un ping vide (sans produit) lors de l'enregistrement initial de l'URL webhook
       if (!p.name && !p.id) {
         return res.json({ success: true, ping: true });
       }
+
+      const storeSecrets = await getWebhookSecretsForStore(storeId);
+      const storeSecret = String(storeSecrets.wooSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || '').trim();
+      if (!storeSecret) {
+        return res.status(503).json({ success: false, error: 'Secret Webhook WooCommerce non configuré pour cette boutique.' });
+      }
+      const sigHeader = String(req.headers['x-wc-webhook-signature'] || '').trim();
+      const rawBodyBuf = (req as any).rawBody
+        ? Buffer.isBuffer((req as any).rawBody)
+          ? (req as any).rawBody
+          : Buffer.from(String((req as any).rawBody), 'utf8')
+        : null;
+      if (!sigHeader || !rawBodyBuf) {
+        return res.status(401).json({ success: false, error: 'Signature HMAC WooCommerce absente.' });
+      }
+      const digest = crypto.createHmac('sha256', storeSecret).update(rawBodyBuf).digest('base64');
+      if (!timingSafeEqualsServer(digest, sigHeader)) {
+        return res.status(401).json({ success: false, error: 'Signature HMAC WooCommerce invalide' });
+      }
+
       const rawPrice = parseFloat(String(p.price || p.regular_price || '0')) || 0;
       const { costXof, sellingXof } = convertToXof(rawPrice, 'EUR', 0, 0);
       const cat = Array.isArray(p.categories) && p.categories[0]?.name ? p.categories[0].name : 'WooCommerce';
@@ -2149,11 +2286,18 @@ async function startServer() {
     }
   });
 
-  // GET & POST /api/webhooks/import-config/:storeId — Configuration & produits synchronisés (100% persistant Supabase)
+  // GET & POST /api/webhooks/import-config/:storeId — Configuration & produits synchronisés (vérification stricte propriétaire)
   app.get('/api/webhooks/import-config/:storeId', async (req, res) => {
     const owner = await resolveVerifiedUniverseOwner(req);
     if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
     const storeId = String(req.params.storeId || '').trim();
+    const isSuper = KNOWN_ADMIN_EMAILS.has(owner.email);
+    if (!isSuper && storeId !== owner.userId) {
+      const ownedMerchant = await verifyMerchantOwnership(storeId, owner.userId);
+      if (!ownedMerchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé : cette boutique ne vous appartient pas.' });
+      }
+    }
     const storeSecrets = await getWebhookSecretsForStore(storeId);
     const productsByStore = readJsonObjSafe(WEBHOOK_PRODUCTS_FILE);
     const localList: any[] = Array.isArray(productsByStore[storeId]) ? productsByStore[storeId] : [];
@@ -2205,6 +2349,13 @@ async function startServer() {
     const owner = await resolveVerifiedUniverseOwner(req);
     if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
     const storeId = String(req.params.storeId || '').trim();
+    const isSuper = KNOWN_ADMIN_EMAILS.has(owner.email);
+    if (!isSuper && storeId !== owner.userId) {
+      const ownedMerchant = await verifyMerchantOwnership(storeId, owner.userId);
+      if (!ownedMerchant) {
+        return res.status(403).json({ success: false, error: 'Accès refusé : cette boutique ne vous appartient pas.' });
+      }
+    }
     const { shopifySecret, wooSecret } = req.body || {};
     const savedSecrets = await saveWebhookSecretsForStore(storeId, { shopifySecret, wooSecret });
     return res.json({
@@ -4486,13 +4637,14 @@ async function startServer() {
     });
   });
 
-  // POST /api/payments/confirm-sale — Crédite le Wallet Marchand après validation Checkout vérifiée côté serveur (SMS BF ou Mobile Money)
+  // POST /api/payments/confirm-sale — Crédite le Wallet Marchand après validation Checkout vérifiée atomiquement côté serveur
   app.post('/api/payments/confirm-sale', async (req, res) => {
     try {
       const body = req.body || {};
-      const orderId = String(body.orderId || body.order_id || '').trim();
-      const transactionId = String(body.transactionId || body.transaction_id || '').trim();
-      const merchantId = String(body.merchantId || body.universeId || body.tenantId || '').trim();
+      const sanitizeToken = (v: any) => String(v || '').trim().replace(/[^a-zA-Z0-9_.:-]/g, '');
+      const orderId = sanitizeToken(body.orderId || body.order_id);
+      const transactionId = sanitizeToken(body.transactionId || body.transaction_id);
+      const merchantId = sanitizeToken(body.merchantId || body.universeId || body.tenantId);
       const requestedAmount = Math.max(0, Math.round(Number(body.amount) || 0));
       const productType = String(body.productType || '').toUpperCase().trim();
       const paymentMethod = String(body.paymentMethod || 'MOBILE_MONEY').toUpperCase().trim();
@@ -4519,23 +4671,60 @@ async function startServer() {
       let verified = false;
       let confirmedAmount = requestedAmount;
 
+      // 1. Vérification et consommation ATOMIQUE (FOR UPDATE) du SMS BF : empêche toute injection PostgREST et tout réemploi inter-commandes
       if (supabaseAdmin && (transactionId || orderId)) {
-        const { data: smsRow } = await supabaseAdmin
-          .from('bf_sms_payments')
-          .select('transaction_id, amount, status, order_id')
-          .or(
-            transactionId
-              ? `transaction_id.eq.${transactionId},order_id.eq.${orderId}`
-              : `order_id.eq.${orderId}`
-          )
-          .limit(1)
-          .maybeSingle();
+        const { data: rpcConsumed, error: rpcErr } = await supabaseAdmin.rpc(
+          'consume_bf_sms_payment_for_sale',
+          {
+            p_order_id: orderId,
+            p_transaction_id: transactionId || null,
+            p_expected_amount: requestedAmount,
+          }
+        );
 
-        const smsStatus = String(smsRow?.status || '').toUpperCase();
-        const isSmsRejected = ['FAILED', 'REJECTED', 'CANCELLED', 'CANCELED'].includes(smsStatus);
-        if (smsRow && !isSmsRejected && Number(smsRow.amount) >= requestedAmount) {
+        if (!rpcErr && rpcConsumed?.verified === true) {
           verified = true;
-          confirmedAmount = Math.round(Number(smsRow.amount));
+          confirmedAmount = Math.round(Number(rpcConsumed.amount) || requestedAmount);
+        } else if (rpcErr) {
+          // Repli sécurisé (zéro .or() interpolé) si la migration RPC n'est pas encore déployée
+          let smsRow: any = null;
+          if (transactionId) {
+            const { data } = await supabaseAdmin
+              .from('bf_sms_payments')
+              .select('id, transaction_id, amount, status, matched_order_id')
+              .eq('transaction_id', transactionId.toUpperCase())
+              .maybeSingle();
+            smsRow = data;
+          }
+          if (!smsRow) {
+            const { data } = await supabaseAdmin
+              .from('bf_sms_payments')
+              .select('id, transaction_id, amount, status, matched_order_id')
+              .eq('matched_order_id', orderId)
+              .maybeSingle();
+            smsRow = data;
+          }
+
+          const smsStatus = String(smsRow?.status || '').toUpperCase();
+          const isSmsRejected = ['FAILED', 'REJECTED', 'CANCELLED', 'CANCELED'].includes(smsStatus);
+          const alreadyBoundToOther =
+            Boolean(smsRow?.matched_order_id) && String(smsRow.matched_order_id) !== orderId;
+
+          if (smsRow && !isSmsRejected && !alreadyBoundToOther && Number(smsRow.amount) >= requestedAmount) {
+            // Verrouillage CAS atomique : un SMS ne peut jamais être lié à 2 commandes distinctes
+            const { data: claimed } = await supabaseAdmin
+              .from('bf_sms_payments')
+              .update({ status: 'consumed', matched_order_id: orderId, matched_at: new Date().toISOString() })
+              .eq('id', smsRow.id)
+              .in('status', ['unmatched', 'matched', 'consumed'])
+              .select('id, matched_order_id, amount')
+              .maybeSingle();
+
+            if (claimed && String(claimed.matched_order_id) === orderId) {
+              verified = true;
+              confirmedAmount = Math.round(Number(claimed.amount) || requestedAmount);
+            }
+          }
         }
       }
 
@@ -4784,20 +4973,73 @@ async function startServer() {
     return crypto.timingSafeEqual(derived, expected);
   };
 
+  // Protection anti-brute-force stricte sur le Master PIN Wallet (max 5 échecs / 15 min par compte et par IP)
+  const PIN_MAX_ATTEMPTS = 5;
+  const PIN_LOCKOUT_MS = 15 * 60 * 1000;
+  const walletPinAttempts = new Map<string, { fails: number; lockedUntil: number; lastFailAt: number }>();
+
+  const getPinClientIp = (req: express.Request): string =>
+    String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+
+  const checkWalletPinLockout = (ownerKey: string, req: express.Request): { blocked: boolean; retryAfterSec: number } => {
+    const now = Date.now();
+    const keys = [`owner:${ownerKey}`, `ip:${getPinClientIp(req)}`];
+    for (const k of keys) {
+      const entry = walletPinAttempts.get(k);
+      if (entry && entry.lockedUntil > now) {
+        return { blocked: true, retryAfterSec: Math.ceil((entry.lockedUntil - now) / 1000) };
+      }
+    }
+    return { blocked: false, retryAfterSec: 0 };
+  };
+
+  const recordWalletPinFailure = (ownerKey: string, req: express.Request) => {
+    const now = Date.now();
+    if (walletPinAttempts.size > 5000) walletPinAttempts.clear();
+    const keys = [`owner:${ownerKey}`, `ip:${getPinClientIp(req)}`];
+    for (const k of keys) {
+      const prev = walletPinAttempts.get(k);
+      const resetExpired = !prev || now - prev.lastFailAt > PIN_LOCKOUT_MS;
+      const fails = resetExpired ? 1 : prev.fails + 1;
+      walletPinAttempts.set(k, {
+        fails,
+        lastFailAt: now,
+        lockedUntil: fails >= PIN_MAX_ATTEMPTS ? now + PIN_LOCKOUT_MS : 0,
+      });
+    }
+  };
+
+  const resetWalletPinFailures = (ownerKey: string, req: express.Request) => {
+    walletPinAttempts.delete(`owner:${ownerKey}`);
+    walletPinAttempts.delete(`ip:${getPinClientIp(req)}`);
+  };
+
   const getWalletPinRecord = async (ownerKey: string) => {
     const pins = readJsonArrayFile(WALLET_PINS_FILE);
     let rec = pins.find((p: any) => p.ownerKey === ownerKey) || null;
     if (!rec && supabaseAdmin) {
       try {
-        const { data } = await supabaseAdmin
-          .from('app_registry')
-          .select('config_json')
+        const { data: vaultRow } = await supabaseAdmin
+          .from('server_security_vault')
+          .select('secret_json')
           .eq('key', `wallet_pin_${ownerKey}`)
           .maybeSingle();
-        if (data?.config_json?.pinHash) {
-          rec = data.config_json;
+        if (vaultRow?.secret_json?.pinHash) {
+          rec = vaultRow.secret_json;
         }
       } catch {}
+      if (!rec) {
+        try {
+          const { data } = await supabaseAdmin
+            .from('app_registry')
+            .select('config_json')
+            .eq('key', `wallet_pin_${ownerKey}`)
+            .maybeSingle();
+          if (data?.config_json?.pinHash) {
+            rec = data.config_json;
+          }
+        } catch {}
+      }
     }
     return rec;
   };
@@ -5598,7 +5840,16 @@ async function startServer() {
     const effectiveUniverseId = cleanUniverseId || ctx.universeId;
     const ownerKey = effectiveUniverseId || ctx.userId;
 
-    // 1. Contrôle Master PIN OBLIGATOIRE côté serveur (recherche par univers puis par utilisateur)
+    // 1. Contrôle anti-brute-force + Master PIN OBLIGATOIRE côté serveur
+    const pinLock = checkWalletPinLockout(ownerKey, req);
+    if (pinLock.blocked) {
+      return res.status(429).json({
+        success: false,
+        code: 'PIN_TEMPORARILY_LOCKED',
+        error: `Trop de tentatives Master PIN erronées. Réessayez dans ${Math.ceil(pinLock.retryAfterSec / 60)} min.`,
+      });
+    }
+
     const pinRecord =
       (await getWalletPinRecord(ownerKey)) ||
       (ctx.userId && ctx.userId !== ownerKey ? await getWalletPinRecord(ctx.userId) : null);
@@ -5610,12 +5861,14 @@ async function startServer() {
       });
     }
     if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+      recordWalletPinFailure(ownerKey, req);
       return res.status(403).json({
         success: false,
         code: 'INVALID_MASTER_PIN',
         error: 'Master PIN requis ou incorrect pour autoriser ce retrait.',
       });
     }
+    resetWalletPinFailures(ownerKey, req);
 
     // 2. Contrôle strict et débit atomique du solde réel côté serveur (refus 402 si solde insuffisant, 500 si échec DB)
     const lockKey = `wallet_${ownerKey}`;
@@ -6270,11 +6523,29 @@ async function startServer() {
     }
 
     const all = readJsonArrayFile(LMS_STUDENTS_FILE);
-    const existing = all.find(
+    let existing = all.find(
       (s: any) =>
         (cleanEmail && s.email === cleanEmail) ||
         (cleanPhone.length >= 6 && normalizePhoneKey(s.phoneNumber) === cleanPhone)
     );
+    if (!existing && supabaseAdmin) {
+      try {
+        const lookupKeys = [
+          cleanEmail ? `lms_student_${cleanEmail}` : '',
+          cleanPhone.length >= 6 ? `lms_student_phone_${cleanPhone}` : '',
+        ].filter(Boolean);
+        if (lookupKeys.length > 0) {
+          const { data: vRows } = await supabaseAdmin
+            .from('server_security_vault')
+            .select('secret_json')
+            .in('key', lookupKeys)
+            .limit(1);
+          if (vRows && vRows.length > 0 && vRows[0]?.secret_json?.id) {
+            existing = vRows[0].secret_json;
+          }
+        }
+      } catch {}
+    }
     if (existing) {
       return res.status(409).json({
         success: false,
@@ -6305,6 +6576,30 @@ async function startServer() {
           created_at: nowIso,
         });
       } catch {}
+      try {
+        const vaultEntries: any[] = [];
+        if (cleanEmail) {
+          vaultEntries.push({
+            key: `lms_student_${cleanEmail}`,
+            category: 'lms_students',
+            tenant_id: student.id,
+            secret_json: student,
+            updated_at: nowIso,
+          });
+        }
+        if (cleanPhone.length >= 6) {
+          vaultEntries.push({
+            key: `lms_student_phone_${cleanPhone}`,
+            category: 'lms_students',
+            tenant_id: student.id,
+            secret_json: student,
+            updated_at: nowIso,
+          });
+        }
+        if (vaultEntries.length > 0) {
+          await supabaseAdmin.from('server_security_vault').upsert(vaultEntries);
+        }
+      } catch {}
     }
 
     const token = signStudentToken({
@@ -6318,7 +6613,7 @@ async function startServer() {
   });
 
   // POST /api/student/auth/login
-  app.post('/api/student/auth/login', (req, res) => {
+  app.post('/api/student/auth/login', async (req, res) => {
     const { identifier = '', password = '' } = req.body || {};
     const cleanId = String(identifier || '').trim().toLowerCase();
     const cleanPhone = normalizePhoneKey(identifier);
@@ -6327,11 +6622,32 @@ async function startServer() {
     }
 
     const all = readJsonArrayFile(LMS_STUDENTS_FILE);
-    const found = all.find(
+    let found = all.find(
       (s: any) =>
         (s.email && s.email.toLowerCase() === cleanId) ||
         (cleanPhone.length >= 6 && normalizePhoneKey(s.phoneNumber) === cleanPhone)
     );
+
+    if (!found && supabaseAdmin) {
+      try {
+        const lookupKeys = [
+          cleanId ? `lms_student_${cleanId}` : '',
+          cleanPhone.length >= 6 ? `lms_student_phone_${cleanPhone}` : '',
+        ].filter(Boolean);
+        if (lookupKeys.length > 0) {
+          const { data: vRows } = await supabaseAdmin
+            .from('server_security_vault')
+            .select('secret_json')
+            .in('key', lookupKeys)
+            .limit(1);
+          if (vRows && vRows.length > 0 && vRows[0]?.secret_json?.passwordHash) {
+            found = vRows[0].secret_json;
+            all.unshift(found);
+            writeJsonArrayFile(LMS_STUDENTS_FILE, all);
+          }
+        }
+      } catch {}
+    }
 
     if (!found || !verifyStudentPassword(String(password), found.passwordHash)) {
       return res.status(401).json({ success: false, error: 'Identifiant ou mot de passe incorrect.' });
@@ -6350,13 +6666,30 @@ async function startServer() {
         (normalizePhoneKey(found.phoneNumber).length >= 6 &&
           normalizePhoneKey(e.studentPhone) === normalizePhoneKey(found.phoneNumber))
     );
+    const enrolledIds = new Set<string>(enrollments.map((e: any) => String(e.courseId)));
+
+    if (supabaseAdmin) {
+      try {
+        const { data: dbEnr } = await supabaseAdmin
+          .from('enrollments')
+          .select('course_id, status')
+          .eq('student_id', found.id);
+        if (Array.isArray(dbEnr)) {
+          for (const row of dbEnr) {
+            if (row?.course_id && row.status !== 'EXPIRED') {
+              enrolledIds.add(String(row.course_id));
+            }
+          }
+        }
+      } catch {}
+    }
 
     const { passwordHash: _ignored, ...safeStudent } = found;
     return res.json({
       success: true,
       token,
       student: safeStudent,
-      enrolledCourseIds: Array.from(new Set(enrollments.map((e: any) => e.courseId))),
+      enrolledCourseIds: Array.from(enrolledIds),
     });
   });
 
@@ -8794,7 +9127,7 @@ async function startServer() {
     });
   });
 
-  // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (Authentifié + contrôle propriétaire)
+  // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (Authentifié + contrôle propriétaire + anti-brute-force)
   app.post('/api/merchant/wallet/pin/set', async (req, res) => {
     const { universeId = '', userId = '', pin = '', currentPin = '' } = req.body || {};
     const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
@@ -8810,11 +9143,22 @@ async function startServer() {
       return res.status(400).json({ success: false, error: 'Le Master PIN doit contenir entre 4 et 6 chiffres.' });
     }
 
+    const pinLock = checkWalletPinLockout(ownerKey, req);
+    if (pinLock.blocked) {
+      return res.status(429).json({
+        success: false,
+        code: 'PIN_TEMPORARILY_LOCKED',
+        error: `Trop de tentatives Master PIN erronées. Réessayez dans ${Math.ceil(pinLock.retryAfterSec / 60)} min.`,
+      });
+    }
+
     const existing = await getWalletPinRecord(ownerKey);
     if (existing?.pinHash) {
       if (!currentPin || !verifyWalletPinHash(String(currentPin), existing.pinHash)) {
+        recordWalletPinFailure(ownerKey, req);
         return res.status(403).json({ success: false, error: 'Master PIN actuel incorrect.' });
       }
+      resetWalletPinFailures(ownerKey, req);
     }
 
     const nowIso = new Date().toISOString();
@@ -8828,38 +9172,61 @@ async function startServer() {
     writeJsonArrayFile(WALLET_PINS_FILE, pins);
 
     if (supabaseAdmin) {
-      const { error: pinErr } = await supabaseAdmin.from('app_registry').upsert({
+      const { error: vaultErr } = await supabaseAdmin.from('server_security_vault').upsert({
         key: `wallet_pin_${ownerKey}`,
-        name: `Master PIN ${ownerKey}`,
+        category: 'wallet_pin',
         tenant_id: String(ctx.userId || ctx.universeId || 'default'),
-        module_key: 'wallet_security',
-        config_json: record,
+        secret_json: record,
         updated_at: nowIso,
       }, { onConflict: 'key' });
-      if (pinErr) {
-        console.error('[WALLET PIN UPSERT ERROR]', pinErr.message);
-        return res.status(500).json({ success: false, error: `Impossible de sauvegarder le Master PIN (${pinErr.message})` });
+
+      if (vaultErr) {
+        const { error: pinErr } = await supabaseAdmin.from('app_registry').upsert({
+          key: `wallet_pin_${ownerKey}`,
+          name: `Master PIN ${ownerKey}`,
+          tenant_id: String(ctx.userId || ctx.universeId || 'default'),
+          module_key: 'wallet_security',
+          is_public: false,
+          config_json: record,
+          updated_at: nowIso,
+        }, { onConflict: 'key' });
+        if (pinErr) {
+          console.error('[WALLET PIN UPSERT ERROR]', pinErr.message);
+          return res.status(500).json({ success: false, error: `Impossible de sauvegarder le Master PIN (${pinErr.message})` });
+        }
       }
     }
 
     return res.json({ success: true, hasMasterPin: true });
   });
 
-  // POST /api/merchant/wallet/pin/verify — Vérification du Master PIN (Authentifié + contrôle propriétaire)
+  // POST /api/merchant/wallet/pin/verify — Vérification du Master PIN (Authentifié + contrôle propriétaire + anti-brute-force)
   app.post('/api/merchant/wallet/pin/verify', async (req, res) => {
     const { universeId = '', userId = '', pin = '' } = req.body || {};
     const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
     if (!ctx) return;
 
     const ownerKey = String(ctx.universeId || ctx.userId || '').trim();
+    const pinLock = checkWalletPinLockout(ownerKey, req);
+    if (pinLock.blocked) {
+      return res.status(429).json({
+        success: false,
+        verified: false,
+        code: 'PIN_TEMPORARILY_LOCKED',
+        error: `Trop de tentatives Master PIN erronées. Réessayez dans ${Math.ceil(pinLock.retryAfterSec / 60)} min.`,
+      });
+    }
+
     const existing = await getWalletPinRecord(ownerKey);
     if (!existing?.pinHash) {
       return res.json({ success: true, verified: false, hasMasterPin: false });
     }
     const ok = verifyWalletPinHash(String(pin || ''), existing.pinHash);
     if (!ok) {
+      recordWalletPinFailure(ownerKey, req);
       return res.status(403).json({ success: false, verified: false, error: 'Master PIN incorrect.' });
     }
+    resetWalletPinFailures(ownerKey, req);
     return res.json({ success: true, verified: true, hasMasterPin: true });
   });
 
@@ -8886,12 +9253,23 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Veuillez sélectionner au moins un module Pay-As-You-Go.' });
       }
 
-      // 1. Contrôle Master PIN si configuré
+      // 1. Contrôle anti-brute-force + Master PIN si configuré
+      const pinLock = checkWalletPinLockout(ownerKey, req);
+      if (pinLock.blocked) {
+        return res.status(429).json({
+          success: false,
+          code: 'PIN_TEMPORARILY_LOCKED',
+          error: `Trop de tentatives Master PIN erronées. Réessayez dans ${Math.ceil(pinLock.retryAfterSec / 60)} min.`,
+        });
+      }
+
       const pinRecord = await getWalletPinRecord(ownerKey);
       if (pinRecord?.pinHash) {
         if (!pin || !verifyWalletPinHash(String(pin), pinRecord.pinHash)) {
+          recordWalletPinFailure(ownerKey, req);
           return res.status(403).json({ success: false, code: 'INVALID_MASTER_PIN', error: 'Master PIN incorrect. Paiement refusé.' });
         }
+        resetWalletPinFailures(ownerKey, req);
       }
 
       // 2. Calcul serveur du montant total et contrôle strict du solde réel
@@ -8972,15 +9350,13 @@ async function startServer() {
         activatedModules.push(entRecord);
 
         if (supabaseAdmin) {
-          const { error: regErr } = await supabaseAdmin.from('app_registry').upsert({
+          await supabaseAdmin.from('server_security_vault').upsert({
             key: `payg_module_${ownerKey}_${mod.id}`,
-            name: `${mod.name} (${ownerKey})`,
-            module_key: mod.supabaseModuleKey,
-            config_json: entRecord,
-            value: entRecord,
+            category: 'payg_entitlements',
+            tenant_id: ownerKey,
+            secret_json: entRecord,
             updated_at: nowIso,
-          });
-          if (regErr) console.error('[PAYG APP_REGISTRY UPSERT ERROR]', regErr.message);
+          }, { onConflict: 'key' });
 
           const { error: entErr } = await supabaseAdmin.from('payg_entitlements').upsert({
             id: `${ownerKey}_${mod.id}`,
@@ -9905,7 +10281,26 @@ async function startServer() {
   // Moteur de Live Streaming WebRTC WHIP / HLS & Relais RTMP MediaMTX (Northflank)
   attachLiveRelayRoutes(app);
 
-  // Proxy sécurisé pour Nana-générateur vers backend AWS Lambda officiel (0 SSRF, 0 stockage Cloud vidéo)
+  // Rate-limiter dédié strict sur les routes IA & Lambda GPU (max 20 requêtes / min / IP)
+  const aiRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+  const enforceAiRateLimit = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+    const now = Date.now();
+    let rec = aiRateLimitMap.get(ip);
+    if (!rec || rec.resetAt <= now) {
+      if (aiRateLimitMap.size > 5000) aiRateLimitMap.clear();
+      rec = { count: 0, resetAt: now + 60_000 };
+      aiRateLimitMap.set(ip, rec);
+    }
+    rec.count += 1;
+    if (rec.count > 20) {
+      return res.status(429).json({ error: 'Limite de requêtes IA atteinte (max 20/min). Veuillez patienter.' });
+    }
+    return next();
+  };
+  app.use('/api/ai', enforceAiRateLimit);
+
+  // Proxy sécurisé pour Nana-générateur vers backend AWS Lambda officiel (0 SSRF, anti-vol de crédits GPU)
   const ALLOWED_LAMBDA_TYPES = new Set(['text', 'image', 'video', 'status', 'copy', 'script', 'flow']);
   const forwardToAwsLambda = async (req: express.Request, res: express.Response) => {
     try {
@@ -9922,38 +10317,74 @@ async function startServer() {
         return res.status(400).json({ error: `Type de requête IA non autorisé : ${reqType}` });
       }
 
-      // Consommation sécurisée côté serveur d'un crédit Pay-As-You-Go studio-video-ia si demandé
-      if (req.method === 'POST' && reqType === 'video' && bodyObj.usePaygCredit) {
-        const ownerKey = String(bodyObj.universeId || bodyObj.userId || '').trim();
-        if (!ownerKey) {
-          return res.status(400).json({ error: 'Identifiant marchand requis pour utiliser un crédit Pay-As-You-Go.' });
-        }
-        const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
-        const entIdx = allEnts.findIndex(
-          (e: any) =>
-            (e.ownerKey === ownerKey || e.universeId === ownerKey || e.userId === ownerKey) &&
-            e.moduleId === 'studio-video-ia' &&
-            (Number(e.credits) || 0) > 0
-        );
-        if (entIdx < 0) {
-          return res.status(402).json({
-            code: 'NO_PAYG_VIDEO_CREDIT',
-            error: 'Aucun crédit Studio Vidéo IA actif. Activez le module dans NaNa Wallet Marchand.'
-          });
-        }
-        allEnts[entIdx] = {
-          ...allEnts[entIdx],
-          credits: Math.max(0, (Number(allEnts[entIdx].credits) || 0) - 1),
-          lastUsedAt: new Date().toISOString()
-        };
-        writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
-        if (supabaseAdmin) {
-          try {
-            await supabaseAdmin
+      // Pour toute génération d'image ou de vidéo GPU : authentification obligatoire !
+      if (req.method === 'POST' && (reqType === 'video' || reqType === 'image')) {
+        const ctx = await paymentSecurity.requireAccountOwner(req, res, {
+          universeId: bodyObj.universeId,
+          userId: bodyObj.userId,
+        });
+        if (!ctx) return;
+
+        // Pour la vidéo GPU : consommation OBLIGATOIRE d'un crédit Pay-As-You-Go studio-video-ia du compte authentifié (sauf Super Admin)
+        if (reqType === 'video' && !ctx.isAdmin) {
+          const ownerKey = String(ctx.universeId || ctx.userId || '').trim();
+          if (!ownerKey) {
+            return res.status(400).json({ error: 'Identifiant marchand requis pour générer une vidéo IA.' });
+          }
+          const allEnts = readJsonArrayFile(PAYG_ENTITLEMENTS_FILE);
+          const entIdx = allEnts.findIndex(
+            (e: any) =>
+              (e.ownerKey === ownerKey || e.universeId === ownerKey || e.userId === ownerKey) &&
+              e.moduleId === 'studio-video-ia' &&
+              (Number(e.credits) || 0) > 0
+          );
+
+          let consumedInDb = false;
+          if (entIdx < 0 && supabaseAdmin) {
+            const { data: dbEnt } = await supabaseAdmin
               .from('payg_entitlements')
-              .update({ credits: allEnts[entIdx].credits, updated_at: new Date().toISOString() })
-              .eq('id', `${allEnts[entIdx].ownerKey}_studio-video-ia`);
-          } catch {}
+              .select('id, credits, remaining_credits')
+              .eq('id', `${ownerKey}_studio-video-ia`)
+              .maybeSingle();
+            const avail = Number(dbEnt?.remaining_credits ?? dbEnt?.credits ?? 0);
+            if (dbEnt && avail > 0) {
+              await supabaseAdmin
+                .from('payg_entitlements')
+                .update({
+                  credits: avail - 1,
+                  remaining_credits: avail - 1,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', dbEnt.id);
+              consumedInDb = true;
+            }
+          }
+
+          if (entIdx < 0 && !consumedInDb) {
+            return res.status(402).json({
+              code: 'NO_PAYG_VIDEO_CREDIT',
+              error: 'Aucun crédit Studio Vidéo IA actif sur votre compte. Activez le module dans NaNa Wallet Marchand.'
+            });
+          }
+
+          if (entIdx >= 0) {
+            const nextCredits = Math.max(0, (Number(allEnts[entIdx].credits) || 0) - 1);
+            allEnts[entIdx] = {
+              ...allEnts[entIdx],
+              credits: nextCredits,
+              remainingCredits: nextCredits,
+              lastUsedAt: new Date().toISOString()
+            };
+            writeJsonArrayFile(PAYG_ENTITLEMENTS_FILE, allEnts);
+            if (supabaseAdmin) {
+              try {
+                await supabaseAdmin
+                  .from('payg_entitlements')
+                  .update({ credits: nextCredits, remaining_credits: nextCredits, updated_at: new Date().toISOString() })
+                  .eq('id', `${allEnts[entIdx].ownerKey}_studio-video-ia`);
+              } catch {}
+            }
+          }
         }
       }
 
@@ -9982,7 +10413,7 @@ async function startServer() {
     }
   };
 
-  app.all('/aws-lambda*', forwardToAwsLambda);
+  app.all('/aws-lambda*', enforceAiRateLimit, forwardToAwsLambda);
   app.post('/api/ai/lambda', forwardToAwsLambda);
 
   // POST /api/ai/backdrop-generate — Utilise Gemini déjà présent pour concevoir un décor Studio YouTubeur
@@ -11847,11 +12278,13 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
 
           // 2. Si le devoir est validé, mise à jour de la progression de l'étudiant dans enrollments
           if (evaluationReport.passed && courseId && studentId && lessonId) {
+            const safeStudentId = String(studentId || '').replace(/[^a-zA-Z0-9@._-]/g, '');
+            const isEmailId = safeStudentId.includes('@');
             const { data: currentEnroll } = await supabase
               .from('enrollments')
               .select('id, completed_lessons')
               .eq('course_id', courseId)
-              .or(`user_id.eq.${studentId},user_email.eq.${studentId}`)
+              .eq(isEmailId ? 'user_email' : 'user_id', safeStudentId)
               .maybeSingle();
 
             let lessonsList: string[] = currentEnroll?.completed_lessons || [];
@@ -11860,10 +12293,10 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
             }
 
             await supabase.from('enrollments').upsert({
-              id: currentEnroll?.id || `${courseId}_${studentId}`,
+              id: currentEnroll?.id || `${courseId}_${safeStudentId}`,
               course_id: courseId,
-              user_id: studentId.includes('-') && studentId.length === 36 ? studentId : undefined,
-              user_email: studentId.includes('@') ? studentId : `student_${studentId}@nanasore.internal`,
+              user_id: safeStudentId.includes('-') && safeStudentId.length === 36 ? safeStudentId : undefined,
+              user_email: isEmailId ? safeStudentId : `student_${safeStudentId}@nanasore.internal`,
               completed_lessons: lessonsList,
               status: 'active',
               updated_at: nowIso
@@ -11887,22 +12320,50 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
   });
 
   // =========================================================================
-  // 3.6. ENDPOINTS: CLOUDFLARE R2 VAULT PRESIGNED & REGISTER
+  // 3.6. ENDPOINTS: CLOUDFLARE R2 VAULT PRESIGNED & REGISTER (AUTH + JETON SIGNÉ + CAP 50 Mo)
   // =========================================================================
+  const MAX_VAULT_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 Mo strict (anti-OOM)
+
+  const signVaultUploadToken = (fileKey: string, expMs: number): string =>
+    crypto
+      .createHmac('sha256', PAYMENT_WEBHOOK_SECRET)
+      .update(`vault_put:${fileKey}:${expMs}`)
+      .digest('hex');
+
+  const verifyVaultUploadToken = (fileKey: string, expStr: string, sig: string): boolean => {
+    const expMs = Number(expStr || 0);
+    if (!fileKey || !sig || !Number.isFinite(expMs) || Date.now() > expMs) return false;
+    const expected = signVaultUploadToken(fileKey, expMs);
+    return timingSafeEqualsServer(sig, expected);
+  };
+
   app.post('/api/r2/presigned-url', async (req, res) => {
     try {
-      const { fileName, fileType, role = 'professeur', userId = 'user_01', courseId = 'general', assignmentId = 'devoir' } = req.body;
+      const supaUser = await resolveSupabaseUserFromRequest(req);
+      const studentSession = extractStudentSession(req);
+      const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
+      const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
+      const isInternal = Boolean(internalSecret && providedKey && timingSafeEqualsServer(providedKey, internalSecret));
+
+      if (!supaUser && !studentSession && !isInternal) {
+        return res.status(401).json({ error: 'Authentification requise pour téléverser dans le Coffre Cloud.' });
+      }
+
+      const { fileName, fileType, role = 'professeur', courseId = 'general', assignmentId = 'devoir' } = req.body || {};
+      const verifiedActorId = String(supaUser?.id || studentSession?.studentId || 'internal').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanCourseId = String(courseId || 'general').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanAssignmentId = String(assignmentId || 'devoir').replace(/[^a-zA-Z0-9_-]/g, '_');
       const timestamp = Date.now();
-      const sanitizedName = (fileName || 'document.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');
+      const sanitizedName = String(fileName || 'document.pdf').replace(/[^a-zA-Z0-9.-]/g, '_');
       const zipFileName = sanitizedName.endsWith('.zip') ? sanitizedName : `${sanitizedName}.zip`;
 
       let fileKey = '';
-      if (role === 'professeur') {
-        fileKey = `academic/courses/${userId}/${courseId}/${timestamp}-${zipFileName}`;
-      } else if (role === 'vendor') {
-        fileKey = `products/vendors/${userId}/${timestamp}-${zipFileName}`;
+      if (role === 'professeur' && (supaUser || isInternal)) {
+        fileKey = `academic/courses/${verifiedActorId}/${cleanCourseId}/${timestamp}-${zipFileName}`;
+      } else if (role === 'vendor' && (supaUser || isInternal)) {
+        fileKey = `products/vendors/${verifiedActorId}/${timestamp}-${zipFileName}`;
       } else {
-        fileKey = `academic/submissions/${userId}/${assignmentId}/${timestamp}-${zipFileName}`;
+        fileKey = `academic/submissions/${verifiedActorId}/${cleanAssignmentId}/${timestamp}-${zipFileName}`;
       }
 
       // Si R2 est configuré dans le serveur
@@ -11918,10 +12379,12 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
         });
       }
 
-      // Fallback Stockage Coffre Serveur Réel (écrit réellement les octets dans DATA_DIR/vault_files)
+      // Fallback Stockage Coffre Serveur Réel signé HMAC (expiration 30 min)
+      const expMs = Date.now() + 30 * 60 * 1000;
+      const sig = signVaultUploadToken(fileKey, expMs);
       return res.json({
         success: true,
-        uploadUrl: `/api/vault/upload?key=${encodeURIComponent(fileKey)}`,
+        uploadUrl: `/api/vault/upload?key=${encodeURIComponent(fileKey)}&exp=${expMs}&sig=${sig}`,
         fileKey,
         bucket: 'nanasore-digital-vault',
         simulated: false,
@@ -11933,7 +12396,7 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
     }
   });
 
-  // Stockage binaire réel dans le Coffre Serveur (DATA_DIR/vault_files) — zéro faux 200 OK
+  // Stockage binaire réel dans le Coffre Serveur (DATA_DIR/vault_files) — authentifié/signé + écriture streamée plafonnée à 50 Mo
   const VAULT_FILES_DIR = path.join(DATA_DIR, 'vault_files');
   const DIGITAL_DELIVERIES_FILE = path.join(DATA_DIR, 'digital_deliveries.json');
   const sanitizeVaultKey = (rawKey: string) =>
@@ -11942,33 +12405,87 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
       .replace(/^\/+/, '')
       .replace(/[^a-zA-Z0-9._\/-]/g, '_');
 
-  const handleRealVaultUpload = (req: any, res: any) => {
+  const escapeEmailHtml = (input: any): string =>
+    String(input ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const handleRealVaultUpload = async (req: any, res: any) => {
     const rawKey = String(req.query?.key || '').trim();
     if (!rawKey) {
       return res.status(400).json({ success: false, error: 'Paramètre key requis.' });
     }
     const safeKey = sanitizeVaultKey(rawKey);
-    const fullPath = path.join(VAULT_FILES_DIR, safeKey);
+    const hasSignedToken = verifyVaultUploadToken(
+      rawKey,
+      String(req.query?.exp || ''),
+      String(req.query?.sig || '')
+    );
+    if (!hasSignedToken) {
+      const supaUser = await resolveSupabaseUserFromRequest(req);
+      if (!supaUser) {
+        return res.status(401).json({ success: false, error: 'Jeton d\'upload manquant, expiré ou invalide.' });
+      }
+    }
+
+    const declaredLength = Number(req.headers['content-length'] || 0);
+    if (declaredLength > MAX_VAULT_UPLOAD_BYTES) {
+      return res.status(413).json({ success: false, error: 'Fichier trop volumineux (maximum 50 Mo).' });
+    }
+
+    const fullPath = path.resolve(VAULT_FILES_DIR, safeKey);
+    const resolvedVaultRoot = path.resolve(VAULT_FILES_DIR);
+    if (!fullPath.startsWith(resolvedVaultRoot + path.sep)) {
+      return res.status(403).json({ success: false, error: 'Chemin de stockage interdit.' });
+    }
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
 
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    req.on('end', () => {
-      try {
-        const buffer = Buffer.concat(chunks);
-        fs.writeFileSync(fullPath, buffer);
-        return res.json({
-          success: true,
-          fileKey: safeKey,
-          bytesStored: buffer.length,
-          message: 'Fichier stocké dans le Coffre Cloud avec succès'
-        });
-      } catch (err: any) {
-        return res.status(500).json({ success: false, error: err?.message || 'Erreur écriture fichier.' });
+    let totalBytes = 0;
+    let aborted = false;
+    const writeStream = fs.createWriteStream(fullPath);
+
+    req.on('data', (chunk: Buffer) => {
+      if (aborted) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.length;
+      if (totalBytes > MAX_VAULT_UPLOAD_BYTES) {
+        aborted = true;
+        writeStream.destroy();
+        try { fs.unlinkSync(fullPath); } catch {}
+        if (!res.headersSent) {
+          res.status(413).json({ success: false, error: 'Limite maximale de 50 Mo dépassée.' });
+        }
+        req.destroy();
+        return;
       }
+      writeStream.write(buf);
     });
+
+    req.on('end', () => {
+      if (aborted) return;
+      writeStream.end(() => {
+        if (!res.headersSent) {
+          res.json({
+            success: true,
+            fileKey: safeKey,
+            bytesStored: totalBytes,
+            message: 'Fichier stocké dans le Coffre Cloud avec succès'
+          });
+        }
+      });
+    });
+
     req.on('error', (err: any) => {
-      return res.status(500).json({ success: false, error: err?.message || 'Erreur flux upload.' });
+      if (aborted) return;
+      aborted = true;
+      writeStream.destroy();
+      try { fs.unlinkSync(fullPath); } catch {}
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: err?.message || 'Erreur flux upload.' });
+      }
     });
   };
 
@@ -11976,7 +12493,7 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
   app.put('/api/r2/upload-simulation', handleRealVaultUpload);
 
   // =========================================================================
-  // 3.7. LIVRAISON NUMÉRIQUE DOUBLE ACCÈS (EMAIL + LIEN DIRECT /download/:orderId)
+  // 3.7. LIVRAISON NUMÉRIQUE DOUBLE ACCÈS (AUTH OU PAIEMENT VÉRIFIÉ + ANTI-INJECTION HTML)
   // =========================================================================
   app.post('/api/digital/register-delivery', async (req, res) => {
     try {
@@ -11996,12 +12513,65 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
         storeName = 'Boutique Agréée',
       } = req.body || {};
 
-      const cleanOrderId = String(orderId || `CMD-${Date.now().toString().slice(-6)}`).trim();
+      const cleanOrderId = String(orderId || '').trim().replace(/[^a-zA-Z0-9_.:-]/g, '');
+      if (!cleanOrderId) {
+        return res.status(400).json({ success: false, error: 'Identifiant de commande (orderId) requis.' });
+      }
+
+      // Autorisation stricte : appelant authentifié (marchand/interne) OU commande payée vérifiée côté serveur
+      const supaUser = await resolveSupabaseUserFromRequest(req);
+      const internalSecret = process.env.ADMIN_API_KEY || process.env.INTERNAL_API_SECRET || '';
+      const providedKey = String(req.headers['x-admin-api-key'] || req.headers['x-internal-secret'] || '');
+      const isInternal = Boolean(internalSecret && providedKey && timingSafeEqualsServer(providedKey, internalSecret));
+
+      let isPaidOrderVerified = Boolean(supaUser || isInternal);
+      if (!isPaidOrderVerified) {
+        const verifiedPay = await paymentSecurity.verifyPayment({
+          orderId: cleanOrderId,
+          expectedAmount: 100,
+          expectedCurrency: 'XOF',
+        });
+        if (verifiedPay.verified) {
+          isPaidOrderVerified = true;
+        } else if (supabaseAdmin) {
+          const { data: paidOrder } = await supabaseAdmin
+            .from('orders')
+            .select('id, status, payment_status')
+            .eq('id', cleanOrderId)
+            .maybeSingle();
+          if (
+            paidOrder &&
+            (String(paidOrder.payment_status || '').toLowerCase() === 'paid' ||
+              ['paid', 'completed'].includes(String(paidOrder.status || '').toLowerCase()))
+          ) {
+            isPaidOrderVerified = true;
+          } else {
+            const { data: matchedSms } = await supabaseAdmin
+              .from('bf_sms_payments')
+              .select('id')
+              .eq('matched_order_id', cleanOrderId)
+              .in('status', ['matched', 'consumed'])
+              .maybeSingle();
+            if (matchedSms?.id) {
+              isPaidOrderVerified = true;
+            }
+          }
+        }
+      }
+
+      if (!isPaidOrderVerified) {
+        return res.status(403).json({
+          success: false,
+          code: 'DELIVERY_NOT_AUTHORIZED',
+          error: 'Livraison refusée : paiement de la commande non vérifié ou authentification requise.',
+        });
+      }
+
       const isCampusOrVip = deliveryMode === 'campus_private' || deliveryMode === 'vip_room';
       const canDownload = typeof allowDownload === 'boolean' ? allowDownload : !isCampusOrVip;
 
-      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-      const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'nanasore.com';
+      const proto = req.protocol === 'http' ? 'http' : 'https';
+      const host = String(req.get('host') || 'nanasore.com').replace(/[^a-zA-Z0-9.:-]/g, '');
       const baseUrl = `${proto}://${host}`;
       const downloadUrl = `/download/${encodeURIComponent(cleanOrderId)}`;
       const absoluteDownloadUrl = `${baseUrl}${downloadUrl}`;
@@ -12009,13 +12579,17 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
 
       let emailSent = false;
       const brevoKey = process.env.BREVO_SMTP_KEY || process.env.BREVO_API_KEY;
-      if (canDownload && customerEmail && String(customerEmail).includes('@') && brevoKey) {
+      if (canDownload && customerEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(customerEmail).trim()) && brevoKey) {
         try {
+          const safeCustName = escapeEmailHtml(customerName);
+          const safeOrder = escapeEmailHtml(cleanOrderId);
+          const safeStore = escapeEmailHtml(storeName);
+          const safeProd = escapeEmailHtml(productName);
           const emailHtml = `
             <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;border:1px solid #e2e8f0;border-radius:16px;">
               <h2 style="color:#0056D2;margin-top:0;">Vos accès sont prêts 🎉</h2>
-              <p>Bonjour <strong>${String(customerName)}</strong>,</p>
-              <p>Merci pour votre commande <strong>${cleanOrderId}</strong> chez <strong>${String(storeName)}</strong> pour <strong>${String(productName)}</strong>.</p>
+              <p>Bonjour <strong>${safeCustName}</strong>,</p>
+              <p>Merci pour votre commande <strong>${safeOrder}</strong> chez <strong>${safeStore}</strong> pour <strong>${safeProd}</strong>.</p>
               <p>Vous disposez d'un double accès sécurisé :</p>
               <p style="margin:20px 0;">
                 <a href="${absoluteDownloadUrl}" style="display:inline-block;padding:12px 20px;background:#0056D2;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:bold;">
@@ -12035,9 +12609,9 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
               'content-type': 'application/json',
             },
             body: JSON.stringify({
-              sender: { name: String(storeName || 'Nanasore'), email: 'contact@nanasore.com' },
-              to: [{ email: String(customerEmail).trim(), name: String(customerName) }],
-              subject: `Vos accès de téléchargement — ${String(productName)} (${cleanOrderId})`,
+              sender: { name: String(storeName || 'Nanasore').slice(0, 80), email: 'contact@nanasore.com' },
+              to: [{ email: String(customerEmail).trim(), name: String(customerName).slice(0, 80) }],
+              subject: `Vos accès de téléchargement — ${String(productName).slice(0, 80)} (${cleanOrderId})`,
               htmlContent: emailHtml,
             }),
           });
@@ -12110,17 +12684,28 @@ Réponds UNIQUEMENT au format JSON STRICT sans markdown entourant :
   app.get('/api/digital/deliveries', async (req, res) => {
     const emailFilter = String(req.query?.email || '').trim().toLowerCase();
     const phoneFilter = String(req.query?.phone || '').replace(/[^0-9]/g, '');
-    let list = readJsonArrayFile(DIGITAL_DELIVERIES_FILE);
 
-    if (emailFilter || phoneFilter) {
-      list = list.filter((d: any) => {
-        const matchEmail = emailFilter && String(d.customerEmail || '').toLowerCase() === emailFilter;
-        const matchPhone =
-          phoneFilter.length >= 6 &&
-          String(d.customerPhone || '').replace(/[^0-9]/g, '').endsWith(phoneFilter);
-        return matchEmail || matchPhone;
-      });
+    // Interdiction formelle de lister toutes les livraisons sans filtre précis (sauf Super-Admin authentifié)
+    if (!emailFilter && phoneFilter.length < 8) {
+      const supaUser = await resolveSupabaseUserFromRequest(req);
+      const isSuper = supaUser ? await isVerifiedSuperAdminUser(supaUser) : false;
+      if (!isSuper) {
+        return res.status(400).json({
+          success: false,
+          deliveries: [],
+          error: 'Veuillez saisir votre adresse e-mail ou numéro de téléphone complet pour retrouver vos achats.',
+        });
+      }
+      return res.json({ success: true, deliveries: readJsonArrayFile(DIGITAL_DELIVERIES_FILE).slice(0, 50) });
     }
+
+    const list = readJsonArrayFile(DIGITAL_DELIVERIES_FILE).filter((d: any) => {
+      const matchEmail = emailFilter && emailFilter.includes('@') && String(d.customerEmail || '').toLowerCase() === emailFilter;
+      const matchPhone =
+        phoneFilter.length >= 8 &&
+        String(d.customerPhone || '').replace(/[^0-9]/g, '').endsWith(phoneFilter.slice(-8));
+      return matchEmail || matchPhone;
+    });
 
     return res.json({ success: true, deliveries: list.slice(0, 50) });
   });
@@ -12991,8 +13576,8 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
     }
   });
 
-  // Endpoint Vérification Réelle WooCommerce REST API v3
-  app.post('/api/woocommerce/test', async (req, res) => {
+  // Endpoint Vérification Réelle WooCommerce REST API v3 (Authentifié + protection anti-SSRF stricte)
+  app.post('/api/woocommerce/test', requireAuthenticatedUser, async (req, res) => {
     try {
       const { siteUrl, consumerKey, consumerSecret } = req.body || {};
 
@@ -13016,14 +13601,22 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
         });
       }
 
-      let cleanUrl = siteUrl.trim();
+      let cleanUrl = String(siteUrl || '').trim();
       if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
         cleanUrl = 'https://' + cleanUrl;
       }
       cleanUrl = cleanUrl.replace(/\/+$/, '');
 
+      const safeParsed = await resolveSafePublicUrl(cleanUrl);
+      if (!safeParsed) {
+        return res.status(400).json({
+          success: false,
+          message: 'URL WordPress invalide ou adresse réseau privée refusée.'
+        });
+      }
+
       const authHeader = 'Basic ' + Buffer.from(`${consumerKey.trim()}:${consumerSecret.trim()}`).toString('base64');
-      const testEndpoint = `${cleanUrl}/wp-json/wc/v3/products?per_page=1`;
+      const testEndpoint = `${safeParsed.origin}${safeParsed.pathname.replace(/\/+$/, '')}/wp-json/wc/v3/products?per_page=1`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -13031,6 +13624,7 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
       try {
         const response = await fetch(testEndpoint, {
           method: 'GET',
+          redirect: 'error',
           headers: {
             'Authorization': authHeader,
             'User-Agent': 'Nanasore-WooCommerce-Connector/2.0'

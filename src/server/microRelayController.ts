@@ -727,23 +727,68 @@ export function attachMicroRelayRoutes(app: Express): void {
   // --------------------------------------------------------------------------
   app.post(['/api/checkout/s/webhook', '/api/webhooks/s'], async (req: Request, res: Response) => {
     try {
+      const candidateSecrets = [
+        process.env.S_WEBHOOK_SECRET,
+        process.env.SEBPAY_WEBHOOK_SECRET,
+        process.env.SEBPAY_SECRET_KEY,
+        process.env.PAYMENT_WEBHOOK_SECRET,
+      ]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+
+      if (candidateSecrets.length === 0) {
+        return res.status(503).json({ success: false, error: 'Configuration webhook S incomplète.' });
+      }
+
+      const providedSig = String(
+        req.headers['x-s-signature'] ||
+          req.headers['x-sebpay-signature'] ||
+          req.headers['x-webhook-signature'] ||
+          req.headers['x-signature'] ||
+          ''
+      )
+        .replace(/^sha256=/i, '')
+        .trim()
+        .toLowerCase();
+
+      if (!providedSig) {
+        return res.status(401).json({ success: false, error: 'Signature cryptographique HMAC requise.' });
+      }
+
+      const rawPayload = (req as any).rawBody
+        ? (req as any).rawBody.toString('utf8')
+        : JSON.stringify(req.body || {});
+
+      let sigOk = false;
+      for (const secret of candidateSecrets) {
+        const expected = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex').toLowerCase();
+        const bufA = Buffer.from(providedSig, 'utf8');
+        const bufB = Buffer.from(expected, 'utf8');
+        if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+          sigOk = true;
+          break;
+        }
+      }
+      if (!sigOk) {
+        return res.status(401).json({ success: false, error: 'Signature webhook S invalide.' });
+      }
+
       const transactionId =
         req.body?.transactionId ||
         req.body?.tx_ref ||
-        req.body?.order_id ||
-        (req.query.transactionId as string);
+        req.body?.order_id;
 
-      if (!transactionId) {
+      if (!transactionId || !req.body?.status) {
         return res.status(400).json({
           success: false,
-          error: 'transactionId est manquant dans le payload du webhook.'
+          error: 'transactionId et status sont obligatoires dans le payload du webhook.'
         });
       }
 
       const result = await handleSPaymentConfirmation({
         transactionId,
         receiptNumber: req.body?.receiptNumber,
-        status: req.body?.status || 'SUCCESS'
+        status: String(req.body.status)
       });
 
       return res.status(200).json(result);

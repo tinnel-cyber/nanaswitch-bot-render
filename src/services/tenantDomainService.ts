@@ -345,7 +345,7 @@ export async function removeTenantCustomDomain(storeId: string, domainToRemove?:
   try {
     const domain = domainToRemove ? cleanDomain(domainToRemove) : localStorage.getItem(`nana_custom_domain_${storeId}`);
     if (domain) {
-      await supabase.from('app_registry').delete().eq('key', `custom_domain_${domain}`).catch(() => {});
+      await supabase.from('app_registry').delete().eq('key', `custom_domain_${domain}`);
       localStorage.removeItem(`nana_resolved_tenant_domain_${domain}`);
     }
     localStorage.removeItem(`nana_custom_domain_${storeId}`);

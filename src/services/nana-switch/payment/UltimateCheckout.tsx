@@ -721,7 +721,7 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
         payment_method: 'CASH_ON_DELIVERY',
         status: 'EN_ATTENTE_LIVRAISON',
         is_paid: false
-      }).catch(() => {});
+      });
 
       await supabase.from('app_registry').upsert({
         key: `order_${orderId}`,
@@ -1228,47 +1228,22 @@ export const UltimateCheckout: React.FC<UltimateCheckoutProps> = ({
     }
   }, [isBurkinaFaso, currentStep, orderId, logBfPaymentStep]);
 
-  // Écoute Supabase Realtime active pendant toute la transaction Burkina Faso (STEP_2B)
+  // Vérification automatique sécurisée via RPC serveur (zéro exposition publique des SMS entrants)
   useEffect(() => {
-    if (!isBurkinaFaso || currentStep !== 'STEP_2B' || !orderId) return;
+    if (!isBurkinaFaso || currentStep !== 'STEP_2B' || !orderId || bfSmsStatus !== 'WAITING_REALTIME') return;
 
-    let bfChannel: any = null;
-    try {
-      const channelName = `bf_sms_watch_${orderId}_${Math.random().toString(36).substring(7)}`;
-      console.log(`[BF-CHECKOUT] Écoute temps réel activée (${channelName})`);
-      bfChannel = supabase
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'bf_sms_payments'
-          },
-          async (payload) => {
-            if (bfVerificationDoneRef.current) return;
-            const row = payload.new as any;
-            console.log('[BF-CHECKOUT] Notification reçue :', row);
-            if (!row || !row.transaction_id) return;
-
-            const currentTargetTx = bfExtractedTxIdRef.current.trim().toUpperCase();
-            const incomingTx = String(row.transaction_id || '').trim().toUpperCase();
-
-            // Si le client a collé un SMS/ID, on compare immédiatement avec le SMS entrant
-            if (currentTargetTx && incomingTx === currentTargetTx) {
-              await verifyBfSmsAgainstSupabase(row.transaction_id, bfSmsInputRef.current);
-            }
-          }
-        )
-        .subscribe();
-    } catch (e) {
-      console.warn('[BF REALTIME WATCHER]', e);
-    }
+    const timer = window.setInterval(() => {
+      if (bfVerificationDoneRef.current) return;
+      const currentTargetTx = bfExtractedTxIdRef.current.trim().toUpperCase();
+      if (currentTargetTx && currentTargetTx.length >= 4) {
+        verifyBfSmsAgainstSupabase(currentTargetTx, bfSmsInputRef.current).catch(() => {});
+      }
+    }, 3500);
 
     return () => {
-      if (bfChannel) supabase.removeChannel(bfChannel);
+      window.clearInterval(timer);
     };
-  }, [isBurkinaFaso, currentStep, orderId, verifyBfSmsAgainstSupabase]);
+  }, [isBurkinaFaso, currentStep, orderId, bfSmsStatus, verifyBfSmsAgainstSupabase]);
 
   // Extraction automatique de l'ID dès que le client colle un SMS ou un ID de paiement (BF)
   const handleBfSmsInputChange = (rawVal: string) => {

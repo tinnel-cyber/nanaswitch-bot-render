@@ -561,13 +561,15 @@ export async function approveMarketCard(cardId: string): Promise<void> {
   if (error) throw new Error(error.message);
 
   // Sync miroir stores
-  await supabase.from('app_registry').upsert({
-    key: `store_${cleanId}`,
-    name: approvedCard.storeName || cleanId,
-    module_key: 'stores',
-    config_json: approvedCard,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'key' }).catch(() => {});
+  try {
+    await supabase.from('app_registry').upsert({
+      key: `store_${cleanId}`,
+      name: approvedCard.storeName || cleanId,
+      module_key: 'stores',
+      config_json: approvedCard,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch {}
 }
 
 /**

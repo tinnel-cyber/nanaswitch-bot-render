@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAds0VCLfekX8qQw-ya8ATlUbSyrG4Y6Zk",
+  apiKey: process.env.FIREBASE_API_KEY || "",
   authDomain: "nanasore.firebaseapp.com",
   projectId: "nanasore",
   storageBucket: "nanasore.firebasestorage.app",

@@ -64,7 +64,7 @@ interface Deps {
   dataDir: string;
   getSupabaseAdmin: () => any;
   resolveUser: (req: express.Request) => Promise<any | null>;
-  isAdminUser: (user: any) => boolean;
+  isAdminUser: (user: any) => Promise<boolean> | boolean;
 }
 
 const PAID_STATUSES = ['PAID', 'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'APPROVED', 'VALIDATED', 'CONFIRMED'];
@@ -133,8 +133,19 @@ export function createPaymentSecurity(deps: Deps) {
     const supa = deps.getSupabaseAdmin();
     if (!supa) return false;
     try {
-      const { data } = await supa.from('universes').select('id, user_id').eq('id', universeId).maybeSingle();
-      if (data && String(data.user_id) === authUserId) return true;
+      const { data } = await supa.from('universes').select('*').eq('id', universeId).maybeSingle();
+      if (data) {
+        const owners = [
+          data.user_id,
+          data.owner_id,
+          data.owner_uid,
+          data.uid,
+          data.merchant_id,
+          data.settings?.owner_id,
+          data.settings?.user_id,
+        ].map((v: any) => String(v || ''));
+        if (owners.includes(authUserId)) return true;
+      }
     } catch {}
     try {
       const { data } = await supa.from('merchants').select('*').eq('id', universeId).maybeSingle();
@@ -168,7 +179,7 @@ export function createPaymentSecurity(deps: Deps) {
       return null;
     }
     const authUserId = String(user.id);
-    const isAdmin = deps.isAdminUser(user);
+    const isAdmin = Boolean(await deps.isAdminUser(user));
 
     if (!universeId && !userId) {
       return { universeId: '', userId: authUserId, authUserId, isAdmin };
@@ -195,16 +206,25 @@ export function createPaymentSecurity(deps: Deps) {
   };
 
   // ---------------------------------------------------------------------------
-  // 2. INTENTIONS DE PAIEMENT SERVEUR
+  // 2. INTENTIONS DE PAIEMENT SERVEUR (isolées dans server_security_vault service_role)
   // ---------------------------------------------------------------------------
   const persistIntentRemote = async (intent: PaymentIntent) => {
     const supa = deps.getSupabaseAdmin();
     if (!supa) return;
     try {
+      const { error: vaultErr } = await supa.from('server_security_vault').upsert({
+        key: `payment_intent_${intent.orderId}`,
+        category: 'payment_intents',
+        tenant_id: intent.universeId || intent.userId || intent.ownerUserId,
+        secret_json: intent,
+        updated_at: intent.updatedAt,
+      });
+      if (!vaultErr) return;
       const { error } = await supa.from('app_registry').upsert({
         key: `payment_intent_${intent.orderId}`,
         name: `Intention paiement ${intent.orderId}`,
         module_key: 'payment_intents',
+        is_public: false,
         config_json: intent,
         value: intent,
         updated_at: intent.updatedAt,
@@ -234,6 +254,20 @@ export function createPaymentSecurity(deps: Deps) {
     if (local) return local;
     const supa = deps.getSupabaseAdmin();
     if (supa) {
+      try {
+        const { data: vData } = await supa
+          .from('server_security_vault')
+          .select('secret_json')
+          .eq('key', `payment_intent_${clean}`)
+          .maybeSingle();
+        if (vData?.secret_json?.orderId === clean) {
+          const intent = vData.secret_json as PaymentIntent;
+          const all = readArr(INTENTS_FILE);
+          all.unshift(intent);
+          writeArr(INTENTS_FILE, all);
+          return intent;
+        }
+      } catch {}
       try {
         const { data } = await supa.from('app_registry').select('config_json').eq('key', `payment_intent_${clean}`).maybeSingle();
         if (data?.config_json?.orderId === clean) {
@@ -401,15 +435,23 @@ export function createPaymentSecurity(deps: Deps) {
   /**
    * Vérifie qu'un paiement est réellement encaissé, avec le bon montant et la bonne devise.
    */
-  const verifyPayment = async (params: { orderId: string; expectedAmount: number; expectedCurrency?: string }): Promise<VerifiedPayment> => {
+  const verifyPayment = async (params: { orderId: string; transactionId?: string; expectedAmount: number; expectedCurrency?: string }): Promise<VerifiedPayment> => {
     const orderId = String(params.orderId || '').trim();
+    const txId = String(params.transactionId || '').trim();
     const expectedCurrency = String(params.expectedCurrency || 'XOF').toUpperCase();
-    const pending: VerifiedPayment = { verified: false, status: 'PENDING', amount: 0, currency: expectedCurrency, transactionId: orderId, source: 'none' };
-    if (!orderId) return { ...pending, reason: 'REFERENCE_MANQUANTE' };
+    const pending: VerifiedPayment = { verified: false, status: 'PENDING', amount: 0, currency: expectedCurrency, transactionId: txId || orderId, source: 'none' };
+    if (!orderId && !txId) return { ...pending, reason: 'REFERENCE_MANQUANTE' };
 
-    let result: VerifiedPayment | null = fromSignedWebhooks(orderId);
-    if (!result?.verified) result = (await fromRouterLedger(orderId)) || result;
-    if (!result?.verified) result = (await fromRouterApi(orderId)) || result;
+    const refs = [orderId, txId].filter(Boolean);
+    let result: VerifiedPayment | null = null;
+    for (const ref of refs) {
+      result = fromSignedWebhooks(ref) || result;
+      if (result?.verified) break;
+      result = (await fromRouterLedger(ref)) || result;
+      if (result?.verified) break;
+      result = (await fromRouterApi(ref)) || result;
+      if (result?.verified) break;
+    }
     if (!result) return pending;
     if (!result.verified) return result;
 

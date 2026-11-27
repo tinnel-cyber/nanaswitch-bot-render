@@ -327,7 +327,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
             return nextConfig;
           });
         }
-      }).catch(() => {});
+      }, () => {});
 
     // Écouteur Supabase Realtime sur app_registry (Synchronisation instantanée du thème)
     const themeChannelName = `public_theme_${storeIdToUse}_${Math.random().toString(36).substring(7)}`;
@@ -457,8 +457,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
             writeFastStoreCache(resolvedStoreSlug, { products: loaded });
           }
         }
-      })
-      .catch(() => {});
+      }, () => {});
 
     // 3. Requête Supabase SQL table public.products (Sécurisée contre erreur 22P02 UUID)
     const validUuids = storeLookupIds.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
@@ -479,8 +478,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
             writeFastStoreCache(resolvedStoreSlug, { products: loaded });
           }
         }
-      })
-      .catch(() => {});
+      }, () => {});
 
     return () => {
       isCancelled = true;

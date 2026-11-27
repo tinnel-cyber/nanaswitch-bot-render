@@ -423,7 +423,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
             logo_url: draftThemeConfig.logoUrl || storeConfig.logoUrl,
             primary_color: draftThemeConfig.primaryAccentColor || '#2563EB',
             updated_at: new Date().toISOString()
-          }, { onConflict: 'id' }).catch(() => {});
+          }, { onConflict: 'id' });
       }
 
       // 3. Synchronisation du slug centralisé
@@ -514,7 +514,7 @@ export const StoreStudioPage: React.FC<StoreStudioPageProps> = ({
 
       const isStoreUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
       if (isStoreUUID) {
-        await supabase.from('products').delete().eq('id', productId).catch(() => {});
+        await supabase.from('products').delete().eq('id', productId);
       }
 
       showToast(`🗑️ "${productName}" supprimé avec succès !`);

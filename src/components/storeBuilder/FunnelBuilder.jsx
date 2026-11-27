@@ -4736,10 +4736,14 @@ export const FunnelBuilder = ({
 
       case 'raw_html_block': {
         if (viewMode === 'preview') {
+          const safeRawHtml = String(data.rawHtml || '')
+            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+            .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+            .replace(/javascript\s*:/gi, 'blocked:');
           return (
             <div
               className="w-full my-2"
-              dangerouslySetInnerHTML={{ __html: data.rawHtml || '' }}
+              dangerouslySetInnerHTML={{ __html: safeRawHtml }}
             />
           );
         }
@@ -12318,7 +12322,12 @@ export const FunnelBuilder = ({
                   )}
                   <div
                     className="w-full text-slate-200 overflow-x-auto"
-                    dangerouslySetInnerHTML={{ __html: customHTML }}
+                    dangerouslySetInnerHTML={{
+                      __html: String(customHTML || '')
+                        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                        .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+                        .replace(/javascript\s*:/gi, 'blocked:'),
+                    }}
                   />
                 </div>
               )}
