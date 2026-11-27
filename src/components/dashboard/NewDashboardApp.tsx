@@ -7227,7 +7227,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-bold uppercase tracking-wider">
               <GraduationCap className="w-4 h-4 text-amber-300" />
-              <span>Modèle 2 : Formule Créateurs, Formateurs & Produits Numériques</span>
+              <span>Modèle 2 : Créateurs, Formateurs, Prestataires de Services &amp; Produits Numériques</span>
             </div>
             <div className="px-3.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-extrabold text-xs">
               ✓ 0 F AU DÉPART • AUCUN FRAIS FIXE
@@ -7237,18 +7237,18 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             <div className="lg:col-span-7 space-y-4">
               <h3 className="text-xl sm:text-2xl font-black tracking-tight leading-snug">
-                Commission fixe à <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400">14% pour tous</span> sur chaque produit non physique.
+                Commission fixe à <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400">14% pour tous</span> sur chaque produit non physique &amp; prestation de service.
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Idéal pour formateurs, coachs, conférenciers et créateurs : hébergez vos cours vidéo, documents PDF, masterclasses et accès réservés sans abonnement fixe mensuel. 
-                Une commission unique de <strong className="text-amber-300">14%</strong> est prélevée uniquement lors d'une vente encaissée sous protection séquestre Escrow automatique. Vous conservez 86% net de vos revenus.
+                Idéal pour formateurs, coachs, conférenciers, créateurs et <strong>prestataires de services</strong> : hébergez vos prestations, cours vidéo, documents PDF, masterclasses et accès réservés sans abonnement fixe mensuel. 
+                Une commission unique de <strong className="text-amber-300">14%</strong> est prélevée uniquement lors d'une vente ou prestation encaissée sous protection séquestre Escrow automatique. Vous conservez 86% net de vos revenus.
               </p>
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="p-3.5 rounded-xl bg-white/5 border border-white/10">
                   <div className="text-amber-300 font-black text-xl">14% Fixe</div>
-                  <div className="text-xs font-bold text-white mt-0.5">Produits Non Physiques</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">Formations, cours, PDF, masterclasses</div>
+                  <div className="text-xs font-bold text-white mt-0.5">Non Physiques &amp; Services</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Prestations de services, formations, PDF, masterclasses</div>
                 </div>
                 <div className="p-3.5 rounded-xl bg-white/5 border border-white/10">
                   <div className="text-emerald-400 font-black text-xl">0% Commission</div>

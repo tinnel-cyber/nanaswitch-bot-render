@@ -216,10 +216,10 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
         <p style="font-size:13px;"><strong>Numéros de paiement :</strong> 1) ${paymentNumber1} | 2) ${paymentNumber2}</p>
         <p style="font-size:13px;"><strong>Contact d'urgence :</strong> ${emergencyContactName} (${emergencyContactPhone})</p>
         <hr style="margin:14px 0; border-color:#e2e8f0;" />
-        <p style="font-size:12px;"><strong>Article 1 (Objet) :</strong> Activation du Plan Commission sans frais fixes mensuels pour la vente de produits numériques, formations et contenus digitaux.</p>
-        <p style="font-size:12px;"><strong>Article 2 (Taux &amp; Répartition) :</strong> Commission unique de ${commissionRatePercent}% prélevée automatiquement sur chaque vente encaissée. ${100 - commissionRatePercent}% net reversé au marchand.</p>
+        <p style="font-size:12px;"><strong>Article 1 (Objet &amp; Domaine d'activité) :</strong> Activation du Plan Commission sans frais fixes mensuels pour le domaine d'activité déclaré (<strong>${businessDomain}</strong>), couvrant les prestations de services, la vente de produits numériques, formations, documents PDF et accès digitaux.</p>
+        <p style="font-size:12px;"><strong>Article 2 (Taux &amp; Répartition) :</strong> Commission unique de ${commissionRatePercent}% prélevée automatiquement sur chaque vente ou prestation encaissée. ${100 - commissionRatePercent}% net reversé au marchand / prestataire de service.</p>
         <p style="font-size:12px;"><strong>Article 3 (Reversement &amp; Séquestre) :</strong> Les fonds sont protégés sous séquestre Escrow puis versés sur les numéros déclarés (${paymentNumber1} / ${paymentNumber2}).</p>
-        <p style="font-size:12px;"><strong>Article 4 (Conformité) :</strong> Le souscripteur certifie l'exactitude de son identité et de son contact d'urgence (${emergencyContactName} - ${emergencyContactPhone}).</p>
+        <p style="font-size:12px;"><strong>Article 4 (Conformité) :</strong> Le souscripteur certifie l'exactitude de son identité, de son domaine d'activité (${businessDomain}) et de son contact d'urgence (${emergencyContactName} - ${emergencyContactPhone}).</p>
         <div style="margin-top:20px;">
           <p style="font-weight:bold; font-size:13px; margin-bottom:6px;">Lu et approuvé</p>
           ${signatureDataUrl ? `<img src="${signatureDataUrl}" alt="Signature" style="max-height:80px; border-bottom:1px solid #94a3b8;" />` : ''}
@@ -264,7 +264,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
     doc.setTextColor(15, 23, 42);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('1. IDENTIFICATION DU MARCHAND / CRÉATEUR', 16, 48);
+    doc.text('1. IDENTIFICATION DU MARCHAND / PRESTATAIRE DE SERVICE', 16, 48);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
@@ -290,8 +290,8 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
     y += 7;
 
     const clauses = [
-      `Article 1 - Objet : Le présent contrat régit l'adhésion du Souscripteur au Plan Commission NaNaStore (0 F CFA d'abonnement mensuel fixe) pour la commercialisation de produits numériques, formations, PDF, masterclasses et accès digitaux.`,
-      `Article 2 - Taux de Commission (${commissionRatePercent}%) : Sur chaque vente encaissée via la plateforme, une commission unique de ${commissionRatePercent}% est prélevée automatiquement. Le Souscripteur perçoit ${100 - commissionRatePercent}% net de chaque transaction.`,
+      `Article 1 - Objet & Domaine d'activité : Le présent contrat régit l'adhésion du Souscripteur au Plan Commission NaNaStore (0 F CFA d'abonnement mensuel fixe) pour son domaine d'activité (« ${businessDomain} »), couvrant les prestations de services, la commercialisation de produits numériques, formations, PDF, masterclasses et accès digitaux.`,
+      `Article 2 - Taux de Commission (${commissionRatePercent}%) : Sur chaque vente ou prestation de service encaissée via la plateforme, une commission unique de ${commissionRatePercent}% est prélevée automatiquement. Le Souscripteur perçoit ${100 - commissionRatePercent}% net de chaque transaction.`,
       `Article 3 - Séquestre Escrow & Reversement : Les paiements clients transitent sous protection séquestre Escrow et sont reversés vers les numéros de paiement déclarés (${paymentNumber1} ou ${paymentNumber2}).`,
       `Article 4 - Transparence Analytique : Chaque vente génère un relevé détaillé (Montant Brut, Commission ${commissionRatePercent}%, Revenu Net) consultable en temps réel dans le tableau de bord Analytique.`,
       `Article 5 - Contact d'Urgence & Résiliation : En cas de besoin opérationnel ou de litige, NaNaStore est autorisé à joindre ${emergencyContactName} (${emergencyContactPhone}). Le Souscripteur peut à tout moment basculer vers un Plan Abonnement (0% commission).`,
@@ -450,7 +450,8 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
               <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200/80 flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0 mt-0.5" />
                 <p className="text-xs text-indigo-950 leading-relaxed">
-                  Renseignez vos informations officielles pour générer votre contrat pré-rempli{' '}
+                  Renseignez vos informations officielles (créateur, formateur ou <strong>prestataire de service</strong>)
+                  pour générer votre contrat pré-rempli{' '}
                   <strong>NaNaStore Commission Plan ({commissionRatePercent}%)</strong>. Vos deux numéros de paiement
                   permettront le reversement sécurisé de vos revenus nets (86%).
                 </p>
@@ -492,7 +493,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                       required
                       value={businessDomain}
                       onChange={(e) => setBusinessDomain(e.target.value)}
-                      placeholder="Ex: Formation digitale, Coaching, E-books..."
+                      placeholder="Ex: Prestataire de service, Formation, Coaching, Consulting..."
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                     />
                   </div>
@@ -637,16 +638,17 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                 {/* Clauses */}
                 <div className="space-y-2.5 text-xs text-slate-700 leading-relaxed bg-white p-4 rounded-xl border border-slate-200 max-h-56 overflow-y-auto">
                   <p>
-                    <strong>Article 1 — Objet :</strong> Le présent contrat officialise l'adhésion de{' '}
-                    <strong>{fullName}</strong> (Boutique : <strong>{storeName || universeId}</strong>) au{' '}
-                    <strong>Plan Commission NaNaStore</strong> pour la vente de produits numériques, formations,
-                    documents PDF et accès digitaux sans abonnement mensuel fixe.
+                    <strong>Article 1 — Objet &amp; Domaine d'activité :</strong> Le présent contrat officialise l'adhésion
+                    de <strong>{fullName}</strong> (Boutique : <strong>{storeName || universeId}</strong>) au{' '}
+                    <strong>Plan Commission NaNaStore</strong> pour son domaine d'activité déclaré :{' '}
+                    <strong>« {businessDomain} »</strong>, couvrant les <strong>prestations de services</strong>, la vente
+                    de produits numériques, formations, documents PDF et accès digitaux sans abonnement mensuel fixe.
                   </p>
                   <p>
                     <strong>Article 2 — Taux de Commission ({commissionRatePercent}%) :</strong> Une commission fixe et
-                    unique de <strong>{commissionRatePercent}%</strong> est prélevée uniquement lors de chaque vente
-                    encaissée. Le marchand conserve <strong>{100 - commissionRatePercent}% net</strong> de son chiffre
-                    d'affaires.
+                    unique de <strong>{commissionRatePercent}%</strong> est prélevée uniquement lors de chaque vente ou
+                    prestation de service encaissée. Le marchand / prestataire de service conserve{' '}
+                    <strong>{100 - commissionRatePercent}% net</strong> de son chiffre d'affaires.
                   </p>
                   <p>
                     <strong>Article 3 — Reversement &amp; Séquestre Escrow :</strong> Les paiements clients sont
