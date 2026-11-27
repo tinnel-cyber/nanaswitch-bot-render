@@ -43,7 +43,8 @@ import {
   Calendar,
   Sparkle,
   Sliders,
-  PlusCircle
+  PlusCircle,
+  Download
 } from 'lucide-react';
 import { MarketDirectoryStore } from '../../types';
 import {
@@ -226,6 +227,91 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [marketViewMode, setMarketViewMode] = useState<'STORES' | 'PRODUCTS'>('STORES');
   const [marketProducts, setMarketProducts] = useState<MarketplaceProductOffer[]>([]);
+
+  // PWA Nanamarket (/manifest-market.json?v=market_v1)
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
+  const [showPwaInstallHint, setShowPwaInstallHint] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+    const prevManifest = manifestLink?.getAttribute('href') || '/manifest.json?v=nanasore_v7';
+    let createdLink: HTMLLinkElement | null = null;
+    if (manifestLink) {
+      manifestLink.setAttribute('href', '/manifest-market.json?v=market_v1');
+    } else {
+      createdLink = document.createElement('link');
+      createdLink.rel = 'manifest';
+      createdLink.href = '/manifest-market.json?v=market_v1';
+      document.head.appendChild(createdLink);
+    }
+
+    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null;
+    const prevAppleIcon = appleIcon?.getAttribute('href') || '';
+    if (appleIcon) appleIcon.setAttribute('href', '/market-icon-192.png?v=market_v1');
+
+    const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]') as HTMLMetaElement | null;
+    const prevAppleTitle = appleTitle?.getAttribute('content') || '';
+    if (appleTitle) appleTitle.setAttribute('content', 'Nanamarket');
+
+    const themeMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    const prevTheme = themeMeta?.getAttribute('content') || '';
+    if (themeMeta) themeMeta.setAttribute('content', '#2563EB');
+
+    const standalone =
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      (window.navigator as any)?.standalone === true;
+    if (standalone) setIsPwaInstalled(true);
+
+    const globalPrompt = (window as any).__nanaDeferredInstallPrompt;
+    if (globalPrompt) setDeferredInstallPrompt(globalPrompt);
+
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      (window as any).__nanaDeferredInstallPrompt = e;
+      setDeferredInstallPrompt(e);
+    };
+    const onAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredInstallPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
+      setShowPwaInstallHint(false);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onAppInstalled);
+
+    try {
+      (navigator.storage as any)?.persist?.().catch(() => {});
+    } catch {}
+
+    return () => {
+      if (manifestLink) manifestLink.setAttribute('href', prevManifest);
+      else if (createdLink?.parentNode) createdLink.parentNode.removeChild(createdLink);
+      if (appleIcon && prevAppleIcon) appleIcon.setAttribute('href', prevAppleIcon);
+      if (appleTitle && prevAppleTitle) appleTitle.setAttribute('content', prevAppleTitle);
+      if (themeMeta && prevTheme) themeMeta.setAttribute('content', prevTheme);
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const handleInstallMarketPwa = async () => {
+    const promptEvt = deferredInstallPrompt || (window as any).__nanaDeferredInstallPrompt;
+    if (promptEvt) {
+      try {
+        await promptEvt.prompt();
+        const choice = await promptEvt.userChoice.catch(() => null);
+        if (choice?.outcome === 'accepted') setIsPwaInstalled(true);
+      } catch {
+        setShowPwaInstallHint(true);
+      }
+      setDeferredInstallPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
+    } else {
+      setShowPwaInstallHint(true);
+    }
+  };
 
   // --------------------------------------------------------------------------
   // 2. ÉTATS DES FILTRES & RECHERCHE
@@ -538,13 +624,14 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
               </button>
             )}
 
-            {/* Logo Officiel Nanasore Market */}
+            {/* Logo Officiel Nanamarket (M Bleu Royal 3D) */}
             <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onNavigateHome ? onNavigateHome() : null}>
-              <NanasorePasserelleIcon pixelSize={38} />
+              <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 shadow-xs flex items-center justify-center p-1 shrink-0">
+                <img src="/market-icon.svg?v=market_v1" alt="Nanamarket" className="w-full h-full object-contain" />
+              </div>
               <div className="leading-tight">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xl font-black tracking-tight text-slate-900">Nana<span className="text-sky-600">sore</span></span>
-                  <span className="text-xl font-black text-blue-600">Market</span>
+                  <span className="text-xl font-black tracking-tight text-slate-900">Nana<span className="text-blue-600">market</span></span>
                   <span className="hidden sm:inline-block px-1.5 py-0.2 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
                     Plateforme Unifiée
                   </span>
@@ -559,6 +646,18 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
               <Zap className="w-3.5 h-3.5 text-blue-600" />
               <span>Wave & Orange Money acceptés</span>
             </span>
+
+            {!isPwaInstalled && (
+              <button
+                type="button"
+                onClick={handleInstallMarketPwa}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs transition cursor-pointer shrink-0"
+                title="Installer Nanamarket sur votre écran d'accueil"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Installer</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -591,6 +690,23 @@ export const MarketDirectory: React.FC<MarketDirectoryProps> = ({
           </div>
         </div>
       </header>
+
+      {showPwaInstallHint && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 text-xs text-blue-900">
+            <span>
+              📲 Pour installer <strong>Nanamarket</strong> : ouvrez le menu de votre navigateur (<strong>Partager</strong> sur Safari iOS ou <strong>⋮</strong> sur Chrome/Edge) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowPwaInstallHint(false)}
+              className="text-blue-600 hover:text-blue-900 shrink-0 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ==================================================================== */}
       {/* 1. LA NAVIGATION PAR BULLES (INFINITE CIRCLE CATEGORIES)              */}

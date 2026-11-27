@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" fill="none">
+  <defs>
+    <linearGradient id="mLeft" x1="86" y1="112" x2="170" y2="404" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="mMidLeft" x1="130" y1="120" x2="260" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="mMidRight" x1="256" y1="330" x2="386" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="mRight" x1="340" y1="112" x2="430" y2="404" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+  </defs>
+  <!-- Left outer vertical pillar -->
+  <path d="M90 388 L106 128 C108 116 118 110 130 110 L166 110 C176 110 184 118 182 130 L164 388 C162 400 152 406 140 406 L104 406 C94 406 88 398 90 388 Z" fill="url(#mLeft)"/>
+  <!-- Left-center descending 3D ribbon -->
+  <path d="M126 116 C134 108 156 108 168 122 L256 248 L256 326 C244 326 234 320 228 310 L126 154 Z" fill="url(#mMidLeft)"/>
+  <!-- Right-center ascending 3D ribbon -->
+  <path d="M256 248 L344 122 C356 108 378 108 386 116 L386 154 L284 310 C278 320 268 326 256 326 Z" fill="url(#mMidRight)"/>
+  <!-- Right outer vertical pillar -->
+  <path d="M330 130 C328 118 336 110 346 110 L382 110 C394 110 404 116 406 128 L422 388 C424 398 418 406 408 406 L372 406 C360 406 350 400 348 388 Z" fill="url(#mRight)"/>
+  <!-- Subtle 3D bottom center facet -->
+  <path d="M256 248 L278 286 L256 326 L234 286 Z" fill="#60A5FA" opacity="0.92"/>
+</svg>
