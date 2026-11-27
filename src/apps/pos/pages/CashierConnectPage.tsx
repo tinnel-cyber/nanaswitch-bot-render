@@ -12,10 +12,14 @@ import {
   AlertCircle, 
   QrCode, 
   RotateCcw,
-  Delete
+  Delete,
+  Download,
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { verifyCashierPin, persistCashierSession } from '../../../services/cashierAuthService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
+import { usePosPwaManifest } from '../../../hooks/usePosPwaManifest';
 
 interface CashierConnectPageProps {
   onSuccess?: (tenantId: string, caisseId: string) => void;
@@ -34,6 +38,16 @@ export const CashierConnectPage: React.FC<CashierConnectPageProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
   const [showTenantInput, setShowTenantInput] = useState(false);
+
+  const {
+    isInstalled: isPosInstalled,
+    showIosHint: showPwaInstallHint,
+    setShowIosHint: setShowPwaInstallHint,
+    isOnline,
+    updateAvailable,
+    applyUpdate,
+    installPosPwa,
+  } = usePosPwaManifest(true);
 
   // Redirection standard vers le Terminal POS
   const navigateToTerminal = useCallback((tid: string, cid: string) => {
@@ -165,28 +179,76 @@ export const CashierConnectPage: React.FC<CashierConnectPageProps> = ({
             <span className="hidden sm:inline">Accueil</span>
           </button>
           
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#1D4ED8] flex items-center justify-center text-white font-black text-sm shadow-sm">
-              N
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-white border border-blue-100 flex items-center justify-center shadow-sm p-1 shrink-0">
+              <img src="/pos-icon.svg?v=pos_v1" alt="Nanasore Caisse POS" className="w-full h-full object-contain" />
             </div>
             <div>
               <span className="font-black text-sm tracking-tight text-[#0F172A] block leading-none">
                 NANASORE
               </span>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Terminal POS
+                Caisse POS
               </span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Caisse En Ligne
+          {updateAvailable && (
+            <button
+              type="button"
+              onClick={applyUpdate}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm cursor-pointer transition"
+              title="Nouvelle version disponible"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Mise à jour</span>
+            </button>
+          )}
+          {!isPosInstalled && (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                installPosPwa();
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-[#1D4ED8] hover:bg-blue-700 text-white shadow-sm cursor-pointer transition active:scale-95"
+              title="Installer Nanasore Caisse POS en application"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden xs:inline">Installer la Caisse</span>
+              <span className="xs:hidden">Installer</span>
+            </button>
+          )}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+            isOnline
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            <span className="hidden sm:inline">{isOnline ? 'Caisse En Ligne' : 'Hors-Ligne (Persistance)'}</span>
+            <span className="sm:hidden">{isOnline ? 'En Ligne' : 'Hors-Ligne'}</span>
           </span>
         </div>
       </header>
+
+      {showPwaInstallHint && (
+        <div className="max-w-md mx-auto w-full px-4 pt-3">
+          <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start justify-between gap-2 shadow-sm">
+            <span>
+              📲 Pour installer <strong>Nanasore Caisse POS</strong> : ouvrez le menu du navigateur (<strong>Partager</strong> sur Safari iOS ou <strong>⋮</strong> sur Chrome/Edge) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong> ou <strong>« Installer l'application »</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowPwaInstallHint(false)}
+              className="text-blue-500 hover:text-blue-800 shrink-0 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">

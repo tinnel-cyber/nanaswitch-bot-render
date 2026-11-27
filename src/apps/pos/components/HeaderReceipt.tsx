@@ -44,12 +44,16 @@ import {
   Bot,
   Wand2,
   LayoutGrid,
-  Search
+  Search,
+  Download,
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { isFreePlan } from '../../../utils/planFeatures';
 import { ProCrownIcon } from '../../../components/common/ProFeatureGuard';
 import { ThemeSwitcher } from '../../../shell/layout/ThemeSwitcher';
 import { NanasoreLogo } from '../../../components/common/NanasoreLogo';
+import { usePosPwaManifest } from '../../../hooks/usePosPwaManifest';
 
 interface HeaderReceiptProps {
   onBackToHome?: () => void;
@@ -154,6 +158,15 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
   const isFreeAccount = isFreePlan(subscription);
+
+  const {
+    isInstalled: isPosInstalled,
+    showIosHint: showPosInstallHint,
+    setShowIosHint: setShowPosInstallHint,
+    updateAvailable: isPosUpdateAvailable,
+    applyUpdate: applyPosUpdate,
+    installPosPwa,
+  } = usePosPwaManifest(true);
 
   // Fermer la liste déroulante lors d'un clic à l'extérieur
   useEffect(() => {
@@ -712,10 +725,38 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
             </button>
           )}
 
-          {/* Bouton Installer PWA */}
-          <PWAInstallBanner variant="button" />
+          {/* Bouton Mise à jour PWA Caisse POS (si nouvelle version disponible) */}
+          {isPosUpdateAvailable && (
+            <button
+              type="button"
+              onClick={applyPosUpdate}
+              className="flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer"
+              title="Mettre à jour l'application Caisse POS"
+            >
+              <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Mise à jour</span>
+            </button>
+          )}
 
-          {/* Badge Statut Réseau / Hors-Ligne Firestore */}
+          {/* Bouton Installer Caisse POS (/manifest-pos.json?v=pos_v1) */}
+          {!isPosInstalled ? (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                installPosPwa();
+              }}
+              className="flex items-center justify-center gap-1.5 px-2 sm:px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer"
+              title="Installer Nanasore Caisse POS en application dédiée"
+            >
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Installer POS</span>
+            </button>
+          ) : (
+            <PWAInstallBanner variant="button" />
+          )}
+
+          {/* Badge Statut Réseau / Hors-Ligne */}
           <NetworkStatusBadge />
 
           {/* Theme Switcher Robuste Multi-Thème (Dark, Pur Blanc, Pur Bleu) */}
@@ -1146,6 +1187,40 @@ export const HeaderReceipt: React.FC<HeaderReceiptProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modale d'installation guidée Caisse POS (iOS Safari / Navigateur sans prompt natif) */}
+      {showPosInstallHint && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-5 shadow-2xl text-slate-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <img src="/pos-icon.svg?v=pos_v1" alt="Caisse POS" className="w-8 h-8 rounded-lg" />
+                <div>
+                  <h3 className="text-sm font-black text-white">Installer Caisse POS</h3>
+                  <p className="text-[11px] text-slate-400">Application autonome & persistance locale</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPosInstallHint(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Ouvrez le menu de votre navigateur (<strong>Partager</strong> sur Safari iOS ou <strong>⋮</strong> sur Chrome / Edge) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong> ou <strong>« Installer Nanasore Caisse POS »</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPosInstallHint(false)}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black cursor-pointer transition"
+            >
+              Compris
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

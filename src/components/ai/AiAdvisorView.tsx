@@ -31,7 +31,8 @@ import {
   ThumbsUp,
   RotateCw,
   Award,
-  WifiOff
+  WifiOff,
+  Sparkles
 } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { GrowthDirectorAssistant } from '../tenant/GrowthDirectorAssistant';
