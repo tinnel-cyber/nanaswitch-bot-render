@@ -70,10 +70,12 @@ interface Deps {
 const PAID_STATUSES = ['PAID', 'COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'APPROVED', 'VALIDATED', 'CONFIRMED'];
 const FAILED_STATUSES = ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'DECLINED'];
 
-// Prix plancher serveur des abonnements (F CFA) — empêche de payer 100 F pour un plan à 15 000 F
+// Prix plancher serveur des abonnements (F CFA) — aligné sur tous les plans frontend (NewDashboardApp + SubscriptionPaywallModal)
 const SERVER_PLAN_PRICES: Record<string, { MONTHLY: number; ANNUAL: number }> = {
-  pro: { MONTHLY: 15000, ANNUAL: 150000 },
+  starter: { MONTHLY: 3000, ANNUAL: 30000 },
+  pro: { MONTHLY: 10000, ANNUAL: 100000 },
   business: { MONTHLY: 30000, ANNUAL: 300000 },
+  elite: { MONTHLY: 20000, ANNUAL: 200000 },
   enterprise: { MONTHLY: 60000, ANNUAL: 600000 },
   custom_modular: { MONTHLY: 5000, ANNUAL: 48000 },
 };
