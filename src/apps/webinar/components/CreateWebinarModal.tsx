@@ -516,11 +516,15 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         ownerKey: currentUser?.storeId || currentUser?.uid || '',
         moduleId: 'salles-vip-live',
         actionLabel: `Création Live / Salle VIP : ${title.trim()}`,
-        hasActivePaidSubscription: Boolean(
-          (currentUser as any)?.subscription?.status === 'active' &&
-          !String((currentUser as any)?.subscription?.planId || '').includes('free') &&
-          !String((currentUser as any)?.subscription?.planId || '').includes('pay-as-you-go')
-        ),
+        hasActivePaidSubscription: Boolean((() => {
+          let sub: any = (currentUser as any)?.subscription || null;
+          if (!sub) {
+            try { sub = JSON.parse(localStorage.getItem('nana_store_sub') || 'null'); } catch {}
+          }
+          const st = String(sub?.status || '').toUpperCase();
+          const pl = String(sub?.plan || sub?.planId || '').toLowerCase();
+          return st === 'ACTIVE' && pl && !pl.includes('free') && !pl.includes('zero') && !pl.includes('pay-as-you-go');
+        })()),
         isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
       });
 
