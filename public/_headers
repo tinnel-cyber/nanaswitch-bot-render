@@ -17,6 +17,8 @@
   Cache-Control: public, max-age=0, must-revalidate
 /manifest-market.json
   Cache-Control: public, max-age=0, must-revalidate
+/manifest-campus.json
+  Cache-Control: public, max-age=0, must-revalidate
 /.well-known/*
   Cache-Control: public, max-age=0, must-revalidate
   Access-Control-Allow-Origin: *

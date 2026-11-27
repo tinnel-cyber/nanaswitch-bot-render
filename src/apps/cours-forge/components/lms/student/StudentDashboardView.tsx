@@ -629,6 +629,92 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     return () => { isMounted = false; };
   }, []);
 
+  // PWA NanaCampus (/manifest-campus.json?v=campus_v1)
+  const [deferredCampusPrompt, setDeferredCampusPrompt] = useState<any>(null);
+  const [isCampusPwaInstalled, setIsCampusPwaInstalled] = useState<boolean>(false);
+  const [showCampusInstallHint, setShowCampusInstallHint] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+    const prevManifest = manifestLink?.getAttribute('href') || '/manifest.json?v=nanasore_v7';
+    let createdLink: HTMLLinkElement | null = null;
+    if (manifestLink) {
+      manifestLink.setAttribute('href', '/manifest-campus.json?v=campus_v1');
+    } else {
+      createdLink = document.createElement('link');
+      createdLink.rel = 'manifest';
+      createdLink.href = '/manifest-campus.json?v=campus_v1';
+      document.head.appendChild(createdLink);
+    }
+
+    const appleIcon = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null;
+    const prevAppleIcon = appleIcon?.getAttribute('href') || '';
+    if (appleIcon) appleIcon.setAttribute('href', '/campus-icon-192.png?v=campus_v1');
+
+    const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]') as HTMLMetaElement | null;
+    const prevAppleTitle = appleTitle?.getAttribute('content') || '';
+    if (appleTitle) appleTitle.setAttribute('content', 'NanaCampus');
+
+    const themeMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    const prevTheme = themeMeta?.getAttribute('content') || '';
+    if (themeMeta) themeMeta.setAttribute('content', '#1D4ED8');
+
+    const standalone =
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      (window.navigator as any)?.standalone === true;
+    if (standalone) setIsCampusPwaInstalled(true);
+
+    const globalPrompt = (window as any).__nanaDeferredInstallPrompt;
+    if (globalPrompt) setDeferredCampusPrompt(globalPrompt);
+
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      (window as any).__nanaDeferredInstallPrompt = e;
+      setDeferredCampusPrompt(e);
+    };
+    const onAppInstalled = () => {
+      setIsCampusPwaInstalled(true);
+      setDeferredCampusPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
+      setShowCampusInstallHint(false);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onAppInstalled);
+
+    try {
+      (navigator.storage as any)?.persist?.().catch(() => {});
+    } catch {}
+
+    return () => {
+      if (manifestLink) manifestLink.setAttribute('href', prevManifest);
+      else if (createdLink?.parentNode) createdLink.parentNode.removeChild(createdLink);
+      if (appleIcon && prevAppleIcon) appleIcon.setAttribute('href', prevAppleIcon);
+      if (appleTitle && prevAppleTitle) appleTitle.setAttribute('content', prevAppleTitle);
+      if (themeMeta && prevTheme) themeMeta.setAttribute('content', prevTheme);
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const handleInstallCampusPwa = async () => {
+    playTapBeep();
+    const promptEvt = deferredCampusPrompt || (window as any).__nanaDeferredInstallPrompt;
+    if (promptEvt) {
+      try {
+        await promptEvt.prompt();
+        const choice = await promptEvt.userChoice.catch(() => null);
+        if (choice?.outcome === 'accepted') setIsCampusPwaInstalled(true);
+      } catch {
+        setShowCampusInstallHint(true);
+      }
+      setDeferredCampusPrompt(null);
+      (window as any).__nanaDeferredInstallPrompt = null;
+    } else {
+      setShowCampusInstallHint(true);
+    }
+  };
+
   // Répertoire des Campus & Cours Souscrits 100% Réels (zéro fallback démo)
   const enrolledCourses = useMemo(() => {
     if (realEnrollments.length > 0) {
@@ -1117,13 +1203,13 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
             }}
             className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1D4ED8] to-blue-600 flex items-center justify-center text-white font-black text-lg shadow-md shadow-blue-900/10 transition group-hover:scale-105">
-              N
+            <div className="w-10 h-10 rounded-xl bg-white border border-blue-100 flex items-center justify-center shadow-sm p-1 transition group-hover:scale-105 shrink-0">
+              <img src="/campus-icon.svg?v=campus_v1" alt="NanaCampus" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:block">
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold text-base tracking-tight text-[#0F172A]">
-                  NaNa<span className="text-[#1D4ED8]">sore</span>
+                  Nana<span className="text-[#1D4ED8]">Campus</span>
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-[#1D4ED8] border border-blue-200">
                   Campus Privé
@@ -1154,8 +1240,20 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Droite : Widgets d'accès rapide (Marketplace, Notifications, Messages, Profil) */}
+        {/* Droite : Widgets d'accès rapide (Installer PWA, Marketplace, Notifications, Messages, Profil) */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {!isCampusPwaInstalled && (
+            <button
+              type="button"
+              onClick={handleInstallCampusPwa}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] border border-blue-200 font-extrabold text-xs transition active:scale-95 cursor-pointer"
+              title="Installer NanaCampus sur votre écran d'accueil"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Installer</span>
+            </button>
+          )}
+
           {/* Bouton Accès Marketplace Next-Gen (Souscrire à des cours) */}
           <button
             type="button"
@@ -1423,6 +1521,23 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           </div>
         </div>
       </header>
+
+      {showCampusInstallHint && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2.5">
+          <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-2 text-xs text-blue-900">
+            <span>
+              📲 Pour installer <strong>NanaCampus</strong> : ouvrez le menu de votre navigateur (<strong>Partager</strong> sur Safari iOS ou <strong>⋮</strong> sur Chrome/Edge) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowCampusInstallHint(false)}
+              className="text-blue-600 hover:text-blue-900 shrink-0 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* CORPS PRINCIPAL : LAYOUT 3-COLONNES RÉACTIF               */}
