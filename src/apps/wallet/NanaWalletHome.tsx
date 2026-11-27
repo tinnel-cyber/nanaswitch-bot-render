@@ -142,7 +142,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
   const [confirmPinInput, setConfirmPinInput] = useState<string>('');
   const [isSavingPin, setIsSavingPin] = useState<boolean>(false);
 
-  // PWA Install Prompt (/manifest-wallet.json)
+  // PWA Install Prompt (/manifest-wallet.json?v=wallet_v2)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
   const [showIosInstallHint, setShowIosInstallHint] = useState<boolean>(false);
@@ -154,18 +154,18 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }, 4500);
   }, []);
 
-  // 1. Injection dynamique du Manifest PWA dédié (/manifest-wallet.json) + capture beforeinstallprompt
+  // 1. Injection dynamique du Manifest PWA dédié (/manifest-wallet.json?v=wallet_v2) + capture beforeinstallprompt
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const existingManifest = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
     const previousHref = existingManifest?.getAttribute('href') || '/manifest.json';
 
     if (existingManifest) {
-      existingManifest.setAttribute('href', '/manifest-wallet.json');
+      existingManifest.setAttribute('href', '/manifest-wallet.json?v=wallet_v2');
     } else {
       const link = document.createElement('link');
       link.rel = 'manifest';
-      link.href = '/manifest-wallet.json';
+      link.href = '/manifest-wallet.json?v=wallet_v2';
       document.head.appendChild(link);
     }
 
@@ -186,7 +186,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
       setIsPwaInstalled(true);
       setDeferredPrompt(null);
       (window as any).__nanaDeferredInstallPrompt = null;
-      showToast('NaNa Wallet Marchand installé sur votre écran d\'accueil !', 'success');
+      showToast('Nanawallet installé sur votre écran d\'accueil !', 'success');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -756,11 +756,11 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-white border border-blue-200/40 flex items-center justify-center shadow-lg shrink-0 p-1.5">
-              <img src="/wallet-icon.svg?v=wallet_v1" alt="NaNa Wallet" className="w-full h-full object-contain" />
+              <img src="/wallet-icon.svg?v=wallet_v2" alt="Nanawallet" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-black text-white truncate">NaNa Wallet Marchand</h1>
+                <h1 className="text-sm font-black text-white truncate">Nanawallet</h1>
                 <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[9px] font-black uppercase">
                   Unifié
                 </span>
@@ -777,7 +777,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                 type="button"
                 onClick={handleInstallPwa}
                 className="px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition"
-                title="Installer NaNa Wallet sur votre téléphone"
+                title="Installer Nanawallet sur votre téléphone"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden xs:inline">Installer</span>
@@ -832,7 +832,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         <div className="max-w-3xl mx-auto w-full px-4 pt-3">
           <div className="p-3 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 text-xs text-indigo-200 flex items-start justify-between gap-2">
             <span>
-              📲 Pour installer <strong>NaNa Wallet Marchand</strong> : ouvrez le menu de votre navigateur (Partager sur Safari iOS ou ⋮ sur Chrome Android) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong>.
+              📲 Pour installer <strong>Nanawallet</strong> : ouvrez le menu de votre navigateur (Partager sur Safari iOS ou ⋮ sur Chrome Android) puis choisissez <strong>« Ajouter à l'écran d'accueil »</strong>.
             </span>
             <button type="button" onClick={() => setShowIosInstallHint(false)} className="text-indigo-300 hover:text-white shrink-0">
               <X className="w-4 h-4" />
@@ -1408,8 +1408,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                 <h3 className="text-xs font-black text-white">Application Installable (PWA)</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   {isPwaInstalled
-                    ? 'NaNa Wallet Marchand est installé sur votre appareil.'
-                    : 'Installez NaNa Wallet directement sur votre écran d\'accueil mobile.'}
+                    ? 'Nanawallet est installé sur votre appareil.'
+                    : 'Installez Nanawallet directement sur votre écran d\'accueil mobile.'}
                 </p>
               </div>
               {!isPwaInstalled && (
@@ -1465,7 +1465,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           <div className="w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-black text-white">Recharger NaNa Wallet</h3>
+                <h3 className="text-sm font-black text-white">Recharger Nanawallet</h3>
                 <p className="text-[11px] text-slate-400">Paiement sécurisé via UltimateCheckout</p>
               </div>
               <button
@@ -1527,16 +1527,16 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           onCancel={() => setIsUltimateCheckoutOpen(false)}
           product={{
             id: 'nana_wallet_recharge',
-            name: `Recharge NaNa Wallet (${formatCFA(rechargeAmount)})`,
+            name: `Recharge Nanawallet (${formatCFA(rechargeAmount)})`,
             price: rechargeAmount,
-            description: `Crédit instantané sur le portefeuille ${activeUniverse?.name || 'NaNa Wallet Marchand'} • Sans expiration`,
+            description: `Crédit instantané sur le portefeuille ${activeUniverse?.name || 'Nanawallet'} • Sans expiration`,
             itemType: 'recharge',
           }}
           amount={rechargeAmount}
           currency="FCFA"
           orderId={activeRechargeOrderId}
-          orderDescription={`Recharge NaNa Wallet Marchand (${activeUniverse?.name || resolvedUserName})`}
-          storeName={activeUniverse?.name || 'NaNa Wallet Marchand'}
+          orderDescription={`Recharge Nanawallet (${activeUniverse?.name || resolvedUserName})`}
+          storeName={activeUniverse?.name || 'Nanawallet'}
           merchantId={selectedUniverseId || resolvedUserId || 'nana-wallet'}
           defaultCustomerName={resolvedUserName}
           defaultEmail={resolvedUserEmail}

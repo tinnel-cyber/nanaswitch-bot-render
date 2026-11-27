@@ -4274,11 +4274,11 @@ async function startServer() {
       try {
         const { data } = await supabaseAdmin
           .from('app_registry')
-          .select('config_json, value')
+          .select('config_json')
           .eq('key', `wallet_pin_${ownerKey}`)
           .maybeSingle();
-        if (data?.config_json?.pinHash || data?.value?.pinHash) {
-          rec = data.config_json || data.value;
+        if (data?.config_json?.pinHash) {
+          rec = data.config_json;
         }
       } catch {}
     }
@@ -8314,11 +8314,11 @@ async function startServer() {
       const { error: pinErr } = await supabaseAdmin.from('app_registry').upsert({
         key: `wallet_pin_${ownerKey}`,
         name: `Master PIN ${ownerKey}`,
+        tenant_id: String(ctx.userId || ctx.universeId || 'default'),
         module_key: 'wallet_security',
         config_json: record,
-        value: record,
         updated_at: nowIso,
-      });
+      }, { onConflict: 'key' });
       if (pinErr) {
         console.error('[WALLET PIN UPSERT ERROR]', pinErr.message);
         return res.status(500).json({ success: false, error: `Impossible de sauvegarder le Master PIN (${pinErr.message})` });
