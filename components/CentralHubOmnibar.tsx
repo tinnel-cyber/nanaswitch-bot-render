@@ -175,6 +175,18 @@ export const OFFICIAL_POS_MODULES: HubCardItem[] = [
     trialBadge: 'Inclus'
   },
   {
+    id: 'mod_barcode_studio',
+    title: 'Studio de création de code barre et QR code',
+    subtitle: 'Studio Pro 1D & 2D + Autocollants',
+    palmares: 'PNG • JPEG • SVG • PDF',
+    description: 'Créez des codes-barres (Code 128, EAN-13, UPC, ITF-14) et QR codes personnalisés avec logo, liens de paiement, planches autocollantes et partage social.',
+    mediaType: 'image',
+    mediaUrl: 'https://images.unsplash.com/photo-1595079676339-1534801ad6cf?w=600&auto=format&fit=crop&q=80',
+    routeUrl: '/dashboard/barcode-studio',
+    targetView: 'BARCODE_STUDIO',
+    trialBadge: 'Inclus'
+  },
+  {
     id: 'mod_cashier_sessions',
     title: 'Multi-Caissiers & Gestion des Shifts',
     subtitle: 'Sécurité & Traçabilité',

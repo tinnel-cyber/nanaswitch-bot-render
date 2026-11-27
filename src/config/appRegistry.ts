@@ -606,6 +606,21 @@ export const OUTILS_BLOCK: CanonicalModule[] = [
     aliases: ['tool-scanner', 'mod_barcode_scanner', 'barcode-scanner', '/scanner']
   },
   {
+    id: 'barcode-studio',
+    slug: 'barcode-studio',
+    name: 'Studio de création de code barre et QR code',
+    route: '/dashboard/barcode-studio',
+    category: 'Matériel POS & Impression',
+    description: 'Studio professionnel 1D & 2D (EAN-13, Code 128, QR Code, Data Matrix, PDF417) avec logo, autocollants et export PNG/JPEG/SVG/PDF.',
+    type: 'OUTIL',
+    taxonomy: 'OUTIL',
+    defaultActive: true,
+    view: 'BARCODE_STUDIO',
+    icon: 'QrCode',
+    keywords: ['studio', 'code barre', 'code-barre', 'qr code', 'qrcode', 'autocollant', 'impression', 'ean13', '1d', '2d'],
+    aliases: ['mod_barcode_studio', 'studio-code-barre', '/barcode-studio']
+  },
+  {
     id: 'excel',
     slug: 'excel',
     name: 'Import & Export de Fichiers Excel / CSV',
