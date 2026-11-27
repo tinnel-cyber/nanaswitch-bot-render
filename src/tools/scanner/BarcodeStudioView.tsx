@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { InventoryProduct } from '../../types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
-import { supabase } from '../../lib/supabaseBridge';
+import { supabase } from '../../lib/supabase';
 
 export interface BarcodeStudioViewProps {
   onBack?: () => void;
