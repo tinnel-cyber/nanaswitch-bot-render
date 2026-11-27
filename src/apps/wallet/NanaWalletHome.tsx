@@ -785,6 +785,49 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     [universes, selectedUniverseId]
   );
 
+  const renderUniverseIdField = (label: string = "ID de l'univers") => (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+          <Store className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <span>{label}</span>
+        </label>
+        {selectedUniverseId && (
+          <span className="text-[10px] font-mono text-blue-300 bg-blue-500/10 border border-blue-500/25 px-2 py-0.5 rounded-md truncate max-w-[170px]">
+            {selectedUniverseId}
+          </span>
+        )}
+      </div>
+      {universes.length > 0 ? (
+        <select
+          value={selectedUniverseId}
+          onChange={(e) => {
+            setSelectedUniverseId(e.target.value);
+            setIsBalanceHidden(true);
+          }}
+          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+          required
+        >
+          {!selectedUniverseId && <option value="">-- Sélectionner un univers --</option>}
+          {universes.map(u => (
+            <option key={u.id} value={u.id}>
+              {u.name} — {u.id}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={selectedUniverseId}
+          onChange={(e) => setSelectedUniverseId(e.target.value)}
+          placeholder="Saisissez l'ID de l'univers (ex: univ_...)"
+          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-blue-500"
+          required
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className={`min-h-[100dvh] w-full bg-slate-950 text-slate-100 font-sans antialiased flex flex-col ${className}`}>
       {/* Toast Flottant */}
@@ -1065,14 +1108,17 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
         {/* ONGLET 2 : MODULES SOUMIS AU PAY-AS-YOU-GO (SÉLECTION MULTIPLE + DÉCRÉMENTATION PARTOUT + CLOUD) */}
         {activeTab === 'PAYG' && (
           <section className="space-y-4">
-            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-amber-400" />
-                <h2 className="text-sm font-black text-white">Modules soumis au Pay-As-You-Go</h2>
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-sm font-black text-white">Modules soumis au Pay-As-You-Go</h2>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Sélectionnez un ou plusieurs modules à activer. Chaque paiement décrémente immédiatement votre solde partout et exécute l'activation dans le Cloud pour chaque module concerné.
+                </p>
               </div>
-              <p className="text-xs text-slate-400">
-                Sélectionnez un ou plusieurs modules à activer. Chaque paiement décrémente immédiatement votre solde partout et exécute l'activation dans le Cloud pour chaque module concerné.
-              </p>
+              {renderUniverseIdField("ID de l'univers à activer")}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1132,6 +1178,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                     Total : {formatCFA(selectedPaygTotal)}
                   </span>
                 </div>
+
+                {renderUniverseIdField("ID de l'univers pour le paiement")}
 
                 {hasMasterPin && (
                   <div className="space-y-1">
@@ -1199,6 +1247,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
               <p className="text-[11px] text-slate-400">
                 Identique aux liens générés depuis votre Dashboard Principal — tout paiement reçu crédite directement ce Wallet et apparaît partout.
               </p>
+
+              {renderUniverseIdField("ID de l'univers pour ce lien de paiement")}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
@@ -1534,6 +1584,8 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {renderUniverseIdField("ID de l'univers à recharger")}
 
             <div className="grid grid-cols-3 gap-2">
               {QUICK_RECHARGE_AMOUNTS.map(amt => (
