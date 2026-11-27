@@ -143,6 +143,7 @@ const AuthCallbackPage = React.lazy(() => import('./components/auth/AuthCallback
 const ResetPasswordPage = React.lazy(() => import('./components/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage || m.default })));
 const TestSupabaseScreen = React.lazy(() => import('./components/TestSupabaseScreen'));
 const ProductsScreen = React.lazy(() => import('./components/ProductsScreen'));
+const BarcodeStudioView = React.lazy(() => import('./tools/scanner/BarcodeStudioView'));
 const TenantEmailingDashboardPage = React.lazy(() => import('../app/dashboard/marketing/emailing/page'));
 import { getMarketplaceCourseById } from './services/marketplaceService';
 import { AuthProvider } from './context/AuthContext';
@@ -285,6 +286,7 @@ export type AppView =
   | 'TARIFS' 
   | 'AI_LEGAL' 
   | 'AI_ADVISOR' 
+  | 'BARCODE_STUDIO'
   | 'REPORTS' 
   | 'DEBT_BOOK' 
   | 'VOICE_TEST' 
@@ -632,6 +634,7 @@ export default function App() {
           if (subMod === 'debt-book' || subMod === 'dettes') return 'DEBT_BOOK';
           if (subMod === 'partners-affiliate' || subMod === 'partenaire') return 'PARTNER';
           if (subMod === 'ai-gemini' || subMod === 'gemini') return 'AI_ADVISOR';
+          if (subMod === 'barcode-studio') return 'BARCODE_STUDIO';
           if (subMod === 'cv-pro' || subMod === 'cv') return 'CV_CREATOR';
           if (subMod === 'lms-academy' || subMod === 'campus') return 'CAMPUS';
           if (subMod === 'lms-marketplace' || subMod === 'marketplace') return 'CATALOG';
@@ -3148,6 +3151,11 @@ export default function App() {
       }
       if (keyUpper === 'BARCODE_SCANNER' || modId === 'scanner' || modId === 'barcode-scanner' || rawPath === '/dashboard/scanner' || rawPath === '/scanner') {
         setIsPosCameraScannerOpen(true);
+        return;
+      }
+      if (keyUpper === 'BARCODE_STUDIO' || modId === 'barcode-studio' || rawPath === '/dashboard/barcode-studio' || rawPath === '/barcode-studio') {
+        setCurrentView('BARCODE_STUDIO');
+        if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard/barcode-studio');
         return;
       }
       if (keyUpper === 'KYC_VERIFICATION' || keyUpper === 'SETTINGS_KYC' || modId === 'kyc' || modId === 'kyc-chain' || rawPath === '/dashboard/kyc' || rawPath === '/kyc') {
@@ -7087,6 +7095,21 @@ export default function App() {
             </ModuleErrorBoundary>
           )}
 
+          {currentView === 'BARCODE_STUDIO' && (
+            <ModuleErrorBoundary moduleName="Studio Codes-Barres & QR Pro">
+              <React.Suspense fallback={<LazyModuleFallback label="Chargement Studio Codes-Barres & QR..." />}>
+                <BarcodeStudioView
+                  inventory={inventory}
+                  storeName={currentUser?.storeName || currentUser?.name || 'Nanasore'}
+                  onBack={() => {
+                    setCurrentView('NANA_SWITCH_APP');
+                    if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
+                  }}
+                />
+              </React.Suspense>
+            </ModuleErrorBoundary>
+          )}
+
           {currentView === 'VOICE_TEST' && (
             /* View: Test Reconnaissance Vocale */
             <ModuleErrorBoundary moduleName="Vocal - Reconnaissance Vocale & Vente Rapide">
@@ -8287,6 +8310,11 @@ export default function App() {
               onClose={() => setIsPosCameraScannerOpen(false)}
               onDetected={(code) => {
                 handleScannedBarcode(code);
+              }}
+              onOpenBarcodeStudio={() => {
+                setIsPosCameraScannerOpen(false);
+                setCurrentView('BARCODE_STUDIO');
+                if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard/barcode-studio');
               }}
             />
           </React.Suspense>

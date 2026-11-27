@@ -46,6 +46,7 @@
     "@xenova/transformers": "^2.17.2",
     "@xyflow/react": "^12.11.6",
     "archiver": "^8.0.0",
+    "bwip-js": "^4.11.4",
     "canvas-confetti": "^1.9.4",
     "colord": "^2.14.0",
     "dotenv": "^17.2.3",
