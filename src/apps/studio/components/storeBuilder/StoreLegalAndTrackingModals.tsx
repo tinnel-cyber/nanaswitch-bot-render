@@ -310,28 +310,11 @@ export const StoreLegalAndTrackingModals: React.FC<StoreLegalAndTrackingModalsPr
         });
         playValidationBeep();
       } else {
-        // Fallback intelligent rassurant
-        setSearchResult({
-          id: queryTrimmed,
-          orderNumber: queryTrimmed.startsWith('#') ? queryTrimmed : `#NANA-${queryTrimmed.toUpperCase().slice(-5)}`,
-          status: 'En cours de traitement',
-          customerName: 'Client Vérifié',
-          customerPhone: queryTrimmed,
-          total: 0,
-          items: [],
-          isSimulated: true,
-          createdAt: 'En cours'
-        });
+        setSearchResult(null);
       }
     } catch (err) {
       console.warn('[OrderTracker] Erreur recherche distante:', err);
-      setSearchResult({
-        id: queryTrimmed,
-        orderNumber: queryTrimmed,
-        status: 'En cours d\'acheminement',
-        isSimulated: true,
-        createdAt: 'Aujourd\'hui'
-      });
+      setSearchResult(null);
     } finally {
       setIsSearching(false);
     }

@@ -486,6 +486,9 @@ export function attachFarotageRoutes(app: Express): void {
   // Simulation en direct de bout en bout pour tester l'animation et le son
   // --------------------------------------------------------------------------
   app.post('/api/farotage/simulate', async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Simulation désactivée en production.' });
+    }
     try {
       const {
         groupId = 'mariage_awa_moussa_2026',

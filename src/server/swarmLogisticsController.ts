@@ -484,6 +484,9 @@ export function attachSwarmLogisticsRoutes(app: Express): void {
   // Prouve formellement que le second livreur est rejeté avec l'erreur gracieuse
   // --------------------------------------------------------------------------
   app.post('/api/logistics/simulate-race-condition', async (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Simulation désactivée en production.' });
+    }
     try {
       const testOrderId = `ord_race_${Date.now()}`;
       emitNewOrderPing({

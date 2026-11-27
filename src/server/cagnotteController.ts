@@ -733,6 +733,9 @@ export function attachCagnotteRoutes(app: Express): void {
 
   // 6. Simulation instantanée d'une contribution ou top-up à 100% pour tester
   app.post('/api/cagnotte/simulate-contribution', async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Simulation désactivée en production.' });
+    }
     try {
       const {
         cagnotteId = 'cagnotte_anniv_sarah_2026',

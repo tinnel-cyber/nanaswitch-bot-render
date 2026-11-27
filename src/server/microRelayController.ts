@@ -759,6 +759,9 @@ export function attachMicroRelayRoutes(app: Express): void {
   // Simule l'achat complet à 15 000 FCFA avec split 14 250 / 750 et émission WS
   // --------------------------------------------------------------------------
   app.post('/api/micro-relay/simulate-commission', async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Simulation désactivée en production.' });
+    }
     try {
       const {
         affiliateId = 'usr_relay_demo',
