@@ -26,14 +26,19 @@ import {
   Type,
   Scissors,
   RefreshCw,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { InventoryProduct } from '../../types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
+import { supabase } from '../../lib/supabaseBridge';
 
 export interface BarcodeStudioViewProps {
   onBack?: () => void;
   inventory?: InventoryProduct[];
   storeName?: string;
+  tenantId?: string;
+  storeSlug?: string;
 }
 
 type CodeDimension = '1D' | '2D';
@@ -96,6 +101,8 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
   onBack,
   inventory = [],
   storeName = 'Nanasore',
+  tenantId = '',
+  storeSlug = '',
 }) => {
   // Format & Données
   const [dimensionFilter, setDimensionFilter] = useState<'ALL' | '1D' | '2D'>('ALL');
@@ -103,6 +110,12 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
   const [rawValue, setRawValue] = useState<string>('NANA-2026-001');
   const [qrTemplate, setQrTemplate] = useState<QrTemplateType>('text');
   const [qrEcc, setQrEcc] = useState<'L' | 'M' | 'Q' | 'H'>('H');
+
+  // Générateur rapide de lien (Boutique & Lien de paiement officiel)
+  const [isPayLinkPanelOpen, setIsPayLinkPanelOpen] = useState<boolean>(false);
+  const [payLinkTitle, setPayLinkTitle] = useState<string>('');
+  const [payLinkAmount, setPayLinkAmount] = useState<string>('');
+  const [isCreatingPayLink, setIsCreatingPayLink] = useState<boolean>(false);
 
   // Champs structurés QR
   const [wifiSsid, setWifiSsid] = useState('');
@@ -187,6 +200,63 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
     }
     if (prod.photoUrl || pAny.imageUrl) {
       setUploadedImageUrl(prod.photoUrl || pAny.imageUrl || null);
+    }
+  };
+
+  const handleInsertStoreLink = () => {
+    playTapBeep();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
+    const url = storeSlug ? `${origin}/boutique/${storeSlug}` : origin;
+    setSymbology('qrcode');
+    setQrTemplate('url');
+    setRawValue(url);
+    if (!labelTitle.trim()) setLabelTitle(storeName);
+    playValidationBeep();
+  };
+
+  const handleGeneratePaymentLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(payLinkAmount);
+    if (!payLinkTitle.trim() || !Number.isFinite(amt) || amt <= 0) {
+      setRenderError('Saisissez un titre et un montant valide (> 0 FCFA) pour générer le lien de paiement.');
+      return;
+    }
+    setIsCreatingPayLink(true);
+    setRenderError(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      const res = await fetch('/api/payment-links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          tenantId: tenantId || storeSlug || 'nana-store',
+          title: payLinkTitle.trim(),
+          amount: amt,
+          currency: 'XOF',
+          origin: typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com',
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !json?.link?.url) {
+        throw new Error(json?.error || 'Impossible de générer le lien de paiement.');
+      }
+      playValidationBeep();
+      setSymbology('qrcode');
+      setQrTemplate('url');
+      setRawValue(json.link.url);
+      setLabelTitle(payLinkTitle.trim());
+      setLabelPrice(formatCFA(amt));
+      setIsPayLinkPanelOpen(false);
+      setPayLinkTitle('');
+      setPayLinkAmount('');
+    } catch (err: any) {
+      setRenderError(err?.message || 'Erreur lors de la génération du lien de paiement.');
+    } finally {
+      setIsCreatingPayLink(false);
     }
   };
 
@@ -760,31 +830,125 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
                 />
               </div>
             ) : (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <label className="text-[11px] font-bold text-slate-600">
-                    Valeur / Code ({currentSymInfo.label})
+                    {symbology === 'qrcode' && qrTemplate === 'url'
+                      ? 'Lien URL à encoder (https://...)'
+                      : `Valeur / Texte / Lien (${currentSymInfo.label})`}
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playTapBeep();
-                      const rand = String(Math.floor(100000000000 + Math.random() * 899999999999));
-                      setRawValue(currentSymInfo.dimension === '1D' && symbology !== 'code128' && symbology !== 'code39' && symbology !== 'code93' ? rand.slice(0, 12) : `NANA-${rand.slice(0, 8)}`);
-                    }}
-                    className="text-[10px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Générer aléatoire</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleInsertStoreLink}
+                      className="text-[10px] font-bold text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer"
+                    >
+                      <Link2 className="w-3 h-3" />
+                      <span>Lien Boutique</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        setIsPayLinkPanelOpen((v) => !v);
+                      }}
+                      className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Générer un lien</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTapBeep();
+                        const rand = String(Math.floor(100000000000 + Math.random() * 899999999999));
+                        setRawValue(currentSymInfo.dimension === '1D' && symbology !== 'code128' && symbology !== 'code39' && symbology !== 'code93' ? rand.slice(0, 12) : `NANA-${rand.slice(0, 8)}`);
+                      }}
+                      className="text-[10px] font-bold text-[#2563EB] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Aléatoire</span>
+                    </button>
+                  </div>
                 </div>
-                <textarea
-                  rows={2}
-                  value={rawValue}
-                  onChange={(e) => setRawValue(e.target.value)}
-                  placeholder={currentSymInfo.defaultSample}
-                  className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-mono text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
-                />
+
+                {isPayLinkPanelOpen && (
+                  <form
+                    onSubmit={handleGeneratePaymentLink}
+                    className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2"
+                  >
+                    <p className="text-[11px] font-black text-[#1E3A8A]">
+                      Générer un lien de paiement officiel &amp; l'encoder en QR Code
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={payLinkTitle}
+                        onChange={(e) => setPayLinkTitle(e.target.value)}
+                        placeholder="Titre (ex: Commande VIP)"
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-blue-200 text-xs focus:outline-none focus:border-[#2563EB]"
+                        required
+                      />
+                      <input
+                        type="number"
+                        min={100}
+                        value={payLinkAmount}
+                        onChange={(e) => setPayLinkAmount(e.target.value)}
+                        placeholder="Montant FCFA (ex: 5000)"
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-blue-200 text-xs font-mono focus:outline-none focus:border-[#2563EB]"
+                        required
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsPayLinkPanelOpen(false)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-600 hover:bg-white cursor-pointer"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isCreatingPayLink}
+                        className="px-3 py-1.5 rounded-lg bg-[#1E3A8A] hover:bg-[#2563EB] disabled:opacity-60 text-white text-[11px] font-black flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {isCreatingPayLink ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
+                        <span>Créer &amp; Encoder</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {symbology === 'qrcode' && qrTemplate === 'url' ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="url"
+                      value={rawValue}
+                      onChange={(e) => setRawValue(e.target.value)}
+                      placeholder="https://nanasore.com/..."
+                      className="flex-1 px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-mono text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                    />
+                    {/^https?:\/\//i.test(rawValue.trim()) && (
+                      <a
+                        href={rawValue.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-xl bg-[#F8FAFC] hover:bg-blue-50 border border-[#E2E8F0] text-[#1E3A8A] shrink-0"
+                        title="Ouvrir / Tester le lien"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <textarea
+                    rows={2}
+                    value={rawValue}
+                    onChange={(e) => setRawValue(e.target.value)}
+                    placeholder={currentSymInfo.defaultSample}
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-mono text-[#0F172A] focus:outline-none focus:border-[#2563EB]"
+                  />
+                )}
               </div>
             )}
 

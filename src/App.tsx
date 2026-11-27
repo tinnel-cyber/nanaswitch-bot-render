@@ -7101,6 +7101,8 @@ export default function App() {
                 <BarcodeStudioView
                   inventory={inventory}
                   storeName={currentUser?.storeName || currentUser?.name || 'Nanasore'}
+                  tenantId={currentUser?.storeId || currentUser?.id || ''}
+                  storeSlug={storeSlug}
                   onBack={() => {
                     setCurrentView('NANA_SWITCH_APP');
                     if (typeof window !== 'undefined') window.history.pushState({}, '', '/dashboard');
