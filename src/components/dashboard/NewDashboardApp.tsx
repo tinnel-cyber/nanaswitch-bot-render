@@ -1884,11 +1884,11 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#1E40AF] text-white text-xs font-bold shadow-sm cursor-pointer"
+                className="lg:hidden inline-flex items-center justify-center p-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-sm cursor-pointer"
                 title="Ouvrir le menu de l'univers"
+                aria-label="Menu"
               >
                 <Menu className="w-4 h-4" />
-                <span>Menu</span>
               </button>
             )}
 
