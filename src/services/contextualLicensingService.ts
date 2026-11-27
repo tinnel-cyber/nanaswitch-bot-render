@@ -63,7 +63,7 @@ export const PAY_AS_YOU_GO_PRICES = {
   EXTRA_PRODUCT: 1000, // 1 000 FCFA par produit supplémentaire activé au-delà des 3 gratuits
   SALES_FUNNEL: 5000,  // 5 000 FCFA par tunnel de vente modulaire
   CV_PRO: 500,         // 500 FCFA par CV Pro & Lettre de Motivation IA
-  AI_VIDEO_MEDIA: 150, // 150 FCFA par création vidéo publicitaire ou visuel IA
+  AI_VIDEO_MEDIA: 1500, // 1 500 FCFA par création vidéo publicitaire ou visuel IA
   DOCUSIGN: 300,       // 300 FCFA par signature certifiée
   SMS_OTP: 25,         // 25 FCFA par SMS
   WHATSAPP_MSG: 35     // 35 FCFA par notification WhatsApp

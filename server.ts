@@ -49,6 +49,7 @@ import { attachDiscoverySearchRoutes } from './src/server/discoverySearchControl
 import { attachCustomDomainsRoutes } from './src/server/customDomainsController';
 import { attachVipSubscriptionRoutes } from './src/server/vipSubscriptionController';
 import { attachVipHostAccreditationRoutes } from './src/server/vipHostAccreditationController';
+import { attachCommissionRoutes } from './src/server/commissionController';
 import {
   attachWameetSyncRoutes,
   setWameetSyncSocketEmitter,
@@ -9361,6 +9362,7 @@ async function startServer() {
   // Moteur de Souscription VIP & Péage Wameet (Prompt 27)
   attachVipSubscriptionRoutes(app);
   attachVipHostAccreditationRoutes(app);
+  attachCommissionRoutes(app);
 
   // Le Pont Backend Nanasore vers Wameet VIP (Prompt 30)
   attachWameetSyncRoutes(app);
