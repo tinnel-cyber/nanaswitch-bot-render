@@ -203,6 +203,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
 
   const handleInstallPwa = async () => {
     playTapBeep();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/nana-wallet')) {
+      window.location.href = '/nana-wallet?install=1';
+      return;
+    }
     const promptEvent = deferredPrompt || (window as any).__nanaDeferredInstallPrompt;
     if (promptEvent) {
       try {
@@ -780,7 +784,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                 title="Installer Nanawallet sur votre téléphone"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span className="hidden xs:inline">Installer</span>
+                <span>Installer</span>
               </button>
             )}
             <button

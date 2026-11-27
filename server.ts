@@ -12640,6 +12640,15 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
         const template = fs.readFileSync(indexPath, 'utf-8');
         let html = injectThemeIntoHtml(template, theme);
 
+        // Manifest PWA dédié pour /nana-wallet dès le chargement initial HTML (évite tout conflit avec Nanasore /)
+        if (req.path.startsWith('/nana-wallet')) {
+          html = html
+            .replace(/\/manifest\.json(\?[^"]*)?/gi, '/manifest-wallet.json?v=wallet_v2')
+            .replace(/\/apple-touch-icon\.png(\?[^"]*)?/gi, '/wallet-icon-192.png?v=wallet_v2')
+            .replace(/<title>.*?<\/title>/i, '<title>Nanawallet — Portefeuille Unifié</title>')
+            .replace(/content="#1E3A8A"/gi, 'content="#2563EB"');
+        }
+
         // Balises OpenGraph dynamiques pour les liens partagés sur WhatsApp (/live/:storeSlug)
         const liveMatch = req.path.match(/^\/live\/([^/?#]+)/i);
         if (liveMatch && liveMatch[1]) {
