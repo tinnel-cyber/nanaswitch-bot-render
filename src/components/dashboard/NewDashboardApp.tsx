@@ -1747,7 +1747,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
       
       {/* GLOBAL TOAST NOTIFICATION */}
       {toast && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-5 right-5 z-[200] flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-4">
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
           ) : toast.type === 'warning' ? (
@@ -1770,8 +1770,8 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
               onClick={handleBackToUniverses}
               title="Revenir à la sélection des Univers"
             >
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm transition group-hover:scale-105 shrink-0 p-1.5">
-                <img src="/nanasore-icon.svg?v=nanasore_v5" alt="Nanasore" className="w-full h-full object-contain" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm transition group-hover:scale-105 shrink-0 p-0.5">
+                <img src="/nanasore-icon.svg?v=nanasore_v6" alt="Nanasore" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -2433,7 +2433,7 @@ export const NewDashboardApp: React.FC<NewDashboardAppProps> = ({
             {activeTab === 'checkout' && <TabServicesAndApps app={selectedApp} showToast={showToast} setActiveTab={setActiveTab} onOpenModule={handleOpenRegistryModule} />}
             {activeTab === 'publish_card' && <PublishMarketCardTab app={selectedApp} showToast={showToast} />}
             {activeTab === 'customers' && <TabCustomers app={selectedApp} />}
-            {activeTab === 'analytics' && <TabAnalytics app={selectedApp} />}
+            {activeTab === 'analytics' && <TabAnalytics app={selectedApp} showToast={showToast} />}
             {activeTab === 'payouts' && <TabPayouts app={selectedApp} showToast={showToast} />}
             {activeTab === 'developer' && <DeveloperTab app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
             {activeTab === 'webhooks' && <TabWebhooks app={selectedApp} copyToClipboard={copyToClipboard} showToast={showToast} onUpdateApp={handleUpdateApp} />}
@@ -5328,7 +5328,7 @@ function TabCustomers({ app }: { app?: NanaMerchantApp }) {
 }
 
 /* 7. TAB: ANALYTICS (AUTHENTIC CLOUD REVENUE & SALES CURVE — STRICT MULTI-TENANT) */
-function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
+function TabAnalytics({ app, showToast }: { app: NanaMerchantApp | null; showToast?: (m: string, t?: any) => void }) {
   const [timeframe, setTimeframe] = useState<'24H' | '7J' | '30J' | '90J' | '1A' | 'TOUT'>('30J');
   const [rawSales, setRawSales] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
