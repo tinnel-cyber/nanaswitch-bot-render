@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v53-bf-sms-checkout';
+const CACHE_NAME = 'nanasore-v54-logos-darkblue';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
@@ -7,12 +7,15 @@ const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
 const STATIC_PRECACHE_URLS = [
   '/',
   '/index.html',
-  '/manifest.json?v=nanasore_arrow_v3',
-  '/nanasore-icon.svg?v=nanasore_arrow_v3',
-  '/favicon.svg?v=nanasore_arrow_v3',
-  '/icon.svg?v=nanasore_arrow_v3',
-  '/pwa-192x192.png?v=nanasore_arrow_v3',
-  '/pwa-512x512.png?v=nanasore_arrow_v3'
+  '/manifest.json?v=nanasore_v5',
+  '/nanasore-icon.svg?v=nanasore_v5',
+  '/favicon.svg?v=nanasore_v5',
+  '/icon.svg?v=nanasore_v5',
+  '/apple-touch-icon.png?v=nanasore_v5',
+  '/pwa-192x192.png?v=nanasore_v5',
+  '/pwa-512x512.png?v=nanasore_v5',
+  '/wallet-icon-192.png',
+  '/wallet-icon-512.png'
 ];
 
 // URLs des fichiers WebAssembly FFmpeg à pré-cacher pour le hors-ligne
