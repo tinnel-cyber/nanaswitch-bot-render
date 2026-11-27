@@ -286,7 +286,7 @@ async function startServer() {
       console.warn('[PROD-CHECK] Variables critiques manquantes:', missingCritical.join(', '));
     }
     if (!process.env.DATA_DIR) {
-      console.warn('[PROD-CHECK] DATA_DIR non défini : le stockage JSON local utilise le disque éphémère. Montez un Persistent Disk (ex: /var/data) sur Render.');
+      console.log('[PROD-CHECK] Mode Cloud Supabase actif (compatible Render Free Plan, aucun disque persistant requis).');
     }
   }
 
@@ -2010,14 +2010,71 @@ async function startServer() {
     return record;
   };
 
+  const getWebhookSecretsForStore = async (storeId: string): Promise<{ shopifySecret?: string; wooSecret?: string }> => {
+    const cleanStore = String(storeId || '').trim();
+    const localAll = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+    const localEntry = localAll[cleanStore] || {};
+    try {
+      const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
+      if (supaClient) {
+        const { data } = await supaClient
+          .from('app_registry')
+          .select('config_json')
+          .eq('key', `webhook_import_secrets_${cleanStore}`)
+          .maybeSingle();
+        if (data?.config_json && typeof data.config_json === 'object') {
+          return { ...localEntry, ...data.config_json };
+        }
+      }
+    } catch {}
+    return localEntry;
+  };
+
+  const saveWebhookSecretsForStore = async (
+    storeId: string,
+    patch: { shopifySecret?: string; wooSecret?: string }
+  ): Promise<{ shopifySecret?: string; wooSecret?: string }> => {
+    const cleanStore = String(storeId || '').trim();
+    const current = await getWebhookSecretsForStore(cleanStore);
+    const nowIso = new Date().toISOString();
+    const merged = {
+      ...current,
+      ...(patch.shopifySecret !== undefined ? { shopifySecret: String(patch.shopifySecret).trim() } : {}),
+      ...(patch.wooSecret !== undefined ? { wooSecret: String(patch.wooSecret).trim() } : {}),
+      updatedAt: nowIso,
+    };
+
+    const localAll = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+    localAll[cleanStore] = merged;
+    writeJsonObjSafe(WEBHOOK_SECRETS_FILE, localAll);
+
+    try {
+      const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
+      if (supaClient) {
+        await supaClient.from('app_registry').upsert(
+          {
+            key: `webhook_import_secrets_${cleanStore}`,
+            name: `Webhook Secrets ${cleanStore}`,
+            tenant_id: cleanStore,
+            module_key: 'webhook_import',
+            config_json: merged,
+            updated_at: nowIso,
+          },
+          { onConflict: 'key' }
+        );
+      }
+    } catch {}
+    return merged;
+  };
+
   // POST /api/webhooks/shopify/products/:storeId — Récepteur Webhook Shopify (products/create, products/update)
   app.post('/api/webhooks/shopify/products/:storeId', async (req, res) => {
     try {
       const storeId = String(req.params.storeId || '').trim();
       if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
 
-      const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
-      const storeSecret = secrets[storeId]?.shopifySecret || process.env.SHOPIFY_WEBHOOK_SECRET || '';
+      const storeSecrets = await getWebhookSecretsForStore(storeId);
+      const storeSecret = storeSecrets.shopifySecret || process.env.SHOPIFY_WEBHOOK_SECRET || '';
       const hmacHeader = String(req.headers['x-shopify-hmac-sha256'] || '');
       if (storeSecret && hmacHeader && (req as any).rawBody) {
         const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
@@ -2056,8 +2113,8 @@ async function startServer() {
       const storeId = String(req.params.storeId || '').trim();
       if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
 
-      const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
-      const storeSecret = secrets[storeId]?.wooSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || '';
+      const storeSecrets = await getWebhookSecretsForStore(storeId);
+      const storeSecret = storeSecrets.wooSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || '';
       const sigHeader = String(req.headers['x-wc-webhook-signature'] || '');
       if (storeSecret && sigHeader && (req as any).rawBody) {
         const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
@@ -2092,18 +2149,55 @@ async function startServer() {
     }
   });
 
-  // GET & POST /api/webhooks/import-config/:storeId — Configuration & produits synchronisés par Webhook
+  // GET & POST /api/webhooks/import-config/:storeId — Configuration & produits synchronisés (100% persistant Supabase)
   app.get('/api/webhooks/import-config/:storeId', async (req, res) => {
     const owner = await resolveVerifiedUniverseOwner(req);
     if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
     const storeId = String(req.params.storeId || '').trim();
-    const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+    const storeSecrets = await getWebhookSecretsForStore(storeId);
     const productsByStore = readJsonObjSafe(WEBHOOK_PRODUCTS_FILE);
+    const localList: any[] = Array.isArray(productsByStore[storeId]) ? productsByStore[storeId] : [];
+    const byId = new Map<string, any>();
+    localList.forEach((p) => { if (p?.id) byId.set(String(p.id), p); });
+
+    try {
+      const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
+      if (supaClient) {
+        const { data: supaRows } = await supaClient
+          .from('products')
+          .select('*')
+          .eq('vendor_id', storeId)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        if (Array.isArray(supaRows)) {
+          supaRows.forEach((r: any) => {
+            const skuStr = String(r.sku || '');
+            if (skuStr.startsWith('SHP-') || skuStr.startsWith('WC-') || r.category === 'Shopify' || r.category === 'WooCommerce') {
+              if (!byId.has(String(r.id))) {
+                byId.set(String(r.id), {
+                  id: String(r.id),
+                  storeId,
+                  name: r.name,
+                  category: r.category || 'Webhook',
+                  sellingPrice: Number(r.price) || 0,
+                  costPrice: 0,
+                  stock: Number(r.stock) || 0,
+                  barcode: skuStr,
+                  unit: 'pièce',
+                  photoUrl: r.image_url || '',
+                });
+              }
+            }
+          });
+        }
+      }
+    } catch {}
+
     return res.json({
       success: true,
-      hasShopifySecret: Boolean(secrets[storeId]?.shopifySecret),
-      hasWooSecret: Boolean(secrets[storeId]?.wooSecret),
-      syncedProducts: Array.isArray(productsByStore[storeId]) ? productsByStore[storeId] : [],
+      hasShopifySecret: Boolean(storeSecrets.shopifySecret),
+      hasWooSecret: Boolean(storeSecrets.wooSecret),
+      syncedProducts: Array.from(byId.values()),
     });
   });
 
@@ -2112,18 +2206,11 @@ async function startServer() {
     if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
     const storeId = String(req.params.storeId || '').trim();
     const { shopifySecret, wooSecret } = req.body || {};
-    const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
-    secrets[storeId] = {
-      ...(secrets[storeId] || {}),
-      ...(shopifySecret !== undefined ? { shopifySecret: String(shopifySecret).trim() } : {}),
-      ...(wooSecret !== undefined ? { wooSecret: String(wooSecret).trim() } : {}),
-      updatedAt: new Date().toISOString(),
-    };
-    writeJsonObjSafe(WEBHOOK_SECRETS_FILE, secrets);
+    const savedSecrets = await saveWebhookSecretsForStore(storeId, { shopifySecret, wooSecret });
     return res.json({
       success: true,
-      hasShopifySecret: Boolean(secrets[storeId]?.shopifySecret),
-      hasWooSecret: Boolean(secrets[storeId]?.wooSecret),
+      hasShopifySecret: Boolean(savedSecrets.shopifySecret),
+      hasWooSecret: Boolean(savedSecrets.wooSecret),
     });
   });
 
