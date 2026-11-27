@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v56-disjoint-scopes';
+const CACHE_NAME = 'nanasore-v57-webapk-fix';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
@@ -113,7 +113,6 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/auth') ||
     url.pathname.startsWith('/login') ||
     url.pathname.startsWith('/register') ||
-    url.pathname.startsWith('/dashboard') ||
     url.pathname.startsWith('/admin')
   ) {
     return;
@@ -162,8 +161,10 @@ self.addEventListener('fetch', (event) => {
           if (networkRes && networkRes.status === 200) {
             const resClone = networkRes.clone();
             cache.put(req, resClone);
-            cache.put('/index.html', networkRes.clone());
-            cache.put('/', networkRes.clone());
+            if (!url.pathname.startsWith('/nana-wallet')) {
+              cache.put('/index.html', networkRes.clone());
+              cache.put('/', networkRes.clone());
+            }
             return networkRes;
           }
           // Repli direct réseau SPA vers /index.html si la sous-route renvoie 404
