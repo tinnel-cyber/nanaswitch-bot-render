@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nanasore-v55-royal-blue-wallet';
+const CACHE_NAME = 'nanasore-v56-disjoint-scopes';
 const WASM_CACHE_NAME = 'nanasore-v8-wasm';
 const IMAGE_CACHE_NAME = 'nanasore-v8-images';
 const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
@@ -7,16 +7,16 @@ const REELS_VIDEO_CACHE_NAME = 'wameet-reels-video-v4';
 const STATIC_PRECACHE_URLS = [
   '/',
   '/index.html',
-  '/manifest.json?v=nanasore_v6',
-  '/manifest-wallet.json?v=wallet_v2',
+  '/manifest.json?v=nanasore_v7',
+  '/manifest-wallet.json?v=wallet_v3',
   '/nanasore-icon.svg?v=nanasore_v6',
   '/favicon.svg?v=nanasore_v6',
   '/icon.svg?v=nanasore_v6',
   '/apple-touch-icon.png?v=nanasore_v6',
   '/pwa-192x192.png?v=nanasore_v6',
   '/pwa-512x512.png?v=nanasore_v6',
-  '/wallet-icon-192.png?v=wallet_v2',
-  '/wallet-icon-512.png?v=wallet_v2'
+  '/wallet-icon-192.png?v=wallet_v3',
+  '/wallet-icon-512.png?v=wallet_v3'
 ];
 
 // URLs des fichiers WebAssembly FFmpeg à pré-cacher pour le hors-ligne

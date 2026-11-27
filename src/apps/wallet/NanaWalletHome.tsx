@@ -142,7 +142,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
   const [confirmPinInput, setConfirmPinInput] = useState<string>('');
   const [isSavingPin, setIsSavingPin] = useState<boolean>(false);
 
-  // PWA Install Prompt (/manifest-wallet.json?v=wallet_v2)
+  // PWA Install Prompt (/manifest-wallet.json?v=wallet_v3)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
   const [showIosInstallHint, setShowIosInstallHint] = useState<boolean>(false);
@@ -154,18 +154,18 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }, 4500);
   }, []);
 
-  // 1. Injection dynamique du Manifest PWA dédié (/manifest-wallet.json?v=wallet_v2) + capture beforeinstallprompt
+  // 1. Injection dynamique du Manifest PWA dédié (/manifest-wallet.json?v=wallet_v3) + capture beforeinstallprompt
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const existingManifest = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
     const previousHref = existingManifest?.getAttribute('href') || '/manifest.json';
 
     if (existingManifest) {
-      existingManifest.setAttribute('href', '/manifest-wallet.json?v=wallet_v2');
+      existingManifest.setAttribute('href', '/manifest-wallet.json?v=wallet_v3');
     } else {
       const link = document.createElement('link');
       link.rel = 'manifest';
-      link.href = '/manifest-wallet.json?v=wallet_v2';
+      link.href = '/manifest-wallet.json?v=wallet_v3';
       document.head.appendChild(link);
     }
 

@@ -1,10 +1,10 @@
 {
-  "id": "/?v=nanasore_v6",
+  "id": "/dashboard?v=nanasore_v7",
   "name": "Nanasore",
   "short_name": "Nanasore",
   "description": "Nanasore : Votre plateforme unifiée pour créer et développer votre business en toute sécurité et souveraineté.",
-  "start_url": "/?v=nanasore_v6",
-  "scope": "/",
+  "start_url": "/dashboard?v=nanasore_v7",
+  "scope": "/dashboard",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FFFFFF",
