@@ -75,6 +75,33 @@ export default defineConfig(() => {
             if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
               return 'react-core';
             }
+            if (id.includes('node_modules/@supabase/')) {
+              return 'supabase-vendor';
+            }
+            if (id.includes('node_modules/lucide-react/')) {
+              return 'icons-vendor';
+            }
+            if (id.includes('node_modules/motion/') || id.includes('node_modules/framer-motion/')) {
+              return 'motion-vendor';
+            }
+            if (id.includes('node_modules/bwip-js/')) {
+              return 'bwip-barcode';
+            }
+            if (id.includes('node_modules/@xyflow/')) {
+              return 'xyflow-vendor';
+            }
+            if (id.includes('node_modules/jspdf/') || id.includes('node_modules/pdfjs-dist/')) {
+              return 'pdf-vendor';
+            }
+            if (id.includes('node_modules/hls.js/') || id.includes('node_modules/plyr')) {
+              return 'video-player-vendor';
+            }
+            if (id.includes('node_modules/leaflet/') || id.includes('node_modules/react-leaflet/')) {
+              return 'maps-vendor';
+            }
+            if (id.includes('node_modules/@dnd-kit/')) {
+              return 'dnd-vendor';
+            }
           },
         },
       },

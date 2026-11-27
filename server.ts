@@ -846,6 +846,73 @@ async function startServer() {
     resolveUser: resolveSupabaseUserFromRequest,
     isAdminUser: isVerifiedSuperAdminUser,
   });
+
+  // Miroir Cloud Supabase (`server_security_vault`) pour persister tous les registres JSON sur Render Free
+  const ledgerSyncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const syncJsonLedgerToCloud = (filePath: string, payload: any): void => {
+    if (!supabaseAdmin) return;
+    const baseName = path.basename(filePath);
+    if (!baseName.endsWith('.json')) return;
+    const prev = ledgerSyncTimers.get(baseName);
+    if (prev) clearTimeout(prev);
+    const timer = setTimeout(async () => {
+      ledgerSyncTimers.delete(baseName);
+      try {
+        await supabaseAdmin.from('server_security_vault').upsert({
+          key: `json_ledger_${baseName}`,
+          category: 'server_json_ledger',
+          tenant_id: 'system',
+          secret_json: { fileName: baseName, payload },
+          updated_at: new Date().toISOString(),
+        });
+      } catch {}
+    }, 350);
+    if (typeof (timer as any).unref === 'function') (timer as any).unref();
+    ledgerSyncTimers.set(baseName, timer);
+  };
+
+  const writePersistentJsonFile = (filePath: string, payload: any): void => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+    syncJsonLedgerToCloud(filePath, payload);
+  };
+
+  const hydrateJsonLedgersFromCloud = async (): Promise<void> => {
+    if (!supabaseAdmin) return;
+    try {
+      const { data: rows } = await supabaseAdmin
+        .from('server_security_vault')
+        .select('key, secret_json')
+        .eq('category', 'server_json_ledger')
+        .limit(100);
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      for (const row of rows) {
+        const rawName = String(row?.secret_json?.fileName || String(row?.key || '').replace(/^json_ledger_/, '')).trim();
+        const safeName = path.basename(rawName);
+        if (!safeName || !safeName.endsWith('.json') || safeName.includes('..')) continue;
+        const targetPath = path.join(DATA_DIR, safeName);
+        let shouldHydrate = !fs.existsSync(targetPath);
+        if (!shouldHydrate) {
+          try {
+            if (fs.statSync(targetPath).size <= 4) shouldHydrate = true;
+          } catch {}
+        }
+        if (shouldHydrate && row?.secret_json && 'payload' in row.secret_json) {
+          fs.writeFileSync(targetPath, JSON.stringify(row.secret_json.payload, null, 2), 'utf-8');
+        }
+      }
+    } catch {}
+  };
+  await Promise.race([
+    hydrateJsonLedgersFromCloud(),
+    new Promise((resolve) => {
+      const t = setTimeout(resolve, 1500);
+      if (typeof (t as any).unref === 'function') (t as any).unref();
+    }),
+  ]);
+
   const KYC_DATA_FILE = path.join(KYC_DATA_DIR, 'kyc_submissions.json');
   const UNIVERSES_DATA_FILE = path.join(KYC_DATA_DIR, 'universes.json');
 
@@ -863,10 +930,7 @@ async function startServer() {
 
   function saveStoredKycSubmissions(subs: any[]): void {
     try {
-      if (!fs.existsSync(KYC_DATA_DIR)) {
-        fs.mkdirSync(KYC_DATA_DIR, { recursive: true });
-      }
-      fs.writeFileSync(KYC_DATA_FILE, JSON.stringify(subs, null, 2), 'utf-8');
+      writePersistentJsonFile(KYC_DATA_FILE, subs);
     } catch (e) {
       console.warn('[SERVER KYC] Erreur écriture fichier kyc_submissions.json:', e);
     }
@@ -902,10 +966,7 @@ async function startServer() {
 
   function saveStoredUniverses(univs: any[]): void {
     try {
-      if (!fs.existsSync(KYC_DATA_DIR)) {
-        fs.mkdirSync(KYC_DATA_DIR, { recursive: true });
-      }
-      fs.writeFileSync(UNIVERSES_DATA_FILE, JSON.stringify(univs, null, 2), 'utf-8');
+      writePersistentJsonFile(UNIVERSES_DATA_FILE, univs);
     } catch (e) {
       console.warn('[SERVER UNIVERSES] Erreur écriture universes.json:', e);
     }
@@ -1436,8 +1497,7 @@ async function startServer() {
   }
   function saveStoredPaymentLinks(list: any[]) {
     try {
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(paymentLinksFile, JSON.stringify(list, null, 2), 'utf8');
+      writePersistentJsonFile(paymentLinksFile, list);
     } catch (e) {
       console.warn('[PAYMENT LINKS] Local save notice:', (e as Error).message);
     }
@@ -1798,8 +1858,7 @@ async function startServer() {
 
   const writeJsonObjSafe = (filePath: string, data: Record<string, any>) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      writePersistentJsonFile(filePath, data);
     } catch {}
   };
 
@@ -2802,8 +2861,7 @@ async function startServer() {
   }
   function saveStoredNfcTags(list: any[]) {
     try {
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(nfcTagsFile, JSON.stringify(list, null, 2), 'utf8');
+      writePersistentJsonFile(nfcTagsFile, list);
     } catch {}
   }
 
@@ -3074,8 +3132,7 @@ async function startServer() {
   }
   function saveStoredGroupBuys(list: any[]) {
     try {
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(groupBuysFile, JSON.stringify(list.slice(0, 500), null, 2), 'utf8');
+      writePersistentJsonFile(groupBuysFile, list.slice(0, 500));
     } catch {}
   }
 
@@ -3233,8 +3290,7 @@ async function startServer() {
         if (fs.existsSync(capiEventsFile)) {
           logs = JSON.parse(fs.readFileSync(capiEventsFile, 'utf8')) || [];
         }
-        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-        fs.writeFileSync(capiEventsFile, JSON.stringify([record, ...logs.slice(0, 499)], null, 2), 'utf8');
+        writePersistentJsonFile(capiEventsFile, [record, ...logs.slice(0, 499)]);
       } catch {}
 
       return res.json({ success: true, eventId, dispatched });
@@ -3361,8 +3417,7 @@ async function startServer() {
 
   const saveStoredCommentTriggers = (rules: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(COMMENT_TRIGGERS_FILE, JSON.stringify(rules.slice(0, 1000), null, 2), 'utf-8');
+      writePersistentJsonFile(COMMENT_TRIGGERS_FILE, rules.slice(0, 1000));
     } catch (err) {
       console.warn('[CommentTrigger] Erreur sauvegarde:', err);
     }
@@ -3588,8 +3643,7 @@ async function startServer() {
 
   const saveStoredAffiliateSettings = (settings: any) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(AFFILIATE_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+      writePersistentJsonFile(AFFILIATE_SETTINGS_FILE, settings);
     } catch (err) {
       console.warn('[AffiliateSettings] Erreur sauvegarde:', err);
     }
@@ -3614,8 +3668,7 @@ async function startServer() {
 
   const saveStoredAffiliateCommissions = (items: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(AFFILIATE_COMMISSIONS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(AFFILIATE_COMMISSIONS_FILE, items.slice(0, 5000));
     } catch (err) {
       console.warn('[AffiliateLedger] Erreur sauvegarde:', err);
     }
@@ -3633,8 +3686,7 @@ async function startServer() {
 
   const saveStoredAffiliateReferrals = (items: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(AFFILIATE_REFERRALS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(AFFILIATE_REFERRALS_FILE, items.slice(0, 5000));
     } catch (err) {
       console.warn('[AffiliateReferrals] Erreur sauvegarde:', err);
     }
@@ -3652,8 +3704,7 @@ async function startServer() {
 
   const saveStoredAffiliateWithdrawals = (items: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(AFFILIATE_WITHDRAWALS_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(AFFILIATE_WITHDRAWALS_FILE, items.slice(0, 5000));
     } catch (err) {
       console.warn('[AffiliateWithdrawals] Erreur sauvegarde:', err);
     }
@@ -3672,8 +3723,7 @@ async function startServer() {
 
   const saveStoredMiniMarketOrders = (orders: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(MINIMARKET_ORDERS_FILE, JSON.stringify(orders.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(MINIMARKET_ORDERS_FILE, orders.slice(0, 5000));
     } catch (err) {
       console.warn('[MiniMarketOrders] Erreur sauvegarde:', err);
     }
@@ -4784,8 +4834,7 @@ async function startServer() {
 
   const saveStoredLiveCodes = (items: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(LIVE_MAGIC_CODES_FILE, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(LIVE_MAGIC_CODES_FILE, items.slice(0, 5000));
     } catch (err) {
       console.warn('[LiveMagicCodes] Erreur sauvegarde:', err);
     }
@@ -4950,8 +4999,7 @@ async function startServer() {
 
   const writeJsonArrayFile = (filePath: string, items: any[]) => {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(filePath, JSON.stringify(items.slice(0, 5000), null, 2), 'utf-8');
+      writePersistentJsonFile(filePath, items.slice(0, 5000));
     } catch (err) {
       console.warn('[DashboardAPI] Erreur écriture JSON:', err);
     }

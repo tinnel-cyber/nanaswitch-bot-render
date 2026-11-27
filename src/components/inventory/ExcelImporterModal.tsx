@@ -1,5 +1,44 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import * as XLSX from 'xlsx';
+import readXlsxFile from 'read-excel-file/browser';
+import writeXlsxFile from 'write-excel-file/browser';
+
+function parseCsvToMatrix(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const delimiter = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ';' : ',';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell);
+      if (row.some((c) => c.trim() !== '')) rows.push(row);
+      row = [];
+      cell = '';
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== '')) rows.push(row);
+  return rows;
+}
 import {
   UploadCloud,
   X,
@@ -322,26 +361,13 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
     setFile(selectedFile);
 
     try {
-      const buffer = await selectedFile.arrayBuffer();
-      const workbook = XLSX.read(buffer, {
-        type: 'array',
-        cellDates: true,
-        raw: false,
-      });
-
-      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-        throw new Error('Le classeur ne contient aucune feuille de calcul.');
+      let rawData: any[][];
+      if (isCsv) {
+        const text = await selectedFile.text();
+        rawData = parseCsvToMatrix(text);
+      } else {
+        rawData = await readXlsxFile(selectedFile);
       }
-
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-
-      // Conversion en matrice de lignes
-      const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        defval: '',
-        blankrows: false,
-      });
 
       if (!rawData || rawData.length === 0) {
         throw new Error('La feuille de calcul est vide.');
@@ -476,56 +502,62 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
   );
 
   // Téléchargement du modèle type Excel (.xlsx)
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     playTapBeep();
-    const sampleData = [
-      {
-        Nom: 'Riz Parfumé Royal 5kg',
-        'Prix de vente': 4500,
-        "Prix d'achat": 3800,
-        Stock: 25,
-        Catégorie: 'Alimentation',
-        'Code-barres': '6181100123456',
-      },
-      {
-        Nom: 'Huile Végétale Dinor 1L',
-        'Prix de vente': 1200,
-        "Prix d'achat": 950,
-        Stock: 40,
-        Catégorie: 'Épicerie',
-        'Code-barres': '6181100654321',
-      },
-      {
-        Nom: 'Savon Marseille Citron 200g',
-        'Prix de vente': 350,
-        "Prix d'achat": 250,
-        Stock: 60,
-        Catégorie: 'Entretien',
-        'Code-barres': '6181100789012',
-      },
-      {
-        Nom: 'Lait Concentré Sucré 397g',
-        'Prix de vente': 600,
-        "Prix d'achat": 480,
-        Stock: 30,
-        Catégorie: 'Alimentation',
-        'Code-barres': '6181100998877',
-      },
+    const sheetData: any[][] = [
+      [
+        { value: 'Nom', fontWeight: 'bold' },
+        { value: 'Prix de vente', fontWeight: 'bold' },
+        { value: "Prix d'achat", fontWeight: 'bold' },
+        { value: 'Stock', fontWeight: 'bold' },
+        { value: 'Catégorie', fontWeight: 'bold' },
+        { value: 'Code-barres', fontWeight: 'bold' },
+      ],
+      [
+        { value: 'Riz Parfumé Royal 5kg', type: String },
+        { value: 4500, type: Number },
+        { value: 3800, type: Number },
+        { value: 25, type: Number },
+        { value: 'Alimentation', type: String },
+        { value: '6181100123456', type: String },
+      ],
+      [
+        { value: 'Huile Végétale Dinor 1L', type: String },
+        { value: 1200, type: Number },
+        { value: 950, type: Number },
+        { value: 40, type: Number },
+        { value: 'Épicerie', type: String },
+        { value: '6181100654321', type: String },
+      ],
+      [
+        { value: 'Savon Marseille Citron 200g', type: String },
+        { value: 350, type: Number },
+        { value: 250, type: Number },
+        { value: 60, type: Number },
+        { value: 'Entretien', type: String },
+        { value: '6181100789012', type: String },
+      ],
+      [
+        { value: 'Lait Concentré Sucré 397g', type: String },
+        { value: 600, type: Number },
+        { value: 480, type: Number },
+        { value: 30, type: Number },
+        { value: 'Alimentation', type: String },
+        { value: '6181100998877', type: String },
+      ],
     ];
 
-    const ws = XLSX.utils.json_to_sheet(sampleData);
-    ws['!cols'] = [
-      { wch: 30 }, // Nom
-      { wch: 15 }, // Prix de vente
-      { wch: 15 }, // Prix d'achat
-      { wch: 10 }, // Stock
-      { wch: 18 }, // Catégorie
-      { wch: 20 }, // Code-barres
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Articles');
-    XLSX.writeFile(wb, 'modele_import_nanasore.xlsx');
+    await writeXlsxFile(sheetData, {
+      columns: [
+        { width: 30 },
+        { width: 15 },
+        { width: 15 },
+        { width: 10 },
+        { width: 18 },
+        { width: 20 },
+      ],
+      fileName: 'modele_import_nanasore.xlsx',
+    });
   };
 
   // Export JSON immédiat
