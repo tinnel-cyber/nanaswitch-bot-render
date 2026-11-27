@@ -23,11 +23,13 @@ import {
   CheckCircle2,
   X,
   Upload,
-  ExternalLink
+  ExternalLink,
+  Crown
 } from 'lucide-react';
 import { VipRoom, getVipRooms, subscribeToVipRooms, saveVipRoom } from '../../services/vipRoomsService';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import ComposantUploadVideo from '../../../../components/ComposantUploadVideo';
+import { VipHostAccreditationModal } from './VipHostAccreditationModal';
 
 export interface SallesVipDiscoveryScreenProps {
   onSelectRoom: (roomId: string) => void;
@@ -46,6 +48,7 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
   const [selectedCategory, setSelectedCategory] = useState<string>('TOUS');
   const [onlyLiveFilter, setOnlyLiveFilter] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [isAccreditationOpen, setIsAccreditationOpen] = useState<boolean>(false);
 
   // Formulaire de création de Salle VIP
   const [newTitle, setNewTitle] = useState('');
@@ -230,12 +233,43 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => {
                 playTapBeep();
-                setIsCreateModalOpen(true);
+                setIsAccreditationOpen(true);
+              }}
+              className="px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <Crown className="w-4 h-4 text-slate-950" />
+              <span className="hidden sm:inline">Grade &amp; Badges VIP</span>
+              <span className="sm:hidden">Grade VIP</span>
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                playTapBeep();
+                let u = currentUser;
+                try {
+                  if (!u) u = JSON.parse(localStorage.getItem('nana_store_auth_user') || 'null');
+                } catch {}
+                const isSuperAdmin = u?.role === 'super_admin' || u?.role === 'SUPER_ADMIN';
+                if (isSuperAdmin) {
+                  setIsCreateModalOpen(true);
+                  return;
+                }
+                try {
+                  const uid = u?.id || u?.uid || '';
+                  const storeId = u?.storeId || uid;
+                  const res = await fetch(`/api/vip/host/eligibility?userId=${encodeURIComponent(uid)}&universeId=${encodeURIComponent(storeId)}`);
+                  const json = await res.json().catch(() => null);
+                  if (json?.isActiveHost) {
+                    setIsCreateModalOpen(true);
+                    return;
+                  }
+                } catch {}
+                setIsAccreditationOpen(true);
               }}
               className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-2xl bg-white hover:bg-blue-50 text-[#4169E1] font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 border border-white"
             >
@@ -565,7 +599,7 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
               <div>
                 <h3 className="text-xl font-black text-slate-900">Créer une Salle VIP E-learning</h3>
                 <p className="text-xs text-slate-500">
-                  Publiez votre masterclass dans la collection Firebase 'rooms' avec cours vidéo et flux direct.
+                  Publiez votre masterclass dans Supabase avec cours vidéo et flux direct.
                 </p>
               </div>
             </div>
@@ -692,6 +726,15 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
         </div>
       )}
 
+      <VipHostAccreditationModal
+        isOpen={isAccreditationOpen}
+        onClose={() => setIsAccreditationOpen(false)}
+        currentUser={currentUser}
+        onAccredited={() => {
+          setIsAccreditationOpen(false);
+          setIsCreateModalOpen(true);
+        }}
+      />
     </div>
   );
 };
