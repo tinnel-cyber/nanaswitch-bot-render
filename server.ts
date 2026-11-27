@@ -1927,12 +1927,18 @@ async function startServer() {
     }
   });
 
+  const toDeterministicUuid = (seed: string): string => {
+    const hex = crypto.createHash('md5').update(seed).digest('hex');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  };
+
   // Helper persistance produit reçu par Webhook Shopify / WooCommerce
   const persistWebhookProduct = async (storeId: string, source: 'shopify' | 'woocommerce', item: any) => {
     const cleanStore = String(storeId || '').trim();
     if (!cleanStore) return;
     const nowIso = new Date().toISOString();
-    const prodId = `${source === 'shopify' ? 'shp' : 'wc'}_${cleanStore}_${String(item.externalId || Date.now())}`;
+    const externalKey = String(item.externalId || Date.now());
+    const prodId = toDeterministicUuid(`${source}:${cleanStore}:${externalKey}`);
 
     // 1. Journal local pour synchronisation instantanée dans l'UI
     const allByStore = readJsonObjSafe(WEBHOOK_PRODUCTS_FILE);
@@ -1954,25 +1960,28 @@ async function startServer() {
     allByStore[cleanStore] = [record, ...list.filter((x: any) => x.id !== prodId)].slice(0, 100);
     writeJsonObjSafe(WEBHOOK_PRODUCTS_FILE, allByStore);
 
-    // 2. Upsert Supabase `products` si disponible
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('products').upsert({
-          id: prodId,
-          tenant_id: cleanStore,
-          name: record.name,
-          price: record.sellingPrice,
-          cost_price: record.costPrice,
-          category: record.category,
-          stock: record.stock,
-          barcode: record.barcode,
-          thumbnail_url: record.photoUrl || null,
-          image_url: record.photoUrl || null,
-          metadata: { source, webhook_synced_at: nowIso },
-          updated_at: nowIso,
-        });
-      } catch {}
-    }
+    // 2. Upsert Supabase `products` avec les colonnes exactes du schéma (vendor_id, sku, price, image_url, is_active)
+    try {
+      const supaClient = supabaseAdmin || (await import('./app/utils/supabase.server')).supabase;
+      if (supaClient) {
+        await supaClient.from('products').upsert(
+          {
+            id: prodId,
+            name: record.name,
+            price: record.sellingPrice,
+            description: String(item.description || '').slice(0, 500),
+            vendor_id: cleanStore,
+            sku: record.barcode || prodId,
+            stock: record.stock,
+            category: record.category,
+            image_url: record.photoUrl || '',
+            is_active: true,
+            created_at: nowIso,
+          },
+          { onConflict: 'id' }
+        );
+      }
+    } catch {}
     return record;
   };
 
