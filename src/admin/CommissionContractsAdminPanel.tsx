@@ -113,7 +113,7 @@ export const CommissionContractsAdminPanel: React.FC<CommissionContractsAdminPan
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
-    doc.text('COPIE SUPER ADMIN — CONTRAT NANASTORE COMMISSION PLAN', 16, 21);
+    doc.text('COPIE SUPER ADMIN — CONTRAT NANASORE COMMISSION PLAN', 16, 21);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.text(`Réf : ${acc.contract_number || acc.id}   |   Signé le : ${signedDate}`, 16, 29);
@@ -125,7 +125,7 @@ export const CommissionContractsAdminPanel: React.FC<CommissionContractsAdminPan
     doc.setTextColor(180, 83, 9);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.text('NANASTORE', pageW - 42, 48, { align: 'center' });
+    doc.text('NANASORE', pageW - 42, 48, { align: 'center' });
     doc.text('COMMISSION PLAN', pageW - 42, 53, { align: 'center' });
     doc.setFontSize(7.5);
     doc.text(`CERTIFIÉ • TAUX ${rate}%`, pageW - 42, 57.5, { align: 'center' });
@@ -202,7 +202,7 @@ export const CommissionContractsAdminPanel: React.FC<CommissionContractsAdminPan
           </div>
         </div>
         <div className="p-4 rounded-2xl bg-slate-900 border border-amber-500/30">
-          <div className="text-[11px] font-bold text-amber-300 uppercase">Total Commissions NaNaStore</div>
+          <div className="text-[11px] font-bold text-amber-300 uppercase">Total Commissions NaNaSore</div>
           <div className="text-2xl font-black text-amber-400 mt-1">
             {Number(summary.totalCommissionXof || 0).toLocaleString('fr-FR')} <span className="text-xs text-amber-300">F</span>
           </div>

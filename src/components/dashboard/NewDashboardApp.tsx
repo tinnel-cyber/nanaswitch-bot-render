@@ -5341,7 +5341,7 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
     const tenantId = app?.id;
     if (!tenantId) return;
     try {
-      const localCached = localStorage.getItem(`nanastore_commission_plan_${tenantId}`);
+      const localCached = localStorage.getItem(`nanasore_commission_plan_${tenantId}`);
       if (localCached) {
         const parsed = JSON.parse(localCached);
         if (parsed?.account) setCommissionAccount(parsed.account);
@@ -6138,7 +6138,7 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
                 </div>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
-                <div className="text-[11px] font-bold text-amber-800 uppercase">Commission NaNaStore ({rate}%)</div>
+                <div className="text-[11px] font-bold text-amber-800 uppercase">Commission NaNaSore ({rate}%)</div>
                 <div className="text-xl font-black text-amber-700 mt-1">
                   {totalCommission.toLocaleString('fr-FR')} <span className="text-xs font-bold text-amber-600">F CFA</span>
                 </div>
@@ -6819,7 +6819,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
     const uid = app?.id;
     if (!uid) return;
     try {
-      const cached = localStorage.getItem(`nanastore_commission_plan_${uid}`);
+      const cached = localStorage.getItem(`nanasore_commission_plan_${uid}`);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed?.account) setCommissionAccount(parsed.account);
@@ -6832,7 +6832,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
           setCommissionAccount(json.account);
           try {
             localStorage.setItem(
-              `nanastore_commission_plan_${uid}`,
+              `nanasore_commission_plan_${uid}`,
               JSON.stringify({
                 active: json.account.status === 'ACTIVE',
                 contractNumber: json.account.contract_number,
@@ -7310,7 +7310,7 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
         isOpen={isCommissionModalOpen}
         onClose={() => setIsCommissionModalOpen(false)}
         universeId={app?.id || 'default'}
-        storeName={app?.name || 'Ma Boutique NaNaStore'}
+        storeName={app?.name || 'Ma Boutique NaNaSore'}
         commissionRatePercent={14}
         existingAccount={commissionAccount}
         onEnrolled={(account) => setCommissionAccount(account)}

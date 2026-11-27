@@ -204,11 +204,11 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
       <div style="font-family: Arial, sans-serif; color: #0f172a; padding: 24px; border: 2px solid #1e293b; border-radius: 12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:14px;">
           <div>
-            <h2 style="margin:0; font-size:18px;">CONTRAT D'ADHÉSION — NANASTORE COMMISSION PLAN</h2>
+            <h2 style="margin:0; font-size:18px;">CONTRAT D'ADHÉSION — NANASORE COMMISSION PLAN</h2>
             <p style="margin:4px 0 0; font-size:12px; color:#475569;">Référence : <strong>${contractNumber}</strong> • Date : ${signedDateStr}</p>
           </div>
           <div style="border:3px solid #b45309; color:#b45309; padding:6px 12px; font-weight:900; font-size:11px; transform:rotate(-6deg); border-radius:8px;">
-            NANASTORE COMMISSION PLAN<br/>TAUX OFFICIEL : ${commissionRatePercent}%
+            NANASORE COMMISSION PLAN<br/>TAUX OFFICIEL : ${commissionRatePercent}%
           </div>
         </div>
         <p style="font-size:13px; margin-top:16px;"><strong>Souscripteur :</strong> ${fullName} — <strong>Boutique :</strong> ${storeName || universeId}</p>
@@ -243,19 +243,19 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('CONTRAT D\'ADHÉSION — NANASTORE COMMISSION PLAN', 16, 21);
+    doc.text('CONTRAT D\'ADHÉSION — NANASORE COMMISSION PLAN', 16, 21);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.text(`Réf. Contrat : ${contractNumber}   |   Date : ${signedDateStr}`, 16, 29);
 
-    // Tampon officiel NANASTORE COMMISSION PLAN
+    // Tampon officiel NANASORE COMMISSION PLAN
     doc.setDrawColor(180, 83, 9);
     doc.setLineWidth(0.9);
     doc.roundedRect(pageW - 68, 42, 52, 18, 2, 2);
     doc.setTextColor(180, 83, 9);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.text('NANASTORE', pageW - 42, 48, { align: 'center' });
+    doc.text('NANASORE', pageW - 42, 48, { align: 'center' });
     doc.text('COMMISSION PLAN', pageW - 42, 53, { align: 'center' });
     doc.setFontSize(7.5);
     doc.text(`CERTIFIÉ • TAUX ${commissionRatePercent}%`, pageW - 42, 57.5, { align: 'center' });
@@ -290,11 +290,11 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
     y += 7;
 
     const clauses = [
-      `Article 1 - Objet & Domaine d'activité : Le présent contrat régit l'adhésion du Souscripteur au Plan Commission NaNaStore (0 F CFA d'abonnement mensuel fixe) pour son domaine d'activité (« ${businessDomain} »), couvrant les prestations de services, la commercialisation de produits numériques, formations, PDF, masterclasses et accès digitaux.`,
+      `Article 1 - Objet & Domaine d'activité : Le présent contrat régit l'adhésion du Souscripteur au Plan Commission NaNaSore (0 F CFA d'abonnement mensuel fixe) pour son domaine d'activité (« ${businessDomain} »), couvrant les prestations de services, la commercialisation de produits numériques, formations, PDF, masterclasses et accès digitaux.`,
       `Article 2 - Taux de Commission (${commissionRatePercent}%) : Sur chaque vente ou prestation de service encaissée via la plateforme, une commission unique de ${commissionRatePercent}% est prélevée automatiquement. Le Souscripteur perçoit ${100 - commissionRatePercent}% net de chaque transaction.`,
       `Article 3 - Séquestre Escrow & Reversement : Les paiements clients transitent sous protection séquestre Escrow et sont reversés vers les numéros de paiement déclarés (${paymentNumber1} ou ${paymentNumber2}).`,
       `Article 4 - Transparence Analytique : Chaque vente génère un relevé détaillé (Montant Brut, Commission ${commissionRatePercent}%, Revenu Net) consultable en temps réel dans le tableau de bord Analytique.`,
-      `Article 5 - Contact d'Urgence & Résiliation : En cas de besoin opérationnel ou de litige, NaNaStore est autorisé à joindre ${emergencyContactName} (${emergencyContactPhone}). Le Souscripteur peut à tout moment basculer vers un Plan Abonnement (0% commission).`,
+      `Article 5 - Contact d'Urgence & Résiliation : En cas de besoin opérationnel ou de litige, NaNaSore est autorisé à joindre ${emergencyContactName} (${emergencyContactPhone}). Le Souscripteur peut à tout moment basculer vers un Plan Abonnement (0% commission).`,
     ];
 
     doc.setFont('helvetica', 'normal');
@@ -325,7 +325,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
     doc.setDrawColor(148, 163, 184);
     doc.line(16, y + 36, 84, y + 36);
 
-    doc.save(`Contrat_Commission_NaNaStore_${contractNumber}.pdf`);
+    doc.save(`Contrat_Commission_NaNaSore_${contractNumber}.pdf`);
   };
 
   const handleValidateAndDownload = async () => {
@@ -385,7 +385,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
       // Persistance locale synchronisée avec Supabase
       try {
         localStorage.setItem(
-          `nanastore_commission_plan_${universeId || 'default'}`,
+          `nanasore_commission_plan_${universeId || 'default'}`,
           JSON.stringify({
             active: true,
             contractNumber,
@@ -424,7 +424,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
             <div>
               <h3 className="text-base sm:text-lg font-black tracking-tight">
                 {step === 'FORM'
-                  ? 'Souscrire au Plan Commission NaNaStore'
+                  ? 'Souscrire au Plan Commission NaNaSore'
                   : 'Contrat Officiel & Signature Électronique'}
               </h3>
               <p className="text-[11px] text-indigo-200 font-medium">
@@ -452,7 +452,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                 <p className="text-xs text-indigo-950 leading-relaxed">
                   Renseignez vos informations officielles (créateur, formateur ou <strong>prestataire de service</strong>)
                   pour générer votre contrat pré-rempli{' '}
-                  <strong>NaNaStore Commission Plan ({commissionRatePercent}%)</strong>. Vos deux numéros de paiement
+                  <strong>NaNaSore Commission Plan ({commissionRatePercent}%)</strong>. Vos deux numéros de paiement
                   permettront le reversement sécurisé de vos revenus nets (86%).
                 </p>
               </div>
@@ -587,13 +587,13 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
             </form>
           ) : (
             <div className="space-y-5">
-              {/* Contrat pré-rempli avec Tampon NANASTORE COMMISSION PLAN */}
+              {/* Contrat pré-rempli avec Tampon NANASORE COMMISSION PLAN */}
               <div className="relative rounded-2xl border-2 border-slate-800 bg-slate-50/70 p-5 sm:p-7 space-y-4 shadow-inner">
                 {/* Tampon officiel */}
                 <div className="sm:absolute sm:top-5 sm:right-5 inline-flex flex-col items-center justify-center px-3.5 py-2 rounded-xl border-2 border-amber-700 text-amber-800 bg-amber-50/90 -rotate-3 shadow-sm select-none">
                   <div className="flex items-center gap-1 text-[10px] font-black tracking-widest uppercase">
                     <Stamp className="w-3.5 h-3.5" />
-                    <span>NANASTORE</span>
+                    <span>NANASORE</span>
                   </div>
                   <div className="text-xs font-black tracking-wider uppercase">COMMISSION PLAN</div>
                   <div className="text-[9px] font-extrabold text-amber-700">CERTIFIÉ • TAUX {commissionRatePercent}%</div>
@@ -640,7 +640,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                   <p>
                     <strong>Article 1 — Objet &amp; Domaine d'activité :</strong> Le présent contrat officialise l'adhésion
                     de <strong>{fullName}</strong> (Boutique : <strong>{storeName || universeId}</strong>) au{' '}
-                    <strong>Plan Commission NaNaStore</strong> pour son domaine d'activité déclaré :{' '}
+                    <strong>Plan Commission NaNaSore</strong> pour son domaine d'activité déclaré :{' '}
                     <strong>« {businessDomain} »</strong>, couvrant les <strong>prestations de services</strong>, la vente
                     de produits numériques, formations, documents PDF et accès digitaux sans abonnement mensuel fixe.
                   </p>
@@ -661,7 +661,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                   </p>
                   <p>
                     <strong>Article 5 — Contact d'urgence &amp; Évolution :</strong> En cas de vérification ou
-                    d'indisponibilité, NaNaStore peut contacter <strong>{emergencyContactName}</strong> (
+                    d'indisponibilité, NaNaSore peut contacter <strong>{emergencyContactName}</strong> (
                     {emergencyContactPhone}). Le marchand reste libre de migrer vers un Plan Abonnement (0% commission)
                     à tout moment.
                   </p>
@@ -713,7 +713,7 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                 />
                 <span className="text-xs font-bold text-slate-800 leading-relaxed">
                   <strong>En cochant cette case</strong>, je déclare avoir <strong>lu et approuvé</strong> l'intégralité
-                  du contrat <strong>NaNaStore Commission Plan ({commissionRatePercent}%)</strong>, j'accepte sans
+                  du contrat <strong>NaNaSore Commission Plan ({commissionRatePercent}%)</strong>, j'accepte sans
                   réserve nos <strong>Conditions Générales d'Utilisation (CGU)</strong>, notre{' '}
                   <strong>Politique de Confidentialité</strong>, notre{' '}
                   <strong>Politique de Séquestre Escrow &amp; de Commission ({commissionRatePercent}%)</strong>, je
