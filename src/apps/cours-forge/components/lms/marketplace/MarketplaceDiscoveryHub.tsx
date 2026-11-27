@@ -26,7 +26,7 @@ import { FrictionlessAfricanCheckoutBottomSheet } from './FrictionlessAfricanChe
 import { CertificatePreviewModal } from '../CertificatePreviewModal';
 import {
   subscribeToPublishedCourses,
-  publishCourseToFirestore,
+  publishCourseToMarketplace,
   SEED_MARKETPLACE_COURSES
 } from '../../../../../services/marketplaceService';
 import { playTapBeep } from '../../../../../utils/audio';
@@ -50,7 +50,7 @@ export const MarketplaceDiscoveryHub: React.FC<MarketplaceDiscoveryHubProps> = (
   const [publishToast, setPublishToast] = useState<string | null>(null);
   const [isCertificatePreviewOpen, setIsCertificatePreviewOpen] = useState(false);
 
-  // 1. ÉCOUTEUR FIRESTORE TEMPS RÉEL (The 'One-Click Publish' Firebase Listener)
+  // 1. ÉCOUTEUR SUPABASE TEMPS RÉEL
   useEffect(() => {
     const unsubscribe = subscribeToPublishedCourses((liveCourses) => {
       setCourses(liveCourses);
@@ -87,9 +87,9 @@ export const MarketplaceDiscoveryHub: React.FC<MarketplaceDiscoveryHubProps> = (
       trailerVideoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
     };
 
-    await publishCourseToFirestore(newDemoCourse);
+    await publishCourseToMarketplace(newDemoCourse);
     setIsPublishingNew(false);
-    setPublishToast('Nouveau cours publié avec succès en direct via Firestore Listener !');
+    setPublishToast('Nouveau cours publié avec succès en direct via Supabase Realtime !');
     setTimeout(() => setPublishToast(null), 4000);
   };
 
@@ -304,7 +304,7 @@ export const MarketplaceDiscoveryHub: React.FC<MarketplaceDiscoveryHubProps> = (
             disabled={isPublishingNew}
             onClick={handleTestOneClickPublish}
             className="hidden sm:flex px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 font-bold text-xs border border-emerald-500/30 transition items-center gap-1.5 cursor-pointer min-h-[38px]"
-            title="Tester l'écouteur live Firestore en publiant un cours instantanément"
+            title="Tester l'écouteur live Supabase Realtime en publiant un cours instantanément"
           >
             <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
             <span>{isPublishingNew ? 'Publication...' : '+ Publier 1-Clic'}</span>

@@ -1,14 +1,4 @@
-import { db } from '../lib/supabaseBridge';
 import { supabase } from '../lib/supabase';
-import {
-  collection,
-  query,
-  where,
-  setDoc,
-  doc,
-  getDocs,
-  serverTimestamp
-} from '../lib/supabaseBridge';
 import { MarketplaceCourse } from '../components/lms/marketplace/types';
 import { DEFAULT_MASTERCLASS_COURSE } from '../components/lms/mockCourses';
 import { isLimitReached, triggerLimitReachedUpsell, normalizePlanId, isUnlimitedCourses } from '../utils/planFeatures';
@@ -262,9 +252,6 @@ export async function deleteCourseEverywhere(courseId: string): Promise<boolean>
 export function subscribeToPublishedCourses(
   callback: (courses: MarketplaceCourse[]) => void
 ): () => void {
-  const coursesRef = collection(db, 'courses');
-  const q = query(coursesRef, where('status', '==', 'published'));
-
   const buildInitialList = () => {
     const dismissed = new Set(getDismissedExampleCourseIds());
     const seedIds = new Set(SEED_MARKETPLACE_COURSES.map((s) => s.id));
@@ -324,25 +311,6 @@ export function subscribeToPublishedCourses(
         }
       } catch {}
 
-      // 3. Firestore Courses (Compatibilité)
-      try {
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          snapshot.forEach((docSnap) => {
-            if (dismissed.has(docSnap.id) || seedIds.has(docSnap.id)) return;
-            const data = docSnap.data() as MarketplaceCourse;
-            if (!allFoundCourses.some(c => c.id === docSnap.id)) {
-              allFoundCourses.push({
-                ...data,
-                id: docSnap.id
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('[MARKETPLACE] Firestore fetch courses notice:', err);
-      }
-
       const merged = allFoundCourses.filter((c) => !dismissed.has(c.id) && !seedIds.has(c.id));
       localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
       callback(merged);
@@ -384,10 +352,9 @@ export function subscribeToPublishedCourses(
 }
 
 /**
- * Publication 1-Clic d'un nouveau cours dans Firestore
- * Déclenche instantanément la mise à jour de tous les clients connectés via le listener
+ * Publication 1-Clic d'un nouveau cours dans Supabase SQL
  */
-export async function publishCourseToFirestore(
+export async function publishCourseToMarketplace(
   course: Partial<MarketplaceCourse>
 ): Promise<MarketplaceCourse> {
   // Contrôle dynamique du quota de cours (Illimité sur Pro / Elite, 5 sur Starter, 1 sur Gratuit)
@@ -439,15 +406,7 @@ export async function publishCourseToFirestore(
     updatedAt: Date.now()
   } as MarketplaceCourse;
 
-  // 1. Sauvegarde Firestore
-  try {
-    const docRef = doc(db, 'courses', courseId);
-    await setDoc(docRef, fullCourse, { merge: true });
-  } catch (err) {
-    console.warn('Sauvegarde storage distante impossible, persistance locale prioritaire:', err);
-  }
-
-  // 2. Synchronisation Supabase SQL (pour accès direct classroom & SSR)
+  // Synchronisation Supabase SQL (source unique de vérité)
   try {
     await supabase.from('courses').upsert({
       id: courseId,
@@ -470,10 +429,9 @@ export async function publishCourseToFirestore(
   // Mise à jour du cache local réactif
   try {
     const saved = localStorage.getItem('nana_published_courses_cache');
-    const list: MarketplaceCourse[] = saved ? JSON.parse(saved) : [...SEED_MARKETPLACE_COURSES];
+    const list: MarketplaceCourse[] = saved ? JSON.parse(saved) : [];
     const updated = [fullCourse, ...list.filter(c => c.id !== courseId)];
     localStorage.setItem('nana_published_courses_cache', JSON.stringify(updated));
-    // Émettre un événement personnalisé pour rafraîchir les vues ouvertes
     window.dispatchEvent(new CustomEvent('nana_courses_updated', { detail: updated }));
   } catch (e) {
     console.error(e);
@@ -496,30 +454,10 @@ export async function recordMobileMoneyEnrollment(params: {
 }): Promise<boolean> {
   const { courseId, studentName, phoneNumber, provider, amount, studentId, studentEmail } = params;
   const transactionId = `tx_${provider.toLowerCase()}_${Date.now()}`;
-  const now = Date.now();
   const cleanPhone = phoneNumber.replace(/\D/g, '');
   const emailEffective = studentEmail || (cleanPhone ? `student_${cleanPhone}@nanasore.internal` : `student_${transactionId}@nanasore.internal`);
 
-  // 1. Sauvegarde Firestore
-  try {
-    const enrollRef = doc(db, 'enrollments', transactionId);
-    await setDoc(enrollRef, {
-      id: transactionId,
-      courseId,
-      studentName,
-      phoneNumber,
-      studentEmail: emailEffective,
-      provider,
-      amount,
-      currency: 'FCFA',
-      status: 'PAID',
-      createdAt: now
-    });
-  } catch (e) {
-    console.warn('Persistance storage enrollment:', e);
-  }
-
-  // 2. Sauvegarde Supabase SQL enrollments (accès immédiat campus & instructeur)
+  // Sauvegarde Supabase SQL enrollments (accès immédiat campus & instructeur)
   try {
     await supabase.from('enrollments').upsert({
       id: transactionId,
