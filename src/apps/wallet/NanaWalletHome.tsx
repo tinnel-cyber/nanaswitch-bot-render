@@ -105,7 +105,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
   const [entitlements, setEntitlements] = useState<Record<string, { credits: number; totalSpentXof: number; lastUnlockedAt: string }>>({});
   const [hasMasterPin, setHasMasterPin] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(false);
+  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(true);
+  const [isUnmaskPinModalOpen, setIsUnmaskPinModalOpen] = useState<boolean>(false);
+  const [unmaskPinInput, setUnmaskPinInput] = useState<string>('');
+  const [isVerifyingUnmaskPin, setIsVerifyingUnmaskPin] = useState<boolean>(false);
   const [activityFilter, setActivityFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -722,6 +725,56 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
     }
   };
 
+  // 9. Démasquage des chiffres du Nanawallet protégé par Master PIN
+  const handleToggleBalanceVisibility = () => {
+    playTapBeep();
+    if (!isBalanceHidden) {
+      setIsBalanceHidden(true);
+      return;
+    }
+    if (!hasMasterPin) {
+      showToast('Veuillez d\'abord configurer votre Master PIN pour démasquer les chiffres du Nanawallet.', 'info');
+      setActiveTab('SECURITY');
+      return;
+    }
+    setUnmaskPinInput('');
+    setIsUnmaskPinModalOpen(true);
+  };
+
+  const handleVerifyUnmaskPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{4,6}$/.test(unmaskPinInput.trim())) {
+      showToast('Le Master PIN doit contenir entre 4 et 6 chiffres.', 'error');
+      return;
+    }
+    setIsVerifyingUnmaskPin(true);
+    try {
+      const headers = await getWalletAuthHeaders();
+      const res = await fetch('/api/merchant/wallet/pin/verify', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          universeId: selectedUniverseId,
+          userId: resolvedUserId,
+          pin: unmaskPinInput.trim()
+        })
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.verified) {
+        throw new Error(json?.error || 'Master PIN incorrect.');
+      }
+      playValidationBeep();
+      setIsBalanceHidden(false);
+      setIsUnmaskPinModalOpen(false);
+      setUnmaskPinInput('');
+      showToast('Chiffres du Nanawallet démasqués.', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Master PIN incorrect.', 'error');
+    } finally {
+      setIsVerifyingUnmaskPin(false);
+    }
+  };
+
   const filteredTransactions = useMemo(() => {
     if (activityFilter === 'ALL') return transactions;
     return transactions.filter(t => t.type === activityFilter);
@@ -814,7 +867,10 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
             <Store className="w-3.5 h-3.5 text-blue-400 shrink-0" />
             <select
               value={selectedUniverseId}
-              onChange={(e) => setSelectedUniverseId(e.target.value)}
+              onChange={(e) => {
+                setSelectedUniverseId(e.target.value);
+                setIsBalanceHidden(true);
+              }}
               className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500"
             >
               {universes.map(u => (
@@ -855,10 +911,12 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                 </span>
                 <button
                   type="button"
-                  onClick={() => setIsBalanceHidden(prev => !prev)}
-                  className="text-blue-200 hover:text-white cursor-pointer"
+                  onClick={handleToggleBalanceVisibility}
+                  title={isBalanceHidden ? 'Démasquer avec le Master PIN' : 'Masquer les chiffres'}
+                  className="text-blue-200 hover:text-white cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 transition"
                 >
                   {isBalanceHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {isBalanceHidden && <Lock className="w-2.5 h-2.5 text-amber-300" />}
                 </button>
               </div>
               <div className="text-3xl sm:text-4xl font-black text-white mt-1 font-mono tracking-tight">
@@ -866,7 +924,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
               </div>
               <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-blue-100/90 font-bold">
                 <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
-                  Paiements reçus : <strong className="text-amber-300">{paymentsCount}</strong>
+                  Paiements reçus : <strong className="text-amber-300">{isBalanceHidden ? '••' : paymentsCount}</strong>
                 </span>
                 <span className="px-2.5 py-1 rounded-xl bg-white/10 border border-white/15">
                   Total encaissé : <strong className="text-emerald-300">{isBalanceHidden ? '••••••' : formatCFA(totalSalesNetXof)}</strong>
@@ -936,7 +994,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
-                Historique Réel ({filteredTransactions.length})
+                Historique Réel ({isBalanceHidden ? '••' : filteredTransactions.length})
               </h2>
               <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[10px] font-bold">
                 {(['ALL', 'CREDIT', 'DEBIT'] as const).map(f => (
@@ -992,7 +1050,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
                       </div>
                       <div className="text-right shrink-0">
                         <p className={`text-xs font-black font-mono ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {isCredit ? '+' : '-'}{formatCFA(tx.amount)}
+                          {isBalanceHidden ? '••••••' : `${isCredit ? '+' : '-'}${formatCFA(tx.amount)}`}
                         </p>
                         <span className="text-[9px] uppercase font-bold text-slate-400">{tx.status}</span>
                       </div>
@@ -1345,7 +1403,7 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                Votre Master PIN (4 à 6 chiffres) est chiffré côté serveur et protège tous vos paiements Pay-As-You-Go ainsi que vos retraits Mobile Money.
+                Votre Master PIN (4 à 6 chiffres) est chiffré côté serveur et protège le démasquage des chiffres de votre Nanawallet, tous vos paiements Pay-As-You-Go ainsi que vos retraits Mobile Money.
               </p>
 
               {hasMasterPin && (
@@ -1543,6 +1601,74 @@ export default function NanaWalletHome({ onBackToHub, className = '' }: NanaWall
           defaultPhone={resolvedUserPhone}
           onSuccess={handleUltimateCheckoutSuccess}
         />
+      )}
+
+      {/* MODALE MASTER PIN POUR DÉMASQUER LES CHIFFRES DU NANAWALLET */}
+      {isUnmaskPinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <form
+            onSubmit={handleVerifyUnmaskPin}
+            className="w-full sm:max-w-sm bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                  <Lock className="w-4 h-4 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Démasquer les chiffres</h3>
+                  <p className="text-[11px] text-slate-400">Saisissez votre Master PIN Nanawallet</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUnmaskPinModalOpen(false);
+                  setUnmaskPinInput('');
+                }}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">Master PIN (4 à 6 chiffres)</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                autoFocus
+                value={unmaskPinInput}
+                onChange={(e) => setUnmaskPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-center text-lg text-white font-mono tracking-[0.4em] focus:outline-none focus:border-blue-500"
+                required
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUnmaskPinModalOpen(false);
+                  setUnmaskPinInput('');
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={isVerifyingUnmaskPin}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition"
+              >
+                {isVerifyingUnmaskPin ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                <span>Démasquer</span>
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

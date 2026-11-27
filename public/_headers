@@ -11,6 +11,10 @@
   Cache-Control: public, max-age=0, must-revalidate
 /manifest.json
   Cache-Control: public, max-age=0, must-revalidate
+/manifest-wallet.json
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest-pos.json
+  Cache-Control: public, max-age=0, must-revalidate
 /.well-known/*
   Cache-Control: public, max-age=0, must-revalidate
   Access-Control-Allow-Origin: *
