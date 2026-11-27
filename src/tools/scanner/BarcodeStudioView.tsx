@@ -318,8 +318,12 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
                 ctx.save();
                 ctx.fillStyle = transparentBg ? '#FFFFFF' : bgColor;
                 ctx.beginPath();
-                ctx.roundRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2, 12);
-                ctx.fill();
+                if (typeof ctx.roundRect === 'function') {
+                  ctx.roundRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2, 12);
+                  ctx.fill();
+                } else {
+                  ctx.fillRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2);
+                }
                 ctx.drawImage(img, x, y, logoSize, logoSize);
                 ctx.restore();
               }
