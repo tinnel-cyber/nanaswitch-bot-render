@@ -412,6 +412,14 @@ export default function App() {
         pathname.startsWith('/pos') ||
         pathname === '/dashboard' ||
         pathname.startsWith('/dashboard') ||
+        pathname === '/wallet' ||
+        pathname.startsWith('/wallet') ||
+        pathname === '/nanawallet' ||
+        pathname.startsWith('/nanawallet') ||
+        pathname === '/nana-wallet' ||
+        pathname.startsWith('/nana-wallet') ||
+        pathname === '/app/wallet' ||
+        pathname === '/apps/wallet' ||
         pathname === '/auth/callback' ||
         pathname.startsWith('/auth/callback') ||
         pathname === '/auth/reset-password' ||
@@ -6195,6 +6203,10 @@ export default function App() {
   // 0.1 Vue Publique Client : Vitrine Boutique & Fiche Produit Partagée (/s/[slug], /shop/[id], ?store=id, etc.)
   if (
     publicBoutiqueParams.isBoutique &&
+    currentView !== 'WALLET' &&
+    currentView !== 'wallet' &&
+    currentView !== 'NANA_WALLET' &&
+    currentView !== 'nanawallet' &&
     currentView !== 'NANA_SWITCH_APP' &&
     currentView !== 'nana_switch_app' &&
     currentView !== 'NANA_SWITCH' &&
