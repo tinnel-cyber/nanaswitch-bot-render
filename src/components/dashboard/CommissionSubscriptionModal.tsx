@@ -712,9 +712,13 @@ export const CommissionSubscriptionModal: React.FC<CommissionSubscriptionModalPr
                   className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <span className="text-xs font-bold text-slate-800 leading-relaxed">
-                  <strong>Lu et approuvé</strong> — Je certifie l'exactitude des informations saisies et j'accepte les
-                  clauses du contrat <strong>NaNaStore Commission Plan ({commissionRatePercent}%)</strong> ainsi que
-                  l'envoi d'une copie au Super Admin Dashboard.
+                  <strong>En cochant cette case</strong>, je déclare avoir <strong>lu et approuvé</strong> l'intégralité
+                  du contrat <strong>NaNaStore Commission Plan ({commissionRatePercent}%)</strong>, j'accepte sans
+                  réserve nos <strong>Conditions Générales d'Utilisation (CGU)</strong>, notre{' '}
+                  <strong>Politique de Confidentialité</strong>, notre{' '}
+                  <strong>Politique de Séquestre Escrow &amp; de Commission ({commissionRatePercent}%)</strong>, je
+                  certifie l'exactitude des informations saisies et j'autorise la transmission d'une copie officielle
+                  signée au Super Admin Dashboard.
                 </span>
               </label>
 
