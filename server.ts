@@ -9226,7 +9226,14 @@ async function startServer() {
       const finalVideoUrl = `https://${bucket}.s3.${region}.amazonaws.com/${compressedKey}`;
 
       if (!accessKeyId || !secretAccessKey) {
-        console.warn('[API S3 UPLOAD] Variables AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY non détectées dans .env, mode simulation prêt.');
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(503).json({
+            success: false,
+            code: 'S3_NOT_CONFIGURED',
+            error: 'Clés AWS S3 manquantes sur le serveur (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY).'
+          });
+        }
+        console.warn('[API S3 UPLOAD] Variables AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY non détectées dans .env, mode simulation local.');
         return res.json({
           uploadUrl: `https://${bucket}.s3.${region}.amazonaws.com/${fileKey}?mock=true`,
           finalVideoUrl,
@@ -12443,14 +12450,21 @@ Renvoie UNIQUEMENT un objet JSON STRICT conforme à ce format :
         }
       }
 
-      // 4. Mode Bac à Sable / Simulation Réaliste Télécom
+      // 4. Mode Bac à Sable (uniquement hors production)
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({
+          success: false,
+          code: 'SMS_PROVIDER_NOT_CONFIGURED',
+          error: 'Aucune passerelle SMS réelle configurée ou valide (BREVO_API_KEY ou TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN requis).'
+        });
+      }
       const simAckId = `SMS-${provider.substring(0, 3)}-${Math.floor(100000 + Math.random() * 900000)}`;
       return res.json({
         success: true,
         provider,
         ackId: simAckId,
         simulated: true,
-        message: `Message transmis à la passerelle télécom vers ${to} (Mode bac à sable / Simulation réaliste).`
+        message: `Message transmis à la passerelle télécom vers ${to} (Mode bac à sable local).`
       });
     } catch (err: any) {
       console.error('[SERVER SMS HANDLER ERROR]', err);

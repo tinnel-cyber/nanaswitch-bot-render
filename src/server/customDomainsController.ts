@@ -135,6 +135,12 @@ export function attachCustomDomainsRoutes(app: Express): void {
           }
         }
       } else {
+        if (process.env.NODE_ENV === 'production') {
+          res.status(503).json({
+            error: 'Configuration Cloudflare manquante sur le serveur (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID).',
+          });
+          return;
+        }
         cfHostnameId = `mock_cf_${Date.now()}`;
         cfStatus = 'pending';
         ownershipVerification = {

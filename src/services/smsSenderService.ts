@@ -128,9 +128,15 @@ export async function sendTransactionalSms(params: SendSmsParams): Promise<SendS
       };
     }
   } catch (netErr: any) {
-    console.warn('[SMS SERVICE] Erreur réseau proxy, repli sécurisé :', netErr);
+    console.warn('[SMS SERVICE] Erreur réseau proxy :', netErr);
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env?.PROD) {
+      return {
+        success: false,
+        message: netErr?.message || 'Passerelle SMS injoignable. Vérifiez la connexion ou la configuration serveur.',
+        provider,
+      };
+    }
 
-    // Repli de secours bac à sable si le serveur proxy est temporairement inaccessible
     const fallbackAckId = `ACK-OFFLINE-${Math.floor(100000 + Math.random() * 900000)}`;
     return {
       success: true,

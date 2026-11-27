@@ -467,11 +467,19 @@ export async function sendBrevoEmail(params: {
     }
   }
 
-  // Simulation intelligente si pas de clé live ou environnement isolé
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.PROD) {
+    return {
+      success: false,
+      message: 'Clé API Brevo manquante ou invalide. Veuillez configurer BREVO_API_KEY pour expédier vos e-mails.',
+      provider: 'BREVO_API_V3'
+    };
+  }
+
+  // Simulation intelligente uniquement hors production
   await new Promise(resolve => setTimeout(resolve, 800));
   return {
     success: true,
-    message: `Campagne expédiée avec succès vers ${params.to.length} destinataire(s) via la passerelle Brevo.`,
+    message: `Campagne expédiée avec succès vers ${params.to.length} destinataire(s) via la passerelle Brevo (local).`,
     messageId: `BRV-MSG-${Date.now().toString().slice(-6)}`,
     sentCount: params.to.length,
     provider: 'BREVO_SIMULATED_LOCAL'

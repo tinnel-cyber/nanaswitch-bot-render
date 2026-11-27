@@ -262,7 +262,11 @@ export function attachResonanceRoutes(app: Express) {
 
       res.status(200).json({ success: true, message: 'Notification transmise' });
     } catch (error: any) {
-      console.warn('[PUSH NOTIFICATION] Fallback simulé :', error?.message);
+      if (process.env.NODE_ENV === 'production') {
+        res.status(500).json({ success: false, error: error?.message || 'Erreur envoi notification push.' });
+        return;
+      }
+      console.warn('[PUSH NOTIFICATION] Fallback simulé local :', error?.message);
       res.status(200).json({ success: true, simulated: true });
     }
   });
