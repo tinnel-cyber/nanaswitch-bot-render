@@ -1697,6 +1697,402 @@ async function startServer() {
     }
   });
 
+  // ============================================================================
+  // IMPORTATEUR UNIVERSEL DE PRODUITS (URL Shopify / Web + Webhooks Shopify & WooCommerce)
+  // ============================================================================
+  const WEBHOOK_SECRETS_FILE = path.join(DATA_DIR, 'external_webhook_secrets.json');
+  const WEBHOOK_PRODUCTS_FILE = path.join(DATA_DIR, 'external_webhook_products.json');
+
+  const readJsonObjSafe = (filePath: string): Record<string, any> => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      }
+    } catch {}
+    return {};
+  };
+
+  const writeJsonObjSafe = (filePath: string, data: Record<string, any>) => {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch {}
+  };
+
+  const isPublicHttpUrl = (rawUrl: string): URL | null => {
+    try {
+      const u = new URL(rawUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+      const host = u.hostname.toLowerCase();
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host.endsWith('.local') ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      ) {
+        return null;
+      }
+      return u;
+    } catch {
+      return null;
+    }
+  };
+
+  const convertToXof = (rawPrice: number, currency: string, customRate: number, marginPercent: number): { costXof: number; sellingXof: number } => {
+    const cur = String(currency || 'USD').toUpperCase();
+    let rate = Number(customRate) || 655;
+    if (!customRate || customRate <= 0) {
+      if (cur === 'XOF' || cur === 'FCFA' || cur === 'XAF') rate = 1;
+      else if (cur === 'EUR') rate = 656;
+      else if (cur === 'USD') rate = 610;
+      else if (cur === 'GBP') rate = 770;
+      else if (cur === 'CNY' || cur === 'RMB') rate = 85;
+      else rate = 610;
+    } else if (cur === 'XOF' || cur === 'FCFA' || cur === 'XAF') {
+      rate = 1;
+    }
+    const base = Math.max(0, Math.round(rawPrice * rate));
+    const margin = Math.max(0, Number(marginPercent) || 0);
+    const selling = Math.max(100, Math.round(base * (1 + margin / 100)));
+    return { costXof: base, sellingXof: selling };
+  };
+
+  const stripHtmlTags = (html: string): string =>
+    String(html || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 400);
+
+  // POST /api/products/import-from-url — Extrait 1 ou plusieurs produits depuis Shopify (/products.json) ou n'importe quel site (JSON-LD / OpenGraph)
+  app.post('/api/products/import-from-url', async (req, res) => {
+    try {
+      const owner = await resolveVerifiedUniverseOwner(req);
+      if (!owner) {
+        return res.status(401).json({ success: false, error: 'Authentification requise pour importer depuis une URL.' });
+      }
+      const { url = '', currencyRateToXof = 0, marginPercent = 20, defaultCategory = 'Import Web' } = req.body || {};
+      const parsedUrl = isPublicHttpUrl(String(url || '').trim());
+      if (!parsedUrl) {
+        return res.status(400).json({ success: false, error: 'URL publique invalide (http:// ou https:// requis).' });
+      }
+
+      const fetchHeaders = {
+        'User-Agent': 'Mozilla/5.0 (compatible; NanasoreImporter/1.0; +https://nanasore.com)',
+        Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
+      };
+
+      const extracted: any[] = [];
+      let sourceType: 'shopify_product' | 'shopify_store' | 'universal_web' = 'universal_web';
+
+      // 1. Tentative Shopify JSON natif (/products/<handle>.json ou /products.json)
+      const pathClean = parsedUrl.pathname.replace(/\/+$/, '');
+      const isSingleShopifyProduct = /\/products\/[^/]+$/i.test(pathClean);
+      const shopifyCandidates: string[] = [];
+      if (isSingleShopifyProduct) {
+        shopifyCandidates.push(`${parsedUrl.origin}${pathClean}.json`);
+      } else {
+        shopifyCandidates.push(`${parsedUrl.origin}/products.json?limit=50`);
+      }
+
+      for (const candidateUrl of shopifyCandidates) {
+        try {
+          const r = await fetch(candidateUrl, { headers: fetchHeaders, signal: AbortSignal.timeout(8000) });
+          if (r.ok) {
+            const ct = r.headers.get('content-type') || '';
+            if (ct.includes('json')) {
+              const json: any = await r.json().catch(() => null);
+              const list = json?.product ? [json.product] : Array.isArray(json?.products) ? json.products : [];
+              if (list.length > 0) {
+                sourceType = json?.product ? 'shopify_product' : 'shopify_store';
+                for (const p of list.slice(0, 50)) {
+                  const v = Array.isArray(p.variants) && p.variants[0] ? p.variants[0] : {};
+                  const rawPrice = parseFloat(String(v.price || '0')) || 0;
+                  const { costXof, sellingXof } = convertToXof(rawPrice, 'USD', Number(currencyRateToXof), Number(marginPercent));
+                  const img = p.image?.src || (Array.isArray(p.images) && p.images[0]?.src) || '';
+                  extracted.push({
+                    name: String(p.title || 'Produit Shopify').trim(),
+                    category: String(p.product_type || defaultCategory || 'Shopify').trim() || 'Shopify',
+                    costPrice: costXof,
+                    sellingPrice: sellingXof,
+                    stock: Math.max(1, Number(v.inventory_quantity ?? 10) || 10),
+                    barcode: String(v.barcode || v.sku || `SHP-${p.id || ''}`).trim(),
+                    unit: 'pièce',
+                    photoUrl: img,
+                    description: stripHtmlTags(p.body_html || ''),
+                  });
+                }
+                break;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Extraction universelle HTML (JSON-LD Product + Open Graph)
+      if (extracted.length === 0) {
+        const pageRes = await fetch(parsedUrl.toString(), { headers: fetchHeaders, signal: AbortSignal.timeout(9000) });
+        if (!pageRes.ok) {
+          return res.status(400).json({
+            success: false,
+            error: `Le site distant a refusé la lecture directe (HTTP ${pageRes.status}). Utilisez l'export CSV/Excel ou un Webhook pour ce site.`,
+          });
+        }
+        const html = await pageRes.text();
+
+        // A. JSON-LD <script type="application/ld+json">
+        const ldRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+        let ldMatch: RegExpExecArray | null;
+        while ((ldMatch = ldRegex.exec(html)) !== null) {
+          try {
+            const parsedLd = JSON.parse(ldMatch[1].trim());
+            const nodes = Array.isArray(parsedLd)
+              ? parsedLd
+              : Array.isArray(parsedLd?.['@graph'])
+                ? parsedLd['@graph']
+                : [parsedLd];
+            for (const node of nodes) {
+              const t = node?.['@type'];
+              const isProduct = t === 'Product' || (Array.isArray(t) && t.includes('Product'));
+              if (!isProduct || !node?.name) continue;
+              const offers = Array.isArray(node.offers) ? node.offers[0] : node.offers || {};
+              const rawPrice = parseFloat(String(offers?.price ?? offers?.lowPrice ?? '0')) || 0;
+              const currency = String(offers?.priceCurrency || 'USD');
+              const { costXof, sellingXof } = convertToXof(rawPrice, currency, Number(currencyRateToXof), Number(marginPercent));
+              const imgRaw = Array.isArray(node.image) ? node.image[0] : node.image;
+              const imgUrl = typeof imgRaw === 'string' ? imgRaw : imgRaw?.url || '';
+              extracted.push({
+                name: String(node.name).trim(),
+                category: String(node.category || defaultCategory || 'Import Web').trim(),
+                costPrice: costXof,
+                sellingPrice: sellingXof,
+                stock: 10,
+                barcode: String(node.gtin13 || node.gtin || node.sku || '').trim(),
+                unit: 'pièce',
+                photoUrl: imgUrl,
+                description: stripHtmlTags(node.description || ''),
+              });
+            }
+          } catch {}
+        }
+
+        // B. Repli Open Graph / Meta tags
+        if (extracted.length === 0) {
+          const getMeta = (prop: string) => {
+            const m =
+              html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i')) ||
+              html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
+            return m ? m[1].trim() : '';
+          };
+          const titleTag = (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || '').trim();
+          const ogTitle = getMeta('og:title') || getMeta('twitter:title') || titleTag;
+          const ogImage = getMeta('og:image') || getMeta('twitter:image');
+          const ogPriceStr = getMeta('product:price:amount') || getMeta('og:price:amount') || '0';
+          const ogCurrency = getMeta('product:price:currency') || getMeta('og:price:currency') || 'USD';
+          const ogDesc = getMeta('og:description') || getMeta('description');
+          const rawPrice = parseFloat(ogPriceStr.replace(',', '.')) || 0;
+
+          if (ogTitle) {
+            const { costXof, sellingXof } = convertToXof(rawPrice, ogCurrency, Number(currencyRateToXof), Number(marginPercent));
+            extracted.push({
+              name: ogTitle.slice(0, 120),
+              category: defaultCategory || 'Import Web',
+              costPrice: costXof,
+              sellingPrice: sellingXof,
+              stock: 10,
+              barcode: '',
+              unit: 'pièce',
+              photoUrl: ogImage,
+              description: stripHtmlTags(ogDesc),
+            });
+          }
+        }
+      }
+
+      if (extracted.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Aucun produit structuré détecté sur cette page (possible protection anti-bot). Utilisez l\'import CSV/Excel ou les Webhooks.',
+        });
+      }
+
+      return res.json({ success: true, sourceType, count: extracted.length, products: extracted });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur lors de l\'extraction URL.' });
+    }
+  });
+
+  // Helper persistance produit reçu par Webhook Shopify / WooCommerce
+  const persistWebhookProduct = async (storeId: string, source: 'shopify' | 'woocommerce', item: any) => {
+    const cleanStore = String(storeId || '').trim();
+    if (!cleanStore) return;
+    const nowIso = new Date().toISOString();
+    const prodId = `${source === 'shopify' ? 'shp' : 'wc'}_${cleanStore}_${String(item.externalId || Date.now())}`;
+
+    // 1. Journal local pour synchronisation instantanée dans l'UI
+    const allByStore = readJsonObjSafe(WEBHOOK_PRODUCTS_FILE);
+    const list: any[] = Array.isArray(allByStore[cleanStore]) ? allByStore[cleanStore] : [];
+    const record = {
+      id: prodId,
+      storeId: cleanStore,
+      source,
+      name: item.name,
+      category: item.category || (source === 'shopify' ? 'Shopify' : 'WooCommerce'),
+      sellingPrice: Math.max(0, Number(item.sellingPrice) || 0),
+      costPrice: Math.max(0, Number(item.costPrice) || 0),
+      stock: Math.max(0, Number(item.stock) || 0),
+      barcode: String(item.barcode || '').trim(),
+      unit: 'pièce',
+      photoUrl: String(item.photoUrl || '').trim(),
+      syncedAt: nowIso,
+    };
+    allByStore[cleanStore] = [record, ...list.filter((x: any) => x.id !== prodId)].slice(0, 100);
+    writeJsonObjSafe(WEBHOOK_PRODUCTS_FILE, allByStore);
+
+    // 2. Upsert Supabase `products` si disponible
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.from('products').upsert({
+          id: prodId,
+          tenant_id: cleanStore,
+          name: record.name,
+          price: record.sellingPrice,
+          cost_price: record.costPrice,
+          category: record.category,
+          stock: record.stock,
+          barcode: record.barcode,
+          thumbnail_url: record.photoUrl || null,
+          image_url: record.photoUrl || null,
+          metadata: { source, webhook_synced_at: nowIso },
+          updated_at: nowIso,
+        });
+      } catch {}
+    }
+    return record;
+  };
+
+  // POST /api/webhooks/shopify/products/:storeId — Récepteur Webhook Shopify (products/create, products/update)
+  app.post('/api/webhooks/shopify/products/:storeId', async (req, res) => {
+    try {
+      const storeId = String(req.params.storeId || '').trim();
+      if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
+
+      const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+      const storeSecret = secrets[storeId]?.shopifySecret || process.env.SHOPIFY_WEBHOOK_SECRET || '';
+      const hmacHeader = String(req.headers['x-shopify-hmac-sha256'] || '');
+      if (storeSecret && hmacHeader && (req as any).rawBody) {
+        const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
+        if (digest !== hmacHeader) {
+          return res.status(401).json({ success: false, error: 'Signature HMAC Shopify invalide' });
+        }
+      }
+
+      const p = req.body || {};
+      if (!p.title && !p.id) {
+        return res.status(400).json({ success: false, error: 'Payload produit Shopify invalide' });
+      }
+      const v = Array.isArray(p.variants) && p.variants[0] ? p.variants[0] : {};
+      const rawPrice = parseFloat(String(v.price || '0')) || 0;
+      const { costXof, sellingXof } = convertToXof(rawPrice, 'USD', 0, 0);
+
+      const saved = await persistWebhookProduct(storeId, 'shopify', {
+        externalId: p.id,
+        name: String(p.title || 'Produit Shopify').trim(),
+        category: String(p.product_type || 'Shopify').trim(),
+        sellingPrice: sellingXof,
+        costPrice: costXof,
+        stock: Number(v.inventory_quantity ?? 10) || 10,
+        barcode: String(v.barcode || v.sku || `SHP-${p.id}`).trim(),
+        photoUrl: p.image?.src || (Array.isArray(p.images) && p.images[0]?.src) || '',
+      });
+      return res.json({ success: true, product: saved });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // POST /api/webhooks/woocommerce/products/:storeId — Récepteur Webhook WooCommerce (product.created, product.updated)
+  app.post('/api/webhooks/woocommerce/products/:storeId', async (req, res) => {
+    try {
+      const storeId = String(req.params.storeId || '').trim();
+      if (!storeId) return res.status(400).json({ success: false, error: 'storeId requis' });
+
+      const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+      const storeSecret = secrets[storeId]?.wooSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || '';
+      const sigHeader = String(req.headers['x-wc-webhook-signature'] || '');
+      if (storeSecret && sigHeader && (req as any).rawBody) {
+        const digest = crypto.createHmac('sha256', storeSecret).update((req as any).rawBody).digest('base64');
+        if (digest !== sigHeader) {
+          return res.status(401).json({ success: false, error: 'Signature HMAC WooCommerce invalide' });
+        }
+      }
+
+      const p = req.body || {};
+      // WooCommerce envoie un ping vide lors de la création du webhook
+      if (!p.name && !p.id) {
+        return res.json({ success: true, ping: true });
+      }
+      const rawPrice = parseFloat(String(p.price || p.regular_price || '0')) || 0;
+      const { costXof, sellingXof } = convertToXof(rawPrice, 'EUR', 0, 0);
+      const cat = Array.isArray(p.categories) && p.categories[0]?.name ? p.categories[0].name : 'WooCommerce';
+      const img = Array.isArray(p.images) && p.images[0]?.src ? p.images[0].src : '';
+
+      const saved = await persistWebhookProduct(storeId, 'woocommerce', {
+        externalId: p.id,
+        name: String(p.name || 'Produit WooCommerce').trim(),
+        category: String(cat).trim(),
+        sellingPrice: sellingXof,
+        costPrice: costXof,
+        stock: Number(p.stock_quantity ?? 10) || 10,
+        barcode: String(p.sku || `WC-${p.id}`).trim(),
+        photoUrl: img,
+      });
+      return res.json({ success: true, product: saved });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // GET & POST /api/webhooks/import-config/:storeId — Configuration & produits synchronisés par Webhook
+  app.get('/api/webhooks/import-config/:storeId', async (req, res) => {
+    const owner = await resolveVerifiedUniverseOwner(req);
+    if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
+    const storeId = String(req.params.storeId || '').trim();
+    const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+    const productsByStore = readJsonObjSafe(WEBHOOK_PRODUCTS_FILE);
+    return res.json({
+      success: true,
+      hasShopifySecret: Boolean(secrets[storeId]?.shopifySecret),
+      hasWooSecret: Boolean(secrets[storeId]?.wooSecret),
+      syncedProducts: Array.isArray(productsByStore[storeId]) ? productsByStore[storeId] : [],
+    });
+  });
+
+  app.post('/api/webhooks/import-config/:storeId', async (req, res) => {
+    const owner = await resolveVerifiedUniverseOwner(req);
+    if (!owner) return res.status(401).json({ success: false, error: 'Authentification requise' });
+    const storeId = String(req.params.storeId || '').trim();
+    const { shopifySecret, wooSecret } = req.body || {};
+    const secrets = readJsonObjSafe(WEBHOOK_SECRETS_FILE);
+    secrets[storeId] = {
+      ...(secrets[storeId] || {}),
+      ...(shopifySecret !== undefined ? { shopifySecret: String(shopifySecret).trim() } : {}),
+      ...(wooSecret !== undefined ? { wooSecret: String(wooSecret).trim() } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    writeJsonObjSafe(WEBHOOK_SECRETS_FILE, secrets);
+    return res.json({
+      success: true,
+      hasShopifySecret: Boolean(secrets[storeId]?.shopifySecret),
+      hasWooSecret: Boolean(secrets[storeId]?.wooSecret),
+    });
+  });
+
   // GET /api/payment-links/:id (PUBLIC — résout un lien de paiement autonome pour le client payeur)
   app.get('/api/payment-links/:id', async (req, res) => {
     try {

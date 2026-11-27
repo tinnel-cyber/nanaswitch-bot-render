@@ -16,10 +16,17 @@ import {
   Boxes,
   HelpCircle,
   Eye,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  Link2,
+  Webhook,
+  Copy,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { InventoryProduct } from '../../types';
 import { formatCFA, playValidationBeep, playTapBeep, playCancelSound } from '../../utils/audio';
+import { supabase } from '../../lib/supabase';
 
 export interface ParsedImportItem {
   rawRowIndex: number;
@@ -30,6 +37,7 @@ export interface ParsedImportItem {
   stock: number;
   barcode: string;
   unit: string;
+  photoUrl?: string;
   isValid: boolean;
   validationError?: string;
   isDuplicate?: boolean;
@@ -238,6 +246,25 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Onglet source : Fichier Excel/CSV | URL (Shopify / Web) | Webhooks Shopify & WooCommerce
+  const [importSourceTab, setImportSourceTab] = useState<'FILE' | 'URL' | 'WEBHOOKS'>('FILE');
+  const [importUrl, setImportUrl] = useState<string>('');
+  const [urlCurrencyRate, setUrlCurrencyRate] = useState<string>('0');
+  const [urlMarginPercent, setUrlMarginPercent] = useState<string>('20');
+  const [isExtractingUrl, setIsExtractingUrl] = useState<boolean>(false);
+  const [urlSourceBanner, setUrlSourceBanner] = useState<string | null>(null);
+
+  // Webhooks Shopify & WooCommerce
+  const [shopifySecretInput, setShopifySecretInput] = useState<string>('');
+  const [wooSecretInput, setWooSecretInput] = useState<string>('');
+  const [hasShopifySecret, setHasShopifySecret] = useState<boolean>(false);
+  const [hasWooSecret, setHasWooSecret] = useState<boolean>(false);
+  const [webhookSyncedProducts, setWebhookSyncedProducts] = useState<any[]>([]);
+  const [isLoadingWebhookConfig, setIsLoadingWebhookConfig] = useState<boolean>(false);
+  const [isSavingWebhookSecrets, setIsSavingWebhookSecrets] = useState<boolean>(false);
+  const [copiedWebhookKey, setCopiedWebhookKey] = useState<string | null>(null);
+  const [webhookStatusMsg, setWebhookStatusMsg] = useState<string | null>(null);
+
   // Réinitialisation lors de la fermeture
   useEffect(() => {
     if (!isOpen) {
@@ -247,6 +274,8 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
       setParseError(null);
       setParsedRows([]);
       setHeadersFound([]);
+      setUrlSourceBanner(null);
+      setWebhookStatusMsg(null);
     }
   }, [isOpen]);
 
@@ -560,6 +589,7 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
           costPrice: item.costPrice > 0 ? item.costPrice : existing.costPrice,
           category: item.category || existing.category,
           barcode: item.barcode || existing.barcode,
+          photoUrl: item.photoUrl || existing.photoUrl,
         };
         productsToPersist.push(updated);
         updatedCount++;
@@ -576,7 +606,7 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
           unit: item.unit || 'pièce',
           keywords: [item.name.toLowerCase(), item.category.toLowerCase()],
           barcode: item.barcode || '',
-          photoUrl: '',
+          photoUrl: item.photoUrl || '',
         };
         productsToPersist.push(newProduct);
         addedCount++;
@@ -591,6 +621,152 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
       skipped: skippedCount,
     });
     onClose();
+  };
+
+  // Chargement configuration & produits reçus par Webhooks Shopify / WooCommerce
+  const fetchWebhookConfig = useCallback(async () => {
+    if (!storeId) return;
+    setIsLoadingWebhookConfig(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      const res = await fetch(`/api/webhooks/import-config/${encodeURIComponent(storeId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setHasShopifySecret(Boolean(json.hasShopifySecret));
+        setHasWooSecret(Boolean(json.hasWooSecret));
+        setWebhookSyncedProducts(Array.isArray(json.syncedProducts) ? json.syncedProducts : []);
+      }
+    } catch {}
+    finally {
+      setIsLoadingWebhookConfig(false);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (isOpen && importSourceTab === 'WEBHOOKS') {
+      fetchWebhookConfig();
+    }
+  }, [isOpen, importSourceTab, fetchWebhookConfig]);
+
+  const handleSaveWebhookSecrets = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingWebhookSecrets(true);
+    setWebhookStatusMsg(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      const res = await fetch(`/api/webhooks/import-config/${encodeURIComponent(storeId)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          ...(shopifySecretInput.trim() ? { shopifySecret: shopifySecretInput.trim() } : {}),
+          ...(wooSecretInput.trim() ? { wooSecret: wooSecretInput.trim() } : {}),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) throw new Error(json?.error || 'Erreur enregistrement secrets.');
+      setHasShopifySecret(Boolean(json.hasShopifySecret));
+      setHasWooSecret(Boolean(json.hasWooSecret));
+      setShopifySecretInput('');
+      setWooSecretInput('');
+      playValidationBeep();
+      setWebhookStatusMsg('Secrets HMAC enregistrés et actifs pour vos Webhooks !');
+    } catch (err: any) {
+      setWebhookStatusMsg(err?.message || 'Erreur lors de la sauvegarde.');
+    } finally {
+      setIsSavingWebhookSecrets(false);
+    }
+  };
+
+  // Extraction de produits depuis URL (Shopify / JSON-LD / Open Graph)
+  const handleExtractFromUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importUrl.trim()) return;
+    setIsExtractingUrl(true);
+    setParseError(null);
+    setUrlSourceBanner(null);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token || '';
+      const res = await fetch('/api/products/import-from-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          url: importUrl.trim(),
+          currencyRateToXof: Number(urlCurrencyRate) || 0,
+          marginPercent: Number(urlMarginPercent) || 0,
+          storeId,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success || !Array.isArray(json?.products)) {
+        throw new Error(json?.error || 'Impossible d\'extraire des produits depuis cette URL.');
+      }
+
+      const mapped: ParsedImportItem[] = json.products.map((p: any, idx: number) => {
+        const barcodeStr = String(p.barcode || '').trim();
+        const nameStr = String(p.name || '').trim();
+        const isDuplicate =
+          (barcodeStr && existingMap.byBarcode.has(barcodeStr.toLowerCase())) ||
+          existingMap.byName.has(nameStr.toLowerCase());
+        return {
+          rawRowIndex: idx + 1,
+          name: nameStr,
+          category: String(p.category || 'Import Web'),
+          sellingPrice: Number(p.sellingPrice) || 100,
+          costPrice: Number(p.costPrice) || 0,
+          stock: Number(p.stock) || 10,
+          barcode: barcodeStr,
+          unit: String(p.unit || 'pièce'),
+          photoUrl: String(p.photoUrl || ''),
+          isValid: Boolean(nameStr && Number(p.sellingPrice) > 0),
+          isDuplicate: Boolean(isDuplicate),
+        };
+      });
+
+      playValidationBeep();
+      setUrlSourceBanner(`${mapped.length} produit(s) extrait(s) (${json.sourceType}). Vérifiez et confirmez l'intégration ci-dessous.`);
+      setParsedRows(mapped);
+    } catch (err: any) {
+      setParseError(err?.message || 'Erreur lors de l\'extraction URL.');
+    } finally {
+      setIsExtractingUrl(false);
+    }
+  };
+
+  const handleLoadWebhookProductsToPreview = () => {
+    if (webhookSyncedProducts.length === 0) return;
+    playTapBeep();
+    const mapped: ParsedImportItem[] = webhookSyncedProducts.map((p: any, idx: number) => {
+      const barcodeStr = String(p.barcode || '').trim();
+      const nameStr = String(p.name || '').trim();
+      const isDuplicate =
+        (barcodeStr && existingMap.byBarcode.has(barcodeStr.toLowerCase())) ||
+        existingMap.byName.has(nameStr.toLowerCase());
+      return {
+        rawRowIndex: idx + 1,
+        name: nameStr,
+        category: String(p.category || 'Webhook'),
+        sellingPrice: Number(p.sellingPrice) || 100,
+        costPrice: Number(p.costPrice) || 0,
+        stock: Number(p.stock) || 10,
+        barcode: barcodeStr,
+        unit: String(p.unit || 'pièce'),
+        photoUrl: String(p.photoUrl || ''),
+        isValid: Boolean(nameStr),
+        isDuplicate: Boolean(isDuplicate),
+      };
+    });
+    setParsedRows(mapped);
   };
 
   if (!isOpen) return null;
@@ -641,6 +817,60 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
           </button>
         </div>
 
+        {/* Barre d'onglets : Excel/CSV | URL (Shopify & Web) | Webhooks Shopify & WooCommerce */}
+        {parsedRows.length === 0 && (
+          <div className="bg-[#090f1e] px-4 sm:px-6 py-2.5 border-b border-slate-800 flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setImportSourceTab('FILE');
+                setParseError(null);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                importSourceTab === 'FILE'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Excel / CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setImportSourceTab('URL');
+                setParseError(null);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                importSourceTab === 'URL'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>URL (Shopify / Web)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                setImportSourceTab('WEBHOOKS');
+                setParseError(null);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+                importSourceTab === 'WEBHOOKS'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Webhook className="w-3.5 h-3.5" />
+              <span>Webhooks Shopify &amp; WooCommerce</span>
+            </button>
+          </div>
+        )}
+
         {/* Modal Body */}
         <div
           className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar"
@@ -650,8 +880,226 @@ export const ExcelImporterModal: React.FC<ExcelImporterModalProps> = ({
             touchAction: 'pan-y',
           }}
         >
+          {urlSourceBanner && parsedRows.length > 0 && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{urlSourceBanner}</span>
+            </div>
+          )}
+
+          {/* ONGLET 2 : IMPORTATEUR UNIVERSEL PAR URL (SHOPIFY / WEB) */}
+          {parsedRows.length === 0 && importSourceTab === 'URL' && (
+            <form onSubmit={handleExtractFromUrl} className="space-y-4">
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                    <Link2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Importer depuis un lien Shopify ou un site e-commerce</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Collez l'URL d'une boutique Shopify (<code className="text-blue-300">https://boutique.myshopify.com</code>), d'une fiche produit (<code className="text-blue-300">/products/...</code>) ou de n'importe quel site compatible JSON-LD / Open Graph.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">Lien du site ou du produit</label>
+                  <input
+                    type="url"
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    placeholder="https://maboutique.myshopify.com ou https://site.com/produit"
+                    className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300">Taux de conversion vers FCFA (0 = Auto)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={urlCurrencyRate}
+                      onChange={(e) => setUrlCurrencyRate(e.target.value)}
+                      placeholder="0 (Auto USD/EUR) ou 655"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300">Marge bénéficiaire appliquée (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={500}
+                      value={urlMarginPercent}
+                      onChange={(e) => setUrlMarginPercent(e.target.value)}
+                      placeholder="20"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {parseError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{parseError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isExtractingUrl}
+                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition shadow-lg"
+                >
+                  {isExtractingUrl ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Extraction et conversion en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>Analyser &amp; Extraire les produits</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ONGLET 3 : IMPORTATION PAR WEBHOOKS SHOPIFY & WOOCOMMERCE */}
+          {parsedRows.length === 0 && importSourceTab === 'WEBHOOKS' && (
+            <div className="space-y-4">
+              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <Webhook className="w-4 h-4 text-blue-400" />
+                      <span>Synchronisation Automatique par Webhooks</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Chaque produit créé ou mis à jour sur Shopify ou WooCommerce est automatiquement envoyé vers votre boutique Nanasore.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchWebhookConfig}
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                    title="Actualiser"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoadingWebhookConfig ? 'animate-spin text-blue-400' : ''}`} />
+                  </button>
+                </div>
+
+                {/* URLs Webhook prêtes à copier */}
+                {[
+                  {
+                    key: 'shopify',
+                    title: 'Shopify (Paramètres → Notifications → Webhooks : products/create & products/update)',
+                    url: `${typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com'}/api/webhooks/shopify/products/${storeId || 'mon-univers'}`,
+                  },
+                  {
+                    key: 'woo',
+                    title: 'WooCommerce (Réglages → Avancé → Webhooks : Produit créé & Produit mis à jour)',
+                    url: `${typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com'}/api/webhooks/woocommerce/products/${storeId || 'mon-univers'}`,
+                  },
+                ].map((wh) => (
+                  <div key={wh.key} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                    <p className="text-[11px] font-bold text-slate-300">{wh.title}</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={wh.url}
+                        className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-[11px] font-mono text-blue-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(wh.url);
+                          setCopiedWebhookKey(wh.key);
+                          setTimeout(() => setCopiedWebhookKey(null), 1800);
+                        }}
+                        className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        {copiedWebhookKey === wh.key ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedWebhookKey === wh.key ? 'Copié' : 'Copier'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Secrets HMAC optionnels */}
+                <form onSubmit={handleSaveWebhookSecrets} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                      <span>Secret HMAC Shopify (optionnel)</span>
+                      {hasShopifySecret && <span className="text-emerald-400">Configuré</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={shopifySecretInput}
+                      onChange={(e) => setShopifySecretInput(e.target.value)}
+                      placeholder="Signature secrète Shopify..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                      <span>Secret HMAC WooCommerce (optionnel)</span>
+                      {hasWooSecret && <span className="text-emerald-400">Configuré</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={wooSecretInput}
+                      onChange={(e) => setWooSecretInput(e.target.value)}
+                      placeholder="Secret Webhook WooCommerce..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex items-center justify-between gap-2">
+                    {webhookStatusMsg ? (
+                      <span className="text-xs font-bold text-emerald-400">{webhookStatusMsg}</span>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Les signatures HMAC protègent l'authenticité des webhooks.</span>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={isSavingWebhookSecrets}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                    >
+                      {isSavingWebhookSecrets ? 'Enregistrement...' : 'Enregistrer les secrets'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Produits déjà reçus par Webhook */}
+              <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black text-white">
+                    Produits reçus par Webhook : <span className="text-blue-400">{webhookSyncedProducts.length}</span>
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Chargez les produits reçus dans l'aperçu pour les intégrer à votre inventaire local.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLoadWebhookProductsToPreview}
+                  disabled={webhookSyncedProducts.length === 0}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-black cursor-pointer shrink-0"
+                >
+                  Importer ({webhookSyncedProducts.length})
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Écran 1 : Zone de glisser-déposer si aucun fichier ou erreur */}
-          {parsedRows.length === 0 && (
+          {parsedRows.length === 0 && importSourceTab === 'FILE' && (
             <div className="space-y-4">
               {/* Animated Drag & Drop Zone */}
               <div
