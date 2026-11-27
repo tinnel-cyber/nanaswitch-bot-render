@@ -28,6 +28,7 @@ import {
   RefreshCw,
   ExternalLink,
   Loader2,
+  Share2,
 } from 'lucide-react';
 import { InventoryProduct } from '../../types';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../utils/audio';
@@ -154,6 +155,7 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState<boolean>(false);
 
   const currentSymInfo = useMemo(
     () => SYMBOLOGIES.find((s) => s.id === symbology) || SYMBOLOGIES[0],
@@ -505,6 +507,81 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
     a.download = `${safeName}-${symbology}.${format === 'jpeg' ? 'jpg' : 'png'}`;
     a.click();
     playValidationBeep();
+  };
+
+  const handleNativeShare = async () => {
+    playTapBeep();
+    const shareTitle = labelTitle.trim() || `${currentSymInfo.label} — ${storeName}`;
+    const shareText = [
+      labelTitle.trim(),
+      labelPrice.trim() ? `Prix : ${labelPrice.trim()}` : '',
+      effectivePayload,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const isUrl = /^https?:\/\//i.test(effectivePayload);
+
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        const canvas = await buildStickerCanvas(true);
+        if (canvas) {
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+          if (blob) {
+            const file = new File([blob], `${symbology}-code.png`, { type: 'image/png' });
+            const shareData: ShareData = {
+              title: shareTitle,
+              text: shareText,
+              ...(isUrl ? { url: effectivePayload } : {}),
+              files: [file],
+            };
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share(shareData);
+              setIsShareMenuOpen(false);
+              return;
+            }
+          }
+        }
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          ...(isUrl ? { url: effectivePayload } : {}),
+        });
+        setIsShareMenuOpen(false);
+        return;
+      }
+    } catch {
+      // L'utilisateur a annulé ou navigateur non supporté -> ouverture du menu réseaux sociaux
+    }
+    setIsShareMenuOpen((v) => !v);
+  };
+
+  const openSocialShare = (network: 'whatsapp' | 'facebook' | 'twitter' | 'telegram' | 'linkedin') => {
+    playTapBeep();
+    const isUrl = /^https?:\/\//i.test(effectivePayload);
+    const fallbackUrl = typeof window !== 'undefined' ? window.location.origin : 'https://nanasore.com';
+    const targetUrl = isUrl ? effectivePayload : fallbackUrl;
+    const textParts = [
+      labelTitle.trim() || storeName,
+      labelPrice.trim() ? `Prix : ${labelPrice.trim()}` : '',
+      effectivePayload,
+    ]
+      .filter(Boolean)
+      .join(' • ');
+
+    const encText = encodeURIComponent(textParts);
+    const encUrl = encodeURIComponent(targetUrl);
+
+    let shareHref = '';
+    if (network === 'whatsapp') shareHref = `https://wa.me/?text=${encText}`;
+    if (network === 'facebook') shareHref = `https://www.facebook.com/sharer/sharer.php?u=${encUrl}&quote=${encText}`;
+    if (network === 'twitter') shareHref = `https://twitter.com/intent/tweet?text=${encText}${isUrl ? `&url=${encUrl}` : ''}`;
+    if (network === 'telegram') shareHref = `https://t.me/share/url?url=${encUrl}&text=${encText}`;
+    if (network === 'linkedin') shareHref = `https://www.linkedin.com/sharing/share-offsite/?url=${encUrl}`;
+
+    if (shareHref && typeof window !== 'undefined') {
+      window.open(shareHref, '_blank', 'noopener,noreferrer');
+    }
+    setIsShareMenuOpen(false);
   };
 
   const handleExportPdfStickers = async () => {
@@ -1174,18 +1251,79 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard?.writeText(effectivePayload);
-                setCopiedCode(true);
-                setTimeout(() => setCopiedCode(false), 1800);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-[#F8FAFC] hover:bg-blue-50 border border-[#E2E8F0] text-xs font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer"
-            >
-              {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{copiedCode ? 'Copié !' : 'Copier valeur'}</span>
-            </button>
+            <div className="flex items-center gap-1.5 relative">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(effectivePayload);
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 1800);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-[#F8FAFC] hover:bg-blue-50 border border-[#E2E8F0] text-xs font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer"
+              >
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{copiedCode ? 'Copié !' : 'Copier'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsShareMenuOpen((v) => !v)}
+                className="px-3 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1E3A8A] text-white text-xs font-black flex items-center gap-1.5 shadow-xs cursor-pointer transition"
+                title="Partager sur les réseaux sociaux"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Partager</span>
+              </button>
+
+              {isShareMenuOpen && (
+                <div className="absolute right-0 top-11 z-40 w-56 bg-white border border-[#E2E8F0] rounded-2xl shadow-xl p-2 space-y-1">
+                  <button
+                    type="button"
+                    onClick={handleNativeShare}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-blue-50 text-xs font-black text-[#1E3A8A] flex items-center gap-2 cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Partage direct (Image + Lien)</span>
+                  </button>
+                  <div className="border-t border-slate-100 my-1" />
+                  <button
+                    type="button"
+                    onClick={() => openSocialShare('whatsapp')}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-emerald-50 text-xs font-bold text-emerald-700 cursor-pointer"
+                  >
+                    WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSocialShare('facebook')}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-blue-50 text-xs font-bold text-blue-700 cursor-pointer"
+                  >
+                    Facebook
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSocialShare('telegram')}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-sky-50 text-xs font-bold text-sky-700 cursor-pointer"
+                  >
+                    Telegram
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSocialShare('twitter')}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 text-xs font-bold text-slate-800 cursor-pointer"
+                  >
+                    X (Twitter)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openSocialShare('linkedin')}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-indigo-50 text-xs font-bold text-indigo-700 cursor-pointer"
+                  >
+                    LinkedIn
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {renderError && (
