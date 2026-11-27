@@ -1060,6 +1060,10 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   };
 
   const handleResumeLastCourse = () => {
+    if (!activeCourse) {
+      handleOpenMarketplace();
+      return;
+    }
     handleOpenCourseCampus(activeCourse.id);
   };
 
@@ -3264,63 +3268,86 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
               <span className="text-[11px] text-slate-400 font-bold">Activité directe</span>
             </div>
 
-            {/* Carte dynamique affichant le Reel/Cours actif */}
-            <div
-              onClick={handleResumeLastCourse}
-              className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 border border-[#E2E8F0] group cursor-pointer shadow-inner"
-            >
-              <img
-                src={activeCourse.coverImage}
-                alt={activeCourse.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30 pointer-events-none" />
-
-              {/* Badge Bleu Royal en surimpression */}
-              <div className="absolute top-2.5 left-2.5 z-10">
-                <span className="px-2.5 py-0.5 rounded-full bg-[#1D4ED8] text-white text-[10px] font-extrabold shadow flex items-center gap-1">
-                  <GraduationCap className="w-3 h-3" />
-                  <span>{activeCourse.campusName}</span>
-                </span>
-              </div>
-
-              {/* Icône Play pulsante au centre */}
-              <div className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-white text-[#1D4ED8] flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-[#1D4ED8] group-hover:text-white transition-all">
-                <Play className="w-4 h-4 ml-0.5 fill-current" />
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-extrabold text-[#0F172A] leading-snug line-clamp-2">
-                {activeCourse.title}
-              </h4>
-              <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
-                Dernière leçon : {activeCourse.lastLessonTitle}
-              </p>
-            </div>
-
-            {/* Progression en Bleu Royal */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-500">{activeCourse.completedLessons}/{activeCourse.totalLessons} leçons</span>
-                <span className="text-[#1D4ED8] font-black">{activeCourse.progress}%</span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            {activeCourse ? (
+              <>
+                {/* Carte dynamique affichant le Reel/Cours actif */}
                 <div
-                  className="bg-[#1D4ED8] h-full rounded-full transition-all duration-300"
-                  style={{ width: `${activeCourse.progress}%` }}
-                />
-              </div>
-            </div>
+                  onClick={handleResumeLastCourse}
+                  className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 border border-[#E2E8F0] group cursor-pointer shadow-inner"
+                >
+                  <img
+                    src={activeCourse.coverImage}
+                    alt={activeCourse.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-90"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30 pointer-events-none" />
 
-            {/* Bouton direct [ ▶ Entrer au Campus ] */}
-            <button
-              type="button"
-              onClick={handleResumeLastCourse}
-              className="w-full py-3 rounded-2xl bg-[#1D4ED8] hover:bg-blue-800 text-white font-extrabold text-xs sm:text-sm transition-all duration-150 shadow-md shadow-blue-700/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>[ ▶ Entrer au Campus ]</span>
-            </button>
+                  {/* Badge Bleu Royal en surimpression */}
+                  <div className="absolute top-2.5 left-2.5 z-10">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#1D4ED8] text-white text-[10px] font-extrabold shadow flex items-center gap-1">
+                      <GraduationCap className="w-3 h-3" />
+                      <span>{activeCourse.campusName}</span>
+                    </span>
+                  </div>
+
+                  {/* Icône Play pulsante au centre */}
+                  <div className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-white text-[#1D4ED8] flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-[#1D4ED8] group-hover:text-white transition-all">
+                    <Play className="w-4 h-4 ml-0.5 fill-current" />
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-extrabold text-[#0F172A] leading-snug line-clamp-2">
+                    {activeCourse.title}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                    Dernière leçon : {activeCourse.lastLessonTitle}
+                  </p>
+                </div>
+
+                {/* Progression en Bleu Royal */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-slate-500">{activeCourse.completedLessons}/{activeCourse.totalLessons} leçons</span>
+                    <span className="text-[#1D4ED8] font-black">{activeCourse.progress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-[#1D4ED8] h-full rounded-full transition-all duration-300"
+                      style={{ width: `${activeCourse.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Bouton direct [ ▶ Entrer au Campus ] */}
+                <button
+                  type="button"
+                  onClick={handleResumeLastCourse}
+                  className="w-full py-3 rounded-2xl bg-[#1D4ED8] hover:bg-blue-800 text-white font-extrabold text-xs sm:text-sm transition-all duration-150 shadow-md shadow-blue-700/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>[ ▶ Entrer au Campus ]</span>
+                </button>
+              </>
+            ) : (
+              <div className="py-5 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-[#1D4ED8] flex items-center justify-center mx-auto">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-extrabold text-[#0F172A]">Aucune formation en cours</h4>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Explorez le Marketplace Next-Gen pour rejoindre votre premier campus.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenMarketplace}
+                  className="w-full py-2.5 rounded-2xl bg-[#1D4ED8] hover:bg-blue-800 text-white font-extrabold text-xs transition shadow-md shadow-blue-700/20 cursor-pointer"
+                >
+                  Explorer le Marketplace
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Widget 2 (Prompt 3/4) : Reçus Récents */}
