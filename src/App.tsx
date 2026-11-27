@@ -1971,6 +1971,24 @@ export default function App() {
         setIsStudentDashboardView(false);
       }
 
+      if (
+        pathname === '/wallet' ||
+        pathname === '/nanawallet' ||
+        pathname === '/nana-wallet' ||
+        pathname === '/app/wallet' ||
+        pathname === '/apps/wallet' ||
+        pathname.startsWith('/wallet') ||
+        pathname.startsWith('/nanawallet') ||
+        pathname.startsWith('/nana-wallet') ||
+        params.get('view') === 'wallet' ||
+        params.get('view') === 'nanawallet'
+      ) {
+        setCurrentView('WALLET');
+        setShowWelcomeShowcase(false);
+        setPublicBoutiqueParams({ isBoutique: false, targetStoreId: null, targetProductId: null });
+        return;
+      }
+
       // Boutique / Shop / Vitrine / Fiche Produit propre (/{themePrefix}/:store, /s/:store/p/:product ou raccourci)
       const { storeIdFromPath, productIdFromPath } = extractPublicStoreRouteParams(pathname);
 
