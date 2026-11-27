@@ -200,6 +200,24 @@ export async function confirmPrimaryPayment(orderId: string, transactionId: stri
   // Déclenchement automatique des flux d'accomplissement
   dispatchPostPaymentAutomations(order);
 
+  // Enregistrement automatique de la commission si le marchand est sous Plan Commission
+  if (order.itemType !== 'physical' && Number(order.payment?.grandTotal || 0) > 0) {
+    try {
+      const targetUniverseId = (order as any).storeId || (order as any).universeId || (order as any).merchantId || 'default';
+      fetch('/api/merchant/commission/record-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          universeId: targetUniverseId,
+          orderRef: order.orderId,
+          grossAmountXof: Number(order.payment.grandTotal),
+          channel: 'FUNNEL_DIGITAL_SALE',
+        }),
+      }).catch(() => {});
+    } catch {}
+  }
+
   return order;
 }
 

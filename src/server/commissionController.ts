@@ -24,10 +24,104 @@ const supabaseAdmin = supabaseKey
     })
   : null;
 
-const DEFAULT_COMMISSION_RATE_PERCENT = 10;
+const DEFAULT_COMMISSION_RATE_PERCENT = 14;
+
+export async function recordCommissionSaleInternal(params: {
+  universeId: string;
+  orderRef: string;
+  grossAmountXof: number;
+  channel?: string;
+}): Promise<{
+  applied: boolean;
+  reason?: string;
+  commissionRatePercent?: number;
+  commissionAmountXof?: number;
+  netMerchantXof?: number;
+  txId?: string;
+}> {
+  if (!supabaseAdmin) {
+    throw new Error('Supabase non configuré côté serveur.');
+  }
+  const cleanUniverseId = String(params.universeId || '').trim();
+  const gross = Math.round(Number(params.grossAmountXof) || 0);
+  if (!cleanUniverseId || !params.orderRef || gross <= 0) {
+    throw new Error('universeId, orderRef et grossAmountXof (> 0) requis.');
+  }
+
+  const { data: account } = await supabaseAdmin
+    .from('commission_accounts')
+    .select('*')
+    .or(`universe_id.eq.${cleanUniverseId},user_id.eq.${cleanUniverseId},id.eq.${cleanUniverseId}`)
+    .eq('status', 'ACTIVE')
+    .limit(1)
+    .maybeSingle();
+
+  if (!account) {
+    return { applied: false, reason: 'MARCHAND_NON_COMMISSION' };
+  }
+
+  // Idempotence sur order_ref pour éviter tout double prélèvement
+  const { data: existingTx } = await supabaseAdmin
+    .from('commission_transactions')
+    .select('id, commission_rate_percent, commission_amount_xof, net_merchant_xof')
+    .eq('commission_account_id', account.id)
+    .eq('order_ref', String(params.orderRef))
+    .limit(1)
+    .maybeSingle();
+
+  if (existingTx) {
+    return {
+      applied: true,
+      commissionRatePercent: Number(existingTx.commission_rate_percent),
+      commissionAmountXof: Number(existingTx.commission_amount_xof),
+      netMerchantXof: Number(existingTx.net_merchant_xof),
+      txId: existingTx.id,
+    };
+  }
+
+  const rate = Number(account.commission_rate_percent || DEFAULT_COMMISSION_RATE_PERCENT);
+  const commissionAmount = Math.round((gross * rate) / 100);
+  const netMerchant = Math.max(0, gross - commissionAmount);
+  const txId = `COM-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+  const { error: txErr } = await supabaseAdmin.from('commission_transactions').insert({
+    id: txId,
+    commission_account_id: account.id,
+    universe_id: account.universe_id,
+    order_ref: String(params.orderRef),
+    gross_amount_xof: gross,
+    commission_rate_percent: rate,
+    commission_amount_xof: commissionAmount,
+    net_merchant_xof: netMerchant,
+    channel: String(params.channel || 'DIGITAL_SALE'),
+  });
+
+  if (txErr) {
+    throw new Error(txErr.message);
+  }
+
+  await supabaseAdmin
+    .from('commission_accounts')
+    .update({
+      total_sales_xof: Number(account.total_sales_xof || 0) + gross,
+      total_commission_xof: Number(account.total_commission_xof || 0) + commissionAmount,
+      total_net_merchant_xof: Number(account.total_net_merchant_xof || 0) + netMerchant,
+      transactions_count: Number(account.transactions_count || 0) + 1,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', account.id);
+
+  return {
+    applied: true,
+    commissionRatePercent: rate,
+    commissionAmountXof: commissionAmount,
+    netMerchantXof: netMerchant,
+    txId,
+  };
+}
 
 export function attachCommissionRoutes(app: Express): void {
-  // 1. GET /api/merchant/commission/status — Vérifie si le marchand est dans la table commission_accounts
+  // 1. GET /api/merchant/commission/status — Vérifie si le marchand est dans commission_accounts + retourne ses transactions
   app.get('/api/merchant/commission/status', async (req: Request, res: Response) => {
     const userId = String(req.query.userId || '').trim();
     const universeId = String(req.query.universeId || '').trim();
@@ -53,14 +147,26 @@ export function attachCommissionRoutes(app: Express): void {
       return res.status(500).json({ success: false, error: error.message });
     }
 
+    let transactions: any[] = [];
+    if (account?.id) {
+      const { data: txRows } = await supabaseAdmin
+        .from('commission_transactions')
+        .select('*')
+        .eq('commission_account_id', account.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      transactions = txRows || [];
+    }
+
     return res.json({
       success: true,
       isCommissionPlan: Boolean(account && account.status === 'ACTIVE'),
       account: account || null,
+      transactions,
     });
   });
 
-  // 2. POST /api/merchant/commission/enroll — Inscrit officiellement un marchand dans commission_accounts
+  // 2. POST /api/merchant/commission/enroll — Inscrit officiellement un marchand avec contrat signé + copie Super Admin
   app.post('/api/merchant/commission/enroll', async (req: Request, res: Response) => {
     try {
       if (!supabaseAdmin) {
@@ -80,12 +186,38 @@ export function attachCommissionRoutes(app: Express): void {
         universeId = '',
         storeName = '',
         commissionRatePercent = DEFAULT_COMMISSION_RATE_PERCENT,
+        fullName = '',
+        businessDomain = '',
+        paymentNumber1 = '',
+        paymentNumber2 = '',
+        emergencyContactName = '',
+        emergencyContactPhone = '',
+        signatureDataUrl = '',
+        contractAccepted = false,
+        contractNumber = '',
+        contractHtml = '',
       } = req.body || {};
+
+      if (!String(fullName).trim() || !String(businessDomain).trim() || !String(paymentNumber1).trim() || !String(paymentNumber2).trim() || !String(emergencyContactName).trim() || !String(emergencyContactPhone).trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tous les champs du formulaire (nom complet, domaine, 2 numéros de paiement, contact d\'urgence) sont obligatoires.',
+        });
+      }
+
+      if (!signatureDataUrl || !contractAccepted) {
+        return res.status(400).json({
+          success: false,
+          error: 'La signature manuscrite et l\'acceptation du contrat ("Lu et approuvé") sont requises.',
+        });
+      }
 
       const userId = authData.user.id;
       const cleanUniverseId = String(universeId || userId).trim();
       const accountId = cleanUniverseId || userId;
       const rate = Math.max(1, Math.min(30, Number(commissionRatePercent) || DEFAULT_COMMISSION_RATE_PERCENT));
+      const nowIso = new Date().toISOString();
+      const finalContractNumber = String(contractNumber || `CTR-COM-${Date.now().toString(36).toUpperCase()}`).trim();
 
       const { data: upserted, error } = await supabaseAdmin
         .from('commission_accounts')
@@ -98,7 +230,20 @@ export function attachCommissionRoutes(app: Express): void {
             store_name: String(storeName || '').trim() || null,
             status: 'ACTIVE',
             commission_rate_percent: rate,
-            updated_at: new Date().toISOString(),
+            full_name: String(fullName).trim(),
+            business_domain: String(businessDomain).trim(),
+            payment_number_1: String(paymentNumber1).trim(),
+            payment_number_2: String(paymentNumber2).trim(),
+            emergency_contact_name: String(emergencyContactName).trim(),
+            emergency_contact_phone: String(emergencyContactPhone).trim(),
+            signature_data_url: String(signatureDataUrl),
+            contract_accepted: Boolean(contractAccepted),
+            contract_number: finalContractNumber,
+            contract_signed_at: nowIso,
+            contract_html: String(contractHtml || ''),
+            admin_notified: true,
+            admin_reviewed: false,
+            updated_at: nowIso,
           },
           { onConflict: 'id' }
         )
@@ -111,13 +256,29 @@ export function attachCommissionRoutes(app: Express): void {
 
       await supabaseAdmin
         .from('profiles')
-        .update({ pricing_model: 'commission', updated_at: new Date().toISOString() })
+        .update({ pricing_model: 'commission', updated_at: nowIso })
         .eq('id', userId);
+
+      // Notification directe vers le Super Admin Dashboard (best-effort dans saas_action_tasks)
+      try {
+        await supabaseAdmin.from('saas_action_tasks').insert({
+          id: `TASK-COM-${Date.now().toString(36).toUpperCase()}`,
+          title: `Nouveau contrat Plan Commission signé (${finalContractNumber})`,
+          description: `${String(fullName).trim()} (${String(businessDomain).trim()}) a signé le contrat Plan Commission ${rate}%. Paiements : ${String(paymentNumber1).trim()} / ${String(paymentNumber2).trim()}. Contact urgence : ${String(emergencyContactName).trim()} (${String(emergencyContactPhone).trim()}).`,
+          priority: 'HIGH',
+          status: 'PENDING',
+          store_id: cleanUniverseId,
+          created_at: nowIso,
+        });
+      } catch {
+        // Table optionnelle selon l'environnement
+      }
 
       return res.json({
         success: true,
         account: upserted,
-        message: `Compte enregistré sous Plan Commission (${rate}% par vente).`,
+        contractNumber: finalContractNumber,
+        message: `Contrat ${finalContractNumber} validé, enregistré dans Supabase et transmis au Super Admin (${rate}% par vente).`,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message || 'Erreur inscription Plan Commission.' });
@@ -127,73 +288,112 @@ export function attachCommissionRoutes(app: Express): void {
   // 3. POST /api/merchant/commission/record-sale — Enregistre une vente et sa commission dans commission_transactions
   app.post('/api/merchant/commission/record-sale', async (req: Request, res: Response) => {
     try {
+      const { universeId = '', orderRef = '', grossAmountXof = 0, channel = 'DIGITAL_SALE' } = req.body || {};
+      const result = await recordCommissionSaleInternal({
+        universeId,
+        orderRef,
+        grossAmountXof,
+        channel,
+      });
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      const msg = err?.message || 'Erreur calcul commission.';
+      const status = msg.includes('requis') ? 400 : msg.includes('non configuré') ? 503 : 500;
+      return res.status(status).json({ success: false, error: msg });
+    }
+  });
+
+  // 4. GET /api/admin/commission/accounts — Liste tous les comptes & contrats commission pour le Super Admin Dashboard
+  app.get('/api/admin/commission/accounts', async (req: Request, res: Response) => {
+    try {
       if (!supabaseAdmin) {
         return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
       }
-      const { universeId = '', orderRef = '', grossAmountXof = 0, channel = 'DIGITAL_SALE' } = req.body || {};
-      const cleanUniverseId = String(universeId || '').trim();
-      const gross = Math.round(Number(grossAmountXof) || 0);
-      if (!cleanUniverseId || !orderRef || gross <= 0) {
-        return res.status(400).json({ success: false, error: 'universeId, orderRef et grossAmountXof (> 0) requis.' });
+      const authHeader = String(req.headers.authorization || '');
+      if (!authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentification Super Admin requise.' });
+      }
+      const token = authHeader.slice(7).trim();
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !authData?.user) {
+        return res.status(401).json({ success: false, error: 'Session expirée ou invalide.' });
       }
 
-      const { data: account } = await supabaseAdmin
+      const { data: accounts, error } = await supabaseAdmin
         .from('commission_accounts')
         .select('*')
-        .eq('universe_id', cleanUniverseId)
-        .eq('status', 'ACTIVE')
-        .maybeSingle();
+        .order('updated_at', { ascending: false })
+        .limit(200);
 
-      if (!account) {
-        return res.json({
-          success: true,
-          applied: false,
-          reason: 'MARCHAND_NON_COMMISSION',
-        });
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
       }
 
-      const rate = Number(account.commission_rate_percent || DEFAULT_COMMISSION_RATE_PERCENT);
-      const commissionAmount = Math.round((gross * rate) / 100);
-      const netMerchant = Math.max(0, gross - commissionAmount);
-      const txId = `COM-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const { data: recentTx } = await supabaseAdmin
+        .from('commission_transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
 
-      const { error: txErr } = await supabaseAdmin.from('commission_transactions').insert({
-        id: txId,
-        commission_account_id: account.id,
-        universe_id: cleanUniverseId,
-        order_ref: String(orderRef),
-        gross_amount_xof: gross,
-        commission_rate_percent: rate,
-        commission_amount_xof: commissionAmount,
-        net_merchant_xof: netMerchant,
-        channel: String(channel),
-      });
-
-      if (txErr) {
-        return res.status(500).json({ success: false, error: txErr.message });
-      }
-
-      await supabaseAdmin
-        .from('commission_accounts')
-        .update({
-          total_sales_xof: Number(account.total_sales_xof || 0) + gross,
-          total_commission_xof: Number(account.total_commission_xof || 0) + commissionAmount,
-          total_net_merchant_xof: Number(account.total_net_merchant_xof || 0) + netMerchant,
-          transactions_count: Number(account.transactions_count || 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', account.id);
+      const list = accounts || [];
+      const summary = {
+        totalAccounts: list.length,
+        activeAccounts: list.filter((a: any) => a.status === 'ACTIVE').length,
+        pendingReviewCount: list.filter((a: any) => a.contract_accepted && !a.admin_reviewed).length,
+        totalSalesXof: list.reduce((acc: number, a: any) => acc + Number(a.total_sales_xof || 0), 0),
+        totalCommissionXof: list.reduce((acc: number, a: any) => acc + Number(a.total_commission_xof || 0), 0),
+        totalNetMerchantXof: list.reduce((acc: number, a: any) => acc + Number(a.total_net_merchant_xof || 0), 0),
+      };
 
       return res.json({
         success: true,
-        applied: true,
-        commissionRatePercent: rate,
-        commissionAmountXof: commissionAmount,
-        netMerchantXof: netMerchant,
-        txId,
+        accounts: list,
+        transactions: recentTx || [],
+        summary,
       });
     } catch (err: any) {
-      return res.status(500).json({ success: false, error: err?.message || 'Erreur calcul commission.' });
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur chargement contrats commission.' });
+    }
+  });
+
+  // 5. PATCH /api/admin/commission/accounts/:id/review — Validation / changement de statut par le Super Admin
+  app.patch('/api/admin/commission/accounts/:id/review', async (req: Request, res: Response) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(503).json({ success: false, error: 'Supabase non configuré côté serveur.' });
+      }
+      const authHeader = String(req.headers.authorization || '');
+      if (!authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Authentification Super Admin requise.' });
+      }
+      const token = authHeader.slice(7).trim();
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !authData?.user) {
+        return res.status(401).json({ success: false, error: 'Session expirée ou invalide.' });
+      }
+
+      const accountId = String(req.params.id || '').trim();
+      const { adminReviewed, status } = req.body || {};
+      const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (typeof adminReviewed === 'boolean') updatePayload.admin_reviewed = adminReviewed;
+      if (status && ['ACTIVE', 'SUSPENDED', 'SWITCHED_TO_SUBSCRIPTION', 'SWITCHED_TO_PAYG'].includes(String(status))) {
+        updatePayload.status = String(status);
+      }
+
+      const { data: updated, error } = await supabaseAdmin
+        .from('commission_accounts')
+        .update(updatePayload)
+        .eq('id', accountId)
+        .select('*')
+        .single();
+
+      if (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      return res.json({ success: true, account: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erreur mise à jour compte commission.' });
     }
   });
 }

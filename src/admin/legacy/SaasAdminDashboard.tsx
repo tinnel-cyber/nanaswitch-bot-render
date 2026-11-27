@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 const NfcBatchManagerPanel = React.lazy(() => import('../../components/nfc/NfcBatchManagerPanel'));
+import { CommissionContractsAdminPanel } from '../CommissionContractsAdminPanel';
 import { 
   SaasStore, 
   SaasActionTask, 
@@ -216,7 +217,7 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
 
   // Navigation Tabs for SaaS Admin
   const [adminActiveTab, setAdminActiveTab] = useState<
-    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'MARKET_CARDS' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS' | 'NFC_FACTORY'
+    'NETWORK' | 'UPSELL' | 'APPROVALS' | 'KYC' | 'AFFILIATION' | 'PRIVACY' | 'SUBSCRIPTIONS_PAYMENTS' | 'COMMISSION_CONTRACTS' | 'COMPARISON_MATRIX' | 'ESCROW_MEDIATION' | 'MARKET_CARDS' | 'LANDING_CMS' | 'PENDING_PAYMENTS' | 'TUTORIALS' | 'NFC_FACTORY'
   >('NETWORK');
   const [marketCards, setMarketCards] = useState<any[]>([]);
 
@@ -2212,6 +2213,22 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
           >
             <CreditCard className="w-3.5 h-3.5 text-amber-400" />
             <span>Gestion des Abonnements & Paiements</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              playTapBeep();
+              setAdminActiveTab('COMMISSION_CONTRACTS');
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shrink-0 ${
+              adminActiveTab === 'COMMISSION_CONTRACTS'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-900/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileCheck className="w-3.5 h-3.5 text-amber-400" />
+            <span>Contrats Plan Commission</span>
           </button>
 
           <button
@@ -4422,6 +4439,12 @@ export const SaasAdminDashboard: React.FC<SaasAdminDashboardProps> = ({
             <span>{isSavingLegal ? 'Enregistrement...' : 'Enregistrer les modifications sur Supabase'}</span>
           </button>
         </div>
+      </div>
+    )}
+
+    {adminActiveTab === 'COMMISSION_CONTRACTS' && (
+      <div className="animate-in fade-in duration-200">
+        <CommissionContractsAdminPanel showToast={showToast} />
       </div>
     )}
 

@@ -31,6 +31,7 @@ import { PublishMarketCardTab } from '../directory/PublishMarketCardTab';
 import { KycVolumeLimitCard } from './KycVolumeLimitCard';
 import { CentralHubOmnibar } from '../CentralHubOmnibar';
 import UltimateCheckout from '../payment/UltimateCheckout';
+import { CommissionSubscriptionModal, CommissionAccountRecord } from './CommissionSubscriptionModal';
 import { APPS_REGISTRY, AppRegistryItem } from '../../data/appsRegistry';
 import {
   CANONICAL_APP_REGISTRY,
@@ -5333,6 +5334,32 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
   const [loading, setLoading] = useState<boolean>(false);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
   const [svgCoords, setSvgCoords] = useState<{ x: number; y: number } | null>(null);
+  const [commissionAccount, setCommissionAccount] = useState<CommissionAccountRecord | null>(null);
+  const [commissionTransactions, setCommissionTransactions] = useState<any[]>([]);
+
+  const loadCommissionAnalytics = useCallback(async () => {
+    const tenantId = app?.id;
+    if (!tenantId) return;
+    try {
+      const localCached = localStorage.getItem(`nanastore_commission_plan_${tenantId}`);
+      if (localCached) {
+        const parsed = JSON.parse(localCached);
+        if (parsed?.account) setCommissionAccount(parsed.account);
+      }
+    } catch {}
+    try {
+      const res = await fetch(`/api/merchant/commission/status?universeId=${encodeURIComponent(tenantId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.account) setCommissionAccount(json.account);
+        if (Array.isArray(json?.transactions)) setCommissionTransactions(json.transactions);
+      }
+    } catch {}
+  }, [app?.id]);
+
+  useEffect(() => {
+    loadCommissionAnalytics();
+  }, [loadCommissionAnalytics]);
 
   // Charger les données de ventes Cloud en direct (100% réel, zéro mock, strictement filtré par tenant)
   const loadSalesData = useCallback(async () => {
@@ -6026,6 +6053,158 @@ function TabAnalytics({ app }: { app: NanaMerchantApp | null }) {
           </div>
         </div>
       </div>
+
+      {/* SECTION ANALYTIQUE DÉDIÉE AU PLAN COMMISSION */}
+      {(() => {
+        const rate = Number(commissionAccount?.commission_rate_percent || 14);
+        const hasPersistedTx = commissionTransactions.length > 0;
+        const computedFromRaw = rawSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+        const totalGross = hasPersistedTx
+          ? Number(commissionAccount?.total_sales_xof || commissionTransactions.reduce((a, t) => a + Number(t.gross_amount_xof || 0), 0))
+          : commissionAccount?.status === 'ACTIVE'
+            ? Math.max(Number(commissionAccount?.total_sales_xof || 0), computedFromRaw)
+            : Number(commissionAccount?.total_sales_xof || 0);
+        const totalCommission = hasPersistedTx
+          ? Number(commissionAccount?.total_commission_xof || commissionTransactions.reduce((a, t) => a + Number(t.commission_amount_xof || 0), 0))
+          : Math.round((totalGross * rate) / 100);
+        const totalNet = hasPersistedTx
+          ? Number(commissionAccount?.total_net_merchant_xof || commissionTransactions.reduce((a, t) => a + Number(t.net_merchant_xof || 0), 0))
+          : Math.max(0, totalGross - totalCommission);
+        const txCount = hasPersistedTx
+          ? commissionTransactions.length
+          : commissionAccount?.status === 'ACTIVE'
+            ? Math.max(Number(commissionAccount?.transactions_count || 0), rawSales.length)
+            : Number(commissionAccount?.transactions_count || 0);
+
+        const displayRows = hasPersistedTx
+          ? commissionTransactions
+          : commissionAccount?.status === 'ACTIVE'
+            ? rawSales.slice().reverse().slice(0, 20).map((s: any) => {
+                const gross = Number(s.amount) || 0;
+                const comm = Math.round((gross * rate) / 100);
+                return {
+                  id: s.id,
+                  order_ref: s.id,
+                  created_at: s.created_at,
+                  channel: s.source || 'DIGITAL_SALE',
+                  gross_amount_xof: gross,
+                  commission_rate_percent: rate,
+                  commission_amount_xof: comm,
+                  net_merchant_xof: Math.max(0, gross - comm),
+                };
+              })
+            : [];
+
+        return (
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Percent className="w-5 h-5 text-amber-600" />
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Analytique Plan Commission &amp; Reversements
+                  </h3>
+                  {commissionAccount?.status === 'ACTIVE' ? (
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                      Actif ({rate}%)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-black uppercase">
+                      Non souscrit
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {commissionAccount?.contract_number
+                    ? `Contrat ${commissionAccount.contract_number} • Titulaire : ${commissionAccount.full_name || commissionAccount.store_name || app?.name} • Reversement sur : ${commissionAccount.payment_number_1 || '—'}${commissionAccount.payment_number_2 ? ` / ${commissionAccount.payment_number_2}` : ''}`
+                    : 'Souscrivez au Plan Commission dans Tarification & Marges pour activer le suivi contractuel des commissions.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadCommissionAnalytics}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Actualiser</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-bold text-slate-500 uppercase">Ventes Brutes (Commission)</div>
+                <div className="text-xl font-black text-slate-900 mt-1">
+                  {totalGross.toLocaleString('fr-FR')} <span className="text-xs font-bold text-slate-500">F CFA</span>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
+                <div className="text-[11px] font-bold text-amber-800 uppercase">Commission NaNaStore ({rate}%)</div>
+                <div className="text-xl font-black text-amber-700 mt-1">
+                  {totalCommission.toLocaleString('fr-FR')} <span className="text-xs font-bold text-amber-600">F CFA</span>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <div className="text-[11px] font-bold text-emerald-800 uppercase">Revenu Net Marchand ({100 - rate}%)</div>
+                <div className="text-xl font-black text-emerald-700 mt-1">
+                  {totalNet.toLocaleString('fr-FR')} <span className="text-xs font-bold text-emerald-600">F CFA</span>
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200">
+                <div className="text-[11px] font-bold text-indigo-800 uppercase">Ventes Commissionnées</div>
+                <div className="text-xl font-black text-indigo-700 mt-1">
+                  {txCount} <span className="text-xs font-bold text-indigo-500">transactions</span>
+                </div>
+              </div>
+            </div>
+
+            {displayRows.length > 0 ? (
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] border-b border-slate-200">
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Réf. Commande</th>
+                      <th className="py-3 px-4">Canal</th>
+                      <th className="py-3 px-4 text-right">Montant Brut</th>
+                      <th className="py-3 px-4 text-right">Taux</th>
+                      <th className="py-3 px-4 text-right">Commission</th>
+                      <th className="py-3 px-4 text-right">Net Marchand</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {displayRows.map((tx: any) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/70">
+                        <td className="py-2.5 px-4 text-slate-600 font-medium">
+                          {new Date(tx.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="py-2.5 px-4 font-mono font-bold text-slate-900">{tx.order_ref}</td>
+                        <td className="py-2.5 px-4 text-slate-600">{tx.channel || 'DIGITAL_SALE'}</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">
+                          {Number(tx.gross_amount_xof || 0).toLocaleString('fr-FR')} F
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-bold text-amber-700">
+                          {Number(tx.commission_rate_percent || rate)}%
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-black text-amber-700">
+                          -{Number(tx.commission_amount_xof || 0).toLocaleString('fr-FR')} F
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-black text-emerald-700">
+                          {Number(tx.net_merchant_xof || 0).toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-5 rounded-2xl bg-slate-50 border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                Aucune vente enregistrée sous Plan Commission pour le moment. Dès qu'une vente est encaissée, le détail
+                Brut / Commission ({rate}%) / Net ({100 - rate}%) s'affichera automatiquement ici.
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -6633,6 +6812,39 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('orange_money');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [selectedPlanForModal, setSelectedPlanForModal] = useState<any | null>(null);
+  const [isCommissionModalOpen, setIsCommissionModalOpen] = useState<boolean>(false);
+  const [commissionAccount, setCommissionAccount] = useState<CommissionAccountRecord | null>(null);
+
+  useEffect(() => {
+    const uid = app?.id;
+    if (!uid) return;
+    try {
+      const cached = localStorage.getItem(`nanastore_commission_plan_${uid}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.account) setCommissionAccount(parsed.account);
+      }
+    } catch {}
+    fetch(`/api/merchant/commission/status?universeId=${encodeURIComponent(uid)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.account) {
+          setCommissionAccount(json.account);
+          try {
+            localStorage.setItem(
+              `nanastore_commission_plan_${uid}`,
+              JSON.stringify({
+                active: json.account.status === 'ACTIVE',
+                contractNumber: json.account.contract_number,
+                rate: json.account.commission_rate_percent,
+                account: json.account,
+              })
+            );
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  }, [app?.id]);
   const [pendingCheckout, setPendingCheckout] = useState<{
     kind: 'PLAN' | 'RECHARGE';
     orderId: string;
@@ -7066,18 +7278,44 @@ function TabPricing({ app, showToast, onUpdateApp }: { app?: NanaMerchantApp | n
                 </li>
               </ul>
 
+              {commissionAccount?.status === 'ACTIVE' && (
+                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-black">✓ Plan Commission Actif ({commissionAccount.commission_rate_percent || 14}%)</div>
+                    <div className="text-[10px] text-emerald-100/90">
+                      Contrat {commissionAccount.contract_number || 'SIGNÉ'} • {commissionAccount.full_name || app?.name}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => notify("Formule Commission 14% sélectionnée ! Vous pouvez publier vos cours et produits digitaux dès maintenant.", "success")}
+                onClick={() => setIsCommissionModalOpen(true)}
                 className="w-full py-3.5 px-4 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Rocket className="w-4 h-4 text-slate-950" />
-                <span>Activer le Plan Commission 14% (0 F CFA au départ)</span>
+                <span>
+                  {commissionAccount?.status === 'ACTIVE'
+                    ? 'Contrat Commission Signé • Mettre à jour'
+                    : 'Souscrire au plan'}
+                </span>
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      <CommissionSubscriptionModal
+        isOpen={isCommissionModalOpen}
+        onClose={() => setIsCommissionModalOpen(false)}
+        universeId={app?.id || 'default'}
+        storeName={app?.name || 'Ma Boutique NaNaStore'}
+        commissionRatePercent={14}
+        existingAccount={commissionAccount}
+        onEnrolled={(account) => setCommissionAccount(account)}
+        showToast={notify}
+      />
 
       {/* MODÈLE 3 : PLAN D'ABONNEMENT SOUVERAIN (PARTITIONS MODULAIRES À LA CARTE & PACKS ENTREPRISE) */}
       <div className="space-y-6">
