@@ -264,6 +264,31 @@ async function callGeminiWithRetry(
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
+
+  // En-têtes de sécurité HTTP globaux (production hardening)
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  // Diagnostic de démarrage Production (alerte non-bloquante si variables critiques manquantes)
+  if (process.env.NODE_ENV === 'production') {
+    const missingCritical = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'INTERNAL_API_SECRET', 'PAYMENT_WEBHOOK_SECRET'].filter(
+      (k) => !process.env[k] && !(k === 'SUPABASE_URL' && process.env.VITE_SUPABASE_URL)
+    );
+    if (missingCritical.length > 0) {
+      console.warn('[PROD-CHECK] Variables critiques manquantes:', missingCritical.join(', '));
+    }
+    if (!process.env.DATA_DIR) {
+      console.warn('[PROD-CHECK] DATA_DIR non défini : le stockage JSON local utilise le disque éphémère. Montez un Persistent Disk (ex: /var/data) sur Render.');
+    }
+  }
 
   // Configuration CORS stricte (sans wildcard *.code.run / *.onrender.com avec credentials)
   const explicitAllowedOrigins = new Set([

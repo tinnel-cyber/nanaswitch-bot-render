@@ -122,7 +122,7 @@ const MarketDirectory = lazyWithRetry(() => import('./components/directory/Marke
 const StoreStudioPage = lazyWithRetry(() => import('./pages/StoreStudioPage'));
 const PublicStorefrontPage = lazyWithRetry(() => import('./pages/PublicStorefrontPage'));
 const NaNaSwitchAppPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchAppPage').then(m => ({ default: m.NaNaSwitchAppPage || m.default })));
-const NaNaSwitchDocsPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchDocsPage').then(m => ({ default: m.NaNaSwitchDocsPage || m.default })));
+const NaNaSwitchDocsPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchDocsPage').then(m => ({ default: (m as any).NaNaSwitchDocsPage || m.default })));
 const NaNaSwitchLandingPage = React.lazy(() => import('./pages/nanaSwitch/NaNaSwitchLandingPage').then(m => ({ default: m.NaNaSwitchLandingPage || m.default })));
 const NanaSwitchApp = React.lazy(() => import('./components/nanaSwitch/NanaSwitchApp').then(m => ({ default: m.NanaSwitchApp || m.default })));
 const NewDashboardApp = React.lazy(() => import('./components/dashboard/NewDashboardApp').then(m => ({ default: m.NewDashboardApp || m.default })));
@@ -287,6 +287,7 @@ export type AppView =
   | 'AI_LEGAL' 
   | 'AI_ADVISOR' 
   | 'BARCODE_STUDIO'
+  | 'CERTIFICATE'
   | 'REPORTS' 
   | 'DEBT_BOOK' 
   | 'VOICE_TEST' 
@@ -6060,9 +6061,12 @@ export default function App() {
         <AuthCallbackPage
           onSuccess={(authUser) => {
             setCurrentUser(authUser as any);
-            setIsWelcomeShowcaseOpen(false);
+            setShowWelcomeShowcase(false);
             setIsEmailAuthScreenOpen(false);
-            setIsAuthLocked(false);
+            setCurrentView('NANA_SWITCH_APP');
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', '/dashboard');
+            }
           }}
           onGoToLogin={() => {
             if (typeof window !== 'undefined') {

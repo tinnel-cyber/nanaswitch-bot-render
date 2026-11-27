@@ -399,6 +399,8 @@ export interface StoreUser {
   uid?: string;
   avatar?: string;
   subscription?: StoreSubscription | null;
+  subscriptionStatus?: string;
+  isSuperAdmin?: boolean;
   plan?: string;
   credits?: number; // Portefeuille de crédits Studio IA (15 crédits offerts par défaut)
   wallet_balance?: number; // Solde réel du portefeuille Nanasore (XOF / FCFA)
