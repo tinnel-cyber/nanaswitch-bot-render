@@ -776,6 +776,9 @@ export function attachCagnotteRoutes(app: Express): void {
 
   // 7. Réinitialisation de la démo
   app.post('/api/cagnotte/reset-demo', (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ success: false, error: 'Action interdite en production.' });
+    }
     const state = seedInitialSarahBirthdayCagnotte();
     broadcastCagnotteEvent(state.groupId, 'cagnotte_updated', state);
     return res.status(200).json({

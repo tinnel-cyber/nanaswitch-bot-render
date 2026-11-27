@@ -432,9 +432,15 @@ export const VipHostAccreditationModal: React.FC<VipHostAccreditationModalProps>
             onSuccess={async (details) => {
               setIsCheckoutOpen(false);
               const m = collectLocalMetrics();
+              const { supabase } = await import('../../../../lib/supabase');
+              const { data: sessionData } = await supabase.auth.getSession();
+              const accessToken = sessionData?.session?.access_token;
               const actRes = await fetch('/api/vip/host/activate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
                 body: JSON.stringify({
                   userId: m.userId,
                   universeId: m.universeId,

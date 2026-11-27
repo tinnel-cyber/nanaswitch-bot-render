@@ -1,16 +1,16 @@
 /**
  * @file vipHostAccreditationController.ts
- * @description Système d'Accréditation des Hôtes de Salons VIP (Grade Élevé) :
+ * @description Système d'Accréditation des Hôtes de Salons VIP (Grade Élevé) persisté dans Supabase SQL :
  * - Collecte des atouts & points dans tous les secteurs (Commerce/Finance, Savoir/LMS, Audience, Affiliation, Confiance KYC)
  * - Attribution automatique des Badges & Grades (Prestige, Souverain, Impérial)
  * - Tarification dynamique de rareté : 50 000 F CFA d'activation (+5% tous les 5 hôtes activés) + 40 000 F CFA / mois
- * - Validation obligatoire des critères minimaux avant activation par paiement
+ * - Persistance primaire dans Supabase Postgres (public.vip_host_accreditations) + contrôle d'identité Bearer
  */
 
 import type { Express, Request, Response } from 'express';
+import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 
 export type VipHostGrade = 'NON_ELIGIBLE' | 'PRESTIGE' | 'SOUVERAIN' | 'IMPERIAL';
 
@@ -42,6 +42,22 @@ export interface VipHostAccreditationRecord {
   transactionRef?: string;
 }
 
+const supabaseUrl =
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  'https://wsxnznobeefrsoicjqte.supabase.co';
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY ||
+  '';
+
+const supabaseAdmin = supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
+
 const DATA_DIR = path.join(process.cwd(), 'data');
 const ACCREDITATION_FILE = path.join(DATA_DIR, 'vip_host_accreditations.json');
 const COUNTER_FILE = path.join(DATA_DIR, 'vip_host_activation_counter.json');
@@ -57,40 +73,123 @@ function ensureDataDir() {
   }
 }
 
-function readAccreditations(): VipHostAccreditationRecord[] {
+function readLocalAccreditations(): VipHostAccreditationRecord[] {
   ensureDataDir();
   if (!fs.existsSync(ACCREDITATION_FILE)) return [];
   try {
-    const raw = fs.readFileSync(ACCREDITATION_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(fs.readFileSync(ACCREDITATION_FILE, 'utf-8'));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-function writeAccreditations(list: VipHostAccreditationRecord[]) {
+function writeLocalAccreditations(list: VipHostAccreditationRecord[]) {
   ensureDataDir();
   fs.writeFileSync(ACCREDITATION_FILE, JSON.stringify(list, null, 2), 'utf-8');
 }
 
-function readActivationCount(): number {
-  ensureDataDir();
-  if (!fs.existsSync(COUNTER_FILE)) {
-    const existing = readAccreditations().filter((a) => a.isActivated).length;
-    return existing;
-  }
-  try {
-    const parsed = JSON.parse(fs.readFileSync(COUNTER_FILE, 'utf-8'));
-    return Math.max(0, Number(parsed?.activationCount || 0));
-  } catch {
-    return 0;
-  }
+function mapRowToRecord(row: any): VipHostAccreditationRecord {
+  return {
+    userId: row.user_id,
+    universeId: row.universe_id,
+    email: row.email || undefined,
+    fullName: row.full_name || undefined,
+    score: Number(row.score || 0),
+    grade: (row.grade as VipHostGrade) || 'NON_ELIGIBLE',
+    badges: Array.isArray(row.badges) ? row.badges : [],
+    sectors: Array.isArray(row.sectors) ? row.sectors : [],
+    isActivated: Boolean(row.is_activated),
+    activatedAt: row.activated_at || undefined,
+    expiresAt: row.expires_at || undefined,
+    activationPricePaidXof: row.activation_price_paid_xof ?? undefined,
+    monthlyFeeXof: Number(row.monthly_fee_xof || MONTHLY_FEE_XOF),
+    multiStreamingUnlocked: Boolean(row.multi_streaming_unlocked),
+    transactionRef: row.transaction_ref || undefined,
+  };
 }
 
-function writeActivationCount(count: number) {
+async function getActivationCountFromDb(): Promise<number> {
+  if (supabaseAdmin) {
+    try {
+      const { count, error } = await supabaseAdmin
+        .from('vip_host_accreditations')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_activated', true);
+      if (!error && typeof count === 'number') {
+        return count;
+      }
+    } catch {}
+  }
+  if (fs.existsSync(COUNTER_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(COUNTER_FILE, 'utf-8'));
+      return Math.max(0, Number(parsed?.activationCount || 0));
+    } catch {}
+  }
+  return readLocalAccreditations().filter((a) => a.isActivated).length;
+}
+
+async function findExistingAccreditation(userId: string, universeId: string): Promise<VipHostAccreditationRecord | null> {
+  if (supabaseAdmin) {
+    try {
+      const filters: string[] = [];
+      if (userId) filters.push(`user_id.eq.${userId}`);
+      if (universeId) filters.push(`universe_id.eq.${universeId}`);
+      if (filters.length > 0) {
+        const { data, error } = await supabaseAdmin
+          .from('vip_host_accreditations')
+          .select('*')
+          .or(filters.join(','))
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) return mapRowToRecord(data);
+      }
+    } catch {}
+  }
+  const local = readLocalAccreditations();
+  return local.find((r) => (userId && r.userId === userId) || (universeId && r.universeId === universeId)) || null;
+}
+
+async function persistAccreditationToDb(record: VipHostAccreditationRecord): Promise<void> {
+  const rowId = record.universeId || record.userId;
+  if (supabaseAdmin) {
+    const { error } = await supabaseAdmin.from('vip_host_accreditations').upsert(
+      {
+        id: rowId,
+        user_id: record.userId,
+        universe_id: record.universeId,
+        email: record.email || null,
+        full_name: record.fullName || null,
+        score: record.score,
+        grade: record.grade,
+        badges: record.badges,
+        sectors: record.sectors,
+        is_activated: record.isActivated,
+        activated_at: record.activatedAt || null,
+        expires_at: record.expiresAt || null,
+        activation_price_paid_xof: record.activationPricePaidXof ?? null,
+        monthly_fee_xof: record.monthlyFeeXof,
+        multi_streaming_unlocked: record.multiStreamingUnlocked,
+        transaction_ref: record.transactionRef || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    if (error) {
+      console.error('[VIP HOST SUPABASE UPSERT ERROR]', error.message);
+    }
+  }
+
+  const list = readLocalAccreditations();
+  const idx = list.findIndex((r) => r.userId === record.userId || r.universeId === record.universeId);
+  if (idx >= 0) list[idx] = record;
+  else list.push(record);
+  writeLocalAccreditations(list);
+
   ensureDataDir();
-  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ activationCount: count, updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
+  const totalActivated = list.filter((a) => a.isActivated).length;
+  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ activationCount: totalActivated, updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
 }
 
 export function computeDynamicVipPricing(activationCount: number) {
@@ -139,32 +238,27 @@ export function computeSectorScoring(metrics: {
   const kycOk = Boolean(metrics.kycVerified);
   const disputes = Math.max(0, Number(metrics.openDisputesCount || 0));
 
-  // 1. Commerce & Finance (max 25 pts)
   let commercePts = 0;
   if (products >= 1) commercePts += 10;
   if (rev >= 50000 || wallet >= 50000) commercePts += 15;
   else if (rev >= 10000 || wallet >= 10000) commercePts += 7;
 
-  // 2. Savoir & Formation (max 25 pts)
   let knowledgePts = 0;
   if (courses >= 1) knowledgePts += 15;
   if (students >= 10) knowledgePts += 10;
   else if (students >= 1) knowledgePts += 5;
 
-  // 3. Audience & Spectateurs (max 20 pts)
   let audiencePts = 0;
   if (lives >= 1) audiencePts += 10;
   if (audience >= 50) audiencePts += 10;
   else if (audience >= 10) audiencePts += 5;
 
-  // 4. Affiliation & Influence (max 20 pts)
   let affiliatePts = 0;
   if (affiliates >= 3) affiliatePts += 10;
   else if (affiliates >= 1) affiliatePts += 5;
   if (affiliateVol >= 25000) affiliatePts += 10;
   else if (affiliateVol > 0) affiliatePts += 5;
 
-  // 5. Confiance & Séquestre (max 10 pts)
   let trustPts = 0;
   if (kycOk && disputes === 0) trustPts = 10;
   else if (disputes === 0) trustPts = 5;
@@ -225,9 +319,6 @@ export function computeSectorScoring(metrics: {
   else if (totalScore >= 60) grade = 'SOUVERAIN';
   else if (totalScore >= 30) grade = 'PRESTIGE';
 
-  // Critères minimaux obligatoires même en cas d'activation par paiement :
-  // - Aucun litige bloquant ouvert
-  // - Au moins 20 pts d'atouts réels collectés (ou KYC vérifié + au moins 1 actif)
   const hasRealAsset = products >= 1 || courses >= 1 || lives >= 1 || affiliates >= 1 || rev > 0 || wallet >= 10000;
   const meetsMinimumPaymentCriteria = disputes === 0 && hasRealAsset && totalScore >= 15;
 
@@ -246,8 +337,8 @@ export function computeSectorScoring(metrics: {
 }
 
 export function attachVipHostAccreditationRoutes(app: Express): void {
-  // 1. GET /api/vip/host/eligibility — Calcul du score, badges, grade et prix dynamique
-  app.get('/api/vip/host/eligibility', (req: Request, res: Response) => {
+  // 1. GET /api/vip/host/eligibility — Calcul du score, badges, grade et prix dynamique (Supabase)
+  app.get('/api/vip/host/eligibility', async (req: Request, res: Response) => {
     const userId = String(req.query.userId || '').trim();
     const universeId = String(req.query.universeId || '').trim();
     const isSuperAdmin = String(req.query.isSuperAdmin || '') === 'true';
@@ -267,13 +358,9 @@ export function attachVipHostAccreditationRoutes(app: Express): void {
     };
 
     const scoring = computeSectorScoring(metrics);
-    const activationCount = readActivationCount();
+    const activationCount = await getActivationCountFromDb();
     const pricing = computeDynamicVipPricing(activationCount);
-
-    const records = readAccreditations();
-    const existing = records.find(
-      (r) => (userId && r.userId === userId) || (universeId && r.universeId === universeId)
-    );
+    const existing = await findExistingAccreditation(userId, universeId);
 
     const isActiveHost = Boolean(
       isSuperAdmin ||
@@ -288,7 +375,7 @@ export function attachVipHostAccreditationRoutes(app: Express): void {
         meetsMinimumPaymentCriteria: isSuperAdmin ? true : scoring.meetsMinimumPaymentCriteria,
       },
       pricing,
-      accreditation: existing || null,
+      accreditation: existing,
       isActiveHost,
       multiStreamingUnlocked: Boolean(
         isSuperAdmin || (isActiveHost && (scoring.grade === 'SOUVERAIN' || scoring.grade === 'IMPERIAL' || existing?.multiStreamingUnlocked))
@@ -296,9 +383,20 @@ export function attachVipHostAccreditationRoutes(app: Express): void {
     });
   });
 
-  // 2. POST /api/vip/host/activate — Activation après paiement vérifié (50 000+ F + 40 000 F/mois)
-  app.post('/api/vip/host/activate', (req: Request, res: Response) => {
+  // 2. POST /api/vip/host/activate — Activation persistée dans Supabase SQL (protégée Bearer)
+  app.post('/api/vip/host/activate', async (req: Request, res: Response) => {
     try {
+      const authHeader = String(req.headers.authorization || '');
+      if (supabaseAdmin && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7).trim();
+        const { data: userData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+        if (authErr || !userData?.user) {
+          return res.status(401).json({ success: false, error: 'Session expirée ou invalide.' });
+        }
+      } else if (process.env.NODE_ENV === 'production' && supabaseAdmin) {
+        return res.status(401).json({ success: false, error: 'Authentification requise.' });
+      }
+
       const {
         userId = '',
         universeId = '',
@@ -325,14 +423,10 @@ export function attachVipHostAccreditationRoutes(app: Express): void {
         });
       }
 
-      const currentCount = readActivationCount();
+      const currentCount = await getActivationCountFromDb();
       const pricing = computeDynamicVipPricing(currentCount);
-
-      const records = readAccreditations();
-      const idx = records.findIndex(
-        (r) => (userId && r.userId === userId) || (universeId && r.universeId === universeId)
-      );
-      const isFirstActivation = idx < 0 || !records[idx].isActivated;
+      const existing = await findExistingAccreditation(String(userId), String(universeId));
+      const isFirstActivation = !existing || !existing.isActivated;
       const expectedMinAmount = isFirstActivation ? pricing.totalFirstActivationXof : pricing.monthlyFeeXof;
 
       if (Number(amountPaidXof) < expectedMinAmount) {
@@ -356,32 +450,22 @@ export function attachVipHostAccreditationRoutes(app: Express): void {
         badges: scoring.badges,
         sectors: scoring.sectors,
         isActivated: true,
-        activatedAt: isFirstActivation ? now.toISOString() : records[idx].activatedAt || now.toISOString(),
+        activatedAt: isFirstActivation ? now.toISOString() : existing.activatedAt || now.toISOString(),
         expiresAt,
-        activationPricePaidXof: isFirstActivation ? pricing.currentActivationPriceXof : records[idx].activationPricePaidXof,
+        activationPricePaidXof: isFirstActivation ? pricing.currentActivationPriceXof : existing.activationPricePaidXof,
         monthlyFeeXof: MONTHLY_FEE_XOF,
         multiStreamingUnlocked: assignedGrade === 'SOUVERAIN' || assignedGrade === 'IMPERIAL',
         transactionRef: String(transactionId),
       };
 
-      if (idx >= 0) {
-        records[idx] = nextRecord;
-      } else {
-        records.push(nextRecord);
-      }
-      writeAccreditations(records);
-
-      let newActivationCount = currentCount;
-      if (isFirstActivation) {
-        newActivationCount = currentCount + 1;
-        writeActivationCount(newActivationCount);
-      }
+      await persistAccreditationToDb(nextRecord);
+      const updatedCount = await getActivationCountFromDb();
 
       return res.json({
         success: true,
         accreditation: nextRecord,
-        pricing: computeDynamicVipPricing(newActivationCount),
-        message: `Statut Hôte VIP (${assignedGrade}) activé avec succès !`,
+        pricing: computeDynamicVipPricing(updatedCount),
+        message: `Statut Hôte VIP (${assignedGrade}) activé et persisté dans Supabase !`,
       });
     } catch (err: any) {
       console.error('[VIP HOST ACTIVATE ERROR]', err?.message || err);
