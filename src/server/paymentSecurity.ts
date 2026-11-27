@@ -72,7 +72,7 @@ const FAILED_STATUSES = ['FAILED', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED
 
 // Prix plancher serveur des abonnements (F CFA) — aligné sur tous les plans frontend (NewDashboardApp + SubscriptionPaywallModal)
 const SERVER_PLAN_PRICES: Record<string, { MONTHLY: number; ANNUAL: number }> = {
-  starter: { MONTHLY: 3000, ANNUAL: 30000 },
+  starter: { MONTHLY: 5000, ANNUAL: 50000 },
   pro: { MONTHLY: 10000, ANNUAL: 100000 },
   business: { MONTHLY: 30000, ANNUAL: 300000 },
   elite: { MONTHLY: 20000, ANNUAL: 200000 },

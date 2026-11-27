@@ -271,10 +271,16 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     return sum + (addon?.price || 0);
   }, 0);
 
-  const downsellDiscountAmount = downsellAccepted ? 2000 : 0;
+  const isFirstLaunchMonthEligible = Boolean(
+    !effectiveSubscription?.transactionRef &&
+    !effectiveSubscription?.lastAmountPaid &&
+    currentPlan.period !== 'an' &&
+    (typeof window === 'undefined' || !localStorage.getItem(`nana_launch_discount_used_${effectiveStoreId}`))
+  );
+  const downsellDiscountAmount = (downsellAccepted && isFirstLaunchMonthEligible) ? 2000 : 0;
   const isFreePlan = (currentPlan?.price === 0 || currentPlan?.id === 'free') && addonsTotal === 0;
   const rawTotal = (isFreePlan ? 0 : modularCalculation.totalPrice) + addonsTotal - downsellDiscountAmount;
-  const montantTotal = isFreePlan ? 0 : Math.max(1000, rawTotal);
+  const montantTotal = isFreePlan ? 0 : Math.max(5000, rawTotal);
 
   // Écouteur temps réel Supabase Realtime sur les abonnements
   // Ne déclenche JAMAIS l'écran de succès par défaut sur un abonnement déjà actif
@@ -455,6 +461,9 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
     try {
       updateStoreSubscription(effectiveStoreId, newSub, safeUser.id, targetOrderId || details.transactionId).catch(() => {});
       if (typeof window !== 'undefined') {
+        if (downsellAccepted && isFirstLaunchMonthEligible) {
+          localStorage.setItem(`nana_launch_discount_used_${effectiveStoreId}`, 'true');
+        }
         localStorage.setItem('nana_user_plan', currentPlan.id);
         localStorage.setItem('nana_store_plan', currentPlan.id);
         localStorage.setItem('nana_selected_pillars', JSON.stringify(selectedPillars));
@@ -964,7 +973,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 type="button"
                 onClick={() => {
                   playTapBeep();
-                  setFunnelStep('DOWNSELL');
+                  setFunnelStep(isFirstLaunchMonthEligible ? 'DOWNSELL' : 'PAYMENT');
                 }}
                 className="w-full py-2 px-3 text-slate-400 hover:text-slate-200 text-xs font-semibold text-center cursor-pointer transition"
               >
@@ -1006,7 +1015,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                 <div>
                   <h3 className="text-xs font-black text-white">Coupon de Bienvenue Nanasore</h3>
                   <p className="text-[11px] text-slate-300">
-                    Activez votre caisse aujourd'hui et déduisez directement 2 000 F CFA de votre première facture.
+                    Activez votre caisse aujourd&apos;hui et déduisez 2 000 F CFA uniquement sur votre <strong>1er mois de lancement</strong> (tarif normal appliqué dès le renouvellement).
                   </p>
                 </div>
               </div>
@@ -1017,13 +1026,13 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
                   <span className="line-through">{formatCFA(currentPlan.price)}</span>
                 </div>
                 <div className="flex justify-between text-rose-400 font-bold">
-                  <span>Remise immédiate appliquée :</span>
+                  <span>Remise 1er mois de lancement :</span>
                   <span>- 2 000 F CFA</span>
                 </div>
                 <div className="pt-1.5 border-t border-slate-800 flex justify-between font-black text-sm">
-                  <span className="text-white">Nouveau total à régler :</span>
+                  <span className="text-white">Total 1er mois à régler :</span>
                   <span className="text-emerald-400 font-mono">
-                    {formatCFA(Math.max(1000, currentPlan.price - 2000))}
+                    {formatCFA(Math.max(5000, currentPlan.price - 2000))}
                   </span>
                 </div>
               </div>
