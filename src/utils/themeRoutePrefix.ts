@@ -263,6 +263,7 @@ export function extractPublicStoreRouteParams(pathname: string): PublicStoreRout
       'instructor', 'classroom', 'auth', 'teacher-dashboard',
       'salles-vip', 'salle-vip', 'vip', 'salles',
       'wameet', 'communaute', 'community', 'reseau', 'wameet-room',
+      'wallet', 'nanawallet', 'nana-wallet',
       'deconnexion', 'logout', 'mentions-legales', 'cgu', 'privacy'
     ];
     const firstSegment = cleanPath.split('/')[1]?.split('?')[0]?.toLowerCase();

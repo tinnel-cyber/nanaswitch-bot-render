@@ -529,6 +529,22 @@ export default function App() {
       ) {
         return 'EMAILING';
       }
+      if (
+        pathname === '/wallet' ||
+        pathname === '/nanawallet' ||
+        pathname === '/nana-wallet' ||
+        pathname === '/app/wallet' ||
+        pathname === '/apps/wallet' ||
+        pathname.startsWith('/wallet') ||
+        pathname.startsWith('/nanawallet') ||
+        pathname.startsWith('/nana-wallet') ||
+        params.get('view') === 'wallet' ||
+        params.get('view') === 'nanawallet' ||
+        params.get('page') === 'wallet' ||
+        params.get('page') === 'nanawallet'
+      ) {
+        return 'WALLET';
+      }
       const routeParamsForView = extractPublicStoreRouteParams(pathname);
       const isBoutiquePath =
         pathname === '/s' ||
