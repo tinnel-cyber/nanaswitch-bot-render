@@ -320,7 +320,9 @@ export const BarcodeSelfieScanner: React.FC<BarcodeSelfieScannerProps> = ({
       >
         <div className="flex items-center gap-2 min-w-0">
           {!isPopoutMode && (
-            <GripHorizontal className="w-4 h-4 text-slate-400 shrink-0" title="Glisser pour déplacer le lecteur" />
+            <span title="Glisser pour déplacer le lecteur" className="shrink-0 flex items-center">
+              <GripHorizontal className="w-4 h-4 text-slate-400" />
+            </span>
           )}
           <div className="relative shrink-0">
             <Camera className="w-4 h-4 text-blue-400 animate-pulse" />

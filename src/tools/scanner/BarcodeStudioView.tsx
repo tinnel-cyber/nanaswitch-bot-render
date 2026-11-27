@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+// @ts-ignore bwip-js lacks bundled TypeScript declarations
 import bwipjs from 'bwip-js';
 import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
@@ -177,14 +178,15 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
     const prod = inventory.find((p) => p.id === prodId);
     if (!prod) return;
     playTapBeep();
-    const codeVal = (prod.barcode || prod.sku || prod.id || '').trim();
+    const pAny = prod as any;
+    const codeVal = (prod.barcode || pAny.sku || prod.id || '').trim();
     if (codeVal) setRawValue(codeVal);
     setLabelTitle(prod.name || '');
     if (typeof prod.sellingPrice === 'number' && prod.sellingPrice > 0) {
       setLabelPrice(formatCFA(prod.sellingPrice));
     }
-    if (prod.photoUrl || prod.imageUrl) {
-      setUploadedImageUrl(prod.photoUrl || prod.imageUrl || null);
+    if (prod.photoUrl || pAny.imageUrl) {
+      setUploadedImageUrl(prod.photoUrl || pAny.imageUrl || null);
     }
   };
 
@@ -663,7 +665,7 @@ export const BarcodeStudioView: React.FC<BarcodeStudioViewProps> = ({
                   <option value="">-- Choisir un article de l'inventaire --</option>
                   {inventory.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.barcode || p.sku || p.id}) — {formatCFA(p.sellingPrice)}
+                      {p.name} ({p.barcode || (p as any).sku || p.id}) — {formatCFA(p.sellingPrice)}
                     </option>
                   ))}
                 </select>
