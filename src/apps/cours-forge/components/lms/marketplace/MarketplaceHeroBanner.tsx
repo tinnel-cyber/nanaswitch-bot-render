@@ -119,7 +119,7 @@ export const MarketplaceHeroBanner: React.FC<MarketplaceHeroBannerProps> = ({
           <div className="flex items-center gap-1.5 bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-800">
             <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
             <strong className="text-white text-sm">{course.rating} / 5</strong>
-            <span className="text-slate-400">({course.reviewsCount || 194} avis vérifiés)</span>
+            <span className="text-slate-400">({course.reviewsCount ?? 0} avis vérifiés)</span>
           </div>
 
           <div className="flex items-center gap-1.5 bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-800">

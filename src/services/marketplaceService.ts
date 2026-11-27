@@ -150,9 +150,9 @@ export function mapSupabaseCourseToMarketplace(row: any): MarketplaceCourse {
     currency: 'FCFA',
     level: s.level || 'TOUS_NIVEAUX',
     category: s.category || 'Fintech & Mobile Money',
-    rating: 5.0,
-    reviewsCount: 1,
-    enrolledCount: 1,
+    rating: Number(row.rating ?? s.rating ?? 5.0),
+    reviewsCount: Number(row.reviews_count ?? s.reviewsCount ?? 0),
+    enrolledCount: Number(row.enrolled_count ?? s.enrolledCount ?? 0),
     totalDurationMinutes: totalDuration || 60,
     durationLabel: totalDuration ? `${Math.floor(totalDuration / 60)}h ${totalDuration % 60}m • ${modules.length} Modules` : `${modules.length} Modules`,
     certificateEnabled: true,
@@ -267,20 +267,19 @@ export function subscribeToPublishedCourses(
 
   const buildInitialList = () => {
     const dismissed = new Set(getDismissedExampleCourseIds());
-    let localCache = getActiveSeedCourses();
+    const seedIds = new Set(SEED_MARKETPLACE_COURSES.map((s) => s.id));
     try {
       const savedLocal = localStorage.getItem('nana_published_courses_cache');
       if (savedLocal) {
         const parsed = JSON.parse(savedLocal);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleanParsed = parsed.filter((c: any) => !dismissed.has(c.id));
-          localCache = mergeCourseLists(localCache, cleanParsed);
+          return parsed.filter((c: any) => !dismissed.has(c.id) && !seedIds.has(c.id));
         }
       }
     } catch (e) {
       console.warn('Erreur lecture cache local cours:', e);
     }
-    return localCache;
+    return [];
   };
 
   callback(buildInitialList());
@@ -288,6 +287,7 @@ export function subscribeToPublishedCourses(
   const fetchCourses = async () => {
     try {
       const dismissed = new Set(getDismissedExampleCourseIds());
+      const seedIds = new Set(SEED_MARKETPLACE_COURSES.map((s) => s.id));
       const allFoundCourses: MarketplaceCourse[] = [];
 
       // 1. Supabase Courses (Source Principale des Formateurs)
@@ -299,7 +299,7 @@ export function subscribeToPublishedCourses(
 
         if (!supaErr && Array.isArray(supaData)) {
           supaData.forEach(row => {
-            if (!dismissed.has(String(row.id))) {
+            if (!dismissed.has(String(row.id)) && !seedIds.has(String(row.id))) {
               allFoundCourses.push(mapSupabaseCourseToMarketplace(row));
             }
           });
@@ -308,12 +308,28 @@ export function subscribeToPublishedCourses(
         console.warn('[MARKETPLACE] Supabase fetch courses notice:', err);
       }
 
-      // 2. Firestore Courses (Compatibilité)
+      // 2. API Serveur /api/lms/courses (Source Cloud unifiée)
+      try {
+        const apiRes = await fetch('/api/lms/courses');
+        if (apiRes.ok) {
+          const apiJson = await apiRes.json().catch(() => null);
+          const apiList = Array.isArray(apiJson?.courses) ? apiJson.courses : [];
+          apiList.forEach((row: any) => {
+            if (row?.status !== 'draft' && !dismissed.has(String(row.id)) && !seedIds.has(String(row.id))) {
+              if (!allFoundCourses.some(c => c.id === String(row.id))) {
+                allFoundCourses.push(mapSupabaseCourseToMarketplace(row));
+              }
+            }
+          });
+        }
+      } catch {}
+
+      // 3. Firestore Courses (Compatibilité)
       try {
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
           snapshot.forEach((docSnap) => {
-            if (dismissed.has(docSnap.id)) return;
+            if (dismissed.has(docSnap.id) || seedIds.has(docSnap.id)) return;
             const data = docSnap.data() as MarketplaceCourse;
             if (!allFoundCourses.some(c => c.id === docSnap.id)) {
               allFoundCourses.push({
@@ -327,9 +343,7 @@ export function subscribeToPublishedCourses(
         console.warn('[MARKETPLACE] Firestore fetch courses notice:', err);
       }
 
-      const merged = mergeCourseLists(getActiveSeedCourses(), allFoundCourses).filter(
-        (c) => !dismissed.has(c.id)
-      );
+      const merged = allFoundCourses.filter((c) => !dismissed.has(c.id) && !seedIds.has(c.id));
       localStorage.setItem('nana_published_courses_cache', JSON.stringify(merged));
       callback(merged);
     } catch (error) {

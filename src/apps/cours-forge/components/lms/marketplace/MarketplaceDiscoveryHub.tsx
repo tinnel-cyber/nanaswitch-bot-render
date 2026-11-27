@@ -42,7 +42,7 @@ export const MarketplaceDiscoveryHub: React.FC<MarketplaceDiscoveryHubProps> = (
   onNavigateToClassroom,
   onBackToApp
 }) => {
-  const [courses, setCourses] = useState<MarketplaceCourse[]>(SEED_MARKETPLACE_COURSES);
+  const [courses, setCourses] = useState<MarketplaceCourse[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<CourseCategory>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [checkoutCourse, setCheckoutCourse] = useState<MarketplaceCourse | null>(null);
@@ -228,8 +228,7 @@ export const MarketplaceDiscoveryHub: React.FC<MarketplaceDiscoveryHubProps> = (
   return (
     <div 
       id="marketplace-discovery-hub"
-      className="w-full min-h-screen h-screen flex-1 bg-[#030712] text-slate-100 font-sans select-none overflow-y-auto overscroll-y-contain scroll-smooth pb-44"
-      style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+      className="w-full min-h-[100dvh] bg-[#030712] text-slate-100 font-sans overflow-x-hidden pb-24"
     >
       
       {/* 1. Barre de Navigation Supérieure Publique */}
