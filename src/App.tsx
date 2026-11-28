@@ -49,7 +49,7 @@ import { PosSearchBar } from './components/PosSearchBar';
 import { PinKeypadModal } from './components/PinKeypadModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { isCashierSession } from './utils/managerSecurityService';
-import { logoutUser, onSupabaseAuthStateChange } from './services/supabaseAuthService';
+import { logoutUser, onSupabaseAuthStateChange, hasConfiguredMasterPinLocally } from './services/supabaseAuthService';
 import { auth } from './lib/supabaseBridge';
 import { GoogleFlowToast } from './components/GoogleFlowToast';
 import { ClassroomErrorBoundary } from './components/lms/ClassroomErrorBoundary';
@@ -501,7 +501,9 @@ export default function App() {
         pathname === '/signup' ||
         pathname === '/auth' ||
         params.get('auth') === 'login' ||
-        params.get('auth') === 'register'
+        params.get('auth') === 'register' ||
+        params.get('auth') === 'pin_setup' ||
+        params.get('step') === 'pin_setup'
       ) {
         return 'AUTH';
       }
@@ -2366,6 +2368,11 @@ export default function App() {
           parsed.role = 'SUPER_ADMIN';
           parsed.isSuperAdmin = true;
           promoteSuperAdminLocally(parsed.id || 'pousbila04-superadmin');
+          return parsed;
+        }
+        const pendingPinUid = safeGetItem('nana_pin_setup_pending_uid');
+        if (parsed?.id && parsed.id !== 'usr-demo' && pendingPinUid === parsed.id) {
+          return null;
         }
         return parsed;
       } catch (e) {
@@ -2375,13 +2382,33 @@ export default function App() {
     return null;
   });
 
-  // Synchronisation de session Supabase Auth en temps réel
+  // Synchronisation de session Supabase Auth en temps réel (strictement bloquée tant que l'e-mail n'est pas confirmé ET que le Master PIN n'est pas configuré)
   useEffect(() => {
     const unsub = onSupabaseAuthStateChange((supaUser) => {
       if (supaUser) {
-        const isSuperAdminUser = supaUser.email && KNOWN_SUPERADMIN_EMAILS.includes(supaUser.email.toLowerCase());
+        // 1. Interdiction absolue d'ouvrir le tableau de bord si l'adresse e-mail n'est pas confirmée
+        if (!supaUser.emailVerified) {
+          return;
+        }
+
+        const isSuperAdminUser = Boolean(supaUser.email && KNOWN_SUPERADMIN_EMAILS.includes(supaUser.email.toLowerCase()));
         if (isSuperAdminUser) {
           promoteSuperAdminLocally(supaUser.id || 'pousbila04-superadmin');
+        }
+
+        // 2. Ne JAMAIS court-circuiter WelcomeAuthScreen tant que le Master PIN n'a pas été configuré
+        let suppressAutoAuth = false;
+        let pendingPinUid: string | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            suppressAutoAuth = sessionStorage.getItem('nana_SuppressAutoDashboardAuth') === '1';
+            pendingPinUid = localStorage.getItem('nana_pin_setup_pending_uid');
+          } catch {}
+        }
+
+        const hasLocalPin = hasConfiguredMasterPinLocally(supaUser.id);
+        if (!isSuperAdminUser && (suppressAutoAuth || pendingPinUid === supaUser.id || !hasLocalPin)) {
+          return;
         }
 
         setCurrentUser((prev) => {
@@ -2590,6 +2617,8 @@ export default function App() {
         pathname === '/signup' ||
         params.get('auth') === 'register' ||
         params.get('step') === 'register' ||
+        params.get('auth') === 'pin_setup' ||
+        params.get('step') === 'pin_setup' ||
         params.get('plan') === 'free' ||
         pathname === '/partenaire' ||
         pathname.startsWith('/partenaire/') ||
@@ -2652,6 +2681,8 @@ export default function App() {
         pathname === '/signup' ||
         params.get('auth') === 'register' ||
         params.get('step') === 'register' ||
+        params.get('auth') === 'pin_setup' ||
+        params.get('step') === 'pin_setup' ||
         params.get('plan') !== null ||
         params.get('checkout') === 'true'
       ) {
@@ -6048,12 +6079,14 @@ export default function App() {
     );
   }
 
-  // 0.000 Callback Officiel Supabase Auth (/auth/callback ou ?token_hash=...) — 100% Multi-Appareils
+  // 0.000 Callback Officiel Supabase Auth (/auth/callback, ?token_hash=... ou #access_token=... sur Site URL) — 100% Multi-Appareils
   const isAuthCallbackRoute =
     typeof window !== 'undefined' &&
     (window.location.pathname === '/auth/callback' ||
       window.location.pathname.startsWith('/auth/callback/') ||
-      new URLSearchParams(window.location.search).has('token_hash'));
+      new URLSearchParams(window.location.search).has('token_hash') ||
+      ((window.location.hash.includes('access_token=') || window.location.hash.includes('error_code=otp_expired')) &&
+        !window.location.hash.includes('type=recovery')));
 
   if (isAuthCallbackRoute) {
     return (

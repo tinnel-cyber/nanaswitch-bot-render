@@ -9175,6 +9175,25 @@ async function startServer() {
     });
   });
 
+  // GET /api/merchant/wallet/pin/status — Vérifie si un Master PIN est déjà configuré pour l'utilisateur/univers authentifié
+  app.get('/api/merchant/wallet/pin/status', async (req, res) => {
+    const universeId = String(req.query?.universeId || '').trim();
+    const userId = String(req.query?.userId || '').trim();
+    const ctx = await paymentSecurity.requireAccountOwner(req, res, { universeId, userId });
+    if (!ctx) return;
+
+    const ownerKey = String(ctx.universeId || ctx.userId || '').trim();
+    if (!ownerKey) {
+      return res.json({ success: true, hasMasterPin: false });
+    }
+    const userPinRecord = ctx.userId ? await getWalletPinRecord(String(ctx.userId).trim()) : null;
+    const ownerPinRecord = ownerKey !== String(ctx.userId || '').trim() ? await getWalletPinRecord(ownerKey) : userPinRecord;
+    return res.json({
+      success: true,
+      hasMasterPin: Boolean(ownerPinRecord?.pinHash || userPinRecord?.pinHash),
+    });
+  });
+
   // POST /api/merchant/wallet/pin/set — Création ou modification du Master PIN (Authentifié + contrôle propriétaire + anti-brute-force)
   app.post('/api/merchant/wallet/pin/set', async (req, res) => {
     const { universeId = '', userId = '', pin = '', currentPin = '' } = req.body || {};
@@ -9858,11 +9877,12 @@ async function startServer() {
       }
 
       const hashedToken = linkData.properties.hashed_token;
-      confirmationUrl = hashedToken
-        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=signup`
-        : linkData.properties.action_link;
       const userId = linkData.user?.id || '';
-      console.log(`[AUTH REGISTER] Lien cross-device Supabase (/auth/callback) généré pour ${email.trim()}`);
+      const cleanRegEmail = email.trim().toLowerCase();
+      confirmationUrl = hashedToken
+        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=signup&email=${encodeURIComponent(cleanRegEmail)}${userId ? `&uid=${encodeURIComponent(userId)}` : ''}`
+        : linkData.properties.action_link;
+      console.log(`[AUTH REGISTER] Lien cross-device Supabase (/auth/callback) généré pour ${cleanRegEmail}`);
 
       // 3. Enregistrement / synchronisation du profil
       try {
@@ -10039,8 +10059,9 @@ async function startServer() {
       }
 
       const hashedToken = linkData.properties.hashed_token;
+      const resendUid = linkData.user?.id || '';
       const confirmationUrl = hashedToken
-        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink`
+        ? `${callbackUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink&email=${encodeURIComponent(cleanEmail)}${resendUid ? `&uid=${encodeURIComponent(resendUid)}` : ''}`
         : linkData.properties.action_link;
 
       try {
@@ -10068,21 +10089,61 @@ async function startServer() {
     }
   });
 
-  // Route legacy /api/auth/verify : ne valide JAMAIS sans jeton Supabase — transfère vers /auth/callback
+  // Route legacy /api/auth/verify | /auth/verify | /verify : transfère intégralement les jetons vers /auth/callback
   const handleAuthVerify = async (req: any, res: any) => {
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'nanasore.com';
     const appUrl = (process.env.APP_URL || `${proto}://${host}`).replace(/\/$/, '');
     const qs = new URLSearchParams();
-    if (req.query?.token_hash) qs.set('token_hash', String(req.query.token_hash));
+    const resolvedTokenHash = req.query?.token_hash || req.query?.token || req.query?.oobCode;
+    if (resolvedTokenHash) qs.set('token_hash', String(resolvedTokenHash));
     if (req.query?.code) qs.set('code', String(req.query.code));
     if (req.query?.type) qs.set('type', String(req.query.type));
+    if (req.query?.email) qs.set('email', String(req.query.email));
+    if (req.query?.uid) qs.set('uid', String(req.query.uid));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return res.redirect(`${appUrl}/auth/callback${suffix}`);
   };
 
   app.get('/api/auth/verify', handleAuthVerify);
   app.get('/auth/verify', handleAuthVerify);
+  app.get('/verify', handleAuthVerify);
+
+  // POST /api/auth/check-confirmation : vérifie côté serveur (sans créer de session non autorisée ni permettre l'énumération d'emails)
+  // Exige la correspondance exacte (UUID userId + email) de l'inscription en attente.
+  app.post('/api/auth/check-confirmation', async (req, res) => {
+    try {
+      const userId = String(req.body?.userId || '').trim();
+      const cleanEmail = String(req.body?.email || '').trim().toLowerCase();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId) || !cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, verified: false });
+      }
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return res.json({ success: false, fallbackRequired: true });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://wsxnznobeefrsoicjqte.supabase.co';
+      const adminClient = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await adminClient.auth.admin.getUserById(userId);
+      if (error || !data?.user) {
+        return res.json({ success: true, verified: false });
+      }
+      const u = data.user as any;
+      if (String(u.email || '').trim().toLowerCase() !== cleanEmail) {
+        return res.json({ success: true, verified: false });
+      }
+      const isConfirmed = Boolean(u.email_confirmed_at || u.confirmed_at);
+      return res.json({
+        success: true,
+        verified: isConfirmed,
+      });
+    } catch {
+      return res.json({ success: false, fallbackRequired: true });
+    }
+  });
 
   // Route POST de confirmation programmatique d'un utilisateur Supabase
   app.post('/api/auth/confirm-user', requireAdminOrInternal, async (req, res) => {

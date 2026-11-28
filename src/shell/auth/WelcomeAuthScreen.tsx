@@ -10,7 +10,8 @@ import {
   resetPasswordEmail,
   updateUserPassword,
   logoutUser,
-  getSupabaseCurrentUser
+  getSupabaseCurrentUser,
+  AUTH_BROADCAST_CHANNEL,
 } from '../../services/supabaseAuthService';
 import { supabase } from '../../lib/supabase';
 import { saveUserProfile, getUserProfile, subscribeToPlatformLegal, DEFAULT_PLATFORM_LEGAL } from '../../utils/supabaseDataService';
@@ -186,18 +187,39 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
     return () => unsub();
   }, []);
 
-  // Détection URL /register, /reset-password ou hash Supabase recovery
+  // Détection URL /register, /reset-password, ?step=pin_setup ou hash Supabase recovery
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       const hash = window.location.hash;
 
+      // Restaurer les informations d'inscription en attente si présentes
+      try {
+        const rawPending = localStorage.getItem('nana_pending_verification');
+        if (rawPending) {
+          const parsed = JSON.parse(rawPending);
+          if (parsed?.email) setEmailInput((prev) => prev || String(parsed.email));
+          if (parsed?.fullName) setFullName((prev) => prev || String(parsed.fullName));
+          if (parsed?.whatsapp) setWhatsappNumber((prev) => prev || String(parsed.whatsapp));
+          if (parsed?.selectedCountry) setSelectedCountry(String(parsed.selectedCountry));
+        }
+      } catch {}
+
+      const urlEmail = params.get('email');
+      if (urlEmail) {
+        setEmailInput(urlEmail.trim());
+      }
+
       const isRecovery =
         pathname.includes('reset-password') ||
         params.get('type') === 'recovery' ||
         params.get('mode') === 'resetPassword' ||
         hash.includes('type=recovery');
+
+      const wantsPinSetup =
+        params.get('step') === 'pin_setup' ||
+        params.get('auth') === 'pin_setup';
 
       if (isRecovery) {
         setStep('RESET_PASSWORD');
@@ -217,6 +239,8 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).catch(() => {});
           }
         }
+      } else if (wantsPinSetup) {
+        setInfoMessage('✓ Votre adresse e-mail est confirmée ! Définissez maintenant votre Master PIN à 4 chiffres pour accéder à votre tableau de bord.');
       } else if (pathname === '/register' || params.get('step') === 'register' || params.get('auth') === 'register') {
         setStep('REGISTER');
       }
@@ -266,18 +290,25 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
   // Au chargement, vérifier session active Supabase Auth
   useEffect(() => {
     const checkCurrentAuth = async () => {
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const wantsPinSetup = params?.get('step') === 'pin_setup' || params?.get('auth') === 'pin_setup';
+
       const fbUser = await getSupabaseCurrentUser();
       if (fbUser) {
-        setEmailInput(fbUser.email || '');
-        if (fbUser.displayName) setFullName(fbUser.displayName);
+        setEmailInput((prev) => fbUser.email || prev);
+        if (fbUser.displayName) setFullName((prev) => prev || fbUser.displayName);
 
-        if (!fbUser.emailVerified && fbUser.providerData.some(p => p.providerId === 'password')) {
+        if (!fbUser.emailVerified && fbUser.providerData.some(p => p.providerId === 'password' || p.providerId === 'email')) {
           setStep('EMAIL_VERIFICATION');
           return;
         }
 
         const profile = await getUserProfile(fbUser.uid);
-        if (profile?.pinCode || profile?.masterPin) {
+        if ((profile?.pinCode || profile?.masterPin || profile?.hasMasterPin) && !wantsPinSetup) {
+          try {
+            sessionStorage.removeItem('nana_SuppressAutoDashboardAuth');
+            localStorage.removeItem('nana_pin_setup_pending_uid');
+          } catch {}
           // Synchronisation neutre Supabase en arrière-plan
           syncAuthProfileWithSupabase({
             userId: fbUser.uid,
@@ -292,7 +323,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             storeUniqueId: profile.storeUniqueId,
             name: profile.name || fbUser.displayName || 'Utilisateur Nanasore',
             email: fbUser.email || 'utilisateur@nanasore.com',
-            avatarUrl: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+            avatarUrl: (fbUser as any).photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
             storeName: profile.storeName || 'Mon Espace Nanasore',
             role: profile.role || 'GERANT',
             vendorType: 'ecommerce',
@@ -310,15 +341,115 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             credits: profile.credits !== undefined ? profile.credits : 15,
             createdAt: profile.createdAt || new Date().toISOString(),
           };
+          try {
+            localStorage.setItem('nana_store_auth_user', JSON.stringify(completedUser));
+          } catch {}
           onLoginSuccess(completedUser);
         } else {
           setPendingAuthUser(fbUser);
+          setInfoMessage('✓ Votre adresse e-mail est confirmée ! Définissez maintenant votre Master PIN à 4 chiffres avant d’accéder à votre tableau de bord.');
           setStep('PIN_SETUP');
         }
+      } else if (wantsPinSetup) {
+        setStep('LOGIN');
+        setInfoMessage('✓ Votre adresse e-mail est confirmée ! Connectez-vous ci-dessous pour créer votre Master PIN et accéder au tableau de bord.');
       }
     };
     checkCurrentAuth();
   }, []);
+
+  // Rafraîchissement automatique dès que l'utilisateur clique sur le lien de confirmation (même navigateur ou autre appareil)
+  const autoVerifiedTransitionRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (step !== 'EMAIL_VERIFICATION') {
+      autoVerifiedTransitionRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    const triggerAutoVerificationCheck = async () => {
+      if (cancelled || autoVerifiedTransitionRef.current) return;
+      const targetEmail = emailInput.trim();
+      if (!targetEmail) return;
+
+      const check = await verifyEmailConfirmationStatus(
+        targetEmail,
+        passwordInput || undefined,
+        pendingAuthUser?.uid || pendingAuthUser?.id
+      );
+
+      if (cancelled || autoVerifiedTransitionRef.current) return;
+
+      if (check.verified && check.user) {
+        autoVerifiedTransitionRef.current = true;
+        playValidationBeep();
+        setPendingAuthUser(check.user);
+        setErrorMessage(null);
+        const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
+        const fullWhatsapp = whatsappNumber.startsWith('+') ? whatsappNumber : `${dial} ${whatsappNumber.trim()}`;
+        syncAuthProfileWithSupabase({
+          userId: check.user.uid,
+          email: check.user.email || targetEmail,
+          fullName: fullName.trim() || check.user.displayName || 'Utilisateur Nanasore',
+          whatsapp: fullWhatsapp,
+        }).catch(() => {});
+
+        // Si la session JWT est active sur cet onglet, passer directement à la création du Master PIN
+        const liveUser = await getSupabaseCurrentUser().catch(() => null);
+        if (liveUser?.uid || passwordInput) {
+          setInfoMessage('✓ Adresse e-mail confirmée avec succès ! Créez maintenant votre Master PIN à 4 chiffres avant d’accéder au tableau de bord.');
+          setStep('PIN_SETUP');
+        } else {
+          setInfoMessage('✓ Adresse e-mail confirmée ! Saisissez votre mot de passe pour créer votre Master PIN.');
+          setStep('LOGIN');
+        }
+      }
+    };
+
+    // 1. Écoute instantanée inter-onglets (BroadcastChannel + localStorage event)
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+        bc.onmessage = (ev) => {
+          if (ev?.data?.type === 'EMAIL_VERIFIED') {
+            triggerAutoVerificationCheck();
+          }
+        };
+      }
+    } catch {}
+
+    const handleStorageSignal = (ev: StorageEvent) => {
+      if (ev.key === 'nana_email_verified_signal' && ev.newValue) {
+        triggerAutoVerificationCheck();
+      }
+    };
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        triggerAutoVerificationCheck();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageSignal);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    // 2. Sondage léger toutes les 4 secondes (détecte la validation faite sur téléphone pendant que le PC attend)
+    const intervalId = setInterval(triggerAutoVerificationCheck, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      window.removeEventListener('storage', handleStorageSignal);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      try {
+        bc?.close();
+      } catch {}
+    };
+  }, [step, emailInput, passwordInput, pendingAuthUser, fullName, whatsappNumber, selectedCountry]);
 
   // =========================================================================
   // ACTIONS D'AUTHENTIFICATION
@@ -353,14 +484,18 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       });
 
       const profile = await getUserProfile(user.uid);
-      if (profile?.pinCode || profile?.masterPin) {
+      if (profile?.pinCode || profile?.masterPin || profile?.hasMasterPin) {
+        try {
+          sessionStorage.removeItem('nana_SuppressAutoDashboardAuth');
+          localStorage.removeItem('nana_pin_setup_pending_uid');
+        } catch {}
         const storeUser: StoreUser = {
           id: user.uid,
           storeId: profile.storeId || `store-${user.uid.slice(0, 8)}`,
           storeUniqueId: profile.storeUniqueId,
           name: profile.name || user.displayName || 'Utilisateur Nanasore',
           email: user.email || emailInput.trim(),
-          avatarUrl: user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+          avatarUrl: (user as any).photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
           storeName: profile.storeName || 'Mon Espace Nanasore',
           role: profile.role || 'GERANT',
           vendorType: 'ecommerce',
@@ -378,10 +513,14 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           credits: profile.credits !== undefined ? profile.credits : 15,
           createdAt: profile.createdAt || new Date().toISOString(),
         };
+        try {
+          localStorage.setItem('nana_store_auth_user', JSON.stringify(storeUser));
+        } catch {}
         playCashChime();
         onLoginSuccess(storeUser);
       } else {
         setPendingAuthUser(user);
+        setInfoMessage('✓ Compte vérifié ! Définissez maintenant votre Master PIN à 4 chiffres avant d’accéder à votre tableau de bord.');
         setStep('PIN_SETUP');
       }
     } catch (err: any) {
@@ -423,10 +562,24 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       const user = await registerWithEmail(emailInput.trim(), passwordInput, fullName.trim());
       playValidationBeep();
 
+      try {
+        localStorage.setItem(
+          'nana_pending_verification',
+          JSON.stringify({
+            uid: user.uid,
+            email: emailInput.trim().toLowerCase(),
+            fullName: fullName.trim(),
+            whatsapp: whatsappNumber.trim(),
+            selectedCountry,
+            ts: Date.now(),
+          })
+        );
+      } catch {}
+
       setPendingAuthUser(user);
 
       if (!user.emailVerified) {
-        setInfoMessage('Un e-mail de confirmation vous a été envoyé. Cliquez sur le lien reçu dans votre boîte mail avant de continuer.');
+        setInfoMessage('Un e-mail de confirmation vous a été envoyé. Dès que vous cliquez sur le lien reçu dans votre boîte mail, cette page passera automatiquement à la création de votre Master PIN.');
         setStep('EMAIL_VERIFICATION');
       } else {
         await syncAuthProfileWithSupabase({
@@ -435,7 +588,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           fullName: fullName.trim() || 'Utilisateur Nanasore',
           whatsapp: fullWhatsapp
         });
-        setInfoMessage('Compte créé et vérifié avec succès !');
+        setInfoMessage('✓ Compte créé et vérifié ! Définissez maintenant votre Master PIN à 4 chiffres.');
         setStep('PIN_SETUP');
       }
     } catch (err: any) {
@@ -473,7 +626,11 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         });
 
         const profile = await getUserProfile(fbUser.uid);
-        if (profile?.pinCode || profile?.masterPin) {
+        if (profile?.pinCode || profile?.masterPin || profile?.hasMasterPin) {
+          try {
+            sessionStorage.removeItem('nana_SuppressAutoDashboardAuth');
+            localStorage.removeItem('nana_pin_setup_pending_uid');
+          } catch {}
           playCashChime();
           const existingUser: StoreUser = {
             id: fbUser.uid,
@@ -481,7 +638,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             storeUniqueId: profile.storeUniqueId,
             name: profile.name || fbUser.displayName || 'Utilisateur Nanasore',
             email: fbUser.email || 'utilisateur@nanasore.com',
-            avatarUrl: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+            avatarUrl: (fbUser as any).photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
             storeName: profile.storeName || 'Mon Espace Nanasore',
             role: profile.role || 'GERANT',
             vendorType: 'ecommerce',
@@ -499,6 +656,9 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             credits: profile.credits !== undefined ? profile.credits : 15,
             createdAt: profile.createdAt || new Date().toISOString(),
           };
+          try {
+            localStorage.setItem('nana_store_auth_user', JSON.stringify(existingUser));
+          } catch {}
           onLoginSuccess(existingUser);
           return;
         }
@@ -569,7 +729,11 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       const currentUserAuth = verifiedLiveUser || pendingAuthUser;
 
       if (!currentUserAuth?.uid || !currentUserAuth?.emailVerified) {
-        const check = await verifyEmailConfirmationStatus(emailInput.trim(), passwordInput);
+        const check = await verifyEmailConfirmationStatus(
+          emailInput.trim(),
+          passwordInput,
+          pendingAuthUser?.uid || pendingAuthUser?.id
+        );
         if (!check.verified || !check.user) {
           playCancelSound();
           setIsLoading(false);
@@ -584,10 +748,10 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       }
 
       const activeAuthUser = verifiedLiveUser?.emailVerified ? verifiedLiveUser : (pendingAuthUser?.emailVerified ? pendingAuthUser : await getSupabaseCurrentUser());
-      if (!activeAuthUser?.uid) {
+      if (!activeAuthUser?.uid || !activeAuthUser?.emailVerified) {
         playCancelSound();
         setIsLoading(false);
-        setErrorMessage("Votre session n'est pas encore active. Veuillez confirmer votre e-mail puis vous connecter.");
+        setErrorMessage("Votre session n'est pas encore active. Veuillez vous connecter avec votre mot de passe pour sceller votre Master PIN.");
         setStep('LOGIN');
         return;
       }
@@ -604,6 +768,22 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       } catch (hErr) {
         console.warn('[SECURITY] Erreur hachage PIN, repli sécurisé :', hErr);
       }
+
+      // Sceller également le Master PIN dans le coffre serveur (`server_security_vault` / NanaWallet)
+      try {
+        const { data: sessData } = await supabase.auth.getSession();
+        const accessToken = sessData?.session?.access_token || localStorage.getItem('nana_auth_token') || '';
+        if (accessToken) {
+          await fetch('/api/merchant/wallet/pin/set', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ userId: uid, pin: pinValue }),
+          }).catch(() => {});
+        }
+      } catch {}
 
       const storeUniqueId = generateStoreUniqueId();
       const resolvedStoreId = `store-${uid.slice(0, 8)}`;
@@ -641,14 +821,21 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
         avatarUrl: (activeAuthUser as any)?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
       };
 
-      // 1. Sauvegarde locale uniquement après vérification effective de l'e-mail
+      // 1. Sauvegarde locale uniquement après vérification effective de l'e-mail ET création du Master PIN
       try {
+        sessionStorage.removeItem('nana_SuppressAutoDashboardAuth');
+        localStorage.removeItem('nana_pin_setup_pending_uid');
+        localStorage.removeItem('nana_pending_verification');
         localStorage.removeItem('nana_merchant_universes');
         localStorage.removeItem('nana_current_app_id');
+        localStorage.setItem(`nana_master_pin_configured_${uid}`, '1');
         localStorage.setItem('nana_store_auth_user', JSON.stringify(finalStoreUser));
         localStorage.setItem(`nana_user_profile_${uid}`, JSON.stringify(finalStoreUser));
         localStorage.setItem('nana_user_master_pin', masterPinHashed);
         localStorage.setItem('nanasore_seller_mode', 'merchant_ecommerce');
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', '/dashboard');
+        }
       } catch {}
 
       // 2. Sauvegarde Cloud en arrière-plan sans bloquer l'UI
@@ -1307,8 +1494,12 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                     Vérifiez votre boîte de réception
                   </h2>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                    Un email de confirmation a été envoyé à <strong>{emailInput}</strong>. Cliquez sur le lien reçu dans votre boîte mail (vérifiez aussi vos spams) pour activer votre compte.
+                    Un email de confirmation a été envoyé à <strong>{emailInput}</strong>. Cliquez sur le lien reçu dans votre boîte mail (vérifiez aussi vos spams) : cette page se rafraîchira automatiquement vers la création de votre <strong>Master PIN</strong>.
                   </p>
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-[11px] font-bold text-blue-600">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>En attente de confirmation de votre e-mail...</span>
+                  </div>
                 </div>
                 <div className="pt-2 flex flex-col gap-2 w-full max-w-xs">
                   <button
@@ -1318,7 +1509,11 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                       setIsCheckingEmail(true);
                       setErrorMessage(null);
                       setInfoMessage(null);
-                      const check = await verifyEmailConfirmationStatus(emailInput.trim(), passwordInput);
+                      const check = await verifyEmailConfirmationStatus(
+                        emailInput.trim(),
+                        passwordInput,
+                        pendingAuthUser?.uid || pendingAuthUser?.id
+                      );
                       setIsCheckingEmail(false);
                       if (!check.verified || !check.user) {
                         playCancelSound();
@@ -1328,6 +1523,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                         );
                         return;
                       }
+                      autoVerifiedTransitionRef.current = true;
                       playValidationBeep();
                       setPendingAuthUser(check.user);
                       const dial = COUNTRY_DIAL_OPTIONS.find(c => c.code === selectedCountry)?.dialCode || '+226';
@@ -1338,8 +1534,14 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                         fullName: fullName.trim() || check.user.displayName || 'Utilisateur Nanasore',
                         whatsapp: fullWhatsapp
                       }).catch(() => {});
-                      setInfoMessage('✓ Adresse e-mail confirmée avec succès !');
-                      setStep('PIN_SETUP');
+                      const liveUser = await getSupabaseCurrentUser().catch(() => null);
+                      if (liveUser?.uid || passwordInput) {
+                        setInfoMessage('✓ Adresse e-mail confirmée avec succès ! Définissez maintenant votre Master PIN à 4 chiffres.');
+                        setStep('PIN_SETUP');
+                      } else {
+                        setInfoMessage('✓ Adresse e-mail confirmée ! Saisissez votre mot de passe pour créer votre Master PIN.');
+                        setStep('LOGIN');
+                      }
                     }}
                     className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                   >

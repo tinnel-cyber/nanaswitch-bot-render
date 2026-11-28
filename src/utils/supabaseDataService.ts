@@ -1706,38 +1706,96 @@ export async function savePrivacyPolicy(policy: PrivacyPolicyConfig) {
 export async function getUserProfile(uid: string): Promise<Record<string, any> | null> {
   if (!uid) return null;
 
-  // 1. Priorité Supabase PostgreSQL (Source de vérité)
+  let supaProfile: Record<string, any> | null = null;
+  let localParsed: Record<string, any> | null = null;
+  let serverHasMasterPin = false;
+
+  // 1. Lecture Cache LocalStorage (contient masterPin haché et métadonnées boutique locales)
+  if (typeof window !== 'undefined') {
+    try {
+      const localProfile = localStorage.getItem(`nana_user_profile_${uid}`);
+      if (localProfile) {
+        localParsed = JSON.parse(localProfile);
+      }
+      if (localStorage.getItem(`nana_master_pin_configured_${uid}`) === '1') {
+        serverHasMasterPin = true;
+      }
+    } catch {}
+  }
+
+  // 2. Lecture Supabase PostgreSQL (`public.profiles`)
   try {
-    const { data: supaProfile } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', uid)
       .maybeSingle();
-
-    if (supaProfile) {
-      return {
-        ...supaProfile,
-        pinCode: supaProfile.pin_code || (supaProfile as any).pinCode,
-        masterPin: supaProfile.master_pin || (supaProfile as any).masterPin,
-        storeId: (supaProfile as any).store_id || `store-${uid.slice(0, 8)}`,
-        name: supaProfile.full_name || (supaProfile as any).name || 'Utilisateur Nanasore',
-        phone: supaProfile.whatsapp_number || (supaProfile as any).phone,
-        credits: (supaProfile as any).credits !== undefined ? (supaProfile as any).credits : DEFAULT_FREE_CREDITS,
-      };
+    if (data) {
+      supaProfile = data as Record<string, any>;
     }
   } catch (sErr) {
     console.warn('[SUPABASE_PROFILE_READ] Notice :', sErr);
   }
 
-  // 2. Repli Cache LocalStorage
-  try {
-    const localProfile = localStorage.getItem(`nana_user_profile_${uid}`);
-    if (localProfile) {
-      return JSON.parse(localProfile);
-    }
-  } catch {}
+  // 3. Si aucun Master PIN local n'est détecté, vérifier le coffre serveur (`/api/merchant/wallet/pin/status`)
+  const hasPinLocally = Boolean(
+    localParsed?.masterPin ||
+      localParsed?.pinCode ||
+      supaProfile?.master_pin ||
+      supaProfile?.pin_code ||
+      serverHasMasterPin
+  );
 
-  // 3. Repli Firestore si nécessaire
+  if (!hasPinLocally && typeof window !== 'undefined') {
+    try {
+      const { data: sessData } = await supabase.auth.getSession();
+      const token = sessData?.session?.access_token || localStorage.getItem('nana_auth_token') || '';
+      if (token) {
+        const res = await fetch(`/api/merchant/wallet/pin/status?userId=${encodeURIComponent(uid)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json?.hasMasterPin) {
+            serverHasMasterPin = true;
+            try {
+              localStorage.setItem(`nana_master_pin_configured_${uid}`, '1');
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (supaProfile || localParsed || serverHasMasterPin) {
+    const mergedPinCode = supaProfile?.pin_code || supaProfile?.pinCode || localParsed?.pinCode;
+    const mergedMasterPin =
+      supaProfile?.master_pin ||
+      supaProfile?.masterPin ||
+      localParsed?.masterPin ||
+      (serverHasMasterPin ? '__SERVER_VAULT_MASTER_PIN__' : undefined);
+
+    return {
+      ...(localParsed || {}),
+      ...(supaProfile || {}),
+      pinCode: mergedPinCode,
+      masterPin: mergedMasterPin,
+      hasMasterPin: Boolean(mergedMasterPin || mergedPinCode || serverHasMasterPin),
+      storeId: supaProfile?.store_id || localParsed?.storeId || `store-${uid.slice(0, 8)}`,
+      storeUniqueId: localParsed?.storeUniqueId || supaProfile?.store_unique_id,
+      storeName: localParsed?.storeName || supaProfile?.store_name || 'Mon Espace Nanasore',
+      name: supaProfile?.full_name || supaProfile?.name || localParsed?.name || 'Utilisateur Nanasore',
+      phone: supaProfile?.whatsapp_number || supaProfile?.phone || localParsed?.phone,
+      credits:
+        supaProfile?.credits !== undefined
+          ? supaProfile.credits
+          : localParsed?.credits !== undefined
+          ? localParsed.credits
+          : DEFAULT_FREE_CREDITS,
+    };
+  }
+
+  // 4. Repli table générique `users` si existante
   try {
     const userRef = doc(db, 'users', uid);
     const userDoc = await getDoc(userRef);
@@ -1759,7 +1817,7 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
 
 /**
  * Met à jour ou enregistre le profil et le code PIN users/{uid}
- * Ex: { pinCode: "1234", setupCompleted: true, storeId: "..." }
+ * Ex: { masterPin: "...", setupCompleted: true, storeId: "..." }
  * Préserve ou initialise le portefeuille à 15 crédits gratuits.
  */
 export async function saveUserProfile(uid: string, profileData: Record<string, any>): Promise<void> {
@@ -1828,15 +1886,13 @@ export async function saveUserProfile(uid: string, profileData: Record<string, a
     updatedAt: new Date().toISOString(),
   });
 
-  // 1. Sauvegarde prioritaire dans Supabase `profiles`
+  // 1. Sauvegarde prioritaire dans Supabase `profiles` (uniquement colonnes existantes du schéma SQL)
   try {
     await supabase.from('profiles').upsert({
       id: uid,
       email: profileData.email || '',
       full_name: profileData.name || profileData.fullName || '',
       whatsapp_number: profileData.phone || profileData.whatsapp || '',
-      pin_code: profileData.pinCode || null,
-      master_pin: profileData.masterPin || null,
       role: profileData.role || 'GERANT',
       updated_at: new Date().toISOString()
     }, { onConflict: 'id' });
@@ -1854,6 +1910,9 @@ export async function saveUserProfile(uid: string, profileData: Record<string, a
   // Cache local de secours
   try {
     localStorage.setItem(`nana_user_profile_${uid}`, JSON.stringify(payload));
+    if (profileData.masterPin || profileData.pinCode) {
+      localStorage.setItem(`nana_master_pin_configured_${uid}`, '1');
+    }
     localStorage.setItem('nana_user_plan', finalPlan);
     if (profileData.sellerMode) {
       localStorage.setItem('nanasore_seller_mode', String(profileData.sellerMode));

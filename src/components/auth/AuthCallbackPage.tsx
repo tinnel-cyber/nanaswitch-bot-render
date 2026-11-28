@@ -22,19 +22,40 @@ export const AuthCallbackPage: React.FC<AuthCallbackPageProps> = ({
     const run = async () => {
       const result = await handleSupabaseAuthCallback();
 
-      if (result.success && result.user) {
+      if (result.success) {
         setStatus('success');
+        if (result.type === 'recovery') {
+          setMessage('Lien vérifié avec succès ! Redirection vers le changement de mot de passe...');
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.location.replace('/auth/reset-password');
+            }
+          }, 800);
+          return;
+        }
+
+        if (result.verifiedCrossDevice || result.requiresPinSetup !== false) {
+          setMessage(
+            result.verifiedCrossDevice
+              ? 'Votre adresse e-mail est confirmée ! Connectez-vous maintenant pour définir votre Master PIN de sécurité...'
+              : 'Votre adresse e-mail est confirmée ! Redirection vers la création de votre Master PIN de sécurité...'
+          );
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              const emailParam = result.email ? `&email=${encodeURIComponent(result.email)}` : '';
+              window.location.replace(`/login?step=pin_setup&verified=true${emailParam}`);
+            }
+          }, 900);
+          return;
+        }
+
         setMessage('Votre adresse e-mail et votre session ont été vérifiées avec succès ! Redirection vers votre tableau de bord...');
-        if (onSuccess) {
+        if (onSuccess && result.user) {
           onSuccess(result.user);
         }
         setTimeout(() => {
           if (typeof window !== 'undefined') {
-            if (result.type === 'recovery') {
-              window.location.replace('/auth/reset-password');
-            } else {
-              window.location.replace('/dashboard?verified=true');
-            }
+            window.location.replace('/dashboard?verified=true');
           }
         }, 900);
       } else {

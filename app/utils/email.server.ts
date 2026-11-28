@@ -316,19 +316,84 @@ export async function sendBrevoEmail({ templateId, email, name, params }: SendEm
 }
 
 /**
- * Envoie l'e-mail de confirmation de compte (Template ID 1)
+ * Envoie l'e-mail de confirmation de compte avec l'URL exacte de callback Supabase (/auth/callback)
+ * Utilise directement le template HTML officiel Nanasore pour garantir que le lien de confirmation
+ * ne soit jamais remplacé ou tronqué par un ancien template externe.
  */
 export async function sendConfirmationEmail({ email, name, confirmationUrl }: { email: string; name?: string; confirmationUrl: string }) {
-  return sendBrevoEmail({
-    templateId: 1,
-    email,
-    name,
-    params: {
-      CONFIRMATION_URL: confirmationUrl,
-      EMAIL: email,
-      NAME: name || 'Utilisateur',
+  const userName = name || email.split('@')[0] || 'Utilisateur';
+  const apiKey = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_KEY || process.env.VITE_BREVO_SMTP_KEY || process.env.VITE_BREVO_API_KEY;
+
+  if (!apiKey || apiKey.length < 5) {
+    console.warn('[BREVO] Aucune clé Brevo API trouvée. E-mail de confirmation simulé.');
+    return { success: true, simulated: true };
+  }
+
+  const sender = getSenderConfig();
+  const safeUrl = String(confirmationUrl || '').replace(/"/g, '&quot;');
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmez votre adresse e-mail - Nanasore</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #334155;">
+  <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(29, 78, 216, 0.08);">
+    <div style="background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%); padding: 36px 24px; text-align: center; color: #ffffff;">
+      <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background: rgba(255, 255, 255, 0.15); border-radius: 12px; font-size: 22px; font-weight: 900; margin-bottom: 8px;">N</div>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Bienvenue sur Nanasore</h1>
+      <p style="margin: 6px 0 0; font-size: 13px; color: #bfdbfe;">Validation sécurisée de votre compte</p>
+    </div>
+    <div style="padding: 36px 28px;">
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0;">Bonjour ${userName},</h2>
+      <p style="font-size: 14px; line-height: 1.6; color: #475569; margin-bottom: 24px;">
+        Merci d'avoir rejoint Nanasore ! Cliquez sur le bouton ci-dessous pour confirmer votre adresse e-mail, puis définissez votre <strong>Master PIN de sécurité</strong> afin d'accéder à votre tableau de bord :
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${safeUrl}" style="background-color: #1d4ed8; color: #ffffff; padding: 14px 32px; border-radius: 12px; font-weight: 700; text-decoration: none; display: inline-block; font-size: 15px; box-shadow: 0 4px 14px rgba(29, 78, 216, 0.35);">
+          Confirmer mon adresse e-mail →
+        </a>
+      </div>
+      <p style="font-size: 12px; line-height: 1.5; color: #64748b; word-break: break-all;">
+        Si le bouton ne s'ouvre pas, copiez-collez ce lien dans votre navigateur :<br>
+        <a href="${safeUrl}" style="color: #1d4ed8;">${safeUrl}</a>
+      </p>
+      <div style="background-color: #f8fafc; border-left: 4px solid #1d4ed8; padding: 14px 18px; border-radius: 8px; margin: 24px 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+        <strong>Étape suivante :</strong> Dès votre e-mail confirmé, votre écran d'inscription passera automatiquement à la création de votre Master PIN à 4 chiffres.
+      </div>
+    </div>
+    <div style="background-color: #f8fafc; padding: 20px 24px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} Nanasore OS — Plateforme de commerce souverain.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
     },
+    body: JSON.stringify({
+      sender,
+      to: [{ email, name: userName }],
+      subject: 'Confirmez votre adresse e-mail Nanasore',
+      htmlContent,
+    }),
   });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error('❌ Erreur Brevo confirmation email:', errorData);
+    throw new Error(`Échec de l'envoi de l'e-mail de confirmation (Code ${response.status})`);
+  }
+
+  return await response.json();
 }
 
 /**
