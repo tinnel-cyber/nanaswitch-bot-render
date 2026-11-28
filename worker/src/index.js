@@ -3,8 +3,8 @@
  * Cloudflare Worker — Reverse Proxy Transparent Nanasore <-> Render & Northflank
  * ==============================================================================
  * Architecture Dual-Cloud Haute Disponibilité avec Failover automatique.
- * Backend Principal : Render (https://nanaswitch-bot-render-0kqp.onrender.com)
- * Backend Secondaire : Northflank (https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run)
+ * Backend Principal (#1 Always-On) : Northflank (https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run)
+ * Backend Secondaire (#2 Secours)  : Render (https://nanaswitch-bot-render-0kqp.onrender.com)
  * ==============================================================================
  */
 

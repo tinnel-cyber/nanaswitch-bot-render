@@ -327,6 +327,8 @@ async function startServer() {
     'https://nsore.shop',
     'https://www.nsore.shop',
     'https://p02--nanaswitch-bot--p8yx28yyjhbx.code.run',
+    'https://nanaswitch-bot-render-0kqp.onrender.com',
+    'https://nanasore.pages.dev',
     ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean) : [])
   ]);
 
@@ -337,7 +339,8 @@ async function startServer() {
         explicitAllowedOrigins.has(origin) ||
         /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
         /^https:\/\/([a-zA-Z0-9-]+\.)*nanasore\.com$/.test(origin) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*nsore\.shop$/.test(origin);
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nsore\.shop$/.test(origin) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*nanasore\.pages\.dev$/.test(origin);
 
       if (isAllowed) {
         res.setHeader('Access-Control-Allow-Origin', origin);
@@ -4848,8 +4851,8 @@ async function startServer() {
     return String(Math.floor(100000 + Math.random() * 900000));
   };
 
-  // POST /api/live-codes/ensure — Génère ou récupère le Code Magique Live d'un tunnel / vendeur
-  app.post('/api/live-codes/ensure', (req, res) => {
+  // POST /api/live-codes/ensure — Génère ou récupère le Code Magique Live d'un tunnel / vendeur (protégé JWT)
+  app.post('/api/live-codes/ensure', requireAuthenticatedUser, (req, res) => {
     const {
       slug = 'vente',
       storeId = '',
@@ -8115,9 +8118,11 @@ async function startServer() {
     return res.json({ success: true, webinars: list.slice(0, 50) });
   });
 
-  // POST /api/lms/webinars/sync — Enregistre un webinaire ET l'injecte dans le cours associé si linkedCourseId fourni
-  app.post('/api/lms/webinars/sync', async (req, res) => {
+  // POST /api/lms/webinars/sync — Enregistre un webinaire ET l'injecte dans le cours associé si linkedCourseId fourni (protégé JWT)
+  app.post('/api/lms/webinars/sync', requireAuthenticatedUser, async (req, res) => {
     try {
+      const authUser = (req as any).authUser;
+      const isSuperAdmin = (req as any).isInternalAdmin || (authUser ? await isVerifiedSuperAdminUser(authUser) : false);
       const {
         webinarId = `web_${crypto.randomBytes(4).toString('hex')}`,
         merchantId = '',
@@ -8139,9 +8144,10 @@ async function startServer() {
           ? String(meetingUrl).trim()
           : `/wameet?room=${encodeURIComponent(cleanId)}&embed=1`;
 
+      const effectiveMerchantId = String(merchantId || authUser?.id || '');
       const webinarRecord = {
         id: cleanId,
-        merchantId: String(merchantId || ''),
+        merchantId: effectiveMerchantId,
         title: String(title).trim(),
         description: String(description || '').trim(),
         scheduledAt: String(scheduledAt),
@@ -8163,6 +8169,13 @@ async function startServer() {
       if (webinarRecord.linkedCourseId) {
         const courses = readJsonArrayFile(LMS_COURSES_FILE);
         const cIdx = courses.findIndex((c: any) => c.id === webinarRecord.linkedCourseId);
+        const courseOwnerId = cIdx >= 0 ? String(courses[cIdx].instructor_id || courses[cIdx].merchant_id || '') : '';
+        const canModifyCourse =
+          isSuperAdmin ||
+          !courseOwnerId ||
+          courseOwnerId === String(authUser?.id || '') ||
+          courseOwnerId === effectiveMerchantId;
+
         const liveLesson = {
           id: `lesson_live_${cleanId}`,
           title: `🔴 LIVE : ${webinarRecord.title}`,
@@ -8180,7 +8193,7 @@ async function startServer() {
           },
         };
 
-        if (cIdx >= 0) {
+        if (cIdx >= 0 && canModifyCourse) {
           const modules = Array.isArray(courses[cIdx].modules) ? [...courses[cIdx].modules] : [];
           let liveModIdx = modules.findIndex((m: any) => m.id === 'mod_live_sessions');
           if (liveModIdx === -1) {
@@ -8430,20 +8443,22 @@ async function startServer() {
     }
   });
 
-  // POST /api/live/launch-theme-session — Lance un Live depuis Salle VIP, Campus Social ou Campus Privé
+  // POST /api/live/launch-theme-session — Lance un Live depuis Salle VIP, Campus Social ou Campus Privé (protégé JWT)
   // et renvoie toujours l'URL du Thème dédié au Live (/live/:slug)
-  app.post('/api/live/launch-theme-session', async (req, res) => {
+  app.post('/api/live/launch-theme-session', requireAuthenticatedUser, async (req, res) => {
     try {
+      const authUser = (req as any).authUser;
       const {
         source = 'campus_social', // 'vip_room' | 'campus_social' | 'campus_private'
         roomId = '',
         channelId = '',
         courseId = '',
         title = 'Session Live Interactive',
-        hostId = 'host',
+        hostId = '',
         hostName = 'Formateur',
       } = req.body || {};
 
+      const verifiedHostId = String(authUser?.id || hostId || 'host');
       const slug =
         String(roomId || channelId || courseId || `live-${Date.now().toString(36)}`)
           .trim()
@@ -8454,7 +8469,7 @@ async function startServer() {
       // Enregistre la session dans lms_webinars.json + live_sessions
       const webinarRecord = {
         id: slug,
-        merchantId: String(hostId || 'default'),
+        merchantId: verifiedHostId,
         title: String(title).trim(),
         description: `Session en direct (${source}) animée par ${hostName}.`,
         scheduledAt: nowIso,
@@ -8474,8 +8489,8 @@ async function startServer() {
         try {
           await supabaseAdmin.from('live_sessions').upsert({
             id: slug,
-            tenant_id: String(hostId || 'default'),
-            host_id: String(hostId || 'host'),
+            tenant_id: verifiedHostId,
+            host_id: verifiedHostId,
             title: webinarRecord.title,
             description: webinarRecord.description,
             is_live: true,

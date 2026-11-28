@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { fetchLiveApiWithFailover } from '../config/liveStreamConfig';
 
 export interface AffiliateAttribution {
   referrerCode: string;
@@ -181,33 +182,36 @@ export async function recordAffiliateSaleCommission(params: {
   saveLocalCommission(localRecord);
 
   try {
-    const { data, error } = await supabase
-      .from('affiliate_commissions')
-      .insert({
-        merchant_id: localRecord.merchantId,
-        session_id: localRecord.sessionId || null,
-        product_id: localRecord.productId || null,
-        product_name: localRecord.productName,
-        referrer_code: localRecord.referrerCode,
-        referrer_phone: localRecord.referrerPhone || null,
-        buyer_name: localRecord.buyerName || null,
-        buyer_contact: localRecord.buyerContact || null,
-        order_amount: localRecord.orderAmount,
-        commission_percent: localRecord.commissionPercent,
-        commission_amount: localRecord.commissionAmount,
-        currency: 'XOF',
-        transaction_id: localRecord.transactionId || null,
-        status: 'pending',
-      })
-      .select()
-      .maybeSingle();
+    const res = await fetchLiveApiWithFailover(
+      '/api/lives/affiliate/record',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantId: localRecord.merchantId,
+          sessionId: localRecord.sessionId || null,
+          productId: localRecord.productId || null,
+          productName: localRecord.productName,
+          referrerCode: localRecord.referrerCode,
+          referrerPhone: localRecord.referrerPhone || null,
+          buyerName: localRecord.buyerName || null,
+          buyerContact: localRecord.buyerContact || null,
+          orderAmount: localRecord.orderAmount,
+          commissionPercent: localRecord.commissionPercent,
+          transactionId: localRecord.transactionId || null,
+        }),
+      },
+      { attachAuth: false }
+    );
 
-    if (!error && data?.id) {
-      localRecord.id = data.id;
+    const json = await res.json().catch(() => null);
+    const createdId = json?.commission?.id || json?.id;
+    if (res.ok && createdId) {
+      localRecord.id = String(createdId);
       saveLocalCommission(localRecord);
     }
   } catch (err) {
-    console.warn('[liveAffiliateService] Supabase insert warning:', err);
+    console.warn('[liveAffiliateService] Northflank affiliate record warning:', err);
   }
 
   return localRecord;
@@ -250,7 +254,6 @@ export async function listMerchantAffiliateCommissions(
     }
   } catch {}
 
-  // Fallback local
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem(LOCAL_COMMISSIONS_KEY);
@@ -264,7 +267,7 @@ export async function listMerchantAffiliateCommissions(
 }
 
 /**
- * Marque une commission affiliée comme payée (après virement Mobile Money au partenaire).
+ * Marque une commission affiliée comme payée via Northflank (protégé JWT marchand).
  */
 export async function markAffiliateCommissionPaid(commissionId: string): Promise<void> {
   const paidAt = new Date().toISOString();
@@ -283,17 +286,25 @@ export async function markAffiliateCommissionPaid(commissionId: string): Promise
   }
 
   try {
-    await supabase
-      .from('affiliate_commissions')
-      .update({ status: 'paid', paid_at: paidAt })
-      .eq('id', commissionId);
+    const res = await fetchLiveApiWithFailover('/api/lives/affiliate/mark-paid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commissionId }),
+    });
+    if (!res.ok) {
+      await supabase
+        .from('affiliate_commissions')
+        .update({ status: 'paid', paid_at: paidAt })
+        .eq('id', commissionId);
+    }
   } catch (err) {
     console.warn('[liveAffiliateService] markAffiliateCommissionPaid warning:', err);
   }
 }
 
 /**
- * Charge les commissions d'affiliation en temps réel pour un affilié (acheteur / étudiant) par son code.
+ * Charge les commissions d'affiliation en temps réel pour un affilié (acheteur / étudiant) par son code,
+ * sans exposer les coordonnées privées des acheteurs.
  */
 export async function listAffiliateCommissionsByCode(
   referrerCode: string
@@ -302,33 +313,30 @@ export async function listAffiliateCommissionsByCode(
   if (!cleanCode) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('affiliate_commissions')
-      .select('*')
-      .eq('referrer_code', cleanCode)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (!error && Array.isArray(data)) {
-      return data.map((r: any) => ({
-        id: r.id,
-        merchantId: r.merchant_id,
-        sessionId: r.session_id || undefined,
-        productId: r.product_id || undefined,
-        productName: r.product_name,
-        referrerCode: r.referrer_code,
-        referrerPhone: r.referrer_phone || undefined,
-        buyerName: r.buyer_name || undefined,
-        buyerContact: r.buyer_contact || undefined,
-        orderAmount: Number(r.order_amount) || 0,
-        commissionPercent: Number(r.commission_percent) || 10,
-        commissionAmount: Number(r.commission_amount) || 0,
-        currency: r.currency || 'XOF',
-        transactionId: r.transaction_id || undefined,
-        status: r.status === 'paid' ? 'paid' : 'pending',
-        paidAt: r.paid_at || undefined,
-        createdAt: r.created_at,
-      }));
+    const res = await fetchLiveApiWithFailover(
+      `/api/lives/affiliate/by-code?code=${encodeURIComponent(cleanCode)}`,
+      { method: 'GET' },
+      { attachAuth: false }
+    );
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json?.commissions)) {
+        return json.commissions.map((r: any) => ({
+          id: r.id,
+          merchantId: r.merchant_id,
+          sessionId: r.session_id || undefined,
+          productId: r.product_id || undefined,
+          productName: r.product_name,
+          referrerCode: r.referrer_code,
+          orderAmount: Number(r.order_amount) || 0,
+          commissionPercent: Number(r.commission_percent) || 10,
+          commissionAmount: Number(r.commission_amount) || 0,
+          currency: r.currency || 'XOF',
+          status: r.status === 'paid' ? 'paid' : 'pending',
+          paidAt: r.paid_at || undefined,
+          createdAt: r.created_at,
+        }));
+      }
     }
   } catch {}
 

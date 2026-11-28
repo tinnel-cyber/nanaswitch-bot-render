@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ProfileSubButton } from './ProfileSubButton';
 import { ResonanceButton } from './ResonanceButton';
+import type { ProductOffer } from './VaultBottomSheet';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface ReelEngagementSidebarProps {

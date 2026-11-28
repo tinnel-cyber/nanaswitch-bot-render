@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { UltimateCheckout } from '../../../../../services/nana-switch/payment/UltimateCheckout';
 import { formatCFA } from '../../../../../utils/audio';
+import { fetchLiveApiWithFailover } from '../../../../../config/liveStreamConfig';
 
 export interface CourseCommunityFeedProps {
   courseId: string;
@@ -619,8 +620,12 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
               <button
                 type="button"
                 onClick={async () => {
+                  if (currentUserRole !== 'INSTRUCTOR') {
+                    window.open(`/live/${encodeURIComponent(activeChannel.id)}`, '_blank', 'noopener,noreferrer');
+                    return;
+                  }
                   try {
-                    const res = await fetch('/api/live/launch-theme-session', {
+                    const res = await fetchLiveApiWithFailover('/api/live/launch-theme-session', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -641,10 +646,10 @@ export const CourseCommunityFeed: React.FC<CourseCommunityFeedProps> = ({
                     window.open(`/live/${encodeURIComponent(activeChannel.id)}`, '_blank', 'noopener,noreferrer');
                   }
                 }}
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-[11px] flex items-center gap-1.5 shadow-md shadow-rose-500/25 cursor-pointer transition"
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-[11px] flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/25 cursor-pointer transition"
               >
                 <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                <span>Live (Thème Live)</span>
+                <span>{currentUserRole === 'INSTRUCTOR' ? 'Lancer Live' : 'Rejoindre Live'}</span>
               </button>
             )}
             <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30">

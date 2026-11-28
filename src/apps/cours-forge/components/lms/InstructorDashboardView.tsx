@@ -2902,6 +2902,7 @@ export const InstructorDashboardView: React.FC<InstructorDashboardViewProps> = (
           isOpen={isWebinarModalOpen}
           merchantId={activeUser?.id || 'instructor-default'}
           storeName={profile.fullName}
+          currentUser={activeUser}
           onClose={() => setIsWebinarModalOpen(false)}
           isPublicView={false}
         />

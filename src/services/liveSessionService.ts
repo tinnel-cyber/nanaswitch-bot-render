@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { buildStoreHlsUrl } from '../config/liveStreamConfig';
+import { buildStoreHlsUrl, fetchLiveApiWithFailover, normalizeSafeJitsiUrl } from '../config/liveStreamConfig';
 import { 
   LiveSession, 
   LiveSessionStatus,
@@ -25,6 +25,23 @@ function generateUuid(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+function extractLiveRowMetaAndPinned(rawPinnedData: any): {
+  meta: Record<string, any>;
+  pinnedProduct: StoreProductItem | null;
+} {
+  if (!rawPinnedData || typeof rawPinnedData !== 'object') {
+    return { meta: {}, pinnedProduct: null };
+  }
+  const meta =
+    rawPinnedData._meta && typeof rawPinnedData._meta === 'object' ? rawPinnedData._meta : {};
+  // Si l'objet ne contient que `_meta` (sans `id` et `name` produit), ce n'est PAS un produit épinglé !
+  if (rawPinnedData.id && rawPinnedData.name) {
+    const { _meta, ...cleanProduct } = rawPinnedData;
+    return { meta, pinnedProduct: cleanProduct as StoreProductItem };
+  }
+  return { meta, pinnedProduct: null };
 }
 
 // Produits de démonstration pour les sessions Live
@@ -99,7 +116,7 @@ export const FALLBACK_LIVE_SESSION: LiveSession = {
 };
 
 /**
- * Récupère une session Live par son slug ou son ID depuis Supabase
+ * Récupère une session Live par son slug ou son ID depuis Supabase (sans exposer les clés RTMP)
  */
 export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | null> {
   if (!slug) return FALLBACK_LIVE_SESSION;
@@ -107,32 +124,46 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
   const defaultHlsUrl = buildStoreHlsUrl(slug);
 
   try {
-    // 1. Recherche par ID direct ou tenant_id
+    // 1. Recherche par ID direct ou tenant_id (colonnes publiques uniquement)
     const { data: byId } = await supabase
       .from('live_sessions')
-      .select('*')
+      .select('id, tenant_id, host_id, title, description, is_live, status, stream_url, viewer_count, pinned_product_id, pinned_product_data, created_at, updated_at')
       .or(`id.eq.${slug},tenant_id.eq.${slug}`)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (byId) {
-      const resolvedUrl = (byId.stream_url || '').trim() || defaultHlsUrl;
-      const isHls = resolvedUrl.includes('.m3u8');
+      const { meta, pinnedProduct } = extractLiveRowMetaAndPinned(byId.pinned_product_data);
+      const rawUrl = normalizeSafeJitsiUrl((byId.stream_url || meta.streamUrl || meta.meetingUrl || '').trim()) || defaultHlsUrl;
+      const isHls = rawUrl.includes('.m3u8');
+      const isPaid = Boolean(meta.isPaid);
+      const accessPrice = Number(meta.accessPrice ?? meta.price ?? 0) || 0;
+      const resolvedMode =
+        meta.sessionMode ||
+        (meta.roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping');
+
       return {
         id: byId.id,
-        storeId: byId.tenant_id || slug,
-        storeName: byId.store_name || 'Boutique Nanasore',
+        storeId: byId.tenant_id || meta.storeId || slug,
+        storeName: (byId as any).store_name || meta.storeName || 'Boutique Nanasore',
         sessionSlug: slug,
         title: byId.title || 'Live Shopping en Direct',
         description: byId.description || '',
-        sessionMode: 'live_shopping',
+        sessionMode: resolvedMode,
         status: (byId.status as any) || 'live',
         sourceType: isHls ? 'hls' : 'youtube',
-        streamUrl: resolvedUrl,
+        streamUrl: rawUrl,
+        coachingRoomUrl: meta.coachingRoomUrl ? normalizeSafeJitsiUrl(meta.coachingRoomUrl) : undefined,
+        aspectRatio: meta.aspectRatio || 'auto',
+        isPaid,
+        accessPrice,
+        accessLabel: meta.accessLabel || (isPaid ? 'Accès Cours & Salle VIP' : undefined),
+        customBadgeLabel: meta.customBadgeLabel,
+        customBadgeColor: meta.customBadgeColor,
         viewerCount: typeof byId.viewer_count === 'number' ? byId.viewer_count : 0,
-        pinnedProductId: byId.pinned_product_id,
-        pinnedProduct: byId.pinned_product_data,
+        pinnedProductId: pinnedProduct ? (byId.pinned_product_id || pinnedProduct.id) : null,
+        pinnedProduct,
         scheduledAt: byId.created_at ? new Date(byId.created_at).getTime() : Date.now(),
         allowChat: true,
         createdAt: byId.created_at ? new Date(byId.created_at).getTime() : Date.now()
@@ -172,7 +203,7 @@ export async function getLiveSessionBySlug(slug: string): Promise<LiveSession | 
  * Convertit un document webinar local en LiveSession complète avec le vrai lien collé
  */
 function mapWebinarToLiveSession(id: string, w: any): LiveSession {
-  const realUrl = (w.streamUrl || w.meetingUrl || w.socialStreamUrl || '').trim();
+  const realUrl = normalizeSafeJitsiUrl((w.streamUrl || w.meetingUrl || w.socialStreamUrl || '').trim());
   const plat = String(w.platform || '').toLowerCase();
   const isMeetingRoom =
     plat === 'google_meet' ||
@@ -182,6 +213,7 @@ function mapWebinarToLiveSession(id: string, w: any): LiveSession {
     realUrl.includes('meet.google.com') ||
     realUrl.includes('zoom.us') ||
     realUrl.includes('classroom.google.com') ||
+    realUrl.includes('meet.ffmuc.net') ||
     realUrl.includes('meet.jit.si');
 
   return {
@@ -198,14 +230,15 @@ function mapWebinarToLiveSession(id: string, w: any): LiveSession {
     streamUrl: realUrl || FALLBACK_LIVE_SESSION.streamUrl,
     coachingRoomUrl: isMeetingRoom ? realUrl : w.coachingRoomUrl,
     aspectRatio: w.aspectRatio || '16:9',
+    isPaid: Boolean(w.isPaid),
+    accessPrice: Number(w.accessPrice ?? w.price ?? 0) || 0,
     scheduledAt: w.date ? new Date(w.date).getTime() : Date.now(),
     createdAt: typeof w.createdAt === 'number' ? w.createdAt : Date.now()
   };
 }
 
 /**
- * Abonnement en temps réel aux mises à jour de la session Live (spectateurs, produit épinglé, etc.)
- * Utilise Supabase Realtime broadcast & postgres_changes sur live_sessions
+ * Abonnement en temps réel aux mises à jour de la session Live (spectateurs, produit épinglé, sas VIP, etc.)
  */
 export function subscribeLiveSession(
   sessionId: string,
@@ -217,25 +250,33 @@ export function subscribeLiveSession(
     try {
       const { data: supaLive } = await supabase
         .from('live_sessions')
-        .select('*')
+        .select('id, tenant_id, host_id, title, description, status, stream_url, viewer_count, pinned_product_id, pinned_product_data, created_at')
         .eq('id', sessionId)
         .maybeSingle();
 
       if (supaLive) {
+        const { meta, pinnedProduct } = extractLiveRowMetaAndPinned(supaLive.pinned_product_data);
+        const resolvedUrl = normalizeSafeJitsiUrl((supaLive.stream_url || meta.streamUrl || '').trim());
         onUpdate({
           id: supaLive.id,
-          storeId: supaLive.tenant_id,
-          storeName: 'Boutique Nanasore',
+          storeId: supaLive.tenant_id || meta.storeId,
+          storeName: meta.storeName || 'Boutique Nanasore',
           sessionSlug: sessionId,
           title: supaLive.title,
           description: supaLive.description || '',
-          sessionMode: 'live_shopping',
+          sessionMode: meta.sessionMode || (meta.roomMode === 'CLASSROOM' ? 'interactive_class' : 'live_shopping'),
           status: supaLive.status as any,
-          sourceType: 'youtube',
-          streamUrl: supaLive.stream_url || '',
+          sourceType: resolvedUrl.includes('.m3u8') ? 'hls' : 'youtube',
+          streamUrl: resolvedUrl,
+          coachingRoomUrl: meta.coachingRoomUrl ? normalizeSafeJitsiUrl(meta.coachingRoomUrl) : undefined,
+          isPaid: Boolean(meta.isPaid),
+          accessPrice: Number(meta.accessPrice ?? meta.price ?? 0) || 0,
+          accessLabel: meta.accessLabel,
+          customBadgeLabel: meta.customBadgeLabel,
+          customBadgeColor: meta.customBadgeColor,
           viewerCount: typeof supaLive.viewer_count === 'number' ? supaLive.viewer_count : 0,
-          pinnedProductId: supaLive.pinned_product_id,
-          pinnedProduct: supaLive.pinned_product_data,
+          pinnedProductId: pinnedProduct ? (supaLive.pinned_product_id || pinnedProduct.id) : null,
+          pinnedProduct,
           scheduledAt: new Date(supaLive.created_at).getTime(),
           allowChat: true,
           createdAt: new Date(supaLive.created_at).getTime()
@@ -246,7 +287,6 @@ export function subscribeLiveSession(
 
   fetchSession();
 
-  // Écouteur Supabase ciblé sur les modifications de la table live_sessions
   const channelName = `live_sess_pub_${sessionId}`;
   const channel = supabase
     .channel(channelName)
@@ -261,14 +301,19 @@ export function subscribeLiveSession(
       (payload) => {
         if (payload.new) {
           const row = payload.new as any;
+          const { meta, pinnedProduct } = extractLiveRowMetaAndPinned(row.pinned_product_data);
           onUpdate({
             id: row.id,
             title: row.title,
             status: row.status,
             viewerCount: row.viewer_count,
-            pinnedProductId: row.pinned_product_id,
-            pinnedProduct: row.pinned_product_data,
-            streamUrl: row.stream_url
+            pinnedProductId: pinnedProduct ? (row.pinned_product_id || pinnedProduct.id) : null,
+            pinnedProduct,
+            streamUrl: row.stream_url ? normalizeSafeJitsiUrl(row.stream_url) : undefined,
+            ...(meta.sessionMode ? { sessionMode: meta.sessionMode } : {}),
+            ...(typeof meta.isPaid === 'boolean' ? { isPaid: meta.isPaid } : {}),
+            ...(meta.accessPrice !== undefined ? { accessPrice: Number(meta.accessPrice) || 0 } : {}),
+            ...(meta.accessLabel ? { accessLabel: meta.accessLabel } : {}),
           } as any);
         }
       }
@@ -298,13 +343,32 @@ export async function updatePinnedProduct(
 ): Promise<void> {
   if (!sessionId) return;
 
-  // 1. Mise à jour Supabase SQL prioritaire
+  // 1. Mise à jour Supabase SQL prioritaire en préservant `_meta` (tarif VIP, mode salle, etc.)
   try {
+    const { data: existing } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const existingMeta =
+      existing?.pinned_product_data && typeof existing.pinned_product_data === 'object'
+        ? (existing.pinned_product_data as any)._meta
+        : undefined;
+
+    const nextPinnedData = product
+      ? existingMeta
+        ? { ...product, _meta: existingMeta }
+        : product
+      : existingMeta
+      ? { _meta: existingMeta }
+      : null;
+
     await supabase
       .from('live_sessions')
       .update({
         pinned_product_id: product ? product.id : null,
-        pinned_product_data: product || null,
+        pinned_product_data: nextPinnedData,
         updated_at: new Date().toISOString()
       })
       .eq('id', sessionId);
@@ -809,7 +873,7 @@ export interface LiveRoomRuntimeConfig {
 }
 
 const ROOM_CFG_PREFIX = 'nana_live_room_cfg_';
-const ENROLL_PREFIX = 'nana_live_enrolled_';
+const ENROLL_TOKEN_PREFIX = 'nana_live_token_';
 
 export function getSavedLiveRoomConfig(sessionId: string): LiveRoomRuntimeConfig {
   if (typeof window === 'undefined' || !sessionId) return {};
@@ -833,6 +897,36 @@ export async function updateLiveRoomConfig(
     }
   } catch {
     // ignore storage quota
+  }
+
+  // Persistance SQL dans live_sessions.pinned_product_data._meta pour tous les appareils
+  try {
+    const { data: existing } = await supabase
+      .from('live_sessions')
+      .select('pinned_product_data')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    const rawObj =
+      existing?.pinned_product_data && typeof existing.pinned_product_data === 'object'
+        ? { ...(existing.pinned_product_data as Record<string, any>) }
+        : {};
+    const prevMeta = rawObj._meta && typeof rawObj._meta === 'object' ? rawObj._meta : {};
+    rawObj._meta = {
+      ...prevMeta,
+      ...merged,
+      ...(merged.accessPrice !== undefined ? { price: merged.accessPrice } : {}),
+    };
+
+    await supabase
+      .from('live_sessions')
+      .update({
+        pinned_product_data: rawObj,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId);
+  } catch {
+    // non-blocking
   }
 
   try {
@@ -879,12 +973,42 @@ export function subscribeLiveRoomConfig(
   };
 }
 
+/**
+ * SÉCURITÉ ANTI-CONTOURNEMENT : exige un jeton HMAC signé par le serveur (jamais un simple `'1'` localStorage).
+ */
 export function hasLocalLiveEnrollment(sessionId: string): boolean {
   if (typeof window === 'undefined' || !sessionId) return false;
   try {
-    return localStorage.getItem(`${ENROLL_PREFIX}${sessionId}`) === '1';
+    const token = localStorage.getItem(`${ENROLL_TOKEN_PREFIX}${sessionId}`) || '';
+    return token.includes('.') && token.length > 32;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Vérifie auprès de Northflank que le jeton d'accès VIP stocké localement n'a pas été forgé.
+ */
+export async function verifyStoredLiveEnrollmentToken(sessionId: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !sessionId) return false;
+  try {
+    const token = localStorage.getItem(`${ENROLL_TOKEN_PREFIX}${sessionId}`) || '';
+    if (!token.includes('.') || token.length <= 32) return false;
+
+    const res = await fetchLiveApiWithFailover(
+      `/api/lives/enrollments/check-token?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`,
+      { method: 'GET' },
+      { attachAuth: false, timeoutMs: 5000 }
+    );
+    if (!res.ok) return true; // Tolérance hors-ligne transitoire uniquement si format signé présent
+    const data = await res.json();
+    if (!data?.valid) {
+      localStorage.removeItem(`${ENROLL_TOKEN_PREFIX}${sessionId}`);
+      return false;
+    }
+    return true;
+  } catch {
+    return hasLocalLiveEnrollment(sessionId);
   }
 }
 
@@ -898,8 +1022,26 @@ export async function recordStudentLiveEnrollment(params: {
 }): Promise<void> {
   const cleanContact = params.studentContact.trim().toLowerCase();
   try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`${ENROLL_PREFIX}${params.sessionId}`, '1');
+    const res = await fetchLiveApiWithFailover(
+      '/api/lives/enrollments/record',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: params.sessionId,
+          studentName: params.studentName.trim() || 'Étudiant VIP',
+          studentContact: cleanContact || 'membre',
+          amountPaid: Number(params.amountPaid) || 0,
+          transactionId: params.transactionId || `tx_${Date.now()}`,
+          paymentMethod: params.paymentMethod || 'MOBILE_MONEY',
+        }),
+      },
+      { attachAuth: false }
+    );
+
+    const data = await res.json().catch(() => null);
+    if (typeof window !== 'undefined' && data?.accessToken) {
+      localStorage.setItem(`${ENROLL_TOKEN_PREFIX}${params.sessionId}`, String(data.accessToken));
       if (params.studentName) {
         localStorage.setItem('nana_live_participant_name', params.studentName.trim());
       }
@@ -907,19 +1049,6 @@ export async function recordStudentLiveEnrollment(params: {
         localStorage.setItem('nana_live_participant_contact', cleanContact);
       }
     }
-  } catch {}
-
-  try {
-    await supabase.from('live_session_enrollments').insert({
-      session_id: params.sessionId,
-      student_name: params.studentName.trim() || 'Étudiant VIP',
-      student_contact: cleanContact || 'inconnu',
-      amount_paid: Number(params.amountPaid) || 0,
-      currency: 'XOF',
-      transaction_id: params.transactionId || `tx_${Date.now()}`,
-      payment_method: params.paymentMethod || 'MOBILE_MONEY',
-      status: 'paid',
-    });
   } catch (err) {
     console.warn('[liveSessionService] recordStudentLiveEnrollment warning:', err);
   }
@@ -933,26 +1062,28 @@ export async function verifyStudentLiveEnrollment(
   if (!sessionId || !cleanContact) return { enrolled: false };
 
   try {
-    const { data, error } = await supabase
-      .from('live_session_enrollments')
-      .select('id, student_name, status')
-      .eq('session_id', sessionId)
-      .ilike('student_contact', cleanContact)
-      .eq('status', 'paid')
-      .limit(1)
-      .maybeSingle();
+    const res = await fetchLiveApiWithFailover(
+      '/api/lives/enrollments/verify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, contact: cleanContact }),
+      },
+      { attachAuth: false }
+    );
 
-    if (!error && data) {
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.enrolled && data?.accessToken) {
       try {
         if (typeof window !== 'undefined') {
-          localStorage.setItem(`${ENROLL_PREFIX}${sessionId}`, '1');
-          if (data.student_name) {
-            localStorage.setItem('nana_live_participant_name', data.student_name);
+          localStorage.setItem(`${ENROLL_TOKEN_PREFIX}${sessionId}`, String(data.accessToken));
+          if (data.studentName) {
+            localStorage.setItem('nana_live_participant_name', data.studentName);
           }
           localStorage.setItem('nana_live_participant_contact', cleanContact);
         }
       } catch {}
-      return { enrolled: true, studentName: data.student_name };
+      return { enrolled: true, studentName: data.studentName };
     }
   } catch (err) {
     console.warn('[liveSessionService] verifyStudentLiveEnrollment warning:', err);

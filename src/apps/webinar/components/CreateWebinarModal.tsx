@@ -12,7 +12,7 @@ import { formatCFA, playTapBeep, playValidationBeep } from '../../../utils/audio
 import { LivePlatform, LiveRoomMode, LiveRoomStatus, LiveWebinar } from '../../../types';
 import { UltimateFunnelBuilder } from '../../../components/storeBuilder/UltimateFunnelBuilder';
 import { saveFunnelConfig } from '../../../services/omniFunnelService';
-import { buildStoreHlsUrl } from '../../../config/liveStreamConfig';
+import { buildStoreHlsUrl, getSafeJitsiDomain, fetchLiveApiWithFailover } from '../../../config/liveStreamConfig';
 import { LiveMultistreamStudioModal } from '../../../components/live/LiveMultistreamStudioModal';
 import { WhipLiveBroadcaster } from '../../../components/live/WhipLiveBroadcaster';
 
@@ -20,6 +20,7 @@ export interface CreateWebinarModalProps {
   isOpen?: boolean;
   merchantId: string;
   storeName?: string;
+  currentUser?: any | null;
   onClose: () => void;
   onOpenNanaGenerator?: () => void;
   isPublicView?: boolean;
@@ -153,14 +154,14 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   isOpen = true,
   merchantId,
   storeName = 'Ma Boutique',
+  currentUser = null,
   onClose,
   onOpenNanaGenerator,
   isPublicView = false
 }) => {
-  // Sécurité renforcée : strict refus de rendu sur la vitrine publique
-  if (!isOpen || isPublicView) {
-    return null;
-  }
+  // Utilisateur résolu (prop directe ou session Supabase active) — évite tout ReferenceError
+  const [resolvedAuthUser, setResolvedAuthUser] = useState<any | null>(currentUser);
+  const activeUser = currentUser || resolvedAuthUser;
 
   // 4 Onglets principaux de l'Espace Live & Webinaire
   const [activeTab, setActiveTab] = useState<'my_webinars' | 'multistream' | 'catalog' | 'funnels'>('my_webinars');
@@ -288,20 +289,23 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   const isInternalGeneratedUrl = useCallback((rawUrl: string): boolean => {
     const u = (rawUrl || '').trim();
     if (!u) return true;
-    return u.includes('meet.jit.si/nana-live-') || u.includes('daily.co/');
+    return (
+      u.includes('nanasore-coaching-') ||
+      u.includes('meet.ffmuc.net/') ||
+      u.includes('meet.jit.si/') ||
+      u.includes('daily.co/')
+    );
   }, []);
 
-  // Auto-génération de l'URL de salle pour Jitsi ou NaNa Live HD (Daily.co)
+  // Auto-génération de l'URL de salle pour Jitsi (sans coupure 5 min) ou NaNa Live HD (MediaMTX HLS)
   const handleAutoGenerateRoomUrl = useCallback(async (targetPlatform: LivePlatform, forceOverwrite: boolean = false) => {
     playTapBeep();
     const currentUrl = (meetingUrl || streamUrl).trim();
     if (!forceOverwrite && currentUrl && !isInternalGeneratedUrl(currentUrl)) {
-      // Ne jamais écraser un lien collé manuellement par l'utilisateur (ex: Google Meet, Zoom, YouTube...)
       return;
     }
     const roomId = generateUniqueRoomId();
-    const jitsiDomain =
-      (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_JITSI_DOMAIN) || 'meet.ffmuc.net';
+    const jitsiDomain = getSafeJitsiDomain();
     if (targetPlatform === 'jitsi') {
       const url = `https://${jitsiDomain}/${roomId}`;
       setMeetingUrl(url);
@@ -326,10 +330,33 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
   // Initialisation automatique du lien Jitsi uniquement si aucun lien n'a été collé
   useEffect(() => {
+    if (!isOpen || isPublicView) return;
     if (platform === 'jitsi' && !meetingUrl && !streamUrl) {
       handleAutoGenerateRoomUrl('jitsi', false);
     }
-  }, [platform, meetingUrl, streamUrl, handleAutoGenerateRoomUrl]);
+  }, [isOpen, isPublicView, platform, meetingUrl, streamUrl, handleAutoGenerateRoomUrl]);
+
+  // Résolution automatique de l'utilisateur Supabase si currentUser non fourni en prop
+  useEffect(() => {
+    if (currentUser) {
+      setResolvedAuthUser(currentUser);
+      return;
+    }
+    if (!isOpen || isPublicView) return;
+    let mounted = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted && data?.user) {
+        setResolvedAuthUser({
+          id: data.user.id,
+          uid: data.user.id,
+          email: data.user.email,
+          role: data.user.app_metadata?.role || data.user.user_metadata?.role || 'MERCHANT',
+          storeId: data.user.user_metadata?.store_id || merchantId,
+        });
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, [currentUser, isOpen, isPublicView, merchantId]);
 
   // Génère un UUID v4 valide pour la clé primaire UUID de public.live_sessions dans Supabase
   const generateSupabaseUuid = useCallback((): string => {
@@ -357,24 +384,27 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         .order('created_at', { ascending: false });
 
       if (!sErr && supaRows && supaRows.length > 0) {
-        loaded = supaRows.map((row: any) => ({
-          id: row.id,
-          merchantId: row.host_id || merchantId,
-          storeName: storeName || 'Boutique Partenaire',
-          title: row.title,
-          description: row.description || '',
-          date: row.created_at || new Date().toISOString(),
-          platform: 'daily',
-          roomMode: 'WEBINAR',
-          status: row.status as any,
-          socialStreamUrl: row.stream_url,
-          meetingUrl: row.stream_url,
-          isPaid: false,
-          price: 0,
-          currency: 'FCFA',
-          createdAt: new Date(row.created_at).getTime(),
-          registeredCount: row.viewer_count || 0
-        }));
+        loaded = supaRows.map((row: any) => {
+          const meta = row.pinned_product_data?._meta || {};
+          return {
+            id: row.id,
+            merchantId: row.host_id || merchantId,
+            storeName: meta.storeName || storeName || 'Boutique Partenaire',
+            title: row.title,
+            description: row.description || '',
+            date: meta.date || row.created_at || new Date().toISOString(),
+            platform: (meta.platform as LivePlatform) || detectPlatformFromUrl(row.stream_url || '') || 'daily',
+            roomMode: (meta.roomMode as LiveRoomMode) || 'WEBINAR',
+            status: row.status as any,
+            socialStreamUrl: row.stream_url,
+            meetingUrl: meta.meetingUrl || row.stream_url,
+            isPaid: Boolean(meta.isPaid),
+            price: Number(meta.price) || 0,
+            currency: meta.currency || 'FCFA',
+            createdAt: new Date(row.created_at).getTime(),
+            registeredCount: row.viewer_count || 0
+          };
+        });
       }
     } catch (supaErr) {
       console.warn("Lecture Supabase live_sessions en repli:", supaErr);
@@ -407,7 +437,6 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       if (raw) {
         setGeneratedFunnels(JSON.parse(raw));
       } else {
-        // Exemples initiaux inspirants
         const initialFunnels = [
           {
             id: 'funnel-demo-1',
@@ -439,9 +468,15 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
   }, []);
 
   useEffect(() => {
+    if (!isOpen || isPublicView) return;
     loadMyWebinars();
     loadFunnels();
-  }, [loadMyWebinars, loadFunnels]);
+  }, [isOpen, isPublicView, loadMyWebinars, loadFunnels]);
+
+  // Sécurité renforcée : strict refus de rendu sur la vitrine publique (APRÈS tous les hooks React)
+  if (!isOpen || isPublicView) {
+    return null;
+  }
 
   // Utiliser un modèle prêt à l'emploi (1-clic) sans écraser un lien déjà collé par l'utilisateur
   const handleUseTemplate = (template: WebinarTemplate) => {
@@ -454,36 +489,25 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
     setAspectRatio(template.aspectRatio || '16:9');
     setResolution(template.resolution || '720p');
 
-    // Calculer une date par défaut (demain à 19h00)
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(19, 0, 0, 0);
     const localIso = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     setDate(localIso);
 
+    const jitsiDomain = getSafeJitsiDomain();
+    setPlatform(template.platform);
     if (template.platform === 'jitsi') {
-      const url = `https://meet.jit.si/${generateUniqueRoomId()}`;
+      const url = `https://${jitsiDomain}/${generateUniqueRoomId()}`;
       setMeetingUrl(url);
       setStreamUrl(url);
     } else if (template.platform === 'daily') {
       setMeetingUrl('');
       setStreamUrl('');
-      // Déclencher le provisionnement réel auprès du serveur
-      handleAutoGenerateRoomUrl('daily');
+      handleAutoGenerateRoomUrl('daily', true);
     } else {
-      setPlatform(template.platform);
-      if (template.platform === 'jitsi') {
-        const url = `https://meet.jit.si/${generateUniqueRoomId()}`;
-        setMeetingUrl(url);
-        setStreamUrl(url);
-      } else if (template.platform === 'daily') {
-        const url = buildStoreHlsUrl(generateUniqueRoomId());
-        setMeetingUrl(url);
-        setStreamUrl(url);
-      } else {
-        setMeetingUrl('');
-        setStreamUrl('');
-      }
+      setMeetingUrl('');
+      setStreamUrl('');
     }
 
     setIsCreatingFormOpen(true);
@@ -512,12 +536,13 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
 
     try {
       const { consumePaygModuleUsage } = await import('../../../services/paygBillingService');
+      const userRoleUpper = String(activeUser?.role || '').toUpperCase();
       const paygRes = await consumePaygModuleUsage({
-        ownerKey: currentUser?.storeId || currentUser?.uid || '',
+        ownerKey: activeUser?.storeId || activeUser?.id || activeUser?.uid || merchantId || '',
         moduleId: 'salles-vip-live',
         actionLabel: `Création Live / Salle VIP : ${title.trim()}`,
         hasActivePaidSubscription: Boolean((() => {
-          let sub: any = (currentUser as any)?.subscription || null;
+          let sub: any = activeUser?.subscription || null;
           if (!sub) {
             try { sub = JSON.parse(localStorage.getItem('nana_store_sub') || 'null'); } catch {}
           }
@@ -525,7 +550,7 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
           const pl = String(sub?.plan || sub?.planId || '').toLowerCase();
           return st === 'ACTIVE' && pl && !pl.includes('free') && !pl.includes('zero') && !pl.includes('pay-as-you-go');
         })()),
-        isSuperAdmin: currentUser?.role === 'super_admin' || currentUser?.role === 'SUPER_ADMIN'
+        isSuperAdmin: userRoleUpper === 'SUPER_ADMIN' || userRoleUpper === 'ADMIN'
       });
 
       if (!paygRes.allowed) {
@@ -538,14 +563,19 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
       }
 
       const numericPrice = isPaid ? Math.max(0, parseInt(price) || 0) : 0;
-      const finalMeetingUrl = rawPastedUrl || (
+      const safeJitsiHost = getSafeJitsiDomain();
+      const normalizedPastedUrl = rawPastedUrl.includes('meet.jit.si/')
+        ? rawPastedUrl.replace(/https?:\/\/meet\.jit\.si\//i, `https://${safeJitsiHost}/`)
+        : rawPastedUrl;
+
+      const finalMeetingUrl = normalizedPastedUrl || (
         effectivePlatform === 'jitsi'
-          ? `https://meet.jit.si/${generateUniqueRoomId()}`
+          ? `https://${safeJitsiHost}/${generateUniqueRoomId()}`
           : effectivePlatform === 'daily'
             ? buildStoreHlsUrl(generateUniqueRoomId())
             : ''
       );
-      const finalStreamUrl = rawPastedUrl || finalMeetingUrl;
+      const finalStreamUrl = normalizedPastedUrl || finalMeetingUrl;
 
       let liveId = generateSupabaseUuid();
 
@@ -574,9 +604,13 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         coachingRoomUrl: coachingRoom,
         isPaid,
         price: numericPrice,
+        accessPrice: numericPrice,
+        accessLabel: isPaid ? 'Accès Cours & Salle VIP' : undefined,
         currency: 'FCFA',
         registeredCount: 0
       };
+
+      const ownerAuthId = activeUser?.id || activeUser?.uid || merchantId || 'host';
 
       // 1. Enregistrement direct dans Supabase PostgreSQL (table public.live_sessions)
       try {
@@ -584,8 +618,8 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
           .from('live_sessions')
           .upsert({
             id: liveId,
-            tenant_id: merchantId || 'default',
-            host_id: merchantId || 'host',
+            tenant_id: merchantId || ownerAuthId,
+            host_id: ownerAuthId,
             title: title.trim(),
             description: description.trim(),
             is_live: true,
@@ -609,13 +643,13 @@ export const CreateWebinarModal: React.FC<CreateWebinarModalProps> = ({
         console.warn("[CLOUD WEBINAR] Mode résilient activé:", sbCatchErr);
       }
 
-      // 2. Synchronisation automatique avec Course Forge & Modules de Cours (POST /api/lms/webinars/sync)
-      fetch('/api/lms/webinars/sync', {
+      // 2. Synchronisation automatique avec Northflank (#1 primaire) & Course Forge
+      fetchLiveApiWithFailover('/api/lms/webinars/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webinarId: liveId,
-          merchantId: merchantId || 'default',
+          merchantId: merchantId || ownerAuthId,
           title: title.trim(),
           description: description.trim(),
           scheduledAt: date || new Date().toISOString(),

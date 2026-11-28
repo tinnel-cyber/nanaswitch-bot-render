@@ -8491,6 +8491,7 @@ export default function App() {
               isOpen={isGlobalWebinarModalOpen}
               merchantId={getCurrentStoreId()}
               storeName={currentUser?.storeName || currentUser?.name || 'Mon Entreprise'}
+              currentUser={currentUser}
               onClose={() => setIsGlobalWebinarModalOpen(false)}
               onOpenNanaGenerator={() => {
                 setIsGlobalWebinarModalOpen(false);

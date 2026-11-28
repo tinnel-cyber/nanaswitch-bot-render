@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { fetchLiveApiWithFailover } from '../config/liveStreamConfig';
 
 export interface LiveAuctionBid {
   id: string;
@@ -74,24 +75,33 @@ export async function persistAuctionToSupabase(auction: LiveAuctionState): Promi
       ends_at: new Date(auction.endsAt).toISOString(),
     });
   } catch {
-    // Non-bloquant : Broadcast assure le temps réel immédiat
+    // Non-bloquant : réservé à l'hôte authentifié
   }
 }
 
 export async function persistAuctionBidToSupabase(
   sessionId: string,
   bid: LiveAuctionBid
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await supabase.from('live_auction_bids').insert({
-      auction_id: bid.auctionId,
-      session_id: sessionId,
-      bidder_id: bid.bidderId,
-      bidder_name: bid.bidderName,
-      amount: bid.amount,
-    });
+    const res = await fetchLiveApiWithFailover(
+      '/api/lives/auctions/bid',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          auctionId: bid.auctionId,
+          bidderId: bid.bidderId,
+          bidderName: bid.bidderName,
+          amount: bid.amount,
+        }),
+      },
+      { attachAuth: false }
+    );
+    return res.ok;
   } catch {
-    // Non-bloquant
+    return false;
   }
 }
 
@@ -110,9 +120,22 @@ export function createLiveAuctionChannel(
   });
 
   channel.on('broadcast', { event: 'auction_sync' }, ({ payload }) => {
-    const state = payload?.auction ?? null;
-    saveLocalLiveAuction(sessionId, state);
-    handlers.onAuctionSync?.(state);
+    const incoming: LiveAuctionState | null = payload?.auction ?? null;
+    const prev = getSavedLiveAuction(sessionId);
+
+    // SÉCURITÉ ANTI-MANIPULATION : un message broadcast ne peut pas abaisser le prix courant d'une même enchère active
+    if (
+      prev &&
+      incoming &&
+      prev.id === incoming.id &&
+      incoming.status === 'active' &&
+      incoming.currentPrice < prev.currentPrice
+    ) {
+      return;
+    }
+
+    saveLocalLiveAuction(sessionId, incoming);
+    handlers.onAuctionSync?.(incoming);
   });
 
   channel.on('broadcast', { event: 'auction_bid' }, ({ payload }) => {
@@ -144,13 +167,13 @@ export function createLiveAuctionChannel(
   };
 
   return {
-    broadcastAuction: (auction: LiveAuctionState | null) => {
+    broadcastAuction: (auction: LiveAuctionState | null, persistDb: boolean = true) => {
       saveLocalLiveAuction(sessionId, auction);
-      if (auction) persistAuctionToSupabase(auction);
+      if (auction && persistDb) persistAuctionToSupabase(auction);
       return send('auction_sync', { auction });
     },
-    broadcastBid: (bid: LiveAuctionBid) => {
-      persistAuctionBidToSupabase(sessionId, bid);
+    broadcastBid: async (bid: LiveAuctionBid) => {
+      await persistAuctionBidToSupabase(sessionId, bid);
       return send('auction_bid', { bid });
     },
     cleanup: () => {

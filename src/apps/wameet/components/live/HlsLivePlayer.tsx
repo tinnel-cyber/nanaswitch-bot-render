@@ -63,6 +63,8 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const retryCountRef = useRef<number>(0);
+
   // Résolution de l'URL HLS finale
   const targetHlsUrl = src || buildStoreHlsUrl(storeSlug);
 
@@ -92,7 +94,11 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
         levelLoadingTimeOut: 10000,
         fragLoadingTimeOut: 20000,
         enableWorker: true,
-        lowLatencyMode: true
+        lowLatencyMode: true,
+        xhrSetup: (xhr) => {
+          // MediaMTX Northflank répond avec Access-Control-Allow-Origin spécifique + cookieCheck Partitioned
+          xhr.withCredentials = false;
+        },
       });
 
       hlsRef.current = hls;
@@ -100,13 +106,12 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('[HLS PLAYER] Manifeste chargé avec succès :', targetHlsUrl);
         setIsLiveActive(true);
+        retryCountRef.current = 0;
         setRetryCount(0);
         if (onStreamReady) onStreamReady();
         if (autoPlay) {
           video.play().catch(() => {
-            // Si autoplay bloqué par le navigateur, on force en muet
             video.muted = true;
             setIsMuted(true);
             video.play().catch(() => {});
@@ -117,30 +122,28 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
           switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.warn('[HLS PLAYER] Erreur réseau, tentative de récupération / attente vendeur...');
+            case Hls.ErrorTypes.NETWORK_ERROR: {
               setIsLiveActive(false);
               setIsRetrying(true);
               if (onStreamWaiting) onStreamWaiting();
-              // Reconnexion automatique avec backoff progressif
               if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+              const delay = Math.min(2000 + retryCountRef.current * 500, 6000);
               retryTimerRef.current = setTimeout(() => {
-                setRetryCount(prev => prev + 1);
+                retryCountRef.current += 1;
+                setRetryCount(retryCountRef.current);
                 hls.startLoad();
-              }, Math.min(2000 + (retryCount * 500), 6000));
+              }, delay);
               break;
+            }
 
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.warn('[HLS PLAYER] Erreur média, récupération automatique...');
               hls.recoverMediaError();
               break;
 
             default:
-              console.warn('[HLS PLAYER] Erreur fatale non récupérable :', data);
               hls.destroy();
               setIsLiveActive(false);
               setIsRetrying(true);
-              // Réinitialisation complète après 3s
               if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
               retryTimerRef.current = setTimeout(() => {
                 initHlsPlayer();
@@ -155,6 +158,7 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
       video.src = targetHlsUrl;
       video.addEventListener('loadedmetadata', () => {
         setIsLiveActive(true);
+        retryCountRef.current = 0;
         if (onStreamReady) onStreamReady();
         if (autoPlay) {
           video.play().catch(() => {
@@ -171,14 +175,15 @@ export const HlsLivePlayer: React.FC<HlsLivePlayerProps> = ({
         if (onStreamWaiting) onStreamWaiting();
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
-          setRetryCount(prev => prev + 1);
+          retryCountRef.current += 1;
+          setRetryCount(retryCountRef.current);
           initHlsPlayer();
         }, 3000);
       });
     } else {
       setErrorMessage("Votre navigateur ne supporte pas la lecture de flux HLS.");
     }
-  }, [targetHlsUrl, autoPlay, retryCount, onStreamReady, onStreamWaiting]);
+  }, [targetHlsUrl, autoPlay, onStreamReady, onStreamWaiting]);
 
   // Initialisation au montage
   useEffect(() => {

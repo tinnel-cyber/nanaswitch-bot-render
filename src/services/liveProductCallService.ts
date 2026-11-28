@@ -51,19 +51,29 @@ export function isCallForMerchant(
   const normMerchant = normalizeId(merchantId);
   const normIncoming = normalizeId(incoming.sellerId);
 
-  if (!normMerchant || !normIncoming || normIncoming === 'merchant-direct' || normIncoming === 'boutique') {
+  // SÉCURITÉ ANTI-SONNERIE GLOBALE : ne jamais faire sonner tous les marchands si l'identifiant est générique ou vide
+  const isSpecificIncomingId =
+    Boolean(normIncoming) &&
+    normIncoming !== 'merchant-direct' &&
+    normIncoming !== 'boutique' &&
+    normIncoming !== 'default';
+
+  if (normMerchant && isSpecificIncomingId && normIncoming === normMerchant) {
     return true;
   }
-  if (normIncoming === normMerchant) {
-    return true;
-  }
+
+  const cleanMerchantStore = (merchantStoreName || '').trim().toLowerCase();
+  const cleanIncomingStore = (incoming.storeName || '').trim().toLowerCase();
+  const genericStoreNames = new Set(['', 'boutique', 'ma boutique', 'mon entreprise', 'boutique nanasore']);
+
   if (
-    merchantStoreName &&
-    incoming.storeName &&
-    merchantStoreName.trim().toLowerCase() === incoming.storeName.trim().toLowerCase()
+    !genericStoreNames.has(cleanMerchantStore) &&
+    !genericStoreNames.has(cleanIncomingStore) &&
+    cleanMerchantStore === cleanIncomingStore
   ) {
     return true;
   }
+
   return false;
 }
 

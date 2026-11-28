@@ -30,6 +30,7 @@ import {
   updateLiveRoomConfig,
   subscribeLiveRoomConfig,
   hasLocalLiveEnrollment,
+  verifyStoredLiveEnrollmentToken,
   FALLBACK_LIVE_SESSION,
 } from '../../../services/liveSessionService';
 import {
@@ -62,7 +63,7 @@ import { LiveAffiliatePayoutModal } from '../components/live/LiveAffiliatePayout
 import { LiveAffiliateMiniWallet } from '../components/live/LiveAffiliateMiniWallet';
 import { NativeCoaching1to1Room } from '../components/live/NativeCoaching1to1Room';
 import { SlideOutFunnelDrawer } from '../../../components/SlideOutFunnelDrawer';
-import { loadStoreMultistreamConfig } from '../../../services/liveMultistreamService';
+import { loadPublicLiveWhatsappUrl } from '../../../services/liveMultistreamService';
 import { playTapBeep, playValidationBeep } from '../../../utils/audio';
 
 export interface PublicLiveSessionPageProps {
@@ -177,8 +178,9 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
       if (ownerStoreId && (currentUser.id === ownerStoreId || currentUser.storeId === ownerStoreId)) return true;
     }
     if (supabaseUser) {
+      const appMeta = supabaseUser.app_metadata || {};
       const meta = supabaseUser.user_metadata || {};
-      if (meta.role === 'SUPER_ADMIN') return true;
+      if (String(appMeta.role || '').toUpperCase() === 'SUPER_ADMIN') return true;
       if (
         ownerStoreId &&
         (supabaseUser.id === ownerStoreId ||
@@ -219,7 +221,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
     return digits ? `https://wa.me/${digits}` : '';
   }, [whatsappChannelUrl]);
 
-  // Chargement de la session + préférences runtime (mode salle, sas payant & enchère)
+  // Chargement de la session + vérification serveur du jeton VIP + lien WhatsApp public (zéro clé RTMP)
   useEffect(() => {
     let isMounted = true;
     getLiveSessionBySlug(resolvedSlug).then((res) => {
@@ -227,15 +229,20 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         const savedCfg = getSavedLiveRoomConfig(res.id);
         setSession({ ...res, ...savedCfg });
         setHasUnlockedPaidAccess(hasLocalLiveEnrollment(res.id));
+        verifyStoredLiveEnrollmentToken(res.id)
+          .then((valid) => {
+            if (isMounted) setHasUnlockedPaidAccess(valid);
+          })
+          .catch(() => {});
         const savedAuction = getSavedLiveAuction(res.id);
         if (savedAuction) setActiveAuction(savedAuction);
       }
     });
 
-    loadStoreMultistreamConfig(resolvedSlug)
-      .then((cfg) => {
-        if (isMounted && cfg?.whatsappChannelUrl) {
-          setWhatsappChannelUrl(cfg.whatsappChannelUrl);
+    loadPublicLiveWhatsappUrl(resolvedSlug)
+      .then((waUrl) => {
+        if (isMounted && waUrl) {
+          setWhatsappChannelUrl(waUrl);
         }
       })
       .catch(() => {});
@@ -438,23 +445,26 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
       setActiveAuction(nextState);
       await auctionChannelRef.current?.broadcastBid(bid);
-      await auctionChannelRef.current?.broadcastAuction(nextState);
+      await auctionChannelRef.current?.broadcastAuction(nextState, isVerifiedHost);
     },
-    [viewerClientId, currentUser?.name]
+    [viewerClientId, currentUser?.name, isVerifiedHost]
   );
 
   const handleEndAuction = useCallback(async () => {
+    if (!isVerifiedHost) return;
     const current = activeAuctionRef.current;
     if (!current || current.status === 'ended') return;
     const endedState: LiveAuctionState = { ...current, status: 'ended' };
     setActiveAuction(endedState);
-    await auctionChannelRef.current?.broadcastAuction(endedState);
-  }, []);
+    await auctionChannelRef.current?.broadcastAuction(endedState, true);
+  }, [isVerifiedHost]);
 
   const handleDismissAuction = useCallback(async () => {
     setActiveAuction(null);
-    await auctionChannelRef.current?.broadcastAuction(null);
-  }, []);
+    if (isVerifiedHost) {
+      await auctionChannelRef.current?.broadcastAuction(null, false);
+    }
+  }, [isVerifiedHost]);
 
   // Épingler / Désépingler un produit en direct (Hôte vérifié uniquement)
   const handlePinProduct = useCallback(
@@ -506,6 +516,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
 
   const handleUpdateBadge = useCallback(
     async (cfg: { customBadgeLabel: string; customBadgeColor: LiveBadgeColor }) => {
+      if (!isVerifiedHost) return;
       setSession((prev) => ({
         ...prev,
         customBadgeLabel: cfg.customBadgeLabel,
@@ -516,7 +527,7 @@ export const PublicLiveSessionPage: React.FC<PublicLiveSessionPageProps> = ({
         customBadgeColor: cfg.customBadgeColor,
       });
     },
-    [session.id]
+    [session.id, isVerifiedHost]
   );
 
   const handleBack = () => {

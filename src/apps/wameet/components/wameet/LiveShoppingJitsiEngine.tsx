@@ -41,6 +41,8 @@ import { PhygitalScarcityAlert } from './PhygitalScarcityAlert';
 import { RelayShareButton } from './RelayShareButton';
 import { CommissionToast } from './CommissionToast';
 import { ScreenRecordButton } from './ScreenRecordButton';
+import { getSafeJitsiDomain } from '../../../../config/liveStreamConfig';
+import { initiatePaymentTransaction } from '../../../../services/paymentApiService';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 
@@ -182,7 +184,7 @@ const INITIAL_SALE_MESSAGES: LiveSaleMessage[] = [
  */
 export const LiveShoppingJitsiEngine: React.FC<LiveShoppingJitsiEngineProps> = ({
   roomName = 'wameet-live-shopping-studio-1',
-  jitsiDomain = 'meet.jit.si',
+  jitsiDomain: rawJitsiDomain,
   title = '🔥 Grande Vente Flash & Direct Live Shopping Wameet',
   sellerName = 'Aïcha Fashion & Bio Cosmetics',
   sellerHandle = '@aicha.fashion.ci',
@@ -194,6 +196,8 @@ export const LiveShoppingJitsiEngine: React.FC<LiveShoppingJitsiEngineProps> = (
   onClose,
   className = ''
 }) => {
+  const jitsiDomain =
+    rawJitsiDomain && rawJitsiDomain !== 'meet.jit.si' ? rawJitsiDomain : getSafeJitsiDomain();
   // ─── Rôle Actuel (avec switch pour tester facilement en direct) ───────────
   const [isSeller, setIsSeller] = useState<boolean>(initialIsSeller);
 
@@ -480,21 +484,36 @@ export const LiveShoppingJitsiEngine: React.FC<LiveShoppingJitsiEngineProps> = (
     setMessages((prev) => [...prev, hagglingMsg]);
   }, [activeProduct, hagglingOfferPrice, hagglingMessage]);
 
-  // Confirmer Achat en 1 Clic Wameet
-  const handleConfirmOneClickBuy = useCallback(() => {
+  // Confirmer Achat en 1 Clic Wameet (paiement réel via Northflank Payment API)
+  const handleConfirmOneClickBuy = useCallback(async () => {
     setIsProcessingBuy(true);
     playTapBeep();
 
-    setTimeout(() => {
+    try {
+      const payRes = await initiatePaymentTransaction({
+        amount: activeProduct.price,
+        currency: 'XOF',
+        phoneNumber: buyerPhone,
+        operator: selectedMobileMoney.toUpperCase(),
+        description: `Live Shopping : ${activeProduct.shortTitle}`,
+        orderId: `live_${roomName}_${Date.now()}`,
+      });
+
+      if (payRes?.paymentUrl) {
+        window.open(payRes.paymentUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      if (payRes?.status === 'error' && !payRes?.paymentUrl && !payRes?.transactionId) {
+        throw new Error(payRes.error || 'Paiement refusé par l’opérateur.');
+      }
+
       setIsProcessingBuy(false);
       setOrderConfirmed(true);
       playValidationBeep();
       playCashChime();
 
-      // Décompte de stock
       setScarcityStock((prev) => Math.max(0, prev - 1));
 
-      // Notification Cha-Ching Micro-Relais (5%)
       const commission = Math.round(activeProduct.price * 0.05);
       setCommissionToast({
         isOpen: true,
@@ -504,13 +523,12 @@ export const LiveShoppingJitsiEngine: React.FC<LiveShoppingJitsiEngineProps> = (
         productName: activeProduct.shortTitle
       });
 
-      // Bulle de commande dans le live
       const purchaseMsg: LiveSaleMessage = {
         id: `buy-${Date.now()}`,
         type: 'purchase',
         senderName: 'Client VIP',
         senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        text: `⚡ Acheté en 1-Clic via Wameet Escrow : ${activeProduct.shortTitle} ! 🚀`,
+        text: `⚡ Commande initiée via Wameet Pay : ${activeProduct.shortTitle} ! 🚀`,
         amountFcfa: activeProduct.price,
         productId: activeProduct.id,
         time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -521,8 +539,19 @@ export const LiveShoppingJitsiEngine: React.FC<LiveShoppingJitsiEngineProps> = (
         setIsOneClickBuyOpen(false);
         setOrderConfirmed(false);
       }, 1800);
-    }, 900);
-  }, [activeProduct]);
+    } catch (err: any) {
+      setIsProcessingBuy(false);
+      const errMsg: LiveSaleMessage = {
+        id: `err-${Date.now()}`,
+        type: 'chat',
+        senderName: 'Système Paiement',
+        senderAvatar: sellerAvatar,
+        text: `⚠️ ${err?.message || 'Veuillez vérifier votre numéro Mobile Money et réessayer.'}`,
+        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages((prev) => [...prev, errMsg]);
+    }
+  }, [activeProduct, buyerPhone, selectedMobileMoney, roomName, sellerAvatar]);
 
   // Farotage en Direct
   const handleFaroter = useCallback((amount: number) => {

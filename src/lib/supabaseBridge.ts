@@ -358,7 +358,7 @@ export function onSnapshot(target: any, onNext: (snap: any) => void, _onError?: 
 export function query(colRef: any, ...constraints: any[]) {
   let limitCount = 100;
   for (const c of constraints) {
-    if (c?.type === 'limit') limitCount = c.n;
+    if (c?.type === 'limit' || c?.type === 'limitToLast') limitCount = c.n;
   }
   return {
     path: colRef.path,
@@ -381,6 +381,10 @@ export function limit(n: number) {
   return { type: 'limit', n };
 }
 
+export function limitToLast(n: number) {
+  return { type: 'limitToLast', n };
+}
+
 export function startAfter(...args: any[]) {
   return { type: 'startAfter', args };
 }
@@ -388,6 +392,33 @@ export function startAfter(...args: any[]) {
 export function serverTimestamp() {
   return new Date().toISOString();
 }
+
+export const Timestamp = {
+  now: () => ({
+    toDate: () => new Date(),
+    toMillis: () => Date.now(),
+    seconds: Math.floor(Date.now() / 1000),
+    nanoseconds: 0,
+    toJSON: () => new Date().toISOString(),
+  }),
+  fromDate: (d: Date) => {
+    const ms = d instanceof Date ? d.getTime() : Date.now();
+    return {
+      toDate: () => new Date(ms),
+      toMillis: () => ms,
+      seconds: Math.floor(ms / 1000),
+      nanoseconds: 0,
+      toJSON: () => new Date(ms).toISOString(),
+    };
+  },
+  fromMillis: (ms: number) => ({
+    toDate: () => new Date(ms),
+    toMillis: () => ms,
+    seconds: Math.floor(ms / 1000),
+    nanoseconds: 0,
+    toJSON: () => new Date(ms).toISOString(),
+  }),
+};
 
 export function increment(n: number) {
   return n;

@@ -9,7 +9,12 @@
  * - Fermeture propre (DELETE WHIP Location + RTCPeerConnection.close() + track.stop())
  */
 
-import { buildStoreWhipUrl, buildStoreHlsUrl } from '../config/liveStreamConfig';
+import {
+  buildStoreWhipUrl,
+  buildStoreHlsUrl,
+  getSharedWebRtcIceServers,
+  resolveWebRtcIceServers,
+} from '../config/liveStreamConfig';
 
 export type CameraFacingMode = 'user' | 'environment';
 
@@ -35,12 +40,6 @@ export interface StartWhipOptions extends WhipCameraOptions {
   iceServers?: RTCIceServer[];
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
 }
-
-const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' }
-];
 
 /**
  * Formate une erreur getUserMedia en message utilisateur clair (français)
@@ -194,9 +193,10 @@ export async function startWhipBroadcast(
     audioDeviceId: options.audioDeviceId
   }));
 
-  // 2. Création de la RTCPeerConnection
+  // 2. Création de la RTCPeerConnection (STUN + TURN 4G CGNAT résolus depuis Northflank si configurés)
+  const resolvedIce = options.iceServers || (await resolveWebRtcIceServers().catch(() => getSharedWebRtcIceServers()));
   const pc = new RTCPeerConnection({
-    iceServers: options.iceServers || DEFAULT_ICE_SERVERS,
+    iceServers: resolvedIce,
     bundlePolicy: 'max-bundle'
   });
 

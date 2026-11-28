@@ -35,6 +35,7 @@ import { StoreProductItem } from '../../../../components/storeBuilder/types';
 import { HlsLivePlayer } from './HlsLivePlayer';
 import { NanasoreChameleonPlayer } from './NanasoreChameleonPlayer';
 import { NativeCoaching1to1Room } from './NativeCoaching1to1Room';
+import { normalizeSafeJitsiUrl } from '../../../../config/liveStreamConfig';
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 
 export interface NanasoreOmniPlayerProps {
@@ -224,9 +225,10 @@ export const NanasoreOmniPlayer: React.FC<NanasoreOmniPlayerProps> = ({
       };
     }
 
-    // 4. Jitsi Meet (intégration iframe directe de la salle collée)
-    if (raw.includes('meet.jit.si') || raw.includes('jitsi.')) {
-      const baseJitsi = raw.split('#')[0];
+    // 4. Jitsi Meet (normalisé hors de meet.jit.si pour éviter la coupure 5 minutes)
+    if (raw.includes('meet.jit.si') || raw.includes('meet.ffmuc.net') || raw.includes('jitsi.')) {
+      const safeJitsi = normalizeSafeJitsiUrl(raw);
+      const baseJitsi = safeJitsi.split('#')[0];
       return {
         type: 'jitsi' as const,
         label: 'Jitsi Meet',

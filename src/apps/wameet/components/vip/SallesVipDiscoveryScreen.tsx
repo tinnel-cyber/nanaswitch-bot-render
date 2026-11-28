@@ -30,6 +30,7 @@ import { VipRoom, getVipRooms, subscribeToVipRooms, saveVipRoom } from '../../se
 import { playTapBeep, playValidationBeep } from '../../../../utils/audio';
 import ComposantUploadVideo from '../../../../components/ComposantUploadVideo';
 import { VipHostAccreditationModal } from './VipHostAccreditationModal';
+import { fetchLiveApiWithFailover } from '../../../../config/liveStreamConfig';
 
 export interface SallesVipDiscoveryScreenProps {
   onSelectRoom: (roomId: string) => void;
@@ -535,7 +536,7 @@ export const SallesVipDiscoveryScreen: React.FC<SallesVipDiscoveryScreenProps> =
                         onClick={async () => {
                           playValidationBeep();
                           try {
-                            await fetch('/api/live/launch-theme-session', {
+                            await fetchLiveApiWithFailover('/api/live/launch-theme-session', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({

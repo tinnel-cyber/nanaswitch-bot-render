@@ -6,6 +6,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { getSharedWebRtcIceServers, resolveWebRtcIceServers } from '../config/liveStreamConfig';
 
 export type CoachingRtcStatus =
   | 'idle'
@@ -33,28 +34,7 @@ export interface CoachingRtcCallbacks {
 const MAX_REMOTE_PEERS = 5; // Jusqu'à 6 participants au total (soi + 5 distants)
 
 function getIceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-  ];
-
-  const turnUrl =
-    typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_TURN_URL : undefined;
-  const turnUser =
-    typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_TURN_USERNAME : undefined;
-  const turnCred =
-    typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_TURN_CREDENTIAL : undefined;
-
-  if (turnUrl && String(turnUrl).trim()) {
-    servers.push({
-      urls: String(turnUrl).trim(),
-      username: turnUser ? String(turnUser).trim() : undefined,
-      credential: turnCred ? String(turnCred).trim() : undefined,
-    });
-  }
-
-  return servers;
+  return getSharedWebRtcIceServers();
 }
 
 export function formatRtcError(err: any): string {
@@ -116,20 +96,21 @@ export class NativeCoachingRtcSession {
   }
 
   private emitPeers() {
-    if (this.closed) return;
-    const list: RemotePeerInfo[] = Array.from(this.peers.values()).map((entry) => ({
-      peerId: entry.peerId,
-      displayName: entry.displayName,
-      stream: entry.stream,
-      connectionState: entry.pc.connectionState,
-    }));
-    this.callbacks.onPeersChange?.(list);
+    if (!this.closed) {
+      const list: RemotePeerInfo[] = Array.from(this.peers.values()).map((entry) => ({
+        peerId: entry.peerId,
+        displayName: entry.displayName,
+        stream: entry.stream,
+        connectionState: entry.pc.connectionState,
+      }));
+      this.callbacks.onPeersChange?.(list);
 
-    const anyConnected = list.some((p) => p.connectionState === 'connected');
-    const anyConnecting = list.some((p) => p.connectionState === 'connecting' || p.connectionState === 'new');
-    if (anyConnected) this.setStatus('connected');
-    else if (anyConnecting) this.setStatus('connecting');
-    else this.setStatus('waiting_peer');
+      const anyConnected = list.some((p) => p.connectionState === 'connected');
+      const anyConnecting = list.some((p) => p.connectionState === 'connecting' || p.connectionState === 'new');
+      if (anyConnected) this.setStatus('connected');
+      else if (anyConnecting) this.setStatus('connecting');
+      else this.setStatus('waiting_peer');
+    }
   }
 
   async start(): Promise<void> {
@@ -164,6 +145,7 @@ export class NativeCoachingRtcSession {
       return;
     }
 
+    await resolveWebRtcIceServers().catch(() => {});
     this.connectSignalingChannel();
   }
 

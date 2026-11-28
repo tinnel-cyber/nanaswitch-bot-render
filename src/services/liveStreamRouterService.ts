@@ -69,14 +69,10 @@ export interface StartLiveResponse {
   error?: string;
 }
 
-import { getApiBaseUrl, buildStoreWhipUrl, buildStoreHlsUrl } from '../config/liveStreamConfig';
-
-const API_BASE_URL = typeof window !== 'undefined'
-  ? (window.location.hostname === 'localhost' ? 'http://localhost:10000' : getApiBaseUrl())
-  : getApiBaseUrl();
+import { fetchLiveApiWithFailover, buildStoreWhipUrl, buildStoreHlsUrl } from '../config/liveStreamConfig';
 
 /**
- * 1. Déclenche une session Live MediaMTX (WHIP + HLS) via le backend Northflank
+ * 1. Déclenche une session Live MediaMTX (WHIP + HLS) via le backend Northflank (#1 primaire)
  */
 export async function startLiveStream(options: StartLiveOptions = {}): Promise<StartLiveResponse> {
   const storeSlug = options.storeId || 'nanasore_central_hub';
@@ -91,7 +87,7 @@ export async function startLiveStream(options: StartLiveOptions = {}): Promise<S
   };
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/lives/start`, {
+    const res = await fetchLiveApiWithFailover('/api/lives/start', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -130,18 +126,18 @@ export async function startLiveStream(options: StartLiveOptions = {}): Promise<S
 }
 
 /**
- * 2. Récupère le statut du quota YouTube quotidien
+ * 2. Récupère le statut du quota quotidien
  */
 export async function getLiveStreamQuota(): Promise<LiveStreamQuotaInfo | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/lives/quota`);
+    const res = await fetchLiveApiWithFailover('/api/lives/quota', { method: 'GET' }, { attachAuth: false });
     if (!res.ok) return null;
     const data = await res.json();
     return {
       todayCount: data.currentCount || data.todayCount || 0,
       maxDailyLimit: data.maxLimit || data.maxDailyLimit || 30,
       date: data.today || data.date || new Date().toISOString().split('T')[0],
-      quotaExceeded: !data.allowed
+      quotaExceeded: Boolean(data.quotaExceeded)
     };
   } catch (err) {
     console.warn('[LIVE ROUTER CLIENT] Impossible de lire le quota :', err);
@@ -154,7 +150,7 @@ export async function getLiveStreamQuota(): Promise<LiveStreamQuotaInfo | null> 
  */
 export async function stopLiveStream(liveId: string): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/lives/${liveId}/stop`, {
+    const res = await fetchLiveApiWithFailover(`/api/lives/${encodeURIComponent(liveId)}/stop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ liveId })

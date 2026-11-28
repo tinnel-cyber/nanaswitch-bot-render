@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { PhysicalFunnelConfig } from '../../../../types/physicalFunnel';
 import { formatCFA, playTapBeep, playValidationBeep } from '../../../../utils/audio';
+import { fetchLiveApiWithFailover } from '../../../../config/liveStreamConfig';
 
 export interface MagicQrCodeModalProps {
   isOpen: boolean;
@@ -96,7 +97,7 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/live-codes/ensure', {
+    fetchLiveApiWithFailover('/api/live-codes/ensure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -119,7 +120,7 @@ export const MagicQrCodeModal: React.FC<MagicQrCodeModalProps> = ({
     setIsUpdatingLiveCode(true);
     setLiveCodeStatus('');
     try {
-      const res = await fetch('/api/live-codes/ensure', {
+      const res = await fetchLiveApiWithFailover('/api/live-codes/ensure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
