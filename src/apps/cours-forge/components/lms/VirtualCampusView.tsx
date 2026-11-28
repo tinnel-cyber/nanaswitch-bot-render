@@ -77,9 +77,14 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
 }) => {
   const isFree = isFreePlan(subscription || currentUser?.subscription);
   const [course, setCourse] = useState<Course>(() => getMockCourseById(courseId));
-  // Contrôle d'accès vérifié côté serveur (fini le contournement via localStorage)
+  // Contrôle d'accès vérifié côté serveur : seuls le Super Admin ou le propriétaire réel du cours ont l'aperçu staff
   const isStaffPreview = Boolean(
-    currentUser && ['admin', 'superadmin', 'instructor', 'owner', 'merchant'].includes(String((currentUser as any)?.role || '').toLowerCase())
+    currentUser &&
+      ((currentUser as any)?.isSuperAdmin ||
+        String((currentUser as any)?.role || '').toUpperCase() === 'SUPER_ADMIN' ||
+        (currentUser.id &&
+          ((course as any)?.instructorId === currentUser.id ||
+            (currentUser.storeId && (course as any)?.tenantId === currentUser.storeId))))
   );
   const [isEnrolled, setIsEnrolled] = useState<boolean>(isStaffPreview);
   const [accessMeta, setAccessMeta] = useState<{
@@ -321,17 +326,11 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
       console.warn("Échec chargement structure cours Firestore :", err);
     });
 
-    // 2. Chargement de l'inscription réelle de l'étudiant
+    // 2. Chargement de la progression locale (ne déverrouille JAMAIS l'inscription sans validation serveur)
     const studentUid = currentUser?.id || (currentUser as any)?.uid || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || 'student-guest';
     loadStudentEnrollment(courseId, studentUid).then(loadedEnrollment => {
       if (!isMounted || !loadedEnrollment) return;
       setEnrollment(loadedEnrollment);
-      if (loadedEnrollment.isCompleted || (loadedEnrollment.completedLessonIds && loadedEnrollment.completedLessonIds.length > 0)) {
-        setIsEnrolled(true);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(`nana_course_enrolled_${courseId}`, 'true');
-        }
-      }
     }).catch(err => {
       console.warn("Échec chargement inscription étudiante :", err);
     });
@@ -434,9 +433,8 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
   }, [course?.modules, enrollmentTimestamp, enrollment?.completedLessonIds]);
 
   const getLessonLockStatus = useCallback((lesson: CourseLesson, moduleIndex: number) => {
-    // Les formateurs et administrateurs ont accès complet
-    const isStaff = currentUser?.role === 'instructor' || currentUser?.role === 'admin' || (currentUser as any)?.isSuperAdmin;
-    if (isStaff) return { unlocked: true };
+    // Seuls le Super Admin ou le propriétaire réel du cours ont l'accès complet sans souscription
+    if (isStaffPreview) return { unlocked: true };
 
     // Les leçons en aperçu gratuit sont toujours ouvertes à tous
     if (lesson?.isFreePreview) return { unlocked: true };
@@ -939,21 +937,23 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
             <span className="hidden sm:inline">Certificat</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              playTapBeep();
-              if (typeof window !== 'undefined') {
-                window.history.pushState({}, '', '/instructor');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }
-            }}
-            className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition flex items-center gap-1 min-h-[38px] cursor-pointer"
-            title="Espace Formateur & Centre de Correction"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Correction</span>
-          </button>
+          {isStaffPreview && (
+            <button
+              type="button"
+              onClick={() => {
+                playTapBeep();
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/instructor');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition flex items-center gap-1 min-h-[38px] cursor-pointer"
+              title="Espace Formateur & Centre de Correction"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Correction</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -1406,6 +1406,27 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
                 onComplete={() => handleCompleteRemediation(activeRemediationId)}
                 onBackToCourse={() => setActiveRemediationId(null)}
               />
+            </div>
+          ) : activeTab !== 'SYLLABUS' && !isEnrolled ? (
+            <div className="rounded-3xl bg-slate-900/90 border border-amber-500/30 p-8 sm:p-10 text-center space-y-4 shadow-2xl">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+                <Lock className="w-7 h-7" />
+              </div>
+              <div className="max-w-md mx-auto space-y-2">
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  Espace Campus Privé réservé aux inscrits
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Souscrivez à la formation <strong>{course.title}</strong> pour débloquer le Campus Social, l&apos;Arène Vocale IA, le Chat Formateur, les Devoirs, les Quiz et le Diplôme certifié.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCheckoutOpen(true)}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-950/50 transition cursor-pointer"
+              >
+                Souscrire à cette formation maintenant →
+              </button>
             </div>
           ) : (
             <>
@@ -2012,20 +2033,22 @@ export const VirtualCampusView: React.FC<VirtualCampusViewProps> = React.memo(({
         }}
       />
 
-      {/* Bouton d'édition rapide Funnel Builder pour Administrateur / Équipe */}
-      <button
-        type="button"
-        onClick={() => {
-          playTapBeep();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/builder?edit=campus-landing';
-          }
-        }}
-        className="fixed bottom-4 right-4 z-50 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-2xl shadow-blue-500/40 border border-blue-400/40 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
-      >
-        <span>✏️</span>
-        <span>Modifier cette page</span>
-      </button>
+      {/* Bouton d'édition rapide Funnel Builder uniquement pour Administrateur / Propriétaire du cours */}
+      {isStaffPreview && (
+        <button
+          type="button"
+          onClick={() => {
+            playTapBeep();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/builder?edit=campus-landing';
+            }
+          }}
+          className="fixed bottom-4 right-4 z-50 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-2xl shadow-blue-500/40 border border-blue-400/40 flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
+        >
+          <span>✏️</span>
+          <span>Modifier cette page</span>
+        </button>
+      )}
 
       {/* Modale d'inscription & paiement immédiat (Paywall Sécurisé) */}
       <React.Suspense fallback={null}>

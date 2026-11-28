@@ -45,7 +45,8 @@ import {
   CheckSquare,
   AlertTriangle,
   ShoppingBag,
-  UploadCloud
+  UploadCloud,
+  Lock
 } from 'lucide-react';
 import { Course } from '../../../../../types';
 import { DEFAULT_MASTERCLASS_COURSE } from '../mockCourses';
@@ -437,21 +438,8 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   const [purchaseSearch, setPurchaseSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL');
 
-  // Module Quiz & Évaluations des cours souscrits
-  const [quizzes, setQuizzes] = useState<StudentQuiz[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('nana_student_quizzes');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (err) {
-        console.warn('Erreur lecture quizzes localStorage:', err);
-      }
-    }
-    return DEFAULT_STUDENT_QUIZZES;
-  });
+  // Module Quiz & Évaluations (strictement limité aux cours réellement souscrits)
+  const [quizzes, setQuizzes] = useState<StudentQuiz[]>([]);
 
   const [activeQuizModal, setActiveQuizModal] = useState<StudentQuiz | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
@@ -477,10 +465,10 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
       const stored = localStorage.getItem('nana_student_name');
       if (stored && stored.trim()) return stored;
     }
-    return 'Ibrahim Pousbila Konkobo';
+    return 'Apprenant Nanasore';
   });
 
-  const studentEmail = propStudentEmail || 'ibrahim.konkobo@nanasore.com';
+  const studentEmail = propStudentEmail || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') || '' : '');
 
   // Fermeture des dropdowns au clic externe
   useEffect(() => {
@@ -500,62 +488,36 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Notifications simulées de l'académie
-  const notifications = [
-    {
-      id: 'notif-1',
-      title: 'Devoir pratique noté',
-      description: 'M. Konkobo a validé votre étude de cas POS avec la note de 19/20.',
-      time: 'Il y a 25 min',
-      read: false,
-      icon: Award,
-      badgeColor: 'bg-emerald-500'
-    },
-    {
-      id: 'notif-2',
-      title: 'Session Live Q&R ce soir',
-      description: 'Webinaire interactif sur l\'intégration Wave à 19h30 GMT.',
-      time: 'Il y a 2 heures',
-      read: false,
-      icon: Video,
-      badgeColor: 'bg-[#1D4ED8]'
-    },
-    {
-      id: 'notif-3',
-      title: 'Certificat émis & vérifiable',
-      description: 'Votre diplôme en Architectures Caisses Connectées est disponible.',
-      time: 'Hier',
-      read: true,
-      icon: ShieldCheck,
-      badgeColor: 'bg-amber-500'
-    }
-  ];
-
-  // Messages non lus
-  const mockMessages = [
-    {
-      id: 'msg-1',
-      sender: 'Ibrahim P. Konkobo',
-      role: 'Formateur Principal',
-      text: 'Excellente réponse au quiz sur la synchronisation IndexedDB !',
-      time: '14:20',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-      unread: true
-    },
-    {
-      id: 'msg-2',
-      sender: 'Support Pédagogique NaNa',
-      role: 'Assistance Technique',
-      text: 'Vos identifiants pour le simulateur de caisse ont été actualisés.',
-      time: 'Hier',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80',
-      unread: true
-    }
-  ];
-
   // 1. Récupération réactive des inscriptions, achats, quiz & certificats réels depuis le Cloud (/api/student/me)
   const [realEnrollments, setRealEnrollments] = useState<any[]>([]);
   const [realCoursesMap, setRealCoursesMap] = useState<Record<string, any>>({});
+  const [studentPurchases, setStudentPurchases] = useState<StudentPurchase[]>([]);
+
+  // Notifications et messages uniquement si l'étudiant possède au moins un cours souscrit
+  const notifications = useMemo(() => {
+    if (realEnrollments.length === 0) return [];
+    return [
+      {
+        id: 'notif-welcome',
+        title: 'Accès Campus Privé actif',
+        description: `Vos ${realEnrollments.length} formation(s) souscrite(s) sont accessibles dans votre espace.`,
+        time: 'Actif',
+        read: true,
+        icon: ShieldCheck,
+        badgeColor: 'bg-emerald-500'
+      }
+    ];
+  }, [realEnrollments.length]);
+
+  const mockMessages: Array<{
+    id: string;
+    sender: string;
+    role: string;
+    text: string;
+    time: string;
+    avatar: string;
+    unread: boolean;
+  }> = [];
 
   useEffect(() => {
     let isMounted = true;
@@ -569,32 +531,23 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           progress_percent: e.progressPercentage ?? e.progress_percentage ?? 0,
           completed_lessons: e.completedLessons || e.completed_lessons || [],
           last_accessed_at: e.enrolledAt || e.enrolled_at,
+          status: e.status,
+          expires_at: e.expiresAt || e.expires_at || null,
+          pricing_model: e.pricingModel || e.pricing_model || 'lifetime',
+          billing_interval: e.billingInterval || e.billing_interval || null,
+          amount: e.amount,
         }));
 
-        // Synchroniser aussi les achats, quiz et certificats réels du Cloud
-        if (cloudData.authenticated && typeof window !== 'undefined') {
-          try {
-            if (cloudData.purchases.length > 0) {
-              localStorage.setItem('nana_student_purchases', JSON.stringify(cloudData.purchases));
-            }
-            if (cloudData.quizzes.length > 0) {
-              localStorage.setItem('nana_student_quizzes', JSON.stringify(cloudData.quizzes));
-            }
-            if (cloudData.certificates.length > 0) {
-              localStorage.setItem('nana_student_certificates', JSON.stringify(cloudData.certificates));
-            }
-          } catch {}
-        }
-
         const studentId = cloudData.student?.id || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_id') : null) || '';
-        const studentEmail = cloudData.student?.email || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') : null) || '';
+        const resolvedEmail = cloudData.student?.email || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_email') : null) || '';
         const studentPhone = cloudData.student?.phoneNumber || (typeof window !== 'undefined' ? localStorage.getItem('nana_student_phone') : null) || '';
 
+        // N'interroger Supabase `enrollments` que si le jeton étudiant est authentifié côté serveur
         let supaEnrolls: any[] = [];
-        if (studentId || studentEmail || studentPhone) {
+        if (cloudData.authenticated && (studentId || resolvedEmail || studentPhone)) {
           const filters: string[] = [];
           if (studentId) filters.push(`student_id.eq.${studentId}`);
-          if (studentEmail) filters.push(`student_email.eq.${studentEmail}`);
+          if (resolvedEmail) filters.push(`student_email.eq.${resolvedEmail}`);
           if (studentPhone) filters.push(`student_phone.eq.${studentPhone}`);
           if (filters.length > 0) {
             const { data: enrolls } = await supabase.from('enrollments').select('*').or(filters.join(','));
@@ -607,9 +560,35 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
           if (e?.course_id && !mergedMap.has(e.course_id)) mergedMap.set(e.course_id, e);
         });
         const finalEnrolls = Array.from(mergedMap.values());
+        const enrolledIdSet = new Set(finalEnrolls.map((e) => String(e.course_id)));
+
+        if (typeof window !== 'undefined' && finalEnrolls.length === 0) {
+          try {
+            localStorage.removeItem('nana_student_purchases');
+            localStorage.removeItem('nana_student_quizzes');
+            localStorage.removeItem('nana_student_certificates');
+          } catch {}
+        }
 
         if (isMounted) {
           setRealEnrollments(finalEnrolls);
+
+          // Achats strictement réels (filtrés sur les inscriptions vérifiées)
+          const verifiedPurchases: StudentPurchase[] = Array.isArray(cloudData.purchases)
+            ? cloudData.purchases.filter((p: any) => p?.courseId && enrolledIdSet.has(String(p.courseId)))
+            : [];
+          setStudentPurchases(verifiedPurchases);
+
+          // Quiz strictement limités aux cours auxquels l'étudiant a réellement souscrit
+          const cloudQuizzes: StudentQuiz[] = Array.isArray(cloudData.quizzes) ? cloudData.quizzes : [];
+          const matchingQuizzes = [
+            ...cloudQuizzes.filter((q) => enrolledIdSet.has(String(q.courseId))),
+            ...DEFAULT_STUDENT_QUIZZES.filter(
+              (dq) => enrolledIdSet.has(dq.courseId) && !cloudQuizzes.some((cq) => cq.id === dq.id)
+            ),
+          ];
+          setQuizzes(matchingQuizzes);
+
           const courseIds = finalEnrolls.map(e => e.course_id).filter(Boolean);
           if (courseIds.length > 0) {
             const { data: coursesData } = await supabase.from('courses').select('*').in('id', courseIds);
@@ -784,85 +763,15 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     });
   }, [enrolledCourses, searchQuery, courseFilter]);
 
-  // Cours actif pour le widget de droite et le Hero
-  const activeCourse = enrolledCourses[0];
+  // Cours réellement actifs (souscription valide et non expirée)
+  const activeSubscribedCourses = useMemo(
+    () => enrolledCourses.filter((c) => !c.isExpired),
+    [enrolledCourses]
+  );
+  const hasActiveSubscription = activeSubscribedCourses.length > 0;
 
-  // Données des Achats & Souscriptions de l'étudiant
-  const [studentPurchases, setStudentPurchases] = useState<StudentPurchase[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('nana_student_purchases');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (e) {
-        console.warn('Erreur lecture purchases:', e);
-      }
-    }
-    return [
-      {
-        id: '#NS-1092',
-        courseId: 'telecom-fintech-masterclass',
-        courseTitle: 'Masterclass Télécom, Monétique Mobile & E-Commerce',
-        campusName: 'Campus : Ibrahim P. Konkobo',
-        instructorName: 'Ibrahim Pousbila Konkobo',
-        date: '19 Octobre 2026',
-        paymentMethod: 'Wave (Mobile Money 1-Clic)',
-        transactionRef: 'WAV-BF-89230198',
-        amountNumber: 45000,
-        amountFormatted: '45 000 FCFA',
-        accessType: 'Accès à vie',
-        status: 'Validé',
-        invoiceNumber: 'FAC-2026-NS-1092'
-      },
-      {
-        id: '#NS-1088',
-        courseId: 'course-pos-resilience-offline',
-        courseTitle: 'Architecture Caisses Connectées & Mode Déconnecté (Offline-First)',
-        campusName: 'Campus : Systèmes POS & Caisses',
-        instructorName: 'Ing. Marc Ouedraogo',
-        date: '14 Octobre 2026',
-        paymentMethod: 'Orange Money BF',
-        transactionRef: 'OM-BF-77341902',
-        amountNumber: 65000,
-        amountFormatted: '65 000 FCFA',
-        accessType: 'Accès à vie',
-        status: 'Validé',
-        invoiceNumber: 'FAC-2026-NS-1088'
-      },
-      {
-        id: '#NS-1065',
-        courseId: 'course-live-shopping-mastery',
-        courseTitle: 'Live Shopping & Vente Vidéo Interactive sur WhatsApp & Réseaux',
-        campusName: 'Campus : Live Shopping & Social Selling',
-        instructorName: 'Kadiatou Diallo',
-        date: '02 Octobre 2026',
-        paymentMethod: 'CinetPay (Carte Visa / Mastercard)',
-        transactionRef: 'CP-CI-44189021',
-        amountNumber: 35000,
-        amountFormatted: '35 000 FCFA',
-        accessType: 'Abonnement actif',
-        status: 'Validé',
-        invoiceNumber: 'FAC-2026-NS-1065'
-      },
-      {
-        id: '#NS-1040',
-        courseId: 'course-fintech-security-kyc',
-        courseTitle: 'Sécurité des Transactions, Prévention Fraude & Conformité KYC',
-        campusName: 'Campus : Sécurité & Conformité Réglementaire',
-        instructorName: 'Cabinet Conformité & Risques',
-        date: '18 Septembre 2026',
-        paymentMethod: 'Monero XMR (Crypto Décentralisée)',
-        transactionRef: 'XMR-TX-883A09FB2',
-        amountNumber: 25000,
-        amountFormatted: '25 000 FCFA',
-        accessType: 'Accès à vie',
-        status: 'Validé',
-        invoiceNumber: 'FAC-2026-NS-1040'
-      }
-    ];
-  });
+  // Cours actif pour le widget de droite et le Hero (uniquement si souscrit et non expiré)
+  const activeCourse = activeSubscribedCourses[0];
 
   // Calcul dynamique des métriques financières
   const totalInvested = useMemo(() => {
@@ -870,8 +779,8 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   }, [studentPurchases]);
 
   const activeSubscriptionsCount = useMemo(() => {
-    return studentPurchases.filter(p => p.status === 'Validé').length;
-  }, [studentPurchases]);
+    return activeSubscribedCourses.length;
+  }, [activeSubscribedCourses]);
 
   const receiptsCount = useMemo(() => {
     return studentPurchases.filter(p => !!p.invoiceNumber).length;
@@ -906,21 +815,10 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
   // Champs de réponse rapide aux formateurs
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
 
-  // 1. Section "🏆 Mes Certificats" (Passeport d'Élite Nanasore)
+  // 1. Section "🏆 Mes Certificats" — strictement dérivé des cours réellement souscrits
   const certificatesList: CertificateItem[] = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('nana_student_certificates');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch (e) {
-        console.warn('Erreur lecture certificates:', e);
-      }
-    }
+    if (enrolledCourses.length === 0) return [];
 
-    // Calcul dynamique dérivé de l'avancement réel des cours souscrits
     return enrolledCourses.map((c, idx) => {
       const isCompleted = (c.progress || 0) >= 100;
       return {
@@ -941,15 +839,18 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     });
   }, [enrolledCourses]);
 
-  // 2. Section "💬 Messages & Notifications Inter-Campus" — 100% Cloud réel (zéro fausse notification statique)
+  // 2. Section "💬 Messages & Notifications Inter-Campus" — verrouillée tant qu'aucun cours actif n'est souscrit
   const [interCampusNotifications, setInterCampusNotifications] = useState<InterCampusNotification[]>([]);
 
   useEffect(() => {
     let active = true;
-    const courseIds = enrolledCourses.map((c) => c.id).slice(0, 5);
-    const targets = courseIds.length > 0 ? courseIds : ['global'];
+    const courseIds = activeSubscribedCourses.map((c) => c.id).slice(0, 5);
+    if (courseIds.length === 0) {
+      setInterCampusNotifications([]);
+      return () => { active = false; };
+    }
     Promise.all(
-      targets.map((cid) =>
+      courseIds.map((cid) =>
         fetch(`/api/campus/chat/${encodeURIComponent(cid)}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((json) => (Array.isArray(json?.messages) ? json.messages : []))
@@ -960,10 +861,10 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
       const flat = groups.flat().slice(0, 20);
       const mapped: InterCampusNotification[] = flat.map((m: any) => ({
         id: m.id,
-        campusId: m.courseId || 'global',
-        campusName: enrolledCourses.find((c) => c.id === m.courseId)?.campusName || 'Campus Social',
-        courseId: m.courseId || 'global',
-        courseTitle: enrolledCourses.find((c) => c.id === m.courseId)?.title || 'Campus Social NaNa',
+        campusId: m.courseId || courseIds[0],
+        campusName: activeSubscribedCourses.find((c) => c.id === m.courseId)?.campusName || 'Campus Social',
+        courseId: m.courseId || courseIds[0],
+        courseTitle: activeSubscribedCourses.find((c) => c.id === m.courseId)?.title || 'Campus Social NaNa',
         lessonTitle: m.topicTag || 'Discussion Campus',
         instructorName: m.authorName || 'Membre du Campus',
         instructorRole: m.authorRole === 'INSTRUCTOR' ? 'Formateur' : 'Apprenant',
@@ -988,7 +889,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
       setInterCampusNotifications(mapped);
     });
     return () => { active = false; };
-  }, [enrolledCourses]);
+  }, [activeSubscribedCourses]);
 
   // Actions pour les Certificats — lien public officiel /verify-cert/:id
   const handleShareCertificate = (cert: CertificateItem) => {
@@ -1048,9 +949,26 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Actions de navigation vers le lecteur du campus
+  // Actions de navigation vers le lecteur du campus — STRICTEMENT réservé aux cours souscrits et non expirés
   const handleOpenCourseCampus = (courseId: string) => {
     playTapBeep();
+    const matchedCourse = enrolledCourses.find((c) => c.id === courseId);
+    if (!matchedCourse) {
+      setToastMessage("🔒 Accès refusé : vous devez d'abord souscrire à un cours pour accéder au Campus Privé.");
+      setTimeout(() => setToastMessage(null), 4000);
+      handleOpenMarketplace();
+      return;
+    }
+    if (matchedCourse.isExpired) {
+      setToastMessage("⏳ Votre abonnement à ce cours a expiré. Veuillez le renouveler pour rouvrir le Campus Privé.");
+      setTimeout(() => setToastMessage(null), 4000);
+      setRenewTargetCourse({
+        id: matchedCourse.id,
+        title: matchedCourse.title,
+        price: matchedCourse.price || 15000,
+      });
+      return;
+    }
     if (onOpenClassroom) {
       onOpenClassroom(courseId);
     } else if (typeof window !== 'undefined') {
@@ -1061,6 +979,8 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
 
   const handleResumeLastCourse = () => {
     if (!activeCourse) {
+      setToastMessage("🔒 Aucune souscription active : choisissez d'abord un cours dans le Catalogue.");
+      setTimeout(() => setToastMessage(null), 3500);
       handleOpenMarketplace();
       return;
     }
@@ -2411,7 +2331,29 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Grille des Quiz */}
+              {/* Grille des Quiz (verrouillée si aucune souscription active) */}
+              {!hasActiveSubscription ? (
+                <div className="bg-white border border-[#E2E8F0] rounded-3xl p-8 text-center space-y-4 shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <div className="max-w-md mx-auto space-y-1.5">
+                    <h4 className="text-base font-black text-[#0F172A]">
+                      Évaluations réservées aux étudiants inscrits
+                    </h4>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Vous n&apos;avez souscrit à aucune formation active pour le moment. Inscrivez-vous à un cours pour débloquer ses quiz de certification et son Campus Privé.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenMarketplace}
+                    className="px-5 py-2.5 rounded-2xl bg-[#1D4ED8] hover:bg-blue-800 text-white font-extrabold text-xs transition shadow-md shadow-blue-700/20 cursor-pointer"
+                  >
+                    Explorer le Catalogue des Formations →
+                  </button>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {quizzes
                   .filter(q => {
@@ -2524,6 +2466,7 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                     </div>
                   ))}
               </div>
+              )}
             </div>
           )}
 
@@ -2567,8 +2510,12 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                       <Award className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-black text-[#0F172A] mt-2">2 Débloqués</p>
-                  <p className="text-[11px] text-emerald-600 font-bold mt-1">✓ 100% validés par les formateurs</p>
+                  <p className="text-2xl font-black text-[#0F172A] mt-2">
+                    {certificatesList.filter(c => c.status === 'UNLOCKED').length} Débloqué{certificatesList.filter(c => c.status === 'UNLOCKED').length > 1 ? 's' : ''}
+                  </p>
+                  <p className="text-[11px] text-emerald-600 font-bold mt-1">
+                    {certificatesList.length > 0 ? '✓ Vérifiables publiquement par QR Code' : 'Souscrivez et terminez un cours à 100%'}
+                  </p>
                 </div>
 
                 <div className="bg-white border border-[#E2E8F0] p-4 sm:p-5 rounded-2xl shadow-xs">
@@ -3045,10 +2992,33 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Vrai Campus Social Unifié 100% Cloud (Groupes, Salons, Rooms Premium) */}
+              {!hasActiveSubscription ? (
+                <div className="bg-white border border-[#E2E8F0] rounded-3xl p-8 sm:p-10 text-center space-y-4 shadow-xs">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <div className="max-w-lg mx-auto space-y-2">
+                    <h4 className="text-base sm:text-lg font-black text-[#0F172A]">
+                      Accès au Campus Privé réservé aux étudiants inscrits
+                    </h4>
+                    <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                      Vous n&apos;avez pas encore souscrit à un cours actif. Pour rejoindre les salons privés des formateurs, les groupes d&apos;entraide et les sessions en direct, souscrivez d&apos;abord à une formation depuis le catalogue.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenMarketplace}
+                    className="px-6 py-3 rounded-2xl bg-[#1D4ED8] hover:bg-blue-800 text-white font-extrabold text-xs sm:text-sm transition shadow-md shadow-blue-700/20 cursor-pointer"
+                  >
+                    Découvrir &amp; Souscrire à un Cours →
+                  </button>
+                </div>
+              ) : (
+              <>
+              {/* Vrai Campus Social Unifié 100% Cloud (uniquement cours souscrit actif) */}
               <CourseCommunityFeed
-                courseId={enrolledCourses[0]?.id || 'global'}
-                courseTitle={enrolledCourses[0]?.title || 'Campus Social NaNa'}
+                courseId={activeCourse.id}
+                courseTitle={activeCourse.title}
                 currentUserId={
                   (typeof window !== 'undefined' && localStorage.getItem('nana_student_id')) ||
                   studentEmail ||
@@ -3221,6 +3191,8 @@ export const StudentDashboardView: React.FC<StudentDashboardViewProps> = ({
                     </div>
                   ))}
               </div>
+              </>
+              )}
             </div>
           )}
 

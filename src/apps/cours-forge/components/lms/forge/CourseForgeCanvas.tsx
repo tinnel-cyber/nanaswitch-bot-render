@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -47,7 +47,9 @@ import {
   ListOrdered,
   Mic,
   Crown,
-  UploadCloud
+  UploadCloud,
+  Globe,
+  X
 } from 'lucide-react';
 
 import { CourseNodeData, CourseNodeType, AdaptiveQuizQuestion, VideoLessonNodeConfig, CourseModule, CourseLesson, LessonResource, LiveSessionConfig, StoreSubscription, StoreUser } from '../../../../../types';
@@ -442,9 +444,9 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
         body: JSON.stringify({
           courseId: activeCourseId,
           courseTitle: activeCourseTitle,
-          description: (courseGlobalSettings as any)?.description || '',
-          price: Number((courseGlobalSettings as any)?.price) || 15000,
-          thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
+          description: (courseSettings as any)?.description || '',
+          price: Number((courseSettings as any)?.price) || 15000,
+          thumbnailUrl: (courseSettings as any)?.coverImage || '',
           instructorId: currentUser?.id || 'instructor',
           instructorName: currentUser?.name || currentUser?.storeName || 'Formateur',
           announcementText: socialAnnouncementText.trim(),
@@ -500,8 +502,8 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
         courseId: activeCourseId,
         title: activeCourseTitle,
         price: Math.max(0, Number(publishPrice) || 0),
-        description: (courseGlobalSettings as any)?.description || '',
-        thumbnailUrl: (courseGlobalSettings as any)?.coverImage || '',
+        description: (courseSettings as any)?.description || '',
+        thumbnailUrl: (courseSettings as any)?.coverImage || '',
         tenantId: currentUser?.storeId || '',
         pricingModel: publishPricingModel,
         billingInterval: publishPricingModel === 'subscription' ? publishBillingInterval : undefined,
@@ -1392,7 +1394,7 @@ export const CourseForgeCanvas: React.FC<CourseForgeCanvasProps> = ({
           <button
             type="button"
             onClick={() => {
-              setPublishPrice(String(Number((courseGlobalSettings as any)?.price) || 15000));
+              setPublishPrice(String(Number((courseSettings as any)?.price) || 15000));
               setIsPublishPricingOpen(true);
             }}
             className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer"
